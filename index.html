@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Outils Maths</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="topbar">
+
+  <div class="top-left">
+    <button class="btn btn-icon" id="btnFullscreen" title="Plein écran">⛶</button>
+  </div>
+
+  <div class="top-legend" id="headerTitle">
+    <div class="pill" id="pillStatus" title="État de la séance">Prêt</div>
+  </div>
+
+  <div class="top-right">
+    <button class="btn btn-icon" id="btnPause" title="Pause">⏸</button>
+    <button class="btn btn-icon" id="btnConfig" title="Configurer">⚙</button>
+  </div>
+
+</div>
+  <!-- jauge globale du moteur -->
+    <div id="globalTimer" class="timer hidden" aria-hidden="true">
+      <div class="timer-bar" id="timerBar"></div>
+    </div>
+  
+  <!-- zone principale de rendu des outils -->
+  <div id="appRoot">
+    <div id="workArea"></div>
+  </div>
+
+  <!-- overlay (config / demarrer / transitions / fin) -->
+  <div class="overlay hidden" id="overlay">
+    <div class="overlay-card" id="overlayCard">
+      <div class="overlay-title" id="overlayTitle">Titre</div>
+      <div id="overlayBody"></div>
+      <div class="overlay-actions" id="overlayActions"></div>
+      <div class="overlay-hint" id="overlayHint"></div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
