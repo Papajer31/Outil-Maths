@@ -295,8 +295,20 @@ input[type="number"]{
   align-items:center;
   justify-content:center;
 
-  padding:18px;
+  padding:20px;
   z-index:10;
+}
+
+/* Overlay CONFIG uniquement : plus de marge + placé plus haut */
+.overlay.is-config{
+  align-items:flex-start;
+  padding:50px;
+}
+
+.overlay.is-config .overlay-card{
+  margin-top:50px; /* ≈ 50 px du haut */
+  width:min(760px,94vw);
+  padding:24px;
 }
 
 .overlay.hidden{
@@ -304,13 +316,13 @@ input[type="number"]{
 }
 
 .overlay-card{
-  width:min(560px,96vw);
+  width:min(900px,96vw);
 
   background:var(--panel);
   border:1px solid var(--border);
   border-radius:16px;
 
-  padding:14px;
+  padding:30px;
 }
 
 .overlay-title{
@@ -321,9 +333,15 @@ input[type="number"]{
 
 .overlay-actions{
   display:flex;
-  gap:10px;
-  justify-content:flex-end;
-  margin-top:12px;
+  gap:20px;
+  justify-content:center;
+  margin-top:24px;
+}
+
+.overlay-actions .btn{
+  min-width:180px;
+  height:60px;
+  font-size:24px;
 }
 
 .overlay-hint{
@@ -444,30 +462,32 @@ code{
 .cfg-table{
   display:grid;
   gap:10px;
-  max-height: 70vh;
-  overflow:auto;
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* colonnes compactes */
 .cfg-head,
 .cfg-row{
   display:grid;
-  grid-template-columns: 34px 1fr 150px 110px;
-  gap:10px;
+  grid-template-columns: 60px 1fr 140px 140px 140px;
+  gap:20px;
   align-items:center;
+  padding: 6px 3px;
 }
 
 .cfg-head{
   color: var(--muted);
   font-weight: 900;
-  font-size: 13px;
+  font-size: 16px;
   padding: 0 2px;
 }
 
 /* checkbox un peu plus grosse (tablette) */
 .cfg-row input[type="checkbox"]{
-  width: 18px;
-  height: 18px;
+  width: 32px;
+  height: 32px;
   accent-color: var(--warn);
 }
 
@@ -475,13 +495,14 @@ code{
 .cfg-row .cfg-title{
   width: fit-content;
   padding: 5px 9px;
-  font-size: 13px;
+  font-size: 20px;
 }
 
 /* inputs très compacts */
 .cfg-row input[type="number"]{
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 20px;
+  border-radius: 12px;
   font-weight: 900;
 }
 
@@ -490,9 +511,40 @@ code{
   opacity: 0.45;
 }
 
-/* boutons overlay centrés */
-.overlay-actions{
-  justify-content:center;
+
+.cfg-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  margin-top:24px;
+}
+
+.cfg-estimate{
+  margin-left:auto;
+  text-align:right;
+  color:var(--muted);
+  font-weight:900;
+  font-size:18px;
+  white-space:nowrap;
+}
+
+.cfg-estimate strong{
+  color:var(--text);
+  font-size:22px;
+}
+
+.cfg-estimate-inline{
+  width:100%;
+  text-align:right;
+  color:var(--muted);
+  font-weight:900;
+  font-size:18px;
+}
+
+.cfg-estimate-inline strong{
+  color:var(--text);
+  font-size:22px;
 }
 
 /* =========================================================

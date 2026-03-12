@@ -1,6 +1,6 @@
 // Moteur minimal (avec mode prof + reprise après refresh)
 
-const PIN = "1234"; // MVP : change quand tu veux
+const PIN = "1206"; // MVP : change quand tu veux
 const STORAGE_KEY = "outil-maths-session-v1";
 
 const els = {
@@ -212,17 +212,19 @@ function openConfig(){
   setStatus("Configuration", "warn");
 
   const rows = toolsCatalog.map(t => configRowHTML(t)).join("");
+  els.overlay.classList.add("is-config");
 
   openOverlay({
-    title: "",   // minimal : pas de titre
+    title: "",
     body: `
       <div class="cfg-table">
 
         <div class="cfg-head">
           <div></div>
           <div>Outil</div>
-          <div>Temps/questions (s)</div>
+          <div>Temps (s)</div>
           <div>Questions</div>
+          <div>Réponse (s)</div>
         </div>
 
         ${rows}
@@ -233,17 +235,41 @@ function openConfig(){
       { label: "Annuler", primary: false, onClick: () => { closeOverlay(); openIdleHint(); } },
       { label: "Valider", primary: true, onClick: validateConfig }
     ],
-    hint: "" // pas d’aide
+    hint: `<div class="cfg-estimate-inline" id="cfgEstimate">Durée estimée : <strong>0 min</strong></div>`
   });
 
-  // wiring (grisage)
   toolsCatalog.forEach(t => {
     const chk = $(`#chk_${t.id}`);
+    const time = $(`#time_${t.id}`);
+    const count = $(`#count_${t.id}`);
+    const answer = $(`#answer_${t.id}`);
+
     chk.addEventListener("change", () => {
       setRowEnabled(t.id, chk.checked);
+      updateConfigEstimate();
     });
+
+    [time, count, answer].forEach(inp => {
+      inp.addEventListener("input", updateConfigEstimate);
+      inp.addEventListener("change", updateConfigEstimate);
+    });
+
     setRowEnabled(t.id, chk.checked);
   });
+
+  els.overlayBody.querySelectorAll('input[type="number"]').forEach((inp) => {
+    inp.addEventListener("focus", () => {
+      inp.select?.();
+      try { inp.setSelectionRange(0, inp.value.length); } catch {}
+    });
+
+    inp.addEventListener("pointerup", () => {
+      inp.select?.();
+      try { inp.setSelectionRange(0, inp.value.length); } catch {}
+    });
+  });
+
+  updateConfigEstimate();
 }
 
 function configRowHTML(t){
@@ -253,6 +279,7 @@ function configRowHTML(t){
       <div class="pill cfg-title">${escapeHtml(t.title)}</div>
       <input type="number" min="5" max="999" step="5" value="40" id="time_${t.id}">
       <input type="number" min="1" max="200" step="1" value="10" id="count_${t.id}">
+      <input type="number" min="1" max="30" step="1" value="5" id="answer_${t.id}">
     </div>
   `;
 }
@@ -261,13 +288,14 @@ function setRowEnabled(id, enabled){
   const row = $(`#row_${id}`);
   const time = $(`#time_${id}`);
   const count = $(`#count_${id}`);
+  const answer = $(`#answer_${id}`);
 
   time.disabled = !enabled;
   count.disabled = !enabled;
+  answer.disabled = !enabled;
 
   row.classList.toggle("disabled", !enabled);
 }
-
 async function validateConfig(){
   session = [];
   for (const t of toolsCatalog){
@@ -276,12 +304,14 @@ async function validateConfig(){
 
     const timePerQ = clampInt($(`#time_${t.id}`).value, 5, 999);
     const questionCount = clampInt($(`#count_${t.id}`).value, 1, 200);
+    const answerTime = clampInt($(`#answer_${t.id}`).value, 1, 30);
 
     session.push({
       id: t.id,
       title: t.title,
       timePerQ,
-      questionCount
+      questionCount,
+      answerTime
     });
   }
 
@@ -290,7 +320,6 @@ async function validateConfig(){
     return;
   }
 
-  // sauver la config immédiatement (utile si refresh avant démarrage)
   saveSessionSnapshot();
 
   await enterFullscreen();
@@ -311,6 +340,60 @@ async function validateConfig(){
 
   $("#btnStartSession").addEventListener("click", startSession);
 }
+
+function updateConfigEstimate(){
+  const estimateEl = $("#cfgEstimate");
+  if (!estimateEl) return;
+
+  let totalSeconds = 0;
+  let enabledTools = 0;
+
+  for (const t of toolsCatalog){
+    const chk = $(`#chk_${t.id}`);
+    if (!chk?.checked) continue;
+
+    enabledTools += 1;
+
+    const timePerQ = clampInt($(`#time_${t.id}`)?.value, 5, 999);
+    const questionCount = clampInt($(`#count_${t.id}`)?.value, 1, 200);
+    const answerTime = clampInt($(`#answer_${t.id}`)?.value, 1, 30);
+
+    totalSeconds += estimateToolSeconds({
+      timePerQ,
+      questionCount,
+      answerTime
+    });
+  }
+
+  // 10 s entre chaque outil
+  if (enabledTools > 1){
+    totalSeconds += (enabledTools - 1) * 10;
+  }
+
+  estimateEl.innerHTML = `Durée estimée : <strong>${formatDuration(totalSeconds)}</strong>`;
+}
+
+function estimateToolSeconds({ timePerQ, questionCount, answerTime }){
+  const q = questionCount;
+  const questionSeconds = q * timePerQ;
+  const answerSeconds = q * answerTime;
+  const miniTransitionSeconds = Math.max(0, q - 1) * 5;
+
+  return questionSeconds + answerSeconds + miniTransitionSeconds;
+}
+
+function formatDuration(totalSeconds){
+  const minutes = Math.ceil(totalSeconds / 60);
+
+  if (minutes >= 60){
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h} h ${m} min`;
+  }
+
+  return `${minutes} min`;
+}
+
 
 /* =========================
    SESSION
@@ -448,10 +531,10 @@ async function nextQuestion(item, isFirstQuestion){
     // afficher la réponse si l'outil le supporte
     activeTool.showAnswer?.(els.workArea);
 
-    // petite pause pédagogique
+    // petite pause pédagogique configurable
     setTimeout(() => {
       nextQuestion(item, false);
-    }, 3000);
+    }, item.answerTime * 1000);
 
   }, item.timePerQ * 1000);
 }
@@ -678,10 +761,12 @@ function startCurrentQuestion(item, { regenerate = false } = {}){
    OVERLAY helper
    ========================= */
 
+
 function openOverlay({title, body, actions, hint, opaque = false}){
+  els.overlay.classList.remove("is-config");
   els.overlayTitle.textContent = title ?? "";
   els.overlayBody.innerHTML = body ?? "";
-  els.overlayHint.textContent = hint ?? "";
+  els.overlayHint.innerHTML = hint ?? "";
 
   els.overlayActions.innerHTML = "";
   for (const a of (actions ?? [])){
@@ -692,13 +777,14 @@ function openOverlay({title, body, actions, hint, opaque = false}){
     els.overlayActions.appendChild(btn);
   }
 
-  els.overlay.classList.toggle("opaque", !!opaque);   // ✅
+  els.overlay.classList.toggle("opaque", !!opaque);
   els.overlay.classList.remove("hidden");
 }
 
 function closeOverlay(){
   els.overlay.classList.add("hidden");
-  els.overlay.classList.remove("opaque");            // ✅
+  els.overlay.classList.remove("opaque");
+  els.overlay.classList.remove("is-config");
   els.overlayActions.innerHTML = "";
 }
 
