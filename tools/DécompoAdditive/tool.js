@@ -1,16 +1,129 @@
-const SETTINGS = {
-  minTop: 5,
-  maxTop: 9,
-  allowZero: true,
-  includeSymmetricPairs: true // false = 2+3 sans 3+2
-};
+import {
+  renderMinMax,
+  bindMinMax,
+  readMinMax,
+  renderSection,
+  renderCheckbox,
+  readCheckbox,
+  clampInt
+} from "../toolVariables.js";
 
 let currentQuestion = null;
 let questionPool = [];
 let lastQuestionKey = null;
 
 export default {
-  mount(container) {
+  getDefaultSettings(){
+    return {
+      minTop: 5,
+      maxTop: 9,
+      allowZero: false,
+      includeSymmetricPairs: true
+    };
+  },
+
+  renderToolSettings(container, settings){
+    const cfg = normalizeSettings(settings);
+
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+
+        ${renderMinMax({
+          idPrefix: "da_top",
+          title: "Nombres à décomposer",
+          minLabel: "Minimum",
+          maxLabel: "Maximum",
+          minValue: cfg.minTop,
+          maxValue: cfg.maxTop,
+          inputMin: 1,
+          inputMax: 99,
+          step: 1
+        })}
+
+        ${renderSection("Options", `
+          <div class="tv-stack">
+            ${renderCheckbox({
+              id: "da_allowZero",
+              label: "Autoriser 0 dans la décomposition",
+              checked: cfg.allowZero
+            })}
+
+            ${renderCheckbox({
+              id: "da_includeSymmetricPairs",
+              label: "Autoriser les paires symétriques (ex. 2 + 3 et 3 + 2)",
+              checked: cfg.includeSymmetricPairs
+            })}
+          </div>
+        `)}
+
+      </div>
+    `;
+
+    bindMinMax(container, "da_top", {
+      inputMin: 1,
+      inputMax: 99
+    });
+
+    const minEl = container.querySelector("#da_top_min");
+    const maxEl = container.querySelector("#da_top_max");
+    const allowZeroEl = container.querySelector("#da_allowZero");
+
+    const syncSpecific = () => {
+      minEl.value = String(clampInt(minEl.value, 1, 99));
+      maxEl.value = String(clampInt(maxEl.value, 1, 99));
+
+      if (Number(minEl.value) > Number(maxEl.value)){
+        minEl.value = maxEl.value;
+      }
+
+      // Si zéro interdit, top = 1 ne produit aucune décomposition utile.
+      if (!allowZeroEl.checked && Number(maxEl.value) < 2){
+        maxEl.value = "2";
+        if (Number(minEl.value) > 2){
+          minEl.value = "2";
+        }
+      }
+    };
+
+    minEl?.addEventListener("input", syncSpecific);
+    maxEl?.addEventListener("input", syncSpecific);
+    minEl?.addEventListener("change", syncSpecific);
+    maxEl?.addEventListener("change", syncSpecific);
+    allowZeroEl?.addEventListener("change", syncSpecific);
+
+    syncSpecific();
+  },
+
+  readToolSettings(container){
+    const topRange = readMinMax(container, "da_top", {
+      inputMin: 1,
+      inputMax: 99,
+      errorLabel: "Les bornes des nombres à décomposer"
+    });
+
+    const allowZero = readCheckbox(container, "da_allowZero");
+    const includeSymmetricPairs = readCheckbox(container, "da_includeSymmetricPairs");
+
+    if (!allowZero && topRange.max < 2){
+      throw new Error("Avec 0 interdit, le maximum doit être au moins 2.");
+    }
+
+    const settings = {
+      minTop: topRange.min,
+      maxTop: topRange.max,
+      allowZero,
+      includeSymmetricPairs
+    };
+
+    const pool = buildQuestionPool(settings);
+    if (pool.length === 0){
+      throw new Error("Cette configuration ne produit aucune décomposition possible.");
+    }
+
+    return settings;
+  },
+
+  mount(container, ctx) {
     container.innerHTML = `
       <div class="tool-center">
         <div id="decompRoot" style="
@@ -105,9 +218,11 @@ export default {
     `;
   },
 
-  nextQuestion(container) {
+  nextQuestion(container, ctx) {
+    const settings = normalizeSettings(ctx?.settings);
+
     if (questionPool.length === 0) {
-      refillQuestionPool();
+      refillQuestionPool(settings);
     }
 
     currentQuestion = questionPool.pop();
@@ -126,7 +241,7 @@ export default {
     }
   },
 
-  showAnswer(container) {
+  showAnswer(container, ctx) {
     const answerSlot = container.querySelector("#decompAnswerSlot");
     if (!answerSlot || !currentQuestion) return;
 
@@ -139,14 +254,43 @@ export default {
 
   unmount(container) {
     container.innerHTML = "";
+    currentQuestion = null;
+    questionPool = [];
+    lastQuestionKey = null;
   }
 };
 
-function refillQuestionPool() {
-  questionPool = shuffle(buildQuestionPool(SETTINGS));
+function normalizeSettings(settings){
+  const base = {
+    minTop: 5,
+    maxTop: 9,
+    allowZero: false,
+    includeSymmetricPairs: true,
+    ...(settings ?? {})
+  };
 
-  // Évite que la 1re question du nouveau cycle
-  // soit identique à la dernière du cycle précédent.
+  base.minTop = clampInt(base.minTop, 1, 99);
+  base.maxTop = clampInt(base.maxTop, 1, 99);
+
+  if (base.minTop > base.maxTop){
+    const tmp = base.minTop;
+    base.minTop = base.maxTop;
+    base.maxTop = tmp;
+  }
+
+  if (!base.allowZero && base.maxTop < 2){
+    base.maxTop = 2;
+    if (base.minTop > 2){
+      base.minTop = 2;
+    }
+  }
+
+  return base;
+}
+
+function refillQuestionPool(settings) {
+  questionPool = shuffle(buildQuestionPool(settings));
+
   if (
     lastQuestionKey !== null &&
     questionPool.length > 1 &&

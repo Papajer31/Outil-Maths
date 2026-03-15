@@ -10,37 +10,46 @@
 <body>
   <div class="topbar">
 
-  <div class="top-left">
-    <button class="btn btn-icon" id="btnFullscreen" title="Plein écran">⛶</button>
-  </div>
-
-  <div class="top-legend" id="headerTitle">
-    <div class="pill" id="pillStatus" title="État de la séance">Prêt</div>
-  </div>
-
-  <div class="top-right">
-    <button class="btn btn-icon" id="btnPause" title="Pause">⏸</button>
-    <button class="btn btn-icon" id="btnConfig" title="Configurer">⚙</button>
-  </div>
-
-</div>
-  <!-- jauge globale du moteur -->
-    <div id="globalTimer" class="timer hidden" aria-hidden="true">
-      <div class="timer-bar" id="timerBar"></div>
+    <div class="top-left">
+      <button class="btn btn-icon" id="btnFullscreen" title="Plein écran">⛶</button>
     </div>
-  
-  <!-- zone principale de rendu des outils -->
+
+    <div class="top-legend" id="headerTitle">
+      <div class="pill" id="pillStatus" title="État de la séance">Prêt</div>
+    </div>
+
+    <div class="top-right">
+      <button class="btn btn-icon" id="btnPause" title="Pause">⏸</button>
+      <button class="btn btn-icon" id="btnConfig" title="Configurer">⚙</button>
+    </div>
+
+  </div>
+
+  <div id="globalTimer" class="timer hidden" aria-hidden="true">
+    <div class="timer-bar" id="timerBar"></div>
+  </div>
+
   <div id="appRoot">
     <div id="workArea"></div>
   </div>
 
-  <!-- overlay (config / demarrer / transitions / fin) -->
+  <!-- overlay principal -->
   <div class="overlay hidden" id="overlay">
     <div class="overlay-card" id="overlayCard">
       <div class="overlay-title" id="overlayTitle">Titre</div>
       <div id="overlayBody"></div>
       <div class="overlay-actions" id="overlayActions"></div>
       <div class="overlay-hint" id="overlayHint"></div>
+    </div>
+  </div>
+
+  <!-- overlay secondaire : réglages spécifiques outil -->
+  <div class="overlay overlay-tool hidden" id="toolOverlay">
+    <div class="overlay-card overlay-card-tool">
+      <div class="overlay-title" id="toolOverlayTitle">Réglages outil</div>
+      <div id="toolOverlayBody"></div>
+      <div class="overlay-actions" id="toolOverlayActions"></div>
+      <div class="overlay-hint" id="toolOverlayHint"></div>
     </div>
   </div>
 

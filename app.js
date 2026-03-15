@@ -1,7 +1,13 @@
-// Moteur minimal (avec mode prof + reprise après refresh)
-
-const PIN = "1206"; // MVP : change quand tu veux
+const PIN = "1206";
 const STORAGE_KEY = "outil-maths-session-v1";
+
+const DEFAULT_TOOL_ROW = Object.freeze({
+  enabled: false,
+  timePerQ: 40,
+  questionCount: 10,
+  answerTime: 5,
+  settings: null
+});
 
 const els = {
   btnConfig: $("#btnConfig"),
@@ -12,35 +18,48 @@ const els = {
   pillStatus: $("#pillStatus"),
 
   workArea: $("#workArea"),
+
   overlay: $("#overlay"),
   overlayTitle: $("#overlayTitle"),
   overlayBody: $("#overlayBody"),
   overlayActions: $("#overlayActions"),
   overlayHint: $("#overlayHint"),
 
+  toolOverlay: $("#toolOverlay"),
+  toolOverlayTitle: $("#toolOverlayTitle"),
+  toolOverlayBody: $("#toolOverlayBody"),
+  toolOverlayActions: $("#toolOverlayActions"),
+  toolOverlayHint: $("#toolOverlayHint"),
+
   timer: $("#globalTimer"),
   timerBar: $("#timerBar"),
 };
 
-let toolsCatalog = [];     // depuis tools.json
-let session = [];          // [{id,title,timePerQ,questionCount}]
+let toolsCatalog = [];
+let session = [];
 let currentToolIndex = -1;
 let currentQuestionIndex = -1;
 
-let activeTool = null;     // module courant
-let questionTimer = null;  // setTimeout
-let gaugeRaf = null;       // requestAnimationFrame
+let activeTool = null;
+let questionTimer = null;
+let answerTimer = null;
+let gaugeRaf = null;
 let gaugeStart = 0;
 let gaugeDurationMs = 0;
 let paused = false;
 
-let engineState = "IDLE";  // IDLE | CONFIG | READY | RUNNING | BETWEEN_TOOLS | DONE
+let engineState = "IDLE";
 let isSessionRunning = false;
+
+const toolModuleCache = new Map();
+const configDrafts = new Map();
+let currentToolSettingsEditor = null;
 
 boot();
 
 async function boot(){
   toolsCatalog = await fetchJSON("./tools/tools.json");
+  ensureConfigDrafts();
 
   els.btnConfig.addEventListener("click", async () => {
     const ok = await askPin();
@@ -57,19 +76,19 @@ async function boot(){
     if (!isRefresh) return;
 
     if (isSessionRunning){
-        e.preventDefault();
-        stopQuestionLoop();
-        els.timer.classList.add("hidden");
+      e.preventDefault();
+      stopQuestionLoop();
+      els.timer.classList.add("hidden");
 
-        openOverlay({
+      openOverlay({
         title: "Quitter ?",
         body: `<div class="panel">Une séance est en cours.</div>`,
         actions: [
-            { label: "Annuler", primary: false, onClick: () => { closeOverlay(); resumeAfterPause(); } },
-            { label: "Retour config", primary: true, onClick: stopToConfig }
+          { label: "Annuler", primary: false, onClick: () => { closeOverlay(); resumeAfterPause(); } },
+          { label: "Retour config", primary: true, onClick: stopToConfig }
         ],
         hint: ""
-        });
+      });
     }
   });
 
@@ -80,27 +99,22 @@ async function boot(){
     await enterFullscreen();
   });
 
-  // Avertissement navigateur si on quitte pendant une séance
   window.addEventListener("beforeunload", (e) => {
     if (!isSessionRunning) return;
     e.preventDefault();
     e.returnValue = "";
   });
 
-  // Pause automatique dès que la page n’est plus “active”
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pauseForInterruption("Pause (onglet masqué)");
   });
-  
+
   window.addEventListener("blur", () => {
     pauseForInterruption("Pause (fenêtre inactive)");
   });
 
-  // Si une séance existe en stockage : proposer reprise
   const saved = loadSavedSession();
   if (saved && saved.session?.length){
-
-    // ✅ gel complet avant l'écran de reprise
     stopQuestionLoop();
     els.timer.classList.add("hidden");
     isSessionRunning = false;
@@ -127,6 +141,7 @@ function openIdleHint(){
   isSessionRunning = false;
   setStatus("Prêt", "pill");
   closeOverlay();
+  closeToolOverlay();
   els.timer.classList.add("hidden");
   els.workArea.innerHTML = "";
 }
@@ -136,10 +151,8 @@ function openIdleHint(){
    ========================= */
 
 async function askPin(){
-  // Pause totale derrière (important sur tablette)
   stopQuestionLoop();
   els.timer.classList.add("hidden");
-
   return await askPinOverlay();
 }
 
@@ -149,9 +162,9 @@ function askPinOverlay(){
 
     const render = () => {
       const dots = "•".repeat(code.length).padEnd(4, "◦");
-      els.overlayTitle.textContent = "";         // overlay minimaliste
-      els.overlayHint.textContent = "";          // pas de texte en bas
-      els.overlayActions.innerHTML = "";         // boutons dans le body
+      els.overlayTitle.textContent = "";
+      els.overlayHint.textContent = "";
+      els.overlayActions.innerHTML = "";
 
       els.overlayBody.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
@@ -170,7 +183,6 @@ function askPinOverlay(){
         </div>
       `;
 
-      // handlers
       els.overlayBody.querySelectorAll("[data-k]").forEach(b => {
         b.addEventListener("click", () => {
           const k = b.getAttribute("data-k");
@@ -181,7 +193,6 @@ function askPinOverlay(){
             return;
           } else {
             if (code.length < 4) code += k;
-            // auto OK si 4 chiffres
             if (code.length === 4){
               closeOverlay();
               resolve(code === PIN);
@@ -207,9 +218,37 @@ function askPinOverlay(){
    CONFIG
    ========================= */
 
+function ensureConfigDrafts(){
+  for (const t of toolsCatalog){
+    if (!configDrafts.has(t.id)){
+      configDrafts.set(t.id, {
+        enabled: DEFAULT_TOOL_ROW.enabled,
+        timePerQ: DEFAULT_TOOL_ROW.timePerQ,
+        questionCount: DEFAULT_TOOL_ROW.questionCount,
+        answerTime: DEFAULT_TOOL_ROW.answerTime,
+        settings: null
+      });
+    }
+  }
+}
+
+function getToolDraft(id){
+  if (!configDrafts.has(id)){
+    configDrafts.set(id, {
+      enabled: DEFAULT_TOOL_ROW.enabled,
+      timePerQ: DEFAULT_TOOL_ROW.timePerQ,
+      questionCount: DEFAULT_TOOL_ROW.questionCount,
+      answerTime: DEFAULT_TOOL_ROW.answerTime,
+      settings: null
+    });
+  }
+  return configDrafts.get(id);
+}
+
 function openConfig(){
   engineState = "CONFIG";
   setStatus("Configuration", "warn");
+  ensureConfigDrafts();
 
   const rows = toolsCatalog.map(t => configRowHTML(t)).join("");
   els.overlay.classList.add("is-config");
@@ -218,17 +257,15 @@ function openConfig(){
     title: "",
     body: `
       <div class="cfg-table">
-
         <div class="cfg-head">
           <div></div>
           <div>Outil</div>
           <div>Temps (s)</div>
           <div>Questions</div>
           <div>Réponse (s)</div>
+          <div></div>
         </div>
-
         ${rows}
-
       </div>
     `,
     actions: [
@@ -239,19 +276,56 @@ function openConfig(){
   });
 
   toolsCatalog.forEach(t => {
+    const draft = getToolDraft(t.id);
     const chk = $(`#chk_${t.id}`);
     const time = $(`#time_${t.id}`);
     const count = $(`#count_${t.id}`);
     const answer = $(`#answer_${t.id}`);
+    const btnSettings = $(`#settings_${t.id}`);
+
+    chk.checked = !!draft.enabled;
+    time.value = draft.timePerQ;
+    count.value = draft.questionCount;
+    answer.value = draft.answerTime;
 
     chk.addEventListener("change", () => {
+      draft.enabled = chk.checked;
       setRowEnabled(t.id, chk.checked);
       updateConfigEstimate();
     });
 
-    [time, count, answer].forEach(inp => {
-      inp.addEventListener("input", updateConfigEstimate);
-      inp.addEventListener("change", updateConfigEstimate);
+    time.addEventListener("input", () => {
+      draft.timePerQ = clampInt(time.value, 5, 999);
+      updateConfigEstimate();
+    });
+    time.addEventListener("change", () => {
+      time.value = clampInt(time.value, 5, 999);
+      draft.timePerQ = Number(time.value);
+      updateConfigEstimate();
+    });
+
+    count.addEventListener("input", () => {
+      draft.questionCount = clampInt(count.value, 1, 200);
+      updateConfigEstimate();
+    });
+    count.addEventListener("change", () => {
+      count.value = clampInt(count.value, 1, 200);
+      draft.questionCount = Number(count.value);
+      updateConfigEstimate();
+    });
+
+    answer.addEventListener("input", () => {
+      draft.answerTime = clampInt(answer.value, 1, 30);
+      updateConfigEstimate();
+    });
+    answer.addEventListener("change", () => {
+      answer.value = clampInt(answer.value, 1, 30);
+      draft.answerTime = Number(answer.value);
+      updateConfigEstimate();
+    });
+
+    btnSettings?.addEventListener("click", () => {
+      openToolSettings(t.id);
     });
 
     setRowEnabled(t.id, chk.checked);
@@ -277,9 +351,10 @@ function configRowHTML(t){
     <div class="cfg-row" id="row_${t.id}">
       <input type="checkbox" id="chk_${t.id}" aria-label="Activer ${escapeHtml(t.title)}">
       <div class="pill cfg-title">${escapeHtml(t.title)}</div>
-      <input type="number" min="5" max="999" step="5" value="40" id="time_${t.id}">
-      <input type="number" min="1" max="200" step="1" value="10" id="count_${t.id}">
-      <input type="number" min="1" max="30" step="1" value="5" id="answer_${t.id}">
+      <input type="number" min="5" max="999" step="5" id="time_${t.id}">
+      <input type="number" min="1" max="200" step="1" id="count_${t.id}">
+      <input type="number" min="1" max="30" step="1" id="answer_${t.id}">
+      <button class="btn btn-icon cfg-gear" type="button" id="settings_${t.id}" aria-label="Réglages ${escapeHtml(t.title)}">⚙️</button>
     </div>
   `;
 }
@@ -296,22 +371,105 @@ function setRowEnabled(id, enabled){
 
   row.classList.toggle("disabled", !enabled);
 }
+
+async function openToolSettings(toolId){
+  const toolMeta = toolsCatalog.find(t => t.id === toolId);
+  if (!toolMeta) return;
+
+  const draft = getToolDraft(toolId);
+  const mod = await loadToolModule(toolId);
+  const tool = mod.default ?? {};
+
+  if (draft.settings == null){
+    draft.settings = getToolDefaultSettings(tool);
+  }
+
+  currentToolSettingsEditor = { toolId, tool };
+
+  openToolOverlay({
+    title: toolMeta.title,
+    body: `<div id="toolSettingsHost"></div>`,
+    actions: [
+      { label: "Annuler", primary: false, onClick: closeToolOverlay },
+      { label: "Valider", primary: true, onClick: validateToolSettings }
+    ],
+    hint: ""
+  });
+
+  const host = $("#toolSettingsHost");
+  if (!host) return;
+
+  if (typeof tool.renderToolSettings === "function"){
+    tool.renderToolSettings(host, cloneData(draft.settings));
+  } else {
+    host.innerHTML = `<div class="panel">Aucun réglage spécifique pour cet outil.</div>`;
+  }
+
+  host.querySelectorAll('input[type="number"]').forEach((inp) => {
+    inp.addEventListener("focus", () => {
+      inp.select?.();
+      try { inp.setSelectionRange(0, inp.value.length); } catch {}
+    });
+
+    inp.addEventListener("pointerup", () => {
+      inp.select?.();
+      try { inp.setSelectionRange(0, inp.value.length); } catch {}
+    });
+  });
+}
+
+function validateToolSettings(){
+  if (!currentToolSettingsEditor) return;
+
+  const { toolId, tool } = currentToolSettingsEditor;
+  const draft = getToolDraft(toolId);
+  const host = $("#toolSettingsHost");
+  if (!host) return;
+
+  try {
+    if (typeof tool.readToolSettings === "function"){
+      draft.settings = tool.readToolSettings(host);
+    } else if (draft.settings == null) {
+      draft.settings = getToolDefaultSettings(tool);
+    }
+
+    closeToolOverlay();
+  } catch (err) {
+    alert(err?.message || "Réglages invalides.");
+  }
+}
+
 async function validateConfig(){
   session = [];
+
   for (const t of toolsCatalog){
+    const draft = getToolDraft(t.id);
     const chk = $(`#chk_${t.id}`);
-    if (!chk.checked) continue;
+    if (!chk?.checked) continue;
+
+    const mod = await loadToolModule(t.id);
+    const tool = mod.default ?? {};
 
     const timePerQ = clampInt($(`#time_${t.id}`).value, 5, 999);
     const questionCount = clampInt($(`#count_${t.id}`).value, 1, 200);
     const answerTime = clampInt($(`#answer_${t.id}`).value, 1, 30);
+    const settings = draft.settings == null
+      ? getToolDefaultSettings(tool)
+      : cloneData(draft.settings);
+
+    draft.enabled = true;
+    draft.timePerQ = timePerQ;
+    draft.questionCount = questionCount;
+    draft.answerTime = answerTime;
+    draft.settings = cloneData(settings);
 
     session.push({
       id: t.id,
       title: t.title,
       timePerQ,
       questionCount,
-      answerTime
+      answerTime,
+      settings
     });
   }
 
@@ -330,9 +488,9 @@ async function validateConfig(){
   openOverlay({
     title: "",
     body: `
-        <div style="display:flex;justify-content:center;align-items:center;min-height:220px;">
+      <div style="display:flex;justify-content:center;align-items:center;min-height:220px;">
         <button class="btn primary btn-big" id="btnStartSession">Démarrer</button>
-        </div>
+      </div>
     `,
     actions: [],
     hint: ""
@@ -365,7 +523,6 @@ function updateConfigEstimate(){
     });
   }
 
-  // 10 s entre chaque outil
   if (enabledTools > 1){
     totalSeconds += (enabledTools - 1) * 10;
   }
@@ -394,13 +551,13 @@ function formatDuration(totalSeconds){
   return `${minutes} min`;
 }
 
-
 /* =========================
    SESSION
    ========================= */
 
 async function startSession(){
   closeOverlay();
+  closeToolOverlay();
   currentToolIndex = -1;
   currentQuestionIndex = -1;
   isSessionRunning = true;
@@ -410,16 +567,14 @@ async function startSession(){
 async function nextTool(isFirst){
   stopQuestionLoop();
 
-  // démonter l’outil précédent
   if (activeTool?.unmount){
-    activeTool.unmount(els.workArea);
+    activeTool.unmount(els.workArea, getToolContext(session[currentToolIndex]));
   }
   activeTool = null;
 
   currentToolIndex += 1;
   currentQuestionIndex = -1;
 
-  // fin de session
   if (currentToolIndex >= session.length){
     els.timer.classList.add("hidden");
     engineState = "DONE";
@@ -440,7 +595,6 @@ async function nextTool(isFirst){
   setStatus(`${item.title} — prêt`, "warn");
   saveSessionSnapshot();
 
-  // entre deux outils : overlay minimaliste (gros bouton)
   if (!isFirst){
     engineState = "BETWEEN_TOOLS";
 
@@ -459,21 +613,19 @@ async function nextTool(isFirst){
     return;
   }
 
-  // 1er outil : on démarre direct
   await beginTool(item);
 }
 
 async function beginTool(item){
   closeOverlay();
+  closeToolOverlay();
 
-  // charger module
-  const mod = await import(`./tools/${item.id}/tool.js`);
+  const mod = await loadToolModule(item.id);
   activeTool = mod.default;
 
-  // monter UI
-  activeTool.mount?.(els.workArea);
+  const ctx = getToolContext(item);
+  activeTool.mount?.(els.workArea, ctx);
 
-  // lancer questions
   engineState = "RUNNING";
   els.timer.classList.remove("hidden");
 
@@ -494,9 +646,8 @@ async function nextQuestion(item, isFirstQuestion){
   setStatus(`${item.title} (${item.timePerQ} s) — ${currentQuestionIndex + 1}/${item.questionCount}`, "pill");
   saveSessionSnapshot();
 
-  // transition douce (sauf toute 1re question)
   if (!isFirstQuestion){
-    engineState = "BETWEEN_TOOLS"; // “pause” courte
+    engineState = "BETWEEN_TOOLS";
     openOverlay({
       title: "Nouvelle question",
       body: `
@@ -509,7 +660,6 @@ async function nextQuestion(item, isFirstQuestion){
       opaque: true
     });
 
-    // lance l'anim de jauge (3 s)
     const bar = $("#miniTimerBar");
     if (bar){
       bar.style.animation = "miniDrain 5s linear forwards";
@@ -520,22 +670,19 @@ async function nextQuestion(item, isFirstQuestion){
     engineState = "RUNNING";
   }
 
-  // demander à l’outil d’afficher la question
-  activeTool.nextQuestion?.(els.workArea);
+  const ctx = getToolContext(item);
+  activeTool.nextQuestion?.(els.workArea, ctx);
 
-  // lancer chrono + jauge
   startGauge(item.timePerQ * 1000);
 
   questionTimer = setTimeout(() => {
+    const showCtx = getToolContext(item);
+    activeTool.showAnswer?.(els.workArea, showCtx);
 
-    // afficher la réponse si l'outil le supporte
-    activeTool.showAnswer?.(els.workArea);
-
-    // petite pause pédagogique configurable
-    setTimeout(() => {
+    answerTimer = setTimeout(() => {
+      answerTimer = null;
       nextQuestion(item, false);
     }, item.answerTime * 1000);
-
   }, item.timePerQ * 1000);
 }
 
@@ -543,6 +690,10 @@ function stopQuestionLoop(){
   if (questionTimer){
     clearTimeout(questionTimer);
     questionTimer = null;
+  }
+  if (answerTimer){
+    clearTimeout(answerTimer);
+    answerTimer = null;
   }
   stopGauge();
 }
@@ -578,15 +729,14 @@ function stopGauge(){
 }
 
 /* =========================
-   STATUS (header)
+   STATUS
    ========================= */
 
 function setStatus(text, mood){
   if (!els.pillStatus) return;
   els.pillStatus.textContent = text;
 
-  // reset classes
-  els.pillStatus.classList.remove("good","warn","bad");
+  els.pillStatus.classList.remove("good", "warn", "bad");
 
   if (mood === "good") els.pillStatus.classList.add("good");
   else if (mood === "warn") els.pillStatus.classList.add("warn");
@@ -612,19 +762,16 @@ async function enterFullscreen(){
       await document.documentElement.requestFullscreen();
     }
   }catch{
-    // si refusé (iPad/Safari ou politique navigateur), on ignore en MVP
   }finally{
     updateFullscreenButton();
   }
 }
 
 /* =========================
-   PERSISTENCE (anti-refresh)
+   PERSISTENCE
    ========================= */
 
 function saveSessionSnapshot(){
-  // On enregistre assez pour reprendre proprement.
-  // Note : on ne tente pas de reprendre “au milieu d’une question” à la milliseconde.
   const snap = {
     session,
     currentToolIndex,
@@ -635,7 +782,6 @@ function saveSessionSnapshot(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
   }catch{
-    // si stockage plein / bloqué : on ignore (MVP)
   }
 }
 
@@ -655,18 +801,16 @@ function clearSavedSession(){
 
 async function resumeFromSaved(saved){
   closeOverlay();
+  closeToolOverlay();
 
-  // restaure l’état minimal
   session = saved.session ?? [];
   currentToolIndex = saved.currentToolIndex ?? 0;
   currentQuestionIndex = saved.currentQuestionIndex ?? -1;
 
-  // clamp de sécurité
   if (currentToolIndex < 0) currentToolIndex = 0;
   if (currentToolIndex >= session.length) currentToolIndex = 0;
   if (currentQuestionIndex < -1) currentQuestionIndex = -1;
 
-  // reprise directe (collectif : on repart tout de suite)
   isSessionRunning = true;
 
   const item = session[currentToolIndex];
@@ -677,20 +821,19 @@ async function resumeFromSaved(saved){
 
 async function remountAndResume(item){
   closeOverlay();
+  closeToolOverlay();
   stopQuestionLoop();
 
-  const mod = await import(`./tools/${item.id}/tool.js`);
+  const mod = await loadToolModule(item.id);
   activeTool = mod.default;
 
-  activeTool.mount?.(els.workArea);
-
-  // on régénère une question visuellement
-  activeTool.nextQuestion?.(els.workArea);
+  const ctx = getToolContext(item);
+  activeTool.mount?.(els.workArea, ctx);
+  activeTool.nextQuestion?.(els.workArea, ctx);
 
   engineState = "RUNNING";
   els.timer.classList.remove("hidden");
 
-  // redémarre le chrono sans avancer dans l'exercice
   startCurrentQuestion(item, { regenerate: false });
 }
 
@@ -725,11 +868,7 @@ function resumeAfterPause(){
   const item = session?.[currentToolIndex];
   if (!item) return;
 
-  // Option A (recommandée) : reprendre exactement le même affichage
   startCurrentQuestion(item, { regenerate: false });
-
-  // Option B : régénérer l’énoncé MAIS sans avancer le compteur
-  // startCurrentQuestion(item, { regenerate: true });
 }
 
 function startCurrentQuestion(item, { regenerate = false } = {}){
@@ -737,32 +876,45 @@ function startCurrentQuestion(item, { regenerate = false } = {}){
 
   if (!activeTool || !item) return;
 
-  // Affichage (optionnel) : si regenerate=true, on redemande un énoncé
+  const ctx = getToolContext(item);
+
   if (regenerate){
-    activeTool.nextQuestion?.(els.workArea);
+    activeTool.nextQuestion?.(els.workArea, ctx);
   }
 
-  // Relance jauge + timer SANS changer l’index
   engineState = "RUNNING";
   els.timer.classList.remove("hidden");
 
   startGauge(item.timePerQ * 1000);
 
   questionTimer = setTimeout(() => {
-    nextQuestion(item, false); // là, oui, on avance
+    const showCtx = getToolContext(item);
+    activeTool.showAnswer?.(els.workArea, showCtx);
+
+    answerTimer = setTimeout(() => {
+      answerTimer = null;
+      nextQuestion(item, false);
+    }, item.answerTime * 1000);
   }, item.timePerQ * 1000);
 
-  // Met à jour la pill (si tu veux)
   setStatus(`${item.title} — Q ${currentQuestionIndex + 1}/${item.questionCount} — ${item.timePerQ}s`, "pill");
   saveSessionSnapshot();
 }
 
+function stopToConfig(){
+  stopQuestionLoop();
+  isSessionRunning = false;
+  paused = false;
+  activeTool = null;
+  closeToolOverlay();
+  openConfig();
+}
+
 /* =========================
-   OVERLAY helper
+   OVERLAY HELPERS
    ========================= */
 
-
-function openOverlay({title, body, actions, hint, opaque = false}){
+function openOverlay({ title, body, actions, hint, opaque = false }){
   els.overlay.classList.remove("is-config");
   els.overlayTitle.textContent = title ?? "";
   els.overlayBody.innerHTML = body ?? "";
@@ -788,8 +940,66 @@ function closeOverlay(){
   els.overlayActions.innerHTML = "";
 }
 
+function openToolOverlay({ title, body, actions, hint }){
+  els.toolOverlayTitle.textContent = title ?? "";
+  els.toolOverlayBody.innerHTML = body ?? "";
+  els.toolOverlayHint.innerHTML = hint ?? "";
+
+  els.toolOverlayActions.innerHTML = "";
+  for (const a of (actions ?? [])){
+    const btn = document.createElement("button");
+    btn.className = `btn ${a.primary ? "primary" : ""}`.trim();
+    btn.textContent = a.label;
+    btn.addEventListener("click", a.onClick);
+    els.toolOverlayActions.appendChild(btn);
+  }
+
+  els.toolOverlay.classList.remove("hidden");
+}
+
+function closeToolOverlay(){
+  els.toolOverlay.classList.add("hidden");
+  els.toolOverlayActions.innerHTML = "";
+  els.toolOverlayBody.innerHTML = "";
+  els.toolOverlayHint.innerHTML = "";
+  currentToolSettingsEditor = null;
+}
+
 /* =========================
-   Utils
+   PLUGINS / OUTILS
+   ========================= */
+
+async function loadToolModule(toolId){
+  if (!toolModuleCache.has(toolId)){
+    toolModuleCache.set(toolId, import(`./tools/${toolId}/tool.js`));
+  }
+  return await toolModuleCache.get(toolId);
+}
+
+function getToolDefaultSettings(tool){
+  if (typeof tool?.getDefaultSettings === "function"){
+    return cloneData(tool.getDefaultSettings());
+  }
+  return {};
+}
+
+function getToolContext(item){
+  if (!item) return { sessionItem: null, settings: {} };
+  return {
+    sessionItem: item,
+    settings: item.settings ?? {}
+  };
+}
+
+function cloneData(value){
+  if (typeof structuredClone === "function"){
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+/* =========================
+   UTILS
    ========================= */
 
 function $(sel){ return document.querySelector(sel); }

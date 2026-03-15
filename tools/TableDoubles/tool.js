@@ -1,168 +1,136 @@
-let baseNumber = 1;
-let answerNumber = 2;
-let basePool = [];
-let lastBaseNumber = null;
+import {
+  renderMinMax,
+  bindMinMax,
+  readMinMax,
+  clampInt
+} from "../toolVariables.js";
+
+let currentN = null;
+let numberPool = [];
+let lastN = null;
 
 export default {
-  mount(container) {
+  getDefaultSettings(){
+    return {
+      minBase: 1,
+      maxBase: 10
+    };
+  },
+
+  renderToolSettings(container, settings){
+    const cfg = normalizeSettings(settings);
+
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${renderMinMax({
+          idPrefix: "td_base",
+          title: "Nombres de base",
+          minLabel: "Minimum",
+          maxLabel: "Maximum",
+          minValue: cfg.minBase,
+          maxValue: cfg.maxBase,
+          inputMin: 1,
+          inputMax: 99,
+          step: 1
+        })}
+      </div>
+    `;
+
+    bindMinMax(container, "td_base", {
+      inputMin: 1,
+      inputMax: 99
+    });
+  },
+
+  readToolSettings(container){
+    const base = readMinMax(container, "td_base", {
+      inputMin: 1,
+      inputMax: 99,
+      errorLabel: "Les bornes des nombres de base"
+    });
+
+    return {
+      minBase: base.min,
+      maxBase: base.max
+    };
+  },
+
+  mount(container, ctx){
     container.innerHTML = `
       <div class="tool-center">
-        <div id="doubleRoot" style="
-          width:100%;
-          height:100%;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-        ">
-          <div style="
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            gap:48px;
-            transform: translateY(-10px);
-          ">
-            
-            <div
-              id="doubleAnswerSlot"
-              style="
-                width:220px;
-                height:150px;
-                border:6px solid currentColor;
-                border-radius:22px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                box-sizing:border-box;
-              "
-            ></div>
-
-            <svg
-              width="420"
-              height="190"
-              viewBox="0 0 420 190"
-              aria-hidden="true"
-              style="overflow:visible;"
-            >
-              <line
-                x1="210"
-                y1="0"
-                x2="95"
-                y2="180"
-                stroke="currentColor"
-                stroke-width="10"
-                stroke-linecap="round"
-              />
-              <line
-                x1="210"
-                y1="0"
-                x2="325"
-                y2="180"
-                stroke="currentColor"
-                stroke-width="10"
-                stroke-linecap="round"
-              />
-            </svg>
-
-            <div style="
-              width:720px;
-              display:flex;
-              align-items:center;
-              justify-content:center;
-              gap:48px;
-              margin-top:-8px;
-            ">
-              <div
-                id="doubleLeft"
-                class="tool-number"
-                style="
-                  min-width:120px;
-                  text-align:right;
-                  line-height:1;
-                "
-              ></div>
-
-              <div
-                class="tool-number"
-                style="line-height:1;"
-              >+</div>
-
-              <div
-                id="doubleRight"
-                class="tool-number"
-                style="
-                  min-width:120px;
-                  text-align:left;
-                  line-height:1;
-                "
-              ></div>
-            </div>
-          </div>
-        </div>
+        <div class="tool-big" id="td_expr"></div>
       </div>
     `;
   },
 
-  nextQuestion(container) {
-    if (basePool.length === 0) {
-        refillBasePool();
+  nextQuestion(container, ctx){
+    const settings = normalizeSettings(ctx?.settings);
+
+    if (numberPool.length === 0){
+      refillNumberPool(settings);
     }
 
-    baseNumber = basePool.pop();
-    lastBaseNumber = baseNumber;
-    answerNumber = baseNumber * 2;
+    currentN = numberPool.pop();
+    lastN = currentN;
 
-    const leftEl = container.querySelector("#doubleLeft");
-    const rightEl = container.querySelector("#doubleRight");
-    const answerSlot = container.querySelector("#doubleAnswerSlot");
-
-    if (leftEl) leftEl.textContent = String(baseNumber);
-    if (rightEl) rightEl.textContent = String(baseNumber);
-
-    if (answerSlot) {
-        answerSlot.innerHTML = "";
-        answerSlot.style.borderColor = "currentColor";
-    }
+    container.querySelector("#td_expr").textContent = `${currentN} + ${currentN}`;
   },
 
-  showAnswer(container) {
-    const answerSlot = container.querySelector("#doubleAnswerSlot");
-    if (!answerSlot) return;
-
-    answerSlot.innerHTML = `
-      <div class="tool-number" style="line-height:1;">
-        ${answerNumber}
-      </div>
-    `;
+  showAnswer(container, ctx){
+    if (currentN == null) return;
+    container.querySelector("#td_expr").textContent = `${currentN} + ${currentN} = ${currentN * 2}`;
   },
 
-  unmount(container) {
+  unmount(container){
     container.innerHTML = "";
+    currentN = null;
+    numberPool = [];
+    lastN = null;
   }
 };
 
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function normalizeSettings(settings){
+  const base = {
+    minBase: 1,
+    maxBase: 10,
+    ...(settings ?? {})
+  };
+
+  base.minBase = clampInt(base.minBase, 1, 99);
+  base.maxBase = clampInt(base.maxBase, 1, 99);
+
+  if (base.minBase > base.maxBase){
+    const tmp = base.minBase;
+    base.minBase = base.maxBase;
+    base.maxBase = tmp;
+  }
+
+  return base;
 }
 
-function refillBasePool() {
-  basePool = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+function refillNumberPool(settings){
+  const values = [];
+  for (let n = settings.minBase; n <= settings.maxBase; n++){
+    values.push(n);
+  }
 
-  // Évite le doublon entre la fin du cycle précédent
-  // et le début du nouveau cycle.
-  if (lastBaseNumber !== null && basePool[basePool.length - 1] === lastBaseNumber) {
-    // On échange avec un autre élément si possible
-    const swapIndex = basePool.length - 2;
-    if (swapIndex >= 0) {
-      [basePool[swapIndex], basePool[basePool.length - 1]] =
-        [basePool[basePool.length - 1], basePool[swapIndex]];
-    }
+  numberPool = shuffle(values);
+
+  if (
+    lastN !== null &&
+    numberPool.length > 1 &&
+    numberPool[numberPool.length - 1] === lastN
+  ){
+    const lastIndex = numberPool.length - 1;
+    const swapIndex = numberPool.length - 2;
+    [numberPool[lastIndex], numberPool[swapIndex]] =
+      [numberPool[swapIndex], numberPool[lastIndex]];
   }
 }
 
-function shuffle(arr) {
+function shuffle(arr){
   const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
+  for (let i = a.length - 1; i > 0; i--){
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }

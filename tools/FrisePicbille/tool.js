@@ -1,8 +1,15 @@
-const SETTINGS = {
-  boxCount: 6,
+import {
+  renderMinMax,
+  bindMinMax,
+  readMinMax,
+  renderSection,
+  renderSelect,
+  readSelect,
+  clampInt
+} from "../toolVariables.js";
+
+const DRAW = {
   cellsPerBox: 10,
-  minValue: 11,
-  maxValue: 60,
 
   cellWidth: 34,
   cellHeight: 44,
@@ -30,7 +37,104 @@ let valuePool = [];
 let lastTarget = null;
 
 export default {
-  mount(container) {
+  getDefaultSettings(){
+    return {
+      boxCount: 6,
+      minValue: 11,
+      maxValue: 60
+    };
+  },
+
+  renderToolSettings(container, settings){
+    const cfg = normalizeSettings(settings);
+
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+
+        ${renderSection("Frise", `
+          ${renderSelect({
+            id: "fp_boxCount",
+            label: "Nombre de boites",
+            value: cfg.boxCount,
+            options: [
+              { value: 2, label: "2 boites" },
+              { value: 3, label: "3 boites" },
+              { value: 4, label: "4 boites" },
+              { value: 5, label: "5 boites" },
+              { value: 6, label: "6 boites" }
+            ]
+          })}
+        `)}
+
+        ${renderMinMax({
+          idPrefix: "fp_values",
+          title: "Valeurs cibles",
+          minLabel: "Minimum",
+          maxLabel: "Maximum",
+          minValue: cfg.minValue,
+          maxValue: cfg.maxValue,
+          inputMin: 1,
+          inputMax: cfg.boxCount * DRAW.cellsPerBox,
+          step: 1
+        })}
+
+      </div>
+    `;
+
+    bindMinMax(container, "fp_values", {
+      inputMin: 1,
+      inputMax: cfg.boxCount * DRAW.cellsPerBox
+    });
+
+    const boxCountEl = container.querySelector("#fp_boxCount");
+    const minEl = container.querySelector("#fp_values_min");
+    const maxEl = container.querySelector("#fp_values_max");
+
+    const syncSpecific = () => {
+      const boxCount = clampInt(boxCountEl?.value, 3, 6);
+      const absoluteMax = boxCount * DRAW.cellsPerBox;
+
+      minEl.max = String(absoluteMax);
+      maxEl.max = String(absoluteMax);
+
+      minEl.value = String(clampInt(minEl.value, 1, absoluteMax));
+      maxEl.value = String(clampInt(maxEl.value, 1, absoluteMax));
+
+      if (Number(minEl.value) > Number(maxEl.value)){
+        minEl.value = maxEl.value;
+      }
+    };
+
+    boxCountEl?.addEventListener("change", syncSpecific);
+    minEl?.addEventListener("input", syncSpecific);
+    maxEl?.addEventListener("input", syncSpecific);
+    minEl?.addEventListener("change", syncSpecific);
+    maxEl?.addEventListener("change", syncSpecific);
+
+    syncSpecific();
+  },
+
+  readToolSettings(container){
+    const boxCount = readSelect(container, "fp_boxCount", {
+      parse: (v) => clampInt(v, 3, 6)
+    });
+
+    const absoluteMax = boxCount * DRAW.cellsPerBox;
+
+    const values = readMinMax(container, "fp_values", {
+      inputMin: 1,
+      inputMax: absoluteMax,
+      errorLabel: "Les bornes des valeurs cibles"
+    });
+
+    return {
+      boxCount,
+      minValue: values.min,
+      maxValue: values.max
+    };
+  },
+
+  mount(container, ctx) {
     container.innerHTML = `
       <div class="tool-center">
         <div id="picbilleRoot" style="
@@ -51,46 +155,75 @@ export default {
     `;
   },
 
-  nextQuestion(container) {
+  nextQuestion(container, ctx) {
+    const settings = normalizeSettings(ctx?.settings);
+
     if (valuePool.length === 0) {
-      refillValuePool();
+      refillValuePool(settings);
     }
 
     currentTarget = valuePool.pop();
     lastTarget = currentTarget;
 
-    renderExercise(container, false);
+    renderExercise(container, false, settings);
   },
 
-  showAnswer(container) {
-    renderExercise(container, true);
+  showAnswer(container, ctx) {
+    const settings = normalizeSettings(ctx?.settings);
+    renderExercise(container, true, settings);
   },
 
   unmount(container) {
     container.innerHTML = "";
+    currentTarget = null;
+    valuePool = [];
+    lastTarget = null;
   }
 };
 
-function renderExercise(container, showAnswer) {
+function normalizeSettings(settings){
+  const base = {
+    boxCount: 6,
+    minValue: 11,
+    maxValue: 60,
+    ...(settings ?? {})
+  };
+
+  base.boxCount = clampInt(base.boxCount, 3, 6);
+
+  const absoluteMax = base.boxCount * DRAW.cellsPerBox;
+  base.minValue = clampInt(base.minValue, 1, absoluteMax);
+  base.maxValue = clampInt(base.maxValue, 1, absoluteMax);
+
+  if (base.minValue > base.maxValue){
+    const tmp = base.minValue;
+    base.minValue = base.maxValue;
+    base.maxValue = tmp;
+  }
+
+  return base;
+}
+
+function renderExercise(container, showAnswer, settings) {
   const host = container.querySelector("#picbilleHost");
   if (!host) return;
 
   const totalWidth =
-    SETTINGS.leftPadding +
-    (SETTINGS.boxCount * SETTINGS.cellsPerBox * SETTINGS.cellWidth) +
-    ((SETTINGS.boxCount - 1) * SETTINGS.boxGap) +
-    SETTINGS.rightPadding;
+    DRAW.leftPadding +
+    (settings.boxCount * DRAW.cellsPerBox * DRAW.cellWidth) +
+    ((settings.boxCount - 1) * DRAW.boxGap) +
+    DRAW.rightPadding;
 
   const svgWidth = totalWidth;
-  const svgHeight = SETTINGS.svgHeight;
+  const svgHeight = DRAW.svgHeight;
 
   const targetCenterX = getCellCenterX(currentTarget);
   const circleCx = targetCenterX;
-  const circleCy = SETTINGS.circleTopY;
-  const stripTopY = SETTINGS.stripTopY;
+  const circleCy = DRAW.circleTopY;
+  const stripTopY = DRAW.stripTopY;
 
   let boxesSvg = "";
-  for (let boxIndex = 0; boxIndex < SETTINGS.boxCount; boxIndex++) {
+  for (let boxIndex = 0; boxIndex < settings.boxCount; boxIndex++) {
     boxesSvg += renderBox(boxIndex);
   }
 
@@ -104,22 +237,22 @@ function renderExercise(container, showAnswer) {
     >
       <line
         x1="${circleCx}"
-        y1="${circleCy + SETTINGS.circleRadius}"
+        y1="${circleCy + DRAW.circleRadius}"
         x2="${circleCx}"
         y2="${stripTopY}"
-        stroke="${SETTINGS.mainLine}"
+        stroke="${DRAW.mainLine}"
         stroke-width="6"
         stroke-linecap="round"
       />
-      
+
       ${boxesSvg}
 
       <circle
         cx="${circleCx}"
         cy="${circleCy}"
-        r="${SETTINGS.circleRadius}"
+        r="${DRAW.circleRadius}"
         fill="white"
-        stroke="${SETTINGS.circleStroke}"
+        stroke="${DRAW.circleStroke}"
         stroke-width="3"
       />
 
@@ -134,7 +267,7 @@ function renderExercise(container, showAnswer) {
               font-family="Andika, system-ui, sans-serif"
               font-size="64"
               font-weight="1000"
-              fill="${SETTINGS.textColor}"
+              fill="${DRAW.textColor}"
             >${currentTarget}</text>
           `
           : ""
@@ -145,13 +278,13 @@ function renderExercise(container, showAnswer) {
 
 function renderBox(boxIndex) {
   const x0 = getBoxX(boxIndex);
-  const y0 = SETTINGS.stripTopY;
-  const boxWidth = SETTINGS.cellsPerBox * SETTINGS.cellWidth;
-  const cellW = SETTINGS.cellWidth;
-  const cellH = SETTINGS.cellHeight;
+  const y0 = DRAW.stripTopY;
+  const boxWidth = DRAW.cellsPerBox * DRAW.cellWidth;
+  const cellW = DRAW.cellWidth;
+  const cellH = DRAW.cellHeight;
 
   let verticals = "";
-  for (let i = 1; i < SETTINGS.cellsPerBox; i++) {
+  for (let i = 1; i < DRAW.cellsPerBox; i++) {
     const x = x0 + (i * cellW);
     const thick = (i === 5);
     verticals += `
@@ -160,7 +293,7 @@ function renderBox(boxIndex) {
         y1="${y0}"
         x2="${x}"
         y2="${y0 + cellH}"
-        stroke="${SETTINGS.mainLine}"
+        stroke="${DRAW.mainLine}"
         stroke-width="${thick ? 3.5 : 1.6}"
       />
     `;
@@ -175,14 +308,14 @@ function renderBox(boxIndex) {
       <line
         x1="${cx - d}" y1="${cy - d}"
         x2="${cx + d}" y2="${cy + d}"
-        stroke="${SETTINGS.crossLine}"
+        stroke="${DRAW.crossLine}"
         stroke-width="1.8"
         stroke-linecap="round"
       />
       <line
         x1="${cx + d}" y1="${cy - d}"
         x2="${cx - d}" y2="${cy + d}"
-        stroke="${SETTINGS.crossLine}"
+        stroke="${DRAW.crossLine}"
         stroke-width="1.8"
         stroke-linecap="round"
       />
@@ -198,7 +331,7 @@ function renderBox(boxIndex) {
         font-family="Andika, system-ui, sans-serif"
         font-size="28"
         font-weight="1000"
-        fill="${SETTINGS.textColor}"
+        fill="${DRAW.textColor}"
       >1</text>
     `
     : "";
@@ -210,8 +343,8 @@ function renderBox(boxIndex) {
         y="${y0}"
         width="${boxWidth}"
         height="${cellH}"
-        fill="${SETTINGS.stripFill}"
-        stroke="${SETTINGS.stripStroke}"
+        fill="${DRAW.stripFill}"
+        stroke="${DRAW.stripStroke}"
         stroke-width="2"
       />
 
@@ -223,22 +356,22 @@ function renderBox(boxIndex) {
 }
 
 function getBoxX(boxIndex) {
-  const boxWidth = SETTINGS.cellsPerBox * SETTINGS.cellWidth;
-  return SETTINGS.leftPadding + boxIndex * (boxWidth + SETTINGS.boxGap);
+  const boxWidth = DRAW.cellsPerBox * DRAW.cellWidth;
+  return DRAW.leftPadding + boxIndex * (boxWidth + DRAW.boxGap);
 }
 
 function getCellCenterX(value) {
   const zeroBased = value - 1;
-  const boxIndex = Math.floor(zeroBased / SETTINGS.cellsPerBox);
-  const cellIndexInBox = zeroBased % SETTINGS.cellsPerBox;
+  const boxIndex = Math.floor(zeroBased / DRAW.cellsPerBox);
+  const cellIndexInBox = zeroBased % DRAW.cellsPerBox;
 
   const boxX = getBoxX(boxIndex);
-  return boxX + (cellIndexInBox * SETTINGS.cellWidth) + (SETTINGS.cellWidth / 2);
+  return boxX + (cellIndexInBox * DRAW.cellWidth) + (DRAW.cellWidth / 2);
 }
 
-function refillValuePool() {
+function refillValuePool(settings) {
   const values = [];
-  for (let n = SETTINGS.minValue; n <= SETTINGS.maxValue; n++) {
+  for (let n = settings.minValue; n <= settings.maxValue; n++) {
     values.push(n);
   }
 

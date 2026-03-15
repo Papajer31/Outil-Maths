@@ -1,7 +1,3 @@
-/* =========================================================
-   POLICE
-   ========================================================= */
-
 @font-face {
   font-family: "Andika";
   src: url("Andika.ttf") format("truetype");
@@ -11,7 +7,7 @@
 
 
 /* =========================================================
-   THÈME GLOBAL (couleurs du site)
+   THÈME GLOBAL
    ========================================================= */
 
 :root{
@@ -22,7 +18,6 @@
   --muted:#aab3c5;
   --border:#2b3142;
 
-  /* couleurs pédagogiques (feedback élève) */
   --good:#3ad07a;
   --warn:#ffb020;
   --bad:#ff4d4d;
@@ -55,7 +50,7 @@ body{
 
 
 /* =========================================================
-   HEADER (topbar)
+   HEADER
    ========================================================= */
 
 .topbar{
@@ -94,10 +89,10 @@ body{
 .top-legend{
   flex:1;
   text-align:center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 10px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  padding:0 10px;
 
   font-family:"Andika", system-ui, sans-serif;
   font-weight:1000;
@@ -108,7 +103,7 @@ body{
 
 
 /* =========================================================
-   PETITS BADGES (ex : niveau, info, etc.)
+   BADGES
    ========================================================= */
 
 .pill{
@@ -167,8 +162,6 @@ body{
   background:var(--panel2);
 }
 
-/* bouton principal */
-
 .btn.primary{
   border-color:#2f5cff55;
   background:#2f5cff33;
@@ -177,8 +170,6 @@ body{
 .btn.primary:hover{
   background:#2f5cff44;
 }
-
-/* bouton icône (ex : config) */
 
 .btn.btn-icon{
   width:44px;
@@ -195,7 +186,7 @@ body{
 
 
 /* =========================================================
-   PANELS (boîtes d’interface)
+   PANELS
    ========================================================= */
 
 .panel{
@@ -220,7 +211,7 @@ body{
 
 
 /* =========================================================
-   LAYOUT (utile pour certains outils)
+   LAYOUT GÉNÉRIQUE
    ========================================================= */
 
 .layout{
@@ -282,7 +273,7 @@ input[type="number"]{
 
 
 /* =========================================================
-   OVERLAY / MODALES
+   OVERLAYS
    ========================================================= */
 
 .overlay{
@@ -299,15 +290,14 @@ input[type="number"]{
   z-index:10;
 }
 
-/* Overlay CONFIG uniquement : plus de marge + placé plus haut */
 .overlay.is-config{
   align-items:flex-start;
   padding:50px;
 }
 
 .overlay.is-config .overlay-card{
-  margin-top:50px; /* ≈ 50 px du haut */
-  width:min(760px,94vw);
+  margin-top:50px;
+  width:min(980px,96vw);
   padding:24px;
 }
 
@@ -350,12 +340,23 @@ input[type="number"]{
   font-size:13px;
 }
 
-/* Overlay totalement occultant (transition) */
 .overlay.opaque{
-  background:#000; /* noir plein : on ne voit rien derrière */
+  background:#000;
 }
 
-/* Jauge dans l’overlay (verte) */
+.overlay-tool{
+  z-index:20;
+}
+
+.overlay-card-tool{
+  width:min(760px,94vw);
+}
+
+
+/* =========================================================
+   MINI TIMER OVERLAY
+   ========================================================= */
+
 .mini-timer{
   height:20px;
   background:#0c0e13;
@@ -373,14 +374,14 @@ input[type="number"]{
   transform:scaleX(1);
 }
 
-/* Animation simple : de plein à vide */
 @keyframes miniDrain{
   from{ transform:scaleX(1); }
   to  { transform:scaleX(0); }
 }
 
+
 /* =========================================================
-   CODE INLINE (utile dans les aides)
+   CODE INLINE
    ========================================================= */
 
 code{
@@ -389,6 +390,7 @@ code{
   border-radius:8px;
   border:1px solid var(--border);
 }
+
 
 /* =========================================================
    ZONE DE TRAVAIL + TIMER GLOBAL
@@ -399,7 +401,7 @@ code{
 }
 
 #workArea{
-  height: 100%;
+  height:100%;
   min-height:0;
   padding:12px;
   display:flex;
@@ -407,7 +409,6 @@ code{
   justify-content:stretch;
 }
 
-/* jauge */
 .timer{
   height:20px;
   background:#0c0e13;
@@ -415,7 +416,10 @@ code{
   position:relative;
   overflow:hidden;
 }
-.timer.hidden{ display:none; }
+
+.timer.hidden{
+  display:none;
+}
 
 .timer-bar{
   height:100%;
@@ -424,6 +428,11 @@ code{
   transform-origin:left center;
   transform:scaleX(1);
 }
+
+
+/* =========================================================
+   STYLES GÉNÉRIQUES OUTILS
+   ========================================================= */
 
 .tool-center{
   width:100%;
@@ -442,75 +451,97 @@ code{
   letter-spacing:4px;
 }
 
-/* ===== Status pill (moteur) ===== */
-#pillStatus{
-  max-width: 40vw;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tool-row{
+  width:100%;
+  height:100%;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:120px;
 }
 
-/* petites variantes (optionnelles) */
-#pillStatus.good{ border-color: var(--good); color: var(--text); }
-#pillStatus.warn{ border-color: var(--warn); color: var(--text); }
-#pillStatus.bad { border-color: var(--bad);  color: var(--text); }
+.tool-number{
+  font-family:"Andika", system-ui, sans-serif;
+  font-weight:1000;
+  font-size:140px;
+}
+
+.tool-img{
+  height:220px;
+  object-fit:contain;
+}
+
+#pillStatus{
+  max-width:40vw;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#pillStatus.good{ border-color:var(--good); color:var(--text); }
+#pillStatus.warn{ border-color:var(--warn); color:var(--text); }
+#pillStatus.bad { border-color:var(--bad);  color:var(--text); }
+
 
 /* =========================================================
-   CONFIG : table des outils (compact, sans cadre interne)
+   CONFIG : TABLE DES OUTILS
    ========================================================= */
 
 .cfg-table{
   display:grid;
   gap:10px;
-  max-height: 340px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  max-height:340px;
+  overflow-y:auto;
+  overflow-x:hidden;
 }
 
-/* colonnes compactes */
 .cfg-head,
 .cfg-row{
   display:grid;
-  grid-template-columns: 60px 1fr 140px 140px 140px;
-  gap:20px;
+  grid-template-columns:60px minmax(0,1fr) 96px 96px 96px 68px;
+  gap:16px;
   align-items:center;
-  padding: 6px 3px;
+  padding:6px 3px;
 }
 
 .cfg-head{
-  color: var(--muted);
-  font-weight: 900;
-  font-size: 16px;
-  padding: 0 2px;
+  color:var(--muted);
+  font-weight:900;
+  font-size:16px;
+  padding:0 2px;
 }
 
-/* checkbox un peu plus grosse (tablette) */
 .cfg-row input[type="checkbox"]{
-  width: 32px;
-  height: 32px;
-  accent-color: var(--warn);
+  width:32px;
+  height:32px;
+  accent-color:var(--warn);
 }
 
-/* titre outil : pill fine */
 .cfg-row .cfg-title{
-  width: fit-content;
-  padding: 5px 9px;
-  font-size: 20px;
+  width:fit-content;
+  max-width:100%;
+  padding:5px 9px;
+  font-size:20px;
 }
 
-/* inputs très compacts */
 .cfg-row input[type="number"]{
-  padding: 14px 16px;
-  font-size: 20px;
-  border-radius: 12px;
-  font-weight: 900;
+  padding:14px 16px;
+  font-size:20px;
+  border-radius:12px;
+  font-weight:900;
 }
 
-/* grisage propre (désactivé) */
 .cfg-row.disabled{
-  opacity: 0.45;
+  opacity:0.45;
 }
 
+.cfg-gear{
+  width:52px !important;
+  height:52px !important;
+  font-size:22px !important;
+  justify-self:center;
+}
 
 .cfg-footer{
   display:flex;
@@ -547,13 +578,14 @@ code{
   font-size:22px;
 }
 
+
 /* =========================================================
-   PIN PAD (overlay)
+   PIN PAD
    ========================================================= */
 
 .pinpad{
   display:grid;
-  grid-template-columns: repeat(3, 72px);
+  grid-template-columns:repeat(3, 72px);
   gap:10px;
   justify-content:center;
 }
@@ -565,30 +597,96 @@ code{
 }
 
 .btn-big{
-  min-width: min(520px, 92vw);
-  height: 96px;
-  font-size: 34px;
-  font-weight: 1000;
-  border-radius: 16px;
+  min-width:min(520px, 92vw);
+  height:96px;
+  font-size:34px;
+  font-weight:1000;
+  border-radius:16px;
 }
 
-.tool-row{
-  width:100%;
-  height:100%;
+/* =========================================================
+   TOOL VARIABLES (réglages outils)
+   ========================================================= */
 
+.tv-group{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px;
+}
+
+.tv-group-title{
+  font-weight:600;
+  font-size:14px;
+  letter-spacing:.2px;
+  color:var(--muted);
+  margin-bottom:10px;
+}
+
+.tv-stack{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.tv-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  align-items:center;
+}
+
+.tv-row-minmax{
   display:flex;
   align-items:center;
-  justify-content:center;
-  gap:120px;
+  gap:80px;
 }
 
-.tool-number{
-  font-family:"Andika", system-ui, sans-serif;
-  font-weight:1000;
-  font-size:140px;
+.tv-minmax-pair{
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 
-.tool-img{
-  height:220px;
-  object-fit:contain;
+.tv-label{
+  font-size:18px;
+  font-weight:600;
+  color:var(--text);
+}
+
+.tv-input{
+  width:100%;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:#0c0e13;
+  color:var(--text);
+  font-size:18px;
+  font-weight:600;
+}
+
+.tv-input-minmax{
+  width:100px;
+  min-width: 100px;
+  text-align:center;
+}
+
+.tv-select{
+  appearance:auto;
+}
+
+.tv-checkbox-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:20px;
+  font-weight:600;
+  color:var(--text);
+}
+
+.tv-checkbox{
+  width:28px;
+  height:28px;
+  accent-color:var(--warn);
+  flex:0 0 auto;
 }
