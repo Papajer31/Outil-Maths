@@ -1,0 +1,479 @@
+/* ========================================
+   DASHBOARD ENSEIGNANT - STRUCTURE GENERALE
+======================================== */
+
+/* Zone de travail globale du dashboard dans la page */
+.dashboard-workarea{
+  align-items:flex-start !important;
+  justify-content:center !important;
+  overflow:auto;
+}
+
+/* Conteneur principal du dashboard (largeur max + empilement vertical) */
+.dashboard-shell{
+  width:min(1180px, 100%);
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  padding-bottom:20px;
+}
+
+/* ========================================
+   EN-TETE DU DASHBOARD
+======================================== */
+
+/* Carte du haut : titre + email + bouton déconnexion */
+.dashboard-hero{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:18px;
+}
+
+/* Petit libellé de contexte au-dessus d'un titre si besoin */
+.dashboard-eyebrow{
+  color:var(--muted);
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:.4px;
+  text-transform:uppercase;
+}
+
+/* Ligne horizontale contenant le titre, l'email et le bouton déconnexion */
+.dashboard-title-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+/* Titre principal du dashboard */
+.dashboard-title{
+  margin:0;
+  margin-right:auto;
+  font-size:32px;
+  line-height:1.1;
+  font-weight:700;
+}
+
+/* Adresse mail ou sous-titre informatif à droite du titre */
+.dashboard-subtitle{
+  color:var(--muted);
+  font-size:15px;
+}
+
+/* ========================================
+   GRILLE PRINCIPALE
+======================================== */
+
+/* Deux colonnes : classes à gauche, configurations à droite */
+.dashboard-grid{
+  display:grid;
+  grid-template-columns:410px minmax(0, 1fr);
+  gap:16px;
+  align-items:start;
+}
+
+/* Une colonne du dashboard (empilement vertical des panneaux) */
+.dashboard-column{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  min-width:0;
+}
+
+/* Panneau visuel interne (contenu vertical avec espacement régulier) */
+.dashboard-panel{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+/* ========================================
+   TITRES DE SECTIONS
+======================================== */
+
+/* Titre d'un cadre comme "Mes classes" ou "Configurations" */
+.dashboard-section-title{
+  display: flex;
+  align-items: center;
+  font-weight:700;
+  font-size:24px;
+  line-height:1.1;
+}
+
+/* Ligne de titre avec action à droite (ex : bouton +) */
+.dashboard-section-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+/* ========================================
+   BOUTONS
+======================================== */
+
+/* Bouton rond d'ajout de classe dans le panneau "Mes classes" */
+.dashboard-add-btn{
+  width:32px;
+  height:32px;
+  border:none;
+  border-radius:50%;
+  background:rgb(23, 119, 65);
+  color:#fff;
+  font-size:20px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* Effet simple au survol du bouton + */
+.dashboard-add-btn:hover{
+  opacity:.9;
+}
+
+/* Etat désactivé commun aux boutons existants */
+.btn:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+
+
+/* ========================================
+   LISTES : CLASSES ET CONFIGURATIONS
+======================================== */
+
+/* Liste verticale des classes */
+.dashboard-class-list,
+.dashboard-config-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.dashboard-class-list{
+  align-items:center;
+}
+
+/* ========================================
+   CARTES DE CLASSES (COLONNE GAUCHE)
+======================================== */
+
+/* Carte cliquable représentant une classe */
+.dashboard-class-card{
+  width:min(100%, 380px);
+  border:3px solid var(--border);
+  background:linear-gradient(180deg, #1a1f2a, #151922);
+  color:var(--text);
+  border-radius:14px;
+  padding:12px;
+  display:flex;
+  align-items:stretch;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.add-icon{
+  display: inline-block;
+  font-weight: bold;
+  transform: translateY(-1px);
+}
+
+/* Variation visuelle au survol */
+.dashboard-class-card:hover{
+  background:linear-gradient(180deg, #202634, #181d28);
+}
+
+/* Carte de la classe actuellement ouverte */
+.dashboard-class-card.is-active{
+  border-color:rgb(23, 119, 65);
+  box-shadow:0 0 0 1px rgba(58,208,122,.25) inset;
+}
+
+/* Bloc texte principal de la carte */
+.dashboard-class-card-main{
+  min-width:0;
+  flex:1 1 auto;
+  border:none;
+  background:transparent;
+  color:inherit;
+  padding:0;
+  text-align:left;
+  cursor:pointer;
+}
+
+/* Code de classe affiché en gros */
+.dashboard-class-card-title{
+  font-size:24px;
+  font-weight:1000;
+  line-height:1.1;
+}
+
+/* Petite ligne secondaire sous le code classe */
+.dashboard-class-card-subtitle{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:13px;
+}
+
+/* Métadonnées à droite (date, info complémentaire, etc.) */
+.dashboard-class-card-meta{
+  margin-top: 8px;
+  color:var(--muted);
+  font-size:12px;
+}
+
+.dashboard-class-card-actions{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:8px;
+  flex:0 0 auto;
+}
+
+/* ========================================
+   BOUTONS D'ACTIONS
+======================================== */
+
+.dashboard-icon-btn{
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#10141d;
+  color:var(--text);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  cursor:pointer;
+  transition:filter .12s ease, transform .12s ease, border-color .12s ease;
+}
+
+.dashboard-icon-btn:hover{
+  filter:brightness(1.08);
+}
+
+.dashboard-icon-btn:active{
+  transform:translateY(1px);
+}
+
+.dashboard-icon-btn.is-danger{
+  color:#ff8f8f;
+  border-color:rgba(255, 110, 110, 0.25);
+  background:rgba(120, 26, 26, 0.18);
+}
+
+.dashboard-danger-btn{
+  border-color:rgba(255, 110, 110, 0.25);
+  background:rgba(120, 26, 26, 0.28);
+  color:#ffd6d6;
+}
+
+/* ========================================
+   BLOC CONFIGURATIONS (COLONNE DROITE)
+======================================== */
+
+/* Ligne haute du panneau configurations : titre + bouton */
+.dashboard-config-header{
+  display:flex;
+  align-items:stretch;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+/* Nom ou rappel de la classe sélectionnée */
+.dashboard-selected-class{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:15px;
+}
+
+/* Carte d'une configuration */
+.dashboard-config-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:linear-gradient(180deg, #1a1f2a, #151922);
+}
+
+/* Partie gauche de la carte configuration */
+.dashboard-config-main{
+  min-width:240px;
+  flex:1 1 320px;
+}
+
+/* Nom de la configuration */
+.dashboard-config-title{
+  font-size:22px;
+  font-weight:1000;
+  line-height:1.15;
+}
+
+/* Ligne des informations secondaires sous le titre */
+.dashboard-config-meta{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+
+/* Petite pill visuelle pour afficher un outil ou une info courte */
+.dashboard-mini-pill{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:var(--panel);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+/* Date de modification d'une configuration */
+.dashboard-config-date{
+  color:var(--muted);
+  font-size:13px;
+}
+
+/* Zone des boutons d'action à droite d'une configuration */
+.dashboard-config-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+/* ========================================
+   MODAL / OVERLAY DE CREATION DE CLASSE
+======================================== */
+
+/* Fond semi-transparent sur toute la page */
+.modal{
+  position:fixed;
+  inset:0;
+  background: rgba(4, 8, 18, 0.62);
+  backdrop-filter: blur(4px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+/* Overlay masqué */
+.modal.hidden{
+  display:none;
+}
+
+/* Fenêtre centrale du modal */
+.modal-content{
+  width: min(360px, calc(100vw - 48px));
+  background: linear-gradient(180deg, #111722, #0d121b);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Titre du modal */
+.modal-title{
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+/* Champ de saisie dans les overlays */
+#modalClassInput,
+#editClassNameInput{
+  flex: 0 0 auto;
+}
+
+/* Ligne basse du modal : message à gauche, boutons à droite */
+.modal-actions{
+  display:flex;
+  align-items: center;
+  gap:10px;
+  margin-top:12px;
+}
+
+/* Zone réservée au message, même vide */
+.modal-message{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* Boutons de la ligne d’action : taille fixe, collés à droite */
+.modal-actions button{
+  flex: 0 0 auto;
+}
+
+/* Variante erreur */
+.modal-message.is-error{
+  color: var(--bad);
+}
+
+/* Input des modales : plus doux, plus "fini", proche de l'accueil */
+.modal-text-input{
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 152, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.modal-text-input::placeholder{
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.modal-text-input:hover{
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(124, 152, 255, 0.28);
+}
+
+.modal-text-input:focus{
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(124, 152, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(84, 117, 255, 0.18);
+}
+
+#deleteClassText{
+  color:var(--text);
+  line-height:1.45;
+}
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+/* En-dessous de 900px, on passe sur une seule colonne */
+@media (max-width:900px){
+  .dashboard-grid{
+    grid-template-columns:1fr;
+  }
+}

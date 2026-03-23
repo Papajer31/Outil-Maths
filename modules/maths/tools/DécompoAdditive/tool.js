@@ -6,7 +6,7 @@ import {
   renderCheckbox,
   readCheckbox,
   clampInt
-} from "../toolVariables.js";
+} from "../../toolVariables.js";
 
 let currentQuestion = null;
 let questionPool = [];

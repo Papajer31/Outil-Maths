@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Séance</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="topbar">
+
+    <div class="top-left">
+      <button class="btn" id="btnBackToActivities" type="button">← Activités</button>
+      <button class="btn btn-icon" id="btnFullscreen" title="Plein écran" type="button">⛶</button>
+    </div>
+
+    <div class="top-legend" id="headerTitle">
+      <div class="pill" id="pillStatus" title="État de la séance">Chargement…</div>
+    </div>
+
+    <div class="top-right">
+      <button class="btn btn-icon" id="btnPause" title="Pause" type="button">⏸</button>
+    </div>
+
+  </div>
+
+  <div id="globalTimer" class="timer hidden" aria-hidden="true">
+    <div class="timer-bar" id="timerBar"></div>
+  </div>
+
+  <div id="appRoot">
+    <div id="workArea"></div>
+  </div>
+
+  <!-- overlay principal : uniquement pour la séance -->
+  <div class="overlay hidden" id="overlay">
+    <div class="overlay-card" id="overlayCard">
+      <div class="overlay-title" id="overlayTitle">Titre</div>
+      <div id="overlayBody"></div>
+      <div class="overlay-actions" id="overlayActions"></div>
+      <div class="overlay-hint" id="overlayHint"></div>
+    </div>
+  </div>
+
+  <!-- overlay secondaire : réglages spécifiques outil -->
+  <div class="overlay overlay-tool hidden" id="toolOverlay">
+    <div class="overlay-card overlay-card-tool">
+      <div class="overlay-title" id="toolOverlayTitle">Réglages outil</div>
+      <div id="toolOverlayBody"></div>
+      <div class="overlay-actions" id="toolOverlayActions"></div>
+      <div class="overlay-hint" id="toolOverlayHint"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/session-page.js"></script>
+</body>
+</html>

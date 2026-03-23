@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Éditeur de configuration</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="top-left">
+      <button class="btn" id="btnBackDashboard" type="button">← Tableau de bord</button>
+    </div>
+
+    <div class="top-legend" id="headerTitle">
+      <div class="pill" id="pillStatus">Configuration</div>
+    </div>
+
+    <div class="top-right">
+      <button class="btn" id="btnSaveConfig" type="button">Enregistrer</button>
+    </div>
+  </div>
+
+  <div id="appRoot">
+    <div id="workArea" style="align-items:flex-start;justify-content:center;overflow:auto;">
+      <div style="width:min(1100px, 100%);display:flex;flex-direction:column;gap:16px;padding-bottom:20px;">
+
+        <div class="panel" style="display:flex;flex-direction:column;gap:12px;">
+          <div style="font-weight:900;font-size:28px;">Éditeur de configuration</div>
+
+          <div id="editorMeta" style="color:var(--muted);">
+            Chargement…
+          </div>
+
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1 1 320px;">
+              <div style="font-weight:700;margin-bottom:6px;">Code classe</div>
+              <input id="classCodeInput" type="text" readonly>
+            </div>
+
+            <div style="flex:2 1 420px;">
+              <div style="font-weight:700;margin-bottom:6px;">Nom de la configuration</div>
+              <input id="configNameInput" type="text" placeholder="Ex : Picbille1">
+            </div>
+          </div>
+
+          <div id="editorMessage" style="min-height:24px;color:var(--muted);"></div>
+        </div>
+
+        <div class="panel" style="display:flex;flex-direction:column;gap:10px;">
+          <div style="font-weight:900;font-size:24px;">Paramètres des outils</div>
+
+          <div class="cfg-table">
+            <div class="cfg-head">
+              <div></div>
+              <div>Outil</div>
+              <div>Temps (s)</div>
+              <div>Questions</div>
+              <div>Réponse (s)</div>
+              <div></div>
+            </div>
+
+            <div id="configRows"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay overlay-tool hidden" id="toolOverlay">
+    <div class="overlay-card overlay-card-tool">
+      <div class="overlay-title" id="toolOverlayTitle">Réglages outil</div>
+      <div id="toolOverlayBody"></div>
+      <div class="overlay-actions" id="toolOverlayActions"></div>
+      <div class="overlay-hint" id="toolOverlayHint"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/config-editor.js"></script>
+</body>
+</html>

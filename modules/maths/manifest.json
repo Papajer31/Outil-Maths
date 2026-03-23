@@ -1,0 +1,34 @@
+{
+  "module": "maths",
+  "version": 1,
+  "tools": {
+    "PetitesAdditions": {
+      "label": "Petites additions",
+      "entry": "./tools/PetitesAdditions/tool.js"
+    },
+    "PetitesSoustractions": {
+      "label": "Petites soustractions",
+      "entry": "./tools/PetitesSoustractions/tool.js"
+    },
+    "ReprésentationDécimale": {
+      "label": "Représentation décimale",
+      "entry": "./tools/ReprésentationDécimale/tool.js"
+    },
+    "NombresLettres": {
+      "label": "Nombres en lettres",
+      "entry": "./tools/NombresLettres/tool.js"
+    },
+    "DécompoAdditive": {
+      "label": "Décomposition additive",
+      "entry": "./tools/DécompoAdditive/tool.js"
+    },
+    "TableDoubles": {
+      "label": "Tables des doubles",
+      "entry": "./tools/TableDoubles/tool.js"
+    },
+    "FrisePicbille": {
+      "label": "Frise Picbille",
+      "entry": "./tools/FrisePicbille/tool.js"
+    }
+  }
+}

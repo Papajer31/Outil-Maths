@@ -6,7 +6,7 @@ import {
   renderSelect,
   readSelect,
   clampInt
-} from "../toolVariables.js";
+} from "../../toolVariables.js";
 
 const DRAW = {
   cellsPerBox: 10,

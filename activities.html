@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Activités de la classe</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div class="topbar">
+    <div class="top-left">
+      <button class="btn" id="btnBack" type="button">← Retour</button>
+    </div>
+
+    <div class="top-legend" id="headerTitle">
+      <div class="pill" id="pillStatus">Activités</div>
+    </div>
+
+    <div class="top-right"></div>
+  </div>
+
+  <div id="appRoot">
+    <div id="workArea" style="display:flex;align-items:center;justify-content:center;">
+      <div style="width:min(760px, 100%);display:flex;flex-direction:column;gap:16px;">
+
+        <div class="panel" style="text-align:center;">
+          <div style="font-weight:900;font-size:28px;margin-bottom:8px;">Activités disponibles</div>
+          <div id="classCodeLabel" style="color:var(--muted);font-size:18px;"></div>
+        </div>
+
+        <div id="activitiesMessage" class="panel" style="text-align:center;">
+          Chargement...
+        </div>
+
+        <div id="activitiesList" style="display:flex;flex-direction:column;gap:12px;"></div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/activities.js"></script>
+
+</body>
+</html>

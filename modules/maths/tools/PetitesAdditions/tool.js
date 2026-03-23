@@ -3,7 +3,7 @@ import {
   bindMinMax,
   readMinMax,
   clampInt
-} from "../toolVariables.js";
+} from "../../toolVariables.js";
 
 let n1 = 0;
 let n2 = 0;

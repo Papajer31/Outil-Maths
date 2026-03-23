@@ -3,7 +3,7 @@ import {
   bindMinMax,
   readMinMax,
   clampInt
-} from "../toolVariables.js";
+} from "../../toolVariables.js";
 
 const NUMBERS = [
   "zero",
@@ -31,7 +31,9 @@ const NUMBERS = [
 let currentNumber = 0;
 let last = -1;
 
-let questionSrc = "./tools/NombresLettres/seyes.png";
+const ASSET_BASE = "./modules/maths/tools/NombresLettres";
+
+let questionSrc = `${ASSET_BASE}/seyes.png`;
 let answerSrc = "";
 
 const preloadCache = new Map();
@@ -91,7 +93,7 @@ export default {
 
           <div class="tool-number">→</div>
 
-          <img class="tool-img" id="toolSeyes" src="./tools/NombresLettres/seyes.png">
+          <img class="tool-img" id="toolSeyes" src="${ASSET_BASE}/seyes.png">
 
         </div>
       </div>
@@ -114,8 +116,8 @@ export default {
     const numEl = container.querySelector("#toolNumber");
     const img = container.querySelector("#toolSeyes");
 
-    questionSrc = "./tools/NombresLettres/seyes.png";
-    answerSrc = `./tools/NombresLettres/labels/${NUMBERS[currentNumber]}.png`;
+    questionSrc = `${ASSET_BASE}/seyes.png`;
+    answerSrc = `${ASSET_BASE}/labels/${NUMBERS[currentNumber]}.png`;
 
     numEl.textContent = currentNumber;
 
@@ -132,7 +134,7 @@ export default {
     container.innerHTML = "";
     currentNumber = 0;
     last = -1;
-    questionSrc = "./tools/NombresLettres/seyes.png";
+    questionSrc = `${ASSET_BASE}/seyes.png`;
     answerSrc = "";
   }
 };

@@ -3,7 +3,7 @@ import {
   bindMinMax,
   readMinMax,
   clampInt
-} from "../toolVariables.js";
+} from "../../toolVariables.js";
 
 let currentN = null;
 let numberPool = [];

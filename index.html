@@ -5,54 +5,83 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Outils Maths</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/home.css">
 </head>
 
-<body>
-  <div class="topbar">
-
-    <div class="top-left">
-      <button class="btn btn-icon" id="btnFullscreen" title="Plein écran">⛶</button>
-    </div>
-
-    <div class="top-legend" id="headerTitle">
-      <div class="pill" id="pillStatus" title="État de la séance">Prêt</div>
-    </div>
-
-    <div class="top-right">
-      <button class="btn btn-icon" id="btnPause" title="Pause">⏸</button>
-      <button class="btn btn-icon" id="btnConfig" title="Configurer">⚙</button>
-    </div>
-
-  </div>
-
-  <div id="globalTimer" class="timer hidden" aria-hidden="true">
-    <div class="timer-bar" id="timerBar"></div>
-  </div>
+<body class="home-body">
 
   <div id="appRoot">
-    <div id="workArea"></div>
-  </div>
+    <div id="workArea" class="home-workarea">
+      <div class="home-shell">
 
-  <!-- overlay principal -->
-  <div class="overlay hidden" id="overlay">
-    <div class="overlay-card" id="overlayCard">
-      <div class="overlay-title" id="overlayTitle">Titre</div>
-      <div id="overlayBody"></div>
-      <div class="overlay-actions" id="overlayActions"></div>
-      <div class="overlay-hint" id="overlayHint"></div>
+        <div class="home-grid">
+          <section class="panel home-card">
+            <div class="home-card-top">
+              <div class="home-card-title">Code classe</div>
+            </div>
+
+            <div class="home-card-middle">
+              <input
+                id="classCodeInput"
+                type="text"
+                placeholder="Code classe"
+                autocomplete="off"
+                class="home-input"
+              >
+            </div>
+
+            <div class="home-card-bottom">
+              <button class="btn primary home-btn" id="btnGo" type="button">
+                Activités
+              </button>
+            </div>
+          </section>
+
+          <section class="panel home-card">
+            <div class="home-card-top">
+              <div class="home-card-title">Enseignant</div>
+            </div>
+
+            <div class="home-card-middle">
+              <div class="home-fields-stack">
+
+                <div class="home-spacer"></div>
+                
+                <input
+                  id="teacherEmailInput"
+                  type="email"
+                  placeholder="Email"
+                  autocomplete="username"
+                  class="home-input"
+                >
+
+                <input
+                  id="teacherPasswordInput"
+                  type="password"
+                  placeholder="Mot de passe"
+                  autocomplete="current-password"
+                  class="home-input"
+                >
+
+                <div id="teacherLoginMessage" class="home-message"></div>
+              </div>
+            </div>
+
+            <div class="home-card-bottom">
+              <button class="btn primary home-btn" id="btnTeacherLogin" type="button">
+                Connexion
+              </button>
+            </div>
+          </section>
+        </div>
+
+      </div>
     </div>
   </div>
 
-  <!-- overlay secondaire : réglages spécifiques outil -->
-  <div class="overlay overlay-tool hidden" id="toolOverlay">
-    <div class="overlay-card overlay-card-tool">
-      <div class="overlay-title" id="toolOverlayTitle">Réglages outil</div>
-      <div id="toolOverlayBody"></div>
-      <div class="overlay-actions" id="toolOverlayActions"></div>
-      <div class="overlay-hint" id="toolOverlayHint"></div>
-    </div>
-  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/home.js"></script>
 
-  <script type="module" src="app.js"></script>
 </body>
+
 </html>
