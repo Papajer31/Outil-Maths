@@ -19,6 +19,10 @@ const DEFAULT_TOOL_ROW = Object.freeze({
   settings: null
 });
 
+const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
+  questionTransitionSec: 5
+});
+
 /* =========================
    DOM
    ========================= */
@@ -33,7 +37,9 @@ const els = {
   editorMeta: document.getElementById("editorMeta"),
   classCodeInput: document.getElementById("classCodeInput"),
   configNameInput: document.getElementById("configNameInput"),
+  activityEstimateValue: document.getElementById("activityEstimateValue"),
   editorMessage: document.getElementById("editorMessage"),
+  questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
   configRows: document.getElementById("configRows"),
 
   toolOverlay: document.getElementById("toolOverlay"),
@@ -60,6 +66,9 @@ const toolModuleCache = new Map();
 const configDrafts = new Map();
 
 let currentToolSettingsEditor = null;
+const activityGlobals = {
+  questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec
+};
 
 /* =========================
    INIT
@@ -116,8 +125,10 @@ async function boot(){
     }
 
     renderMeta();
+    renderGlobals();
     renderConfigTable();
     bindEvents();
+    updateActivityEstimate();
 
     setStatus("Configuration", "good");
   } catch (err) {
@@ -135,6 +146,7 @@ function loadExistingConfig(existing){
     return;
   }
 
+  applyRemoteGlobals(existing.config_json.globals);
   applyRemoteDrafts(existing.config_json.drafts);
 }
 
@@ -167,6 +179,18 @@ function bindEvents(){
     e.preventDefault();
     saveCurrentConfig();
   });
+
+  els.questionTransitionSecInput?.addEventListener("input", () => {
+    activityGlobals.questionTransitionSec = clampInt(els.questionTransitionSecInput.value, 0, 30);
+    updateActivityEstimate();
+  });
+
+  els.questionTransitionSecInput?.addEventListener("change", () => {
+    const value = clampInt(els.questionTransitionSecInput.value, 0, 30);
+    els.questionTransitionSecInput.value = value;
+    activityGlobals.questionTransitionSec = value;
+    updateActivityEstimate();
+  });
 }
 
 /* =========================
@@ -197,30 +221,37 @@ function renderConfigTable(){
     chk.addEventListener("change", () => {
       draft.enabled = chk.checked;
       setRowEnabled(t.id, chk.checked);
+      updateActivityEstimate();
     });
 
     time.addEventListener("input", () => {
       draft.timePerQ = clampInt(time.value, 5, 999);
+      updateActivityEstimate();
     });
     time.addEventListener("change", () => {
       time.value = clampInt(time.value, 5, 999);
       draft.timePerQ = Number(time.value);
+      updateActivityEstimate();
     });
 
     count.addEventListener("input", () => {
       draft.questionCount = clampInt(count.value, 1, 200);
+      updateActivityEstimate();
     });
     count.addEventListener("change", () => {
       count.value = clampInt(count.value, 1, 200);
       draft.questionCount = Number(count.value);
+      updateActivityEstimate();
     });
 
     answer.addEventListener("input", () => {
       draft.answerTime = clampInt(answer.value, 1, 30);
+      updateActivityEstimate();
     });
     answer.addEventListener("change", () => {
       answer.value = clampInt(answer.value, 1, 30);
       draft.answerTime = Number(answer.value);
+      updateActivityEstimate();
     });
 
     btnSettings?.addEventListener("click", () => {
@@ -372,7 +403,8 @@ async function saveCurrentConfig(){
       moduleKey: currentModuleKey,
       configName: name,
       configJson: {
-        version: 1,
+        version: 2,
+        globals: serializeGlobals(),
         drafts: serializeDrafts()
       }
     });
@@ -414,6 +446,73 @@ function countEnabledTools(){
     if (getToolDraft(t.id).enabled) total += 1;
   }
   return total;
+}
+
+function renderGlobals(){
+  if (els.questionTransitionSecInput){
+    els.questionTransitionSecInput.value = activityGlobals.questionTransitionSec;
+  }
+}
+
+function serializeGlobals(){
+  return {
+    questionTransitionSec: clampInt(activityGlobals.questionTransitionSec, 0, 30)
+  };
+}
+
+function applyRemoteGlobals(remoteGlobals){
+  activityGlobals.questionTransitionSec = clampInt(
+    remoteGlobals?.questionTransitionSec,
+    0,
+    30
+  );
+}
+
+function updateActivityEstimate(){
+  if (!els.activityEstimateValue) return;
+
+  syncDraftsFromUI();
+
+  const totalSeconds = computeEstimatedActivitySeconds();
+  els.activityEstimateValue.textContent = formatEstimatedDuration(totalSeconds);
+}
+
+function computeEstimatedActivitySeconds(){
+  let total = 0;
+  const transitionSec = clampInt(activityGlobals.questionTransitionSec, 0, 30);
+
+  for (const t of toolsCatalog){
+    const draft = getToolDraft(t.id);
+    if (!draft.enabled) continue;
+
+    const questionCount = clampInt(draft.questionCount, 1, 200);
+    const timePerQ = clampInt(draft.timePerQ, 5, 999);
+    const answerTime = clampInt(draft.answerTime, 1, 30);
+
+    total += questionCount * (timePerQ + answerTime);
+
+    if (questionCount > 1){
+      total += (questionCount - 1) * transitionSec;
+    }
+  }
+
+  return total;
+}
+
+function formatEstimatedDuration(totalSeconds){
+  const rounded = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+
+  if (minutes <= 0){
+    return `${seconds} s`;
+  }
+
+  if (seconds === 0){
+    return `${minutes} min`;
+  }
+
+  return `${minutes} min ${seconds} s`;
 }
 
 /* =========================

@@ -95,6 +95,7 @@ async function boot(){
       classCode,
       configName,
       moduleKey,
+      globals: remote.config_json.globals ?? {},
       drafts: remote.config_json.drafts,
       onExitToActivities: goBackToActivities,
       onFatalError: (message) => showFatalError(message),

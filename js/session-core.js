@@ -10,11 +10,16 @@ const DEFAULT_TOOL_ROW = Object.freeze({
   settings: null
 });
 
+const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
+  questionTransitionSec: 5
+});
+
 export function createSessionEngine({
   els,
   classCode,
   configName,
   moduleKey,
+  globals,
   drafts,
   onExitToActivities,
   onFatalError
@@ -39,6 +44,24 @@ export function createSessionEngine({
   const configDrafts = new Map();
 
   let moduleRuntime = null;
+
+    const activityGlobals = {
+    questionTransitionSec: clampInt(
+      globals?.questionTransitionSec,
+      0,
+      30
+    )
+  };
+
+  if (!Number.isFinite(activityGlobals.questionTransitionSec)) {
+    activityGlobals.questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec;
+  }
+
+  activityGlobals.questionTransitionSec = clampInt(
+    activityGlobals.questionTransitionSec || DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
+    0,
+    30
+  );
 
   return {
     init,
@@ -252,11 +275,13 @@ export function createSessionEngine({
       });
 
       const bar = document.getElementById("miniTimerBar");
+      const transitionMs = activityGlobals.questionTransitionSec * 1000;
+
       if (bar) {
-        bar.style.animation = "miniDrain 5s linear forwards";
+        bar.style.animation = `miniDrain ${activityGlobals.questionTransitionSec}s linear forwards`;
       }
 
-      await waitMs(5000);
+      await waitMs(transitionMs);
       closeOverlay();
       engineState = "RUNNING";
     }
