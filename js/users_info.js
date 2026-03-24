@@ -240,8 +240,11 @@ export async function loadPublicActivityConfig(classCode, configName) {
   if (error) throw error;
   if (!data) return null;
 
-  const rawConfig = data?.config_json ?? data;
-  const rawModuleKey = data?.module_key ?? "maths";
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+
+  const rawConfig = row.config_json ?? row;
+  const rawModuleKey = row.module_key ?? "maths";
 
   return {
     class_code: code,
