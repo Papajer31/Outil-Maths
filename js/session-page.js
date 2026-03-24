@@ -81,7 +81,6 @@ async function boot(){
 
     const moduleKey = String(
       remote.module_key ??
-      remote.tool_key ??
       remote.module ??
       "maths"
     ).trim();

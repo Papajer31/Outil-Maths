@@ -240,12 +240,15 @@ export async function loadPublicActivityConfig(classCode, configName) {
   if (error) throw error;
   if (!data) return null;
 
+  const rawConfig = data?.config_json ?? data;
+  const rawModuleKey = data?.module_key ?? "maths";
+
   return {
     class_code: code,
     config_name: cleanDisplayName(configName),
     config_name_normalized: normalizedConfigName,
-    module_key: "maths",
-    config_json: data,
+    module_key: cleanDisplayName(rawModuleKey) || "maths",
+    config_json: rawConfig,
   };
 }
 
@@ -259,7 +262,7 @@ export async function getMyActivitiesForClass(classSpaceId) {
     .select(`
       id,
       class_space_id,
-      tool_key,
+      module_key,
       config_name,
       config_name_normalized,
       config_json,
@@ -282,7 +285,7 @@ export async function getMyActivityByName(classSpaceId, configName) {
     .select(`
       id,
       class_space_id,
-      tool_key,
+      module_key,
       config_name,
       config_name_normalized,
       config_json,
@@ -300,7 +303,7 @@ export async function getMyActivityByName(classSpaceId, configName) {
 export async function saveActivityConfig(params) {
   const {
     classCode,
-    toolKey,
+    moduleKey,
     configName,
     configJson,
     classTitle = "",
@@ -314,7 +317,7 @@ export async function saveActivityConfig(params) {
   const normalizedClassCode = normalizeClassCode(classCode);
   const displayConfigName = cleanDisplayName(configName);
   const normalizedConfigName = normalizeConfigName(configName);
-  const cleanedToolKey = cleanDisplayName(toolKey).toLowerCase();
+  const cleanedModuleKey = cleanDisplayName(moduleKey);
 
   if (!normalizedClassCode) {
     throw new Error("Code classe vide.");
@@ -328,8 +331,8 @@ export async function saveActivityConfig(params) {
     throw new Error("Nom de configuration invalide.");
   }
 
-  if (!cleanedToolKey) {
-    throw new Error("Clé outil vide.");
+  if (!cleanedModuleKey) {
+    throw new Error("Clé module vide.");
   }
 
   if (configJson === undefined) {
@@ -342,7 +345,7 @@ export async function saveActivityConfig(params) {
 
   const payload = {
     class_space_id: classSpace.id,
-    tool_key: cleanedToolKey,
+    module_key: cleanedModuleKey,
     config_name: displayConfigName,
     config_name_normalized: normalizedConfigName,
     config_json: configJson,
@@ -357,7 +360,7 @@ export async function saveActivityConfig(params) {
     .select(`
       id,
       class_space_id,
-      tool_key,
+      module_key,
       config_name,
       config_name_normalized,
       config_json,
@@ -399,7 +402,7 @@ export async function importPublicActivityToMyClass(params) {
     sourceConfigName,
     targetClassCode,
     targetConfigName,
-    targetToolKey,
+    targetModuleKey,
     targetClassTitle = "",
   } = params || {};
 
@@ -408,13 +411,15 @@ export async function importPublicActivityToMyClass(params) {
     throw new Error("Activité source introuvable.");
   }
 
-  const sourceToolKey =
-    cleanDisplayName(targetToolKey || "") ||
-    cleanDisplayName(loaded.config_json?.tool || "");
+  const sourceModuleKey =
+    cleanDisplayName(targetModuleKey || "") ||
+    cleanDisplayName(loaded.module_key || "") ||
+    cleanDisplayName(loaded.config_json?.module_key || "") ||
+    "maths";
 
   return await saveActivityConfig({
     classCode: targetClassCode,
-    toolKey: sourceToolKey || "activity",
+    moduleKey: sourceModuleKey,
     configName: targetConfigName || sourceConfigName,
     configJson: loaded.config_json,
     classTitle: targetClassTitle,

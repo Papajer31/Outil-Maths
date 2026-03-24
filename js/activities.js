@@ -84,7 +84,7 @@ function renderActivities(classCode, activities){
 
   activitiesList.innerHTML = activities.map((activity) => {
     const configName = escapeHtml(activity.config_name ?? "Sans nom");
-    const toolKey = escapeHtml(activity.tool_key ?? "");
+    const moduleKey = escapeHtml(activity.module_key ?? "");
     const createdAt = formatDate(activity.created_at);
     const updatedAt = formatDate(activity.updated_at);
 
@@ -106,7 +106,7 @@ function renderActivities(classCode, activities){
         <div style="font-weight:900;font-size:24px;">${configName}</div>
 
         <div style="color:var(--muted);font-size:15px;">
-          ${toolKey ? `Outil : ${toolKey}` : ""}
+          ${moduleKey ? `Module : ${moduleKey}` : ""}
         </div>
 
         <div style="color:var(--muted);font-size:13px;">

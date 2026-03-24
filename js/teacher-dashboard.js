@@ -486,7 +486,7 @@ async function renderConfigsForCurrentClass(){
           <div class="dashboard-config-main">
             <div class="dashboard-config-title">${escapeHtml(cfg.config_name)}</div>
             <div class="dashboard-config-meta">
-              <span class="dashboard-mini-pill">Outil : ${escapeHtml(cfg.tool_key || "")}</span>
+              <span class="dashboard-mini-pill">Module : ${escapeHtml(cfg.module_key || "")}</span>
               <span class="dashboard-config-date">${updated ? `Modifiée : ${updated}` : ""}</span>
             </div>
           </div>

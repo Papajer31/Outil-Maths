@@ -52,7 +52,7 @@ let currentClassCode = "";
 let currentConfigName = "";
 let currentClassSpace = null;
 
-const currentModuleKey = "maths";
+let currentModuleKey = "maths";
 
 let moduleRuntime = null;
 let toolsCatalog = [];
@@ -97,12 +97,22 @@ async function boot(){
       return;
     }
 
+    let existingConfig = null;
+
+    if (currentConfigName){
+      existingConfig = await getMyActivityByName(currentClassSpace.id, currentConfigName);
+
+      if (existingConfig?.module_key){
+        currentModuleKey = existingConfig.module_key;
+      }
+    }
+
     moduleRuntime = loadModuleRuntime(currentModuleKey);
     toolsCatalog = await moduleRuntime.loadToolsCatalog();
     ensureConfigDrafts();
 
-    if (currentConfigName){
-      await loadExistingConfig();
+    if (existingConfig){
+      loadExistingConfig(existingConfig);
     }
 
     renderMeta();
@@ -119,9 +129,7 @@ async function boot(){
    CHARGEMENT
    ========================= */
 
-async function loadExistingConfig(){
-  const existing = await getMyActivityByName(currentClassSpace.id, currentConfigName);
-
+function loadExistingConfig(existing){
   if (!existing?.config_json?.drafts){
     setMessage("Configuration introuvable, création d’une nouvelle base.", true);
     return;
@@ -361,7 +369,7 @@ async function saveCurrentConfig(){
   try {
     await saveActivityConfig({
       classCode: currentClassCode,
-      toolKey: currentModuleKey,
+      moduleKey: currentModuleKey,
       configName: name,
       configJson: {
         version: 1,
@@ -567,10 +575,6 @@ function setStatus(text, mood){
     if (mood === "good") els.pillStatus.classList.add("good");
     else if (mood === "warn") els.pillStatus.classList.add("warn");
     else if (mood === "bad") els.pillStatus.classList.add("bad");
-  }
-
-  if (els.headerTitle){
-    els.headerTitle.textContent = text;
   }
 }
 
