@@ -4,86 +4,68 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Éditeur de configuration</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="css/config-editor.css">
 </head>
 
 <body>
   <div id="appRoot">
-    <div id="workArea" style="align-items:flex-start;justify-content:center;overflow:auto;">
-      <div style="width:min(1100px, 100%);display:flex;flex-direction:column;gap:16px;padding-bottom:20px;">
+    <div id="workArea" class="cfg-page-shell">
+      <div class="cfg-page">
 
-        <div class="panel" style="display:flex;flex-direction:column;gap:12px;">
-          
-          <!-- HEADER -->
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-            <div>
-              <div style="font-weight:900;font-size:28px;">Éditeur de configuration</div>
-              <div id="editorMeta" style="color:var(--muted);margin-top:4px;">Chargement…</div>
-            </div>
+        <header class="panel cfg-header">
+          <div class="cfg-header-row cfg-header-row-top">
+            <button class="btn cfg-back-btn" id="btnBackDashboard" type="button" aria-label="Retour au tableau de bord">↩</button>
 
-            <div style="display:flex;gap:8px;align-items:center;">
-              <div class="pill" id="pillStatus">Configuration</div>
-              <button class="btn" id="btnBackDashboard" type="button">← Tableau de bord</button>
-              <button class="btn primary" id="btnSaveConfig" type="button">Enregistrer</button>
-            </div>
+            <div class="cfg-page-title">Éditeur d’activités</div>
+
+            <div class="cfg-spacer"></div>
+
+            <label class="cfg-inline-field cfg-name-field">
+              <span>Nom de l’activité :</span>
+              <input id="configNameInput" type="text" placeholder="Ex : Additions (période 1)" class="cfg-input">
+            </label>
           </div>
 
-          <!-- FORM -->
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div style="flex:1 1 260px;">
-              <div style="font-weight:700;margin-bottom:6px;">Code classe</div>
-              <input id="classCodeInput" type="text" readonly class="cfg-input">
+          <div class="cfg-header-row cfg-header-row-bottom">
+            <div class="cfg-module-block">
+              <div class="cfg-field-label">Module</div>
+              <select id="moduleSelect" class="cfg-input"></select>
             </div>
 
-            <div style="flex:2 1 360px;">
-              <div style="font-weight:700;margin-bottom:6px;">Nom de la configuration</div>
-              <input id="configNameInput" type="text" placeholder="Ex : Picbille1" class="cfg-input">
-            </div>
+            <div class="cfg-spacer"></div>
 
-            <div class="cfg-estimate">
-              <div>Temps de l’activité estimé</div>
-              <strong id="activityEstimateValue">0 min</strong>
-            </div>
+            <button class="btn cfg-save-btn" id="btnSaveConfig" type="button">Enregistrer</button>
           </div>
 
-          <div id="editorMessage" style="min-height:24px;color:var(--muted);"></div>
-        </div>
+          <div id="editorMessage" class="cfg-editor-message"></div>
+        </header>
 
-        <div class="panel" style="display:flex;flex-direction:column;gap:14px;">
-          <div style="font-weight:900;font-size:24px;">Paramètres des outils</div>
+        <section class="cfg-main">
+          <aside class="panel cfg-tools-panel">
+            <div class="cfg-panel-title">Outils</div>
+            <div id="configRows" class="cfg-tools-list"></div>
+          </aside>
 
-          <div class="cfg-global-row">
-            <div class="cfg-global-field">
-              <div class="cfg-global-label">Changement de question (s)</div>
-              <input id="questionTransitionSecInput" class="cfg-input cfg-input-small" type="number" min="0" max="30" step="1">
-            </div>
-          </div>
+          <section class="panel cfg-settings-panel">
+            <div class="cfg-settings-header">
+              <div class="cfg-panel-title" id="toolConfigTitle">Configuration de l’outil</div>
 
-          <div class="cfg-table">
-            <div class="cfg-head">
-              <div></div>
-              <div>Outil</div>
-              <div>Temps (s)</div>
-              <div>Questions</div>
-              <div>Réponse (s)</div>
-              <div></div>
+              <div class="cfg-global-inline">
+                <span class="cfg-global-label">Temps entre les questions</span>
+                <input id="questionTransitionSecInput" class="cfg-input cfg-input-small" type="number">
+              </div>
             </div>
 
-            <div id="configRows"></div>
-          </div>
-        </div>
+            <div id="toolConfigHost" class="cfg-tool-config-host">
+              <div class="cfg-empty-state">
+                Sélectionne un outil dans la colonne de gauche.
+              </div>
+            </div>
+          </section>
+        </section>
 
       </div>
-    </div>
-  </div>
-
-  <div class="overlay overlay-tool hidden" id="toolOverlay">
-    <div class="overlay-card overlay-card-tool">
-      <div class="overlay-title" id="toolOverlayTitle">Réglages outil</div>
-      <div id="toolOverlayBody"></div>
-      <div class="overlay-actions" id="toolOverlayActions"></div>
-      <div class="overlay-hint" id="toolOverlayHint"></div>
     </div>
   </div>
 

@@ -1,11 +1,38 @@
 import { createMathsModuleRuntime } from "../modules/maths/module.js";
+import { createProductionEcritModuleRuntime } from "../modules/production-ecrit/module.js";
+
+const MODULE_DEFS = {
+  maths: {
+    key: "maths",
+    label: "Maths",
+    createRuntime: createMathsModuleRuntime
+  },
+  "production-ecrit": {
+    key: "production-ecrit",
+    label: "Production d’écrit",
+    createRuntime: createProductionEcritModuleRuntime
+  }
+};
+
+export function getAvailableModules() {
+  return Object.values(MODULE_DEFS).map((def) => ({
+    key: def.key,
+    label: def.label
+  }));
+}
+
+export function getModuleLabel(moduleKey) {
+  const normalizedModuleKey = String(moduleKey || "").trim();
+  return MODULE_DEFS[normalizedModuleKey]?.label || normalizedModuleKey;
+}
 
 export function loadModuleRuntime(moduleKey) {
   const normalizedModuleKey = String(moduleKey || "").trim();
+  const def = MODULE_DEFS[normalizedModuleKey];
 
-  if (normalizedModuleKey === "maths") {
-    return createMathsModuleRuntime();
+  if (!def) {
+    throw new Error(`Module inconnu : ${normalizedModuleKey}`);
   }
 
-  throw new Error(`Module inconnu : ${normalizedModuleKey}`);
+  return def.createRuntime();
 }

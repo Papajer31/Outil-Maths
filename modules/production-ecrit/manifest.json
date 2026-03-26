@@ -1,0 +1,10 @@
+{
+  "module": "production-ecrit",
+  "version": 1,
+  "tools": {
+    "PhrasesEnMorceaux": {
+      "label": "Phrases en morceaux",
+      "entry": "./tools/PhrasesEnMorceaux/tool.js"
+    }
+  }
+}

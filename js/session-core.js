@@ -1,22 +1,17 @@
 import { loadModuleRuntime } from "./module-registry.js";
-
-const STORAGE_PREFIX = "outil-maths-session-v2";
-
-const DEFAULT_TOOL_ROW = Object.freeze({
-  enabled: false,
-  timePerQ: 40,
-  questionCount: 10,
-  answerTime: 5,
-  settings: null
-});
-
-const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
-  questionTransitionSec: 5
-});
+import {
+  TOOL_LIMITS,
+  DEFAULT_TOOL_ROW,
+  DEFAULT_ACTIVITY_GLOBALS,
+  clampInt,
+  cloneData,
+  normalizeActivityGlobals,
+  normalizeToolDraft
+} from "./activity-config.js";
 
 export function createSessionEngine({
   els,
-  classCode,
+  accessCode,
   configName,
   moduleKey,
   globals,
@@ -32,6 +27,7 @@ export function createSessionEngine({
   let activeTool = null;
   let questionTimer = null;
   let answerTimer = null;
+  let transitionTimer = null;
   let gaugeRaf = null;
   let gaugeStart = 0;
   let gaugeDurationMs = 0;
@@ -39,29 +35,21 @@ export function createSessionEngine({
   let paused = false;
   let engineState = "IDLE";
   let isSessionRunning = false;
+  let phase = createPhase("IDLE");
+  let pausedPhase = null;
 
   const toolModuleCache = new Map();
   const configDrafts = new Map();
 
   let moduleRuntime = null;
+  let selectedStudent = null;
+  let sessionRequiresStudent = false;
+  let allowedStudentIds = [];
 
-    const activityGlobals = {
-    questionTransitionSec: clampInt(
-      globals?.questionTransitionSec,
-      0,
-      30
-    )
+  const activityGlobals = {
+    ...DEFAULT_ACTIVITY_GLOBALS,
+    ...normalizeActivityGlobals(globals)
   };
-
-  if (!Number.isFinite(activityGlobals.questionTransitionSec)) {
-    activityGlobals.questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec;
-  }
-
-  activityGlobals.questionTransitionSec = clampInt(
-    activityGlobals.questionTransitionSec || DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
-    0,
-    30
-  );
 
   return {
     init,
@@ -69,7 +57,9 @@ export function createSessionEngine({
     pauseForInterruption,
     resumeAfterPause,
     isRunning,
-    stop
+    stop,
+    getSessionMeta,
+    setSelectedStudent
   };
 
   async function init() {
@@ -84,86 +74,83 @@ export function createSessionEngine({
     }
   }
 
-  async function openStartOverlay() {
-    const saved = loadSavedSession();
+async function openStartOverlay(){
+  openOverlay({
+    title: "",
+    body: `
+      <div class="start-panel">
 
-    if (saved?.session?.length) {
-      openOverlay({
-        title: "Séance interrompue",
-        body: `
-          <div style="display:flex;flex-direction:column;gap:14px;justify-content:center;align-items:center;min-height:220px;">
-            <div class="panel">Classe : <strong>${escapeHtml(classCode)}</strong></div>
-            <div class="panel">Activité : <strong>${escapeHtml(configName)}</strong></div>
-            <div class="panel">Une reprise est disponible.</div>
-          </div>
-        `,
-        actions: [
-          {
-            label: "Retour aux activités",
-            primary: false,
-            onClick: () => {
-              clearSavedSession();
-              onExitToActivities?.();
-            }
-          },
-          {
-            label: "Reprendre",
-            primary: true,
-            onClick: () => resumeFromSaved(saved)
-          }
-        ],
-        hint: ""
-      });
-      return;
-    }
-
-    openOverlay({
-      title: "",
-      body: `
-        <div style="display:flex;flex-direction:column;gap:14px;justify-content:center;align-items:center;min-height:220px;">
-          <div class="panel">Classe : <strong>${escapeHtml(classCode)}</strong></div>
-          <div class="panel">Activité : <strong>${escapeHtml(configName)}</strong></div>
-          <button class="btn primary btn-big" id="btnStartSession" type="button">Démarrer</button>
+        <div class="start-panel-topbar">
+          <button
+            class="btn btn-icon start-back-btn"
+            id="startBackBtn"
+            type="button"
+            aria-label="Retour"
+          >
+            <span class="icon">&#xEAA7;</span>
+          </button>
         </div>
-      `,
-      actions: [
-        {
-          label: "Retour aux activités",
-          primary: false,
-          onClick: onExitToActivities
-        }
-      ],
-      hint: ""
-    });
 
-    document.getElementById("btnStartSession")?.addEventListener("click", startSession);
-  }
+        <div class="start-panel-content">
+          <button class="btn primary start-btn" id="startBtn" type="button">
+            Démarrer
+          </button>
+        </div>
+
+      </div>
+    `,
+    actions: [],
+    hint: ""
+  });
+
+  document.getElementById("startBackBtn")
+    ?.addEventListener("click", onExitToActivities);
+
+  document.getElementById("startBtn")
+    ?.addEventListener("click", startSession);
+}
 
   function isRunning() {
     return isSessionRunning;
   }
 
   function stop() {
-    stopQuestionLoop();
+    stopAllTimers();
     isSessionRunning = false;
     paused = false;
+    pausedPhase = null;
+    engineState = "IDLE";
+    phase = createPhase("IDLE");
     activeTool = null;
-    clearSavedSession();
     hideTimer();
+    closeOverlay();
     clearWorkArea();
   }
 
   async function startSession() {
+    if (sessionRequiresStudent && !selectedStudent) {
+      onFatalError?.("Aucun élève sélectionné pour cette activité.");
+      return;
+    }
+
     closeOverlay();
     currentToolIndex = -1;
     currentQuestionIndex = -1;
     isSessionRunning = true;
     paused = false;
-    await nextTool(true);
+    pausedPhase = null;
+    engineState = "IDLE";
+    phase = createPhase("IDLE");
+
+    try {
+      await nextTool(true);
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant la séance.");
+    }
   }
 
   async function nextTool(isFirst) {
-    stopQuestionLoop();
+    stopAllTimers();
 
     if (activeTool?.unmount) {
       try {
@@ -178,8 +165,8 @@ export function createSessionEngine({
     if (currentToolIndex >= session.length) {
       hideTimer();
       engineState = "DONE";
+      phase = createPhase("DONE");
       isSessionRunning = false;
-      clearSavedSession();
       setStatus("Séance terminée", "good");
 
       openOverlay({
@@ -203,27 +190,9 @@ export function createSessionEngine({
 
     const item = session[currentToolIndex];
     setStatus(`${item.title} — prêt`, "warn");
-    saveSessionSnapshot();
 
     if (!isFirst) {
-      engineState = "BETWEEN_TOOLS";
-
-      openOverlay({
-        title: "",
-        body: `
-          <div style="display:flex;justify-content:center;align-items:center;min-height:220px;">
-            <button class="btn primary btn-big" id="btnNextActivity" type="button">Activité suivante</button>
-          </div>
-        `,
-        actions: [],
-        hint: ""
-      });
-
-      document.getElementById("btnNextActivity")?.addEventListener("click", () => {
-        beginTool(item).catch((err) => {
-          onFatalError?.(err?.message || "Erreur pendant le chargement de l’outil.");
-        });
-      });
+      openNextToolOverlay(item);
       return;
     }
 
@@ -232,21 +201,38 @@ export function createSessionEngine({
 
   async function beginTool(item) {
     closeOverlay();
+    stopAllTimers();
 
     const mod = await loadToolModule(item.id);
     activeTool = mod.default ?? {};
 
     const ctx = getToolContext(item);
-    activeTool.mount?.(els.workArea, ctx);
 
-    engineState = "RUNNING";
-    showTimer();
+    if (typeof activeTool.getQuestionCount === "function") {
+      item.questionCount = clampInt(
+        activeTool.getQuestionCount(ctx),
+        1,
+        999,
+        item.questionCount
+      );
+    }
+
+    if (typeof activeTool.getQuestionTime === "function") {
+      item.timePerQ = clampInt(
+        activeTool.getQuestionTime(ctx),
+        1,
+        300,
+        item.timePerQ
+      );
+    }
+
+    activeTool.mount?.(els.workArea, ctx);
 
     await nextQuestion(item, true);
   }
 
   async function nextQuestion(item, isFirstQuestion) {
-    stopQuestionLoop();
+    stopAllTimers();
 
     currentQuestionIndex += 1;
 
@@ -256,65 +242,28 @@ export function createSessionEngine({
       return;
     }
 
-    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionCount}`, "pill");
-    saveSessionSnapshot();
-
     if (!isFirstQuestion) {
-      engineState = "BETWEEN_QUESTIONS";
-
-      openOverlay({
-        title: "Nouvelle question",
-        body: `
-          <div class="mini-timer" aria-hidden="true">
-            <div class="mini-timer-bar" id="miniTimerBar"></div>
-          </div>
-        `,
-        actions: [],
-        hint: "",
-        opaque: true
-      });
-
-      const bar = document.getElementById("miniTimerBar");
-      const transitionMs = activityGlobals.questionTransitionSec * 1000;
-
-      if (bar) {
-        bar.style.animation = `miniDrain ${activityGlobals.questionTransitionSec}s linear forwards`;
-      }
-
-      await waitMs(transitionMs);
-      closeOverlay();
-      engineState = "RUNNING";
+      beginQuestionTransition(item);
+      return;
     }
 
-    const ctx = getToolContext(item);
-    activeTool.nextQuestion?.(els.workArea, ctx);
-
-    startGauge(item.timePerQ * 1000);
-
-    questionTimer = setTimeout(() => {
-      const showCtx = getToolContext(item);
-      activeTool.showAnswer?.(els.workArea, showCtx);
-
-      answerTimer = setTimeout(() => {
-        answerTimer = null;
-        nextQuestion(item, false).catch((err) => {
-          onFatalError?.(err?.message || "Erreur pendant la séance.");
-        });
-      }, item.answerTime * 1000);
-    }, item.timePerQ * 1000);
+    beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
   }
 
   function pauseForInterruption() {
     if (!isSessionRunning) return;
     if (paused) return;
 
+    pausedPhase = captureCurrentPhase();
     paused = true;
+    engineState = "PAUSED";
 
-    stopQuestionLoop();
+    stopAllTimers();
     hideTimer();
+    closeOverlay();
 
     openOverlay({
-      title: "",
+      title: "Pause",
       body: `
         <div style="display:flex;justify-content:center;align-items:center;min-height:220px;">
           <button class="btn primary btn-big" id="btnResume" type="button">Reprendre</button>
@@ -329,107 +278,209 @@ export function createSessionEngine({
 
   function resumeAfterPause() {
     closeOverlay();
+
+    if (!paused) return;
+
     paused = false;
 
-    if (!isSessionRunning) return;
-    const item = session?.[currentToolIndex];
-    if (!item) return;
+    if (!isSessionRunning) {
+      pausedPhase = null;
+      return;
+    }
 
-    startCurrentQuestion(item, { regenerate: false });
+    const item = session[currentToolIndex];
+    if (!item) {
+      pausedPhase = null;
+      return;
+    }
+
+    const snap = pausedPhase ?? createPhase("IDLE");
+    pausedPhase = null;
+
+    switch (snap.kind) {
+      case "QUESTION":
+        beginQuestionPhase(item, snap.remainingMs, { generateQuestion: false });
+        return;
+
+      case "ANSWER":
+        beginAnswerPhase(item, snap.remainingMs, { showAnswerNow: false });
+        return;
+
+      case "TRANSITION":
+        beginQuestionTransition(item, snap.remainingMs);
+        return;
+
+      case "BETWEEN_TOOLS":
+        openNextToolOverlay(item);
+        return;
+
+      default:
+        engineState = "RUNNING_QUESTION";
+        phase = createPhase("IDLE");
+        return;
+    }
   }
 
-  function startCurrentQuestion(item, { regenerate = false } = {}) {
-    stopQuestionLoop();
+  function beginQuestionPhase(item, durationMs, { generateQuestion = false } = {}) {
+    stopAllTimers();
 
     if (!activeTool || !item) return;
 
+    const remainingMs = clampPhaseDuration(durationMs);
     const ctx = getToolContext(item);
 
-    if (regenerate) {
+    if (generateQuestion) {
       activeTool.nextQuestion?.(els.workArea, ctx);
     }
 
-    engineState = "RUNNING";
+    engineState = "RUNNING_QUESTION";
+    phase = createPhase("QUESTION", remainingMs);
+    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionCount}`);
     showTimer();
+    startGauge(remainingMs);
 
-    startGauge(item.timePerQ * 1000);
+    questionTimer = window.setTimeout(() => {
+      questionTimer = null;
 
-    questionTimer = setTimeout(() => {
-      const showCtx = getToolContext(item);
-      activeTool.showAnswer?.(els.workArea, showCtx);
-
-      answerTimer = setTimeout(() => {
-        answerTimer = null;
+      if (item.hasAnswerPhase === false) {
         nextQuestion(item, false).catch((err) => {
           onFatalError?.(err?.message || "Erreur pendant la séance.");
         });
-      }, item.answerTime * 1000);
-    }, item.timePerQ * 1000);
+        return;
+      }
 
-    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionCount}`, "pill");
-    saveSessionSnapshot();
+      beginAnswerPhase(item, item.answerTime * 1000, { showAnswerNow: true });
+    }, remainingMs);
   }
 
-  async function resumeFromSaved(saved) {
-    closeOverlay();
+  function beginAnswerPhase(item, durationMs, { showAnswerNow = true } = {}) {
+    stopAllTimers();
 
-    session = saved.session ?? [];
-    currentToolIndex = saved.currentToolIndex ?? 0;
-    currentQuestionIndex = saved.currentQuestionIndex ?? -1;
+    if (!activeTool || !item) return;
 
-    if (currentToolIndex < 0) currentToolIndex = 0;
-    if (currentToolIndex >= session.length) currentToolIndex = 0;
-    if (currentQuestionIndex < -1) currentQuestionIndex = -1;
+    const remainingMs = clampPhaseDuration(durationMs);
 
-    isSessionRunning = true;
-    paused = false;
+    if (showAnswerNow) {
+      const showCtx = getToolContext(item);
+      activeTool.showAnswer?.(els.workArea, showCtx);
+    }
 
-    const item = session[currentToolIndex];
-    setStatus(`${item.title}`, "warn");
+    engineState = "RUNNING_ANSWER";
+    phase = createPhase("ANSWER", remainingMs);
+    hideTimer();
 
-    await remountAndResume(item);
+    answerTimer = window.setTimeout(() => {
+      answerTimer = null;
+      nextQuestion(item, false).catch((err) => {
+        onFatalError?.(err?.message || "Erreur pendant la séance.");
+      });
+    }, remainingMs);
   }
 
-  async function remountAndResume(item) {
-    closeOverlay();
-    stopQuestionLoop();
+  function beginQuestionTransition(item, durationMs = activityGlobals.questionTransitionSec * 1000) {
+    stopAllTimers();
 
-    const mod = await loadToolModule(item.id);
-    activeTool = mod.default ?? {};
+    const remainingMs = Math.max(0, Math.floor(Number(durationMs) || 0));
 
-    const ctx = getToolContext(item);
-    activeTool.mount?.(els.workArea, ctx);
-    activeTool.nextQuestion?.(els.workArea, ctx);
+    if (remainingMs <= 0) {
+      closeOverlay();
+      beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+      return;
+    }
 
-    engineState = "RUNNING";
-    showTimer();
+    engineState = "BETWEEN_QUESTIONS";
+    phase = createPhase("TRANSITION", remainingMs);
+    hideTimer();
 
-    startCurrentQuestion(item, { regenerate: false });
+    openOverlay({
+      title: "Nouvelle question",
+      body: `
+        <div class="mini-timer" aria-hidden="true">
+          <div class="mini-timer-bar" id="miniTimerBar"></div>
+        </div>
+      `,
+      actions: [],
+      hint: "",
+      opaque: true
+    });
+
+    animateMiniTimer(remainingMs);
+
+    transitionTimer = window.setTimeout(() => {
+      transitionTimer = null;
+      closeOverlay();
+      beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+    }, remainingMs);
+  }
+
+  function openNextToolOverlay(item) {
+    stopAllTimers();
+    hideTimer();
+    engineState = "BETWEEN_TOOLS";
+    phase = createPhase("BETWEEN_TOOLS");
+
+    openOverlay({
+      title: "",
+      body: `
+        <div style="display:flex;justify-content:center;align-items:center;min-height:220px;">
+          <button class="btn primary btn-big" id="btnNextActivity" type="button">Activité suivante</button>
+        </div>
+      `,
+      actions: [],
+      hint: ""
+    });
+
+    document.getElementById("btnNextActivity")?.addEventListener("click", () => {
+      beginTool(item).catch((err) => {
+        onFatalError?.(err?.message || "Erreur pendant le chargement de l’outil.");
+      });
+    });
+  }
+
+  function captureCurrentPhase() {
+    switch (phase.kind) {
+      case "QUESTION":
+      case "ANSWER":
+      case "TRANSITION":
+        return createPhase(phase.kind, getPhaseRemainingMs());
+
+      case "BETWEEN_TOOLS":
+        return createPhase("BETWEEN_TOOLS");
+
+      default:
+        return createPhase(phase.kind);
+    }
+  }
+
+  function getPhaseRemainingMs() {
+    if (!phase?.remainingMs) return 0;
+    const elapsed = performance.now() - phase.startedAt;
+    return Math.max(0, Math.ceil(phase.remainingMs - elapsed));
+  }
+
+  function createPhase(kind, remainingMs = 0) {
+    return {
+      kind,
+      remainingMs: Math.max(0, Math.floor(Number(remainingMs) || 0)),
+      startedAt: performance.now()
+    };
+  }
+
+  function clampPhaseDuration(value) {
+    return Math.max(1, Math.floor(Number(value) || 0));
   }
 
   function ensureConfigDrafts() {
     for (const t of toolsCatalog) {
       if (!configDrafts.has(t.id)) {
-        configDrafts.set(t.id, {
-          enabled: DEFAULT_TOOL_ROW.enabled,
-          timePerQ: DEFAULT_TOOL_ROW.timePerQ,
-          questionCount: DEFAULT_TOOL_ROW.questionCount,
-          answerTime: DEFAULT_TOOL_ROW.answerTime,
-          settings: null
-        });
+        configDrafts.set(t.id, normalizeToolDraft(DEFAULT_TOOL_ROW));
       }
     }
   }
 
   function getToolDraft(id) {
     if (!configDrafts.has(id)) {
-      configDrafts.set(id, {
-        enabled: DEFAULT_TOOL_ROW.enabled,
-        timePerQ: DEFAULT_TOOL_ROW.timePerQ,
-        questionCount: DEFAULT_TOOL_ROW.questionCount,
-        answerTime: DEFAULT_TOOL_ROW.answerTime,
-        settings: null
-      });
+      configDrafts.set(id, normalizeToolDraft(DEFAULT_TOOL_ROW));
     }
     return configDrafts.get(id);
   }
@@ -442,24 +493,17 @@ export function createSessionEngine({
       const draft = getToolDraft(t.id);
 
       if (!incoming) {
-        draft.enabled = DEFAULT_TOOL_ROW.enabled;
-        draft.timePerQ = DEFAULT_TOOL_ROW.timePerQ;
-        draft.questionCount = DEFAULT_TOOL_ROW.questionCount;
-        draft.answerTime = DEFAULT_TOOL_ROW.answerTime;
-        draft.settings = null;
+        Object.assign(draft, normalizeToolDraft(DEFAULT_TOOL_ROW));
         continue;
       }
 
-      draft.enabled = !!incoming.enabled;
-      draft.timePerQ = clampInt(incoming.timePerQ, 5, 999);
-      draft.questionCount = clampInt(incoming.questionCount, 1, 200);
-      draft.answerTime = clampInt(incoming.answerTime, 1, 30);
-      draft.settings = incoming.settings == null ? null : cloneData(incoming.settings);
+      Object.assign(draft, normalizeToolDraft(incoming));
     }
   }
-
   async function prepareSessionFromDrafts() {
     const nextSession = [];
+    let requiresStudent = false;
+    const allowedIds = new Set();
 
     for (const t of toolsCatalog) {
       const draft = getToolDraft(t.id);
@@ -467,24 +511,43 @@ export function createSessionEngine({
 
       const mod = await loadToolModule(t.id);
       const tool = mod.default ?? {};
-
-      const timePerQ = clampInt(draft.timePerQ, 5, 999);
-      const questionCount = clampInt(draft.questionCount, 1, 200);
-      const answerTime = clampInt(draft.answerTime, 1, 30);
-      const settings = draft.settings == null
+      const normalizedDraft = normalizeToolDraft(draft);
+      const settings = normalizedDraft.settings == null
         ? getToolDefaultSettings(tool)
-        : cloneData(draft.settings);
+        : cloneData(normalizedDraft.settings);
+
+      const toolRequiresStudent = typeof tool.requiresStudent === "function"
+        ? !!tool.requiresStudent(settings)
+        : tool.requiresStudent === true;
+
+      if (toolRequiresStudent) {
+        requiresStudent = true;
+      }
+
+      const selectedIds = Array.isArray(settings?.selectionOrder) && settings.selectionOrder.length
+        ? settings.selectionOrder
+        : Array.isArray(settings?.selectedStudentIds)
+          ? settings.selectedStudentIds
+          : [];
+
+      selectedIds.forEach((id) => {
+        const cleanId = String(id || "").trim();
+        if (cleanId) allowedIds.add(cleanId);
+      });
 
       nextSession.push({
         id: t.id,
         title: t.title,
-        timePerQ,
-        questionCount,
-        answerTime,
+        timePerQ: normalizedDraft.timePerQ,
+        questionCount: normalizedDraft.questionCount,
+        answerTime: normalizedDraft.answerTime,
+        hasAnswerPhase: tool.hasAnswerPhase !== false,
         settings
       });
     }
 
+    sessionRequiresStudent = requiresStudent;
+    allowedStudentIds = [...allowedIds];
     session = nextSession;
   }
 
@@ -510,17 +573,39 @@ export function createSessionEngine({
   }
 
   function getToolContext(item) {
-    if (!item) return { sessionItem: null, settings: {} };
+    if (!item) {
+      return {
+        sessionItem: null,
+        settings: {},
+        student: selectedStudent,
+        studentFirstName: selectedStudent?.first_name ?? ""
+      };
+    }
+
     return {
       sessionItem: item,
-      settings: item.settings ?? {}
+      settings: item.settings ?? {},
+      student: selectedStudent,
+      studentFirstName: selectedStudent?.first_name ?? ""
     };
+  }
+
+  function getSessionMeta() {
+    return {
+      requiresStudent: sessionRequiresStudent,
+      allowedStudentIds: cloneData(allowedStudentIds),
+      selectedStudent: selectedStudent ? cloneData(selectedStudent) : null
+    };
+  }
+
+  function setSelectedStudent(student) {
+    selectedStudent = student ? cloneData(student) : null;
   }
 
   function startGauge(durationMs) {
     stopGauge();
     gaugeStart = performance.now();
-    gaugeDurationMs = durationMs;
+    gaugeDurationMs = Math.max(1, durationMs);
 
     const tick = (now) => {
       const t = (now - gaugeStart) / gaugeDurationMs;
@@ -541,6 +626,15 @@ export function createSessionEngine({
     gaugeRaf = requestAnimationFrame(tick);
   }
 
+  function animateMiniTimer(durationMs) {
+    const bar = document.getElementById("miniTimerBar");
+    if (!bar) return;
+
+    bar.style.animation = "none";
+    bar.offsetHeight;
+    bar.style.animation = `miniDrain ${Math.max(0, durationMs) / 1000}s linear forwards`;
+  }
+
   function stopGauge() {
     if (gaugeRaf) {
       cancelAnimationFrame(gaugeRaf);
@@ -551,7 +645,7 @@ export function createSessionEngine({
     }
   }
 
-  function stopQuestionLoop() {
+  function stopAllTimers() {
     if (questionTimer) {
       clearTimeout(questionTimer);
       questionTimer = null;
@@ -559,6 +653,10 @@ export function createSessionEngine({
     if (answerTimer) {
       clearTimeout(answerTimer);
       answerTimer = null;
+    }
+    if (transitionTimer) {
+      clearTimeout(transitionTimer);
+      transitionTimer = null;
     }
     stopGauge();
   }
@@ -618,81 +716,6 @@ export function createSessionEngine({
     els.overlay?.classList.remove("opaque");
     if (els.overlayActions) els.overlayActions.innerHTML = "";
   }
-
-  function saveSessionSnapshot() {
-    const snap = {
-      classCode,
-      configName,
-      session,
-      currentToolIndex,
-      currentQuestionIndex,
-      engineState,
-      savedAt: Date.now()
-    };
-
-    try {
-      localStorage.setItem(getStorageKey(), JSON.stringify(snap));
-    } catch {}
-  }
-
-  function loadSavedSession() {
-    try {
-      const raw = localStorage.getItem(getStorageKey());
-      if (!raw) return null;
-
-      const parsed = JSON.parse(raw);
-
-      if (parsed?.classCode !== classCode) return null;
-      if (parsed?.configName !== configName) return null;
-
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
-
-  function clearSavedSession() {
-    try {
-      localStorage.removeItem(getStorageKey());
-    } catch {}
-  }
-
-  function getStorageKey() {
-    return `${STORAGE_PREFIX}:${classCode}:${normalizeStoragePart(configName)}`;
-  }
-}
-
-/* =========================
-   HELPERS
-   ========================= */
-
-function normalizeStoragePart(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9_-]/g, "");
-}
-
-async function fetchJSON(path) {
-  const r = await fetch(path, { cache: "no-store" });
-  if (!r.ok) {
-    throw new Error(`Impossible de charger ${path} (${r.status})`);
-  }
-  return await r.json();
-}
-
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
-
-function cloneData(value) {
-  if (typeof structuredClone === "function") {
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
 }
 
 function escapeHtml(s) {
@@ -702,8 +725,4 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function waitMs(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,0 +1,193 @@
+.pem-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+
+.pem-student-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(120px, 1fr));
+  gap:10px;
+}
+
+.pem-student-chip{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:46px;
+  padding:0 12px;
+  border-radius:999px;
+  background:rgba(255,255,255,.05);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  font-weight:700;
+  cursor:pointer;
+  user-select:none;
+}
+
+.pem-student-chip input{
+  width:20px;
+  height:20px;
+  accent-color:var(--warn);
+}
+
+.pem-student-sections{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.pem-student-card{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.04);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+.pem-student-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+}
+
+.pem-student-name{
+  font-size:22px;
+  font-weight:800;
+  line-height:1.1;
+}
+
+.pem-student-timing{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+  font-weight:700;
+}
+
+.pem-student-time{
+  width:100px;
+  min-width:100px;
+  max-width:100px;
+  text-align:center;
+  font-size:22px;
+  font-weight:800;
+}
+
+.pem-student-body{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 52px;
+  gap:10px;
+  align-items:start;
+}
+
+.pem-student-text{
+  min-height:102px; /* ≈ 2 lignes confortables */
+
+  resize:none !important;
+  overflow:hidden;
+
+  line-height:1.5;
+  font-size:18px;
+
+  padding:14px 16px;
+
+  border-radius:16px;
+
+  background:rgb(225, 225, 225);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+
+  transition:background .12s ease, box-shadow .12s ease;
+}
+
+.pem-student-text:focus{
+  background:rgb(225, 225, 225);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.18),
+    0 0 0 2px rgba(255,255,255,.06);
+  outline:none;
+}
+
+.pem-student-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.pem-icon-btn{
+  width:48px;
+  height:48px;
+  min-width:48px;
+  border:none;
+  border-radius:14px;
+  background:rgba(255,255,255,.08);
+  color:var(--text);
+  font-size:22px;
+  font-weight:800;
+  cursor:pointer;
+  transition:transform .12s ease, background .12s ease;
+}
+
+.pem-icon-btn:hover{
+  transform:translateY(-1px);
+  background:rgba(255,255,255,.12);
+}
+
+.pem-placeholder{
+  color:var(--muted);
+  text-align:center;
+  padding:28px 20px;
+  border-radius:18px;
+  border:1px dashed rgba(255,255,255,.12);
+}
+
+.pem-mode-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,.06);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+.pem-mode-pill input{
+  display:none;
+}
+
+.pem-mode-option{
+  min-width:110px;
+  height:40px;
+  padding:0 16px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  color:var(--muted);
+  cursor:pointer;
+  transition:background .12s ease, color .12s ease, transform .12s ease;
+}
+
+.pem-mode-pill input:checked + .pem-mode-option{
+  background:rgba(255,255,255,.14);
+  color:var(--text);
+}
+
+@media (max-width: 900px){
+  .pem-student-body{
+    grid-template-columns:1fr;
+  }
+
+  .pem-student-actions{
+    flex-direction:row;
+  }
+
+  .pem-icon-btn{
+    width:52px;
+    height:52px;
+  }
+}

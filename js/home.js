@@ -1,5 +1,5 @@
 import {
-  normalizeClassCode,
+  normalizeAccessCode,
   getCurrentUser,
   signInUser
 } from "./users_info.js";
@@ -57,18 +57,26 @@ teacherPasswordInput?.addEventListener("keydown", (e) => {
    LOGIQUE ÉLÈVE
    ========================= */
 
-function goToActivities(){
+async function goToActivities(){
   const raw = classCodeInput?.value ?? "";
-  const code = normalizeClassCode(raw);
+  const code = normalizeAccessCode(raw);
 
   if (!code){
-    alert("Entre un code classe valide.");
+    alert("Entre un code de connexion valide.");
     return;
   }
 
   try {
-    localStorage.setItem("lastClassCode", code);
+    localStorage.setItem("lastAccessCode", code);
   } catch {}
+
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch {
+    // on continue quand même si le navigateur refuse
+  }
 
   window.location.href = `activities.html?classCode=${encodeURIComponent(code)}`;
 }

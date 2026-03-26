@@ -1,11 +1,13 @@
 import {
-  normalizeClassCode,
-  loadPublicActivityConfig
+  normalizeAccessCode,
+  loadPublicActivityConfig,
+  listPublicStudentsForSpace
 } from "./users_info.js";
 
 import {
   createSessionEngine
 } from "./session-core.js";
+
 
 /* =========================
    DOM
@@ -36,7 +38,7 @@ const els = {
   timerBar: document.getElementById("timerBar"),
 };
 
-let classCode = "";
+let accessCode = "";
 let configName = "";
 let engine = null;
 
@@ -53,16 +55,18 @@ boot();
 async function boot(){
   const params = new URLSearchParams(window.location.search);
 
-  classCode = normalizeClassCode(params.get("classCode"));
+  accessCode = normalizeAccessCode(
+    params.get("accessCode") || params.get("classCode")
+  );
   configName = String(params.get("configName") || "").trim();
 
-  if (!classCode || !configName){
+  if (!accessCode || !configName){
     showFatalError("Paramètres invalides. Retourne à la liste des activités.");
     return;
   }
 
   try {
-    localStorage.setItem("lastClassCode", classCode);
+    localStorage.setItem("lastAccessCode", accessCode);
   } catch {}
 
   bindStaticEvents();
@@ -72,7 +76,7 @@ async function boot(){
   setStatus("Chargement…", "warn");
 
   try {
-    const remote = await loadPublicActivityConfig(classCode, configName);
+    const remote = await loadPublicActivityConfig(accessCode, configName);
 
     if (!remote?.config_json?.drafts){
       showFatalError("Configuration introuvable ou invalide.");
@@ -92,7 +96,7 @@ async function boot(){
 
     engine = createSessionEngine({
       els,
-      classCode,
+      accessCode,
       configName,
       moduleKey,
       globals: remote.config_json.globals ?? {},
@@ -102,6 +106,26 @@ async function boot(){
     });
 
     await engine.init();
+
+    const meta = engine.getSessionMeta?.() ?? { requiresStudent: false };
+
+    if (meta.requiresStudent) {
+      const students = await listPublicStudentsForSpace(accessCode);
+      const allowedIds = Array.isArray(meta.allowedStudentIds) ? meta.allowedStudentIds : [];
+
+      const filteredStudents = Array.isArray(students)
+        ? students.filter((student) => allowedIds.includes(String(student?.id || "")))
+        : [];
+
+      if (filteredStudents.length === 0) {
+        showFatalError("Cette activité nécessite un élève, mais aucun élève concerné n’est disponible.");
+        return;
+      }
+
+      openStudentSelectionOverlay(filteredStudents);
+      return;
+    }
+
     await engine.openStartOverlay();
 
   } catch (err) {
@@ -136,15 +160,6 @@ function bindStaticEvents(){
     e.returnValue = "";
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden){
-      engine?.pauseForInterruption?.("Pause (onglet masqué)");
-    }
-  });
-
-  window.addEventListener("blur", () => {
-    engine?.pauseForInterruption?.("Pause (fenêtre inactive)");
-  });
 
   window.addEventListener("keydown", (e) => {
     const isRefresh = (e.key === "F5") || (e.ctrlKey && e.key.toLowerCase() === "r");
@@ -162,7 +177,6 @@ function bindStaticEvents(){
           primary: false,
           onClick: () => {
             closeOverlay();
-            engine?.resumeAfterPause?.();
           }
         },
         {
@@ -183,14 +197,108 @@ function bindStaticEvents(){
    ========================= */
 
 function goBackToActivities(){
-  window.location.href = `activities.html?classCode=${encodeURIComponent(classCode)}`;
+  window.location.href = `activities.html?accessCode=${encodeURIComponent(accessCode)}`;
 }
 
 /* =========================
    UI HELPERS
    ========================= */
 
-function setStatus(text, mood){
+function openStudentSelectionOverlay(students){
+  const rows = Array.isArray(students)
+    ? [...students].sort((a, b) => {
+        const classOrderA = Number(a?.class_display_order ?? 0);
+        const classOrderB = Number(b?.class_display_order ?? 0);
+        if (classOrderA !== classOrderB) return classOrderA - classOrderB;
+
+        const firstNameA = String(a?.first_name || "").toLowerCase();
+        const firstNameB = String(b?.first_name || "").toLowerCase();
+        return firstNameA.localeCompare(firstNameB, "fr");
+      })
+    : [];
+
+  const duplicateMap = countFirstNameDuplicates(rows);
+
+  openOverlay({
+    title: "",
+    body: `
+      <div class="student-panel">
+        <div class="student-panel-topbar">
+          <button
+            class="btn btn-icon student-back-btn"
+            id="studentBackBtn"
+            type="button"
+            aria-label="Retour"
+          >
+            <span class="icon">&#xEAA7;</span>
+          </button>
+        </div>
+
+        <div id="studentSelectionGrid" class="student-selection-grid">
+          ${rows.map((student) => {
+            const firstName = String(student.first_name || "").trim();
+            const className = String(student.class_name || "").trim();
+            const showClassName = duplicateMap.get(firstName.toLowerCase()) > 1 && className;
+
+            return `
+              <button
+                type="button"
+                class="student-selection-btn"
+                data-student-id="${escapeAttr(student.id ?? "")}"
+              >
+                <div class="student-selection-emoji">🙂</div>
+                <div class="student-selection-name">${escapeHtml(firstName)}</div>
+                ${showClassName ? `<div class="student-selection-class">${escapeHtml(className)}</div>` : ""}
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `,
+    actions: [],
+    hint: ""
+  });
+
+  document.getElementById("studentBackBtn")
+    ?.addEventListener("click", goBackToActivities);
+
+  document.querySelectorAll("[data-student-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const studentId = String(btn.dataset.studentId || "");
+      const student = rows.find((row) => String(row.id || "") === studentId);
+      if (!student) return;
+
+      try {
+        engine?.setSelectedStudent?.(student);
+        await engine?.openStartOverlay?.();
+      } catch (err) {
+        showFatalError(err?.message || "Impossible d’ouvrir la séance.");
+      }
+    });
+  });
+}
+
+function countFirstNameDuplicates(students){
+  const map = new Map();
+
+  for (const student of students) {
+    const key = String(student?.first_name || "").trim().toLowerCase();
+    if (!key) continue;
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+
+  return map;
+}
+
+function escapeAttr(s){
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+   function setStatus(text, mood){
   if (els.pillStatus){
     els.pillStatus.textContent = text;
     els.pillStatus.classList.remove("good", "warn", "bad");

@@ -1,16 +1,14 @@
 import {
-  normalizeClassCode,
-  listPublicActivitiesForClass
+  normalizeAccessCode,
+  listPublicActivitiesForSpace
 } from "./users_info.js";
+
 
 /* =========================
    DOM
    ========================= */
 
 const btnBack = document.getElementById("btnBack");
-const pillStatus = document.getElementById("pillStatus");
-const classCodeLabel = document.getElementById("classCodeLabel");
-const activitiesMessage = document.getElementById("activitiesMessage");
 const activitiesList = document.getElementById("activitiesList");
 
 /* =========================
@@ -33,85 +31,48 @@ btnBack?.addEventListener("click", () => {
 
 async function boot(){
   const params = new URLSearchParams(window.location.search);
-  const classCode = normalizeClassCode(params.get("classCode"));
 
-  if (!classCode){
-    showError("Code classe invalide.");
+  const accessCode = normalizeAccessCode(
+    params.get("accessCode") || params.get("classCode")
+  );
+
+  if (!accessCode){
+    showError("Code de connexion invalide.");
     return;
   }
 
   try {
-    localStorage.setItem("lastClassCode", classCode);
+    localStorage.setItem("lastAccessCode", accessCode);
   } catch {}
 
-  if (classCodeLabel){
-    classCodeLabel.textContent = `Classe : ${classCode}`;
-  }
-
-  if (pillStatus){
-    pillStatus.textContent = "Chargement";
-  }
-
   try {
-    const activities = await listPublicActivitiesForClass(classCode);
+    const activities = await listPublicActivitiesForSpace(accessCode);
 
     if (!Array.isArray(activities) || activities.length === 0){
-      showEmpty(classCode);
+      showEmpty();
       return;
     }
 
-    renderActivities(classCode, activities);
-
-    if (pillStatus){
-      pillStatus.textContent = `${activities.length} activité${activities.length > 1 ? "s" : ""}`;
-    }
-
-    if (activitiesMessage){
-      activitiesMessage.innerHTML = `
-        <div style="font-weight:700;">
-          Choisis une activité.
-        </div>
-      `;
-    }
+    renderActivities(accessCode, activities);
 
   } catch (err) {
     showError(err?.message || "Impossible de charger les activités.");
   }
 }
 
-function renderActivities(classCode, activities){
+function renderActivities(accessCode, activities){
   if (!activitiesList) return;
 
   activitiesList.innerHTML = activities.map((activity) => {
     const configName = escapeHtml(activity.config_name ?? "Sans nom");
-    const moduleKey = escapeHtml(activity.module_key ?? "");
-    const createdAt = formatDate(activity.created_at);
-    const updatedAt = formatDate(activity.updated_at);
 
     return `
       <button
-        class="panel activity-card"
+        class="panel activity-tile"
         type="button"
         data-config-name="${escapeAttr(activity.config_name ?? "")}"
-        style="
-          display:flex;
-          flex-direction:column;
-          align-items:flex-start;
-          gap:8px;
-          width:100%;
-          text-align:left;
-          cursor:pointer;
-        "
       >
-        <div style="font-weight:900;font-size:24px;">${configName}</div>
-
-        <div style="color:var(--muted);font-size:15px;">
-          ${moduleKey ? `Module : ${moduleKey}` : ""}
-        </div>
-
-        <div style="color:var(--muted);font-size:13px;">
-          ${updatedAt ? `Modifiée : ${updatedAt}` : createdAt ? `Créée : ${createdAt}` : ""}
-        </div>
+        ${configName}
       </button>
     `;
   }).join("");
@@ -122,42 +83,18 @@ function renderActivities(classCode, activities){
       if (!configName) return;
 
       window.location.href =
-        `session.html?classCode=${encodeURIComponent(classCode)}&configName=${encodeURIComponent(configName)}`;
+        `session.html?accessCode=${encodeURIComponent(accessCode)}&configName=${encodeURIComponent(configName)}`;
     });
   });
 }
 
-function showEmpty(classCode){
-  if (pillStatus){
-    pillStatus.textContent = "Aucune activité";
-  }
-
-  if (activitiesMessage){
-    activitiesMessage.innerHTML = `
-      <div style="font-weight:700;margin-bottom:8px;">Aucune activité trouvée</div>
-      <div style="color:var(--muted);">
-        La classe <strong>${escapeHtml(classCode)}</strong> ne contient encore aucune activité publique.
-      </div>
-    `;
-  }
-
+function showEmpty(){
   if (activitiesList){
     activitiesList.innerHTML = "";
   }
 }
 
-function showError(message){
-  if (pillStatus){
-    pillStatus.textContent = "Erreur";
-  }
-
-  if (activitiesMessage){
-    activitiesMessage.innerHTML = `
-      <div style="font-weight:700;margin-bottom:8px;">Erreur</div>
-      <div style="color:var(--muted);">${escapeHtml(message)}</div>
-    `;
-  }
-
+function showError(){
   if (activitiesList){
     activitiesList.innerHTML = "";
   }
@@ -166,18 +103,6 @@ function showError(message){
 /* =========================
    HELPERS
    ========================= */
-
-function formatDate(value){
-  if (!value) return "";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-
-  return d.toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short"
-  });
-}
 
 function escapeHtml(s){
   return String(s)

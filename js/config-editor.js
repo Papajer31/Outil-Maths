@@ -1,27 +1,24 @@
 import {
   getCurrentUser,
-  normalizeClassCode,
-  getMyClassSpaceByCode,
+  normalizeAccessCode,
+  getMyTeacherSpace,
   getMyActivityByName,
-  saveActivityConfig
+  saveActivityConfig,
+  listPublicStudentsForSpace
 } from "./users_info.js";
-import { loadModuleRuntime } from "./module-registry.js";
-
-/* =========================
-   CONSTANTES
-   ========================= */
-
-const DEFAULT_TOOL_ROW = Object.freeze({
-  enabled: false,
-  timePerQ: 40,
-  questionCount: 10,
-  answerTime: 5,
-  settings: null
-});
-
-const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
-  questionTransitionSec: 5
-});
+import {
+  getAvailableModules,
+  loadModuleRuntime
+} from "./module-registry.js";
+import {
+  TOOL_LIMITS,
+  DEFAULT_TOOL_ROW,
+  DEFAULT_ACTIVITY_GLOBALS,
+  clampInt,
+  cloneData,
+  normalizeActivityGlobals,
+  normalizeToolDraft
+} from "./activity-config.js";
 
 /* =========================
    DOM
@@ -31,22 +28,16 @@ const els = {
   btnBackDashboard: document.getElementById("btnBackDashboard"),
   btnSaveConfig: document.getElementById("btnSaveConfig"),
 
-  headerTitle: document.getElementById("headerTitle"),
-  pillStatus: document.getElementById("pillStatus"),
-
-  editorMeta: document.getElementById("editorMeta"),
   classCodeInput: document.getElementById("classCodeInput"),
+  moduleSelect: document.getElementById("moduleSelect"),
   configNameInput: document.getElementById("configNameInput"),
-  activityEstimateValue: document.getElementById("activityEstimateValue"),
   editorMessage: document.getElementById("editorMessage"),
   questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
   configRows: document.getElementById("configRows"),
 
-  toolOverlay: document.getElementById("toolOverlay"),
-  toolOverlayTitle: document.getElementById("toolOverlayTitle"),
-  toolOverlayBody: document.getElementById("toolOverlayBody"),
-  toolOverlayActions: document.getElementById("toolOverlayActions"),
-  toolOverlayHint: document.getElementById("toolOverlayHint"),
+  toolConfigTitle: document.getElementById("toolConfigTitle"),
+  toolConfigHost: document.getElementById("toolConfigHost"),
+  questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
 };
 
 /* =========================
@@ -54,11 +45,15 @@ const els = {
    ========================= */
 
 let currentUser = null;
-let currentClassCode = "";
+let currentAccessCode = "";
 let currentConfigName = "";
-let currentClassSpace = null;
+let currentTeacherSpace = null;
+let availableStudents = [];
+let saveState = "saved"; // "dirty" | "saving" | "saved"
 
 let currentModuleKey = "maths";
+let availableModules = [];
+let isEditingExistingConfig = false;
 
 let moduleRuntime = null;
 let toolsCatalog = [];
@@ -66,6 +61,7 @@ const toolModuleCache = new Map();
 const configDrafts = new Map();
 
 let currentToolSettingsEditor = null;
+let currentSelectedToolId = null;
 const activityGlobals = {
   questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec
 };
@@ -81,8 +77,7 @@ boot();
    ========================= */
 
 async function boot(){
-  setStatus("Chargement…", "warn");
-  setMessage("");
+  setMessage("Chargement…");
 
   try {
     currentUser = await getCurrentUser();
@@ -92,33 +87,58 @@ async function boot(){
     }
 
     const params = new URLSearchParams(window.location.search);
-    currentClassCode = normalizeClassCode(params.get("classCode"));
+    currentAccessCode = normalizeAccessCode(
+      params.get("accessCode") || params.get("classCode")
+    );
     currentConfigName = String(params.get("configName") || "").trim();
 
-    if (!currentClassCode){
-      setFatalState("Code classe manquant.");
+    if (!currentAccessCode){
+      setFatalState("Code de connexion manquant.");
       return;
     }
 
-    currentClassSpace = await getMyClassSpaceByCode(currentClassCode);
-    if (!currentClassSpace){
-      setFatalState(`La classe "${currentClassCode}" n’existe pas dans ton espace.`);
+    currentTeacherSpace = await getMyTeacherSpace();
+    if (!currentTeacherSpace){
+      setFatalState("Aucun espace enseignant trouvé.");
+      return;
+    }
+
+    if (currentTeacherSpace.access_code !== currentAccessCode){
+      setFatalState(`Le code "${currentAccessCode}" ne correspond pas à ton espace enseignant.`);
+      return;
+    }
+
+    availableStudents = await listPublicStudentsForSpace(currentAccessCode);
+    if (!Array.isArray(availableStudents)) {
+      availableStudents = [];
+    }
+
+    availableStudents = [...availableStudents].sort((a, b) => {
+      const an = String(a?.first_name || "").localeCompare(String(b?.first_name || ""), "fr", { sensitivity: "base" });
+      if (an !== 0) return an;
+      return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
+    });
+
+    availableModules = getAvailableModules();
+    if (!Array.isArray(availableModules) || availableModules.length === 0){
+      setFatalState("Aucun module disponible.");
       return;
     }
 
     let existingConfig = null;
 
     if (currentConfigName){
-      existingConfig = await getMyActivityByName(currentClassSpace.id, currentConfigName);
+      existingConfig = await getMyActivityByName(currentTeacherSpace.id, currentConfigName);
 
       if (existingConfig?.module_key){
         currentModuleKey = existingConfig.module_key;
       }
+
+      isEditingExistingConfig = !!existingConfig;
     }
 
-    moduleRuntime = loadModuleRuntime(currentModuleKey);
-    toolsCatalog = await moduleRuntime.loadToolsCatalog();
-    ensureConfigDrafts();
+    renderModuleSelect();
+    await reloadCurrentModule();
 
     if (existingConfig){
       loadExistingConfig(existingConfig);
@@ -128,12 +148,13 @@ async function boot(){
     renderGlobals();
     renderConfigTable();
     bindEvents();
-    updateActivityEstimate();
 
-    setStatus("Configuration", "good");
+    setMessage("");
   } catch (err) {
     setFatalState(err?.message || "Impossible d’ouvrir l’éditeur.");
   }
+
+  setSaveState("saved");
 }
 
 /* =========================
@@ -152,17 +173,11 @@ function loadExistingConfig(existing){
 
 function renderMeta(){
   if (els.classCodeInput){
-    els.classCodeInput.value = currentClassCode;
+    els.classCodeInput.value = currentAccessCode;
   }
 
   if (els.configNameInput){
     els.configNameInput.value = currentConfigName;
-  }
-
-  if (els.editorMeta){
-    els.editorMeta.textContent = currentConfigName
-      ? `Classe : ${currentClassCode} — édition de "${currentConfigName}"`
-      : `Classe : ${currentClassCode} — nouvelle configuration`;
   }
 }
 
@@ -174,6 +189,26 @@ function bindEvents(){
   els.btnBackDashboard?.addEventListener("click", goBackDashboard);
   els.btnSaveConfig?.addEventListener("click", saveCurrentConfig);
 
+  els.moduleSelect?.addEventListener("change", async () => {
+    if (isEditingExistingConfig) return;
+
+    const nextModuleKey = String(els.moduleSelect.value || "").trim();
+    if (!nextModuleKey || nextModuleKey === currentModuleKey) return;
+
+    try {
+      currentModuleKey = nextModuleKey;
+      await reloadCurrentModule();
+      renderModuleSelect();
+      renderMeta();
+      renderGlobals();
+      renderConfigTable();
+      setMessage("");
+    } catch (err) {
+      setMessage(err?.message || "Impossible de charger ce module.", true);
+      renderModuleSelect();
+    }
+  });
+
   els.configNameInput?.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -181,16 +216,56 @@ function bindEvents(){
   });
 
   els.questionTransitionSecInput?.addEventListener("input", () => {
-    activityGlobals.questionTransitionSec = clampInt(els.questionTransitionSecInput.value, 0, 30);
-    updateActivityEstimate();
+    activityGlobals.questionTransitionSec = clampInt(
+      els.questionTransitionSecInput.value,
+      TOOL_LIMITS.questionTransitionSec.min,
+      TOOL_LIMITS.questionTransitionSec.max
+    );
+    setSaveState("dirty");
   });
 
   els.questionTransitionSecInput?.addEventListener("change", () => {
-    const value = clampInt(els.questionTransitionSecInput.value, 0, 30);
+    const value = clampInt(
+      els.questionTransitionSecInput.value,
+      TOOL_LIMITS.questionTransitionSec.min,
+      TOOL_LIMITS.questionTransitionSec.max
+    );
     els.questionTransitionSecInput.value = value;
     activityGlobals.questionTransitionSec = value;
-    updateActivityEstimate();
+    setSaveState("dirty");
   });
+
+  els.configNameInput?.addEventListener("input", () => setSaveState("dirty"));
+  els.moduleSelect?.addEventListener("change", () => setSaveState("dirty"));
+  els.questionTransitionSecInput?.addEventListener("input", () => setSaveState("dirty"));
+}
+
+function renderModuleSelect(){
+  if (!els.moduleSelect) return;
+
+  els.moduleSelect.innerHTML = availableModules.map((mod) => `
+    <option value="${escapeHtml(mod.key)}">${escapeHtml(mod.label)}</option>
+  `).join("");
+
+  els.moduleSelect.value = currentModuleKey;
+  els.moduleSelect.disabled = isEditingExistingConfig;
+}
+
+async function reloadCurrentModule(){
+  currentToolSettingsEditor = null;
+  currentSelectedToolId = null;
+
+  toolModuleCache.clear();
+  configDrafts.clear();
+
+  moduleRuntime = loadModuleRuntime(currentModuleKey);
+  toolsCatalog = await moduleRuntime.loadToolsCatalog();
+
+  if (!Array.isArray(toolsCatalog)) {
+    toolsCatalog = [];
+  }
+
+  ensureConfigDrafts();
 }
 
 /* =========================
@@ -205,100 +280,46 @@ function renderConfigTable(){
   toolsCatalog.forEach((t) => {
     const draft = getToolDraft(t.id);
 
+    const row = document.getElementById(`row_${t.id}`);
     const chk = document.getElementById(`chk_${t.id}`);
-    const time = document.getElementById(`time_${t.id}`);
-    const count = document.getElementById(`count_${t.id}`);
-    const answer = document.getElementById(`answer_${t.id}`);
     const btnSettings = document.getElementById(`settings_${t.id}`);
 
-    if (!chk || !time || !count || !answer) return;
+    if (!row || !chk || !btnSettings) return;
 
     chk.checked = !!draft.enabled;
-    time.value = draft.timePerQ;
-    count.value = draft.questionCount;
-    answer.value = draft.answerTime;
+    row.classList.toggle("disabled", !draft.enabled);
+    row.classList.toggle("active", draft.enabled);
 
-    chk.addEventListener("change", () => {
+    chk.addEventListener("change", (e) => {
+      e.stopPropagation();
       draft.enabled = chk.checked;
-      setRowEnabled(t.id, chk.checked);
-      updateActivityEstimate();
+      row.classList.toggle("disabled", !chk.checked);
+      setSaveState("dirty");
     });
 
-    time.addEventListener("input", () => {
-      draft.timePerQ = clampInt(time.value, 5, 999);
-      updateActivityEstimate();
-    });
-    time.addEventListener("change", () => {
-      time.value = clampInt(time.value, 5, 999);
-      draft.timePerQ = Number(time.value);
-      updateActivityEstimate();
-    });
-
-    count.addEventListener("input", () => {
-      draft.questionCount = clampInt(count.value, 1, 200);
-      updateActivityEstimate();
-    });
-    count.addEventListener("change", () => {
-      count.value = clampInt(count.value, 1, 200);
-      draft.questionCount = Number(count.value);
-      updateActivityEstimate();
-    });
-
-    answer.addEventListener("input", () => {
-      draft.answerTime = clampInt(answer.value, 1, 30);
-      updateActivityEstimate();
-    });
-    answer.addEventListener("change", () => {
-      answer.value = clampInt(answer.value, 1, 30);
-      draft.answerTime = Number(answer.value);
-      updateActivityEstimate();
-    });
-
-    btnSettings?.addEventListener("click", () => {
+    btnSettings.addEventListener("click", (e) => {
+      e.stopPropagation();
       openToolSettings(t.id).catch((err) => {
         setMessage(err?.message || "Impossible d’ouvrir les réglages outil.", true);
       });
     });
-
-    setRowEnabled(t.id, chk.checked);
   });
 
-  els.configRows.querySelectorAll('input[type="number"]').forEach((inp) => {
-    inp.addEventListener("focus", () => {
-      inp.select?.();
-      try { inp.setSelectionRange(0, inp.value.length); } catch {}
-    });
-
-    inp.addEventListener("pointerup", () => {
-      inp.select?.();
-      try { inp.setSelectionRange(0, inp.value.length); } catch {}
-    });
-  });
+  renderEmptyToolPanel();
 }
 
 function configRowHTML(t){
+  const draft = getToolDraft(t.id);
+
   return `
-    <div class="cfg-row" id="row_${t.id}">
-      <input type="checkbox" id="chk_${t.id}" aria-label="Activer ${escapeHtml(t.title)}">
-      <div class="pill cfg-title">${escapeHtml(t.title)}</div>
-      <input type="number" min="5" max="999" step="5" id="time_${t.id}">
-      <input type="number" min="1" max="200" step="1" id="count_${t.id}">
-      <input type="number" min="1" max="30" step="1" id="answer_${t.id}">
-      <button class="btn btn-icon cfg-gear" type="button" id="settings_${t.id}" aria-label="Réglages ${escapeHtml(t.title)}">⚙️</button>
+    <div class="cfg-tool-row" id="row_${t.id}">
+      <input class="cfg-tool-check" type="checkbox" id="chk_${t.id}" aria-label="Activer ${escapeHtml(t.title)}">
+        <div class="cfg-tool-main">
+          <div class="cfg-tool-name">${escapeHtml(t.title)}</div>
+        </div>
+      <button class="btn btn-icon cfg-gear" type="button" id="settings_${t.id}" aria-label="Configurer ${escapeHtml(t.title)}">⚙️</button>
     </div>
   `;
-}
-
-function setRowEnabled(id, enabled){
-  const row = document.getElementById(`row_${id}`);
-  const time = document.getElementById(`time_${id}`);
-  const count = document.getElementById(`count_${id}`);
-  const answer = document.getElementById(`answer_${id}`);
-
-  if (time) time.disabled = !enabled;
-  if (count) count.disabled = !enabled;
-  if (answer) answer.disabled = !enabled;
-  row?.classList.toggle("disabled", !enabled);
 }
 
 /* =========================
@@ -309,6 +330,10 @@ async function openToolSettings(toolId){
   const toolMeta = toolsCatalog.find(t => t.id === toolId);
   if (!toolMeta) return;
 
+  persistCurrentToolSettings();
+
+  currentSelectedToolId = toolId;
+
   const draft = getToolDraft(toolId);
   const mod = await loadToolModule(toolId);
   const tool = mod.default ?? {};
@@ -318,24 +343,50 @@ async function openToolSettings(toolId){
   }
 
   currentToolSettingsEditor = { toolId, tool };
+  renderConfigTableSelectionState();
 
-  openToolOverlay({
-    title: toolMeta.title,
-    body: `<div id="toolSettingsHost"></div>`,
-    actions: [
-      { label: "Annuler", primary: false, onClick: closeToolOverlay },
-      { label: "Valider", primary: true, onClick: validateToolSettings }
-    ],
-    hint: ""
-  });
+    const headerSlot = ensureToolHeaderControlsSlot();
+  if (headerSlot) {
+    headerSlot.innerHTML = "";
+    if (typeof tool.renderToolHeaderControls === "function") {
+      tool.renderToolHeaderControls(headerSlot, cloneData(draft.settings), {
+        accessCode: currentAccessCode,
+        teacherSpace: cloneData(currentTeacherSpace),
+        students: cloneData(availableStudents),
+        moduleKey: currentModuleKey,
+        configName: currentConfigName
+      });
 
-  const host = document.getElementById("toolSettingsHost");
+      headerSlot.querySelectorAll('input[type="radio"], input[type="checkbox"], select').forEach((el) => {
+        el.addEventListener("change", () => {
+          persistCurrentToolHeaderControls();
+          openToolSettings(toolId).catch((err) => {
+            setMessage(err?.message || "Impossible d’actualiser les réglages outil.", true);
+          });
+        });
+      });
+    }
+  }
+
+  if (els.toolConfigTitle) {
+    els.toolConfigTitle.textContent = toolMeta.title;
+  }
+
+  const host = els.toolConfigHost;
   if (!host) return;
 
+  host.innerHTML = "";
+
   if (typeof tool.renderToolSettings === "function"){
-    tool.renderToolSettings(host, cloneData(draft.settings));
+    tool.renderToolSettings(host, cloneData(getToolDraft(toolId).settings), {
+      accessCode: currentAccessCode,
+      teacherSpace: cloneData(currentTeacherSpace),
+      students: cloneData(availableStudents),
+      moduleKey: currentModuleKey,
+      configName: currentConfigName
+    });
   } else {
-    host.innerHTML = `<div class="panel">Aucun réglage spécifique pour cet outil.</div>`;
+    host.innerHTML = `<div class="cfg-empty-state">Aucun réglage spécifique pour cet outil.</div>`;
   }
 
   host.querySelectorAll('input[type="number"]').forEach((inp) => {
@@ -351,41 +402,22 @@ async function openToolSettings(toolId){
   });
 }
 
-function validateToolSettings(){
-  if (!currentToolSettingsEditor) return;
-
-  const { toolId, tool } = currentToolSettingsEditor;
-  const draft = getToolDraft(toolId);
-  const host = document.getElementById("toolSettingsHost");
-  if (!host) return;
-
-  try {
-    if (typeof tool.readToolSettings === "function"){
-      draft.settings = tool.readToolSettings(host);
-    } else if (draft.settings == null){
-      draft.settings = getToolDefaultSettings(tool);
-    }
-
-    closeToolOverlay();
-  } catch (err) {
-    setMessage(err?.message || "Réglages invalides.", true);
-  }
-}
-
 /* =========================
    SAUVEGARDE
    ========================= */
 
 async function saveCurrentConfig(){
+  setSaveState("saving");
   const name = String(els.configNameInput?.value || "").trim();
 
   if (!name){
-    setMessage("Entre un nom de configuration.", true);
+    setMessage("Entre un nom d’activité.", true);
     els.configNameInput?.focus();
     return;
   }
 
   syncDraftsFromUI();
+  persistCurrentToolSettings();
 
   const enabledCount = countEnabledTools();
   if (enabledCount === 0){
@@ -393,13 +425,13 @@ async function saveCurrentConfig(){
     return;
   }
 
-  setStatus("Enregistrement…", "warn");
+  setSaveState("saving");
   setMessage("Sauvegarde en cours…");
   els.btnSaveConfig.disabled = true;
 
   try {
     await saveActivityConfig({
-      classCode: currentClassCode,
+      accessCode: currentAccessCode,
       moduleKey: currentModuleKey,
       configName: name,
       configJson: {
@@ -412,11 +444,13 @@ async function saveCurrentConfig(){
     currentConfigName = name;
     renderMeta();
 
-    setStatus("Enregistré", "good");
-    setMessage(`Configuration "${name}" enregistrée.`);
+    setSaveState("saved");
+    setMessage(`Activité "${name}" enregistrée.`);
+    setSaveState("saved");
   } catch (err) {
-    setStatus("Erreur", "bad");
+    setSaveState("dirty");
     setMessage(err?.message || "Impossible d’enregistrer.", true);
+    setSaveState("dirty");
   } finally {
     els.btnSaveConfig.disabled = false;
   }
@@ -425,18 +459,9 @@ async function saveCurrentConfig(){
 function syncDraftsFromUI(){
   for (const t of toolsCatalog){
     const draft = getToolDraft(t.id);
-
     const chk = document.getElementById(`chk_${t.id}`);
-    const time = document.getElementById(`time_${t.id}`);
-    const count = document.getElementById(`count_${t.id}`);
-    const answer = document.getElementById(`answer_${t.id}`);
-
-    if (!chk || !time || !count || !answer) continue;
-
+    if (!chk) continue;
     draft.enabled = !!chk.checked;
-    draft.timePerQ = clampInt(time.value, 5, 999);
-    draft.questionCount = clampInt(count.value, 1, 200);
-    draft.answerTime = clampInt(answer.value, 1, 30);
   }
 }
 
@@ -455,64 +480,35 @@ function renderGlobals(){
 }
 
 function serializeGlobals(){
-  return {
-    questionTransitionSec: clampInt(activityGlobals.questionTransitionSec, 0, 30)
-  };
+  return normalizeActivityGlobals(activityGlobals);
 }
 
 function applyRemoteGlobals(remoteGlobals){
-  activityGlobals.questionTransitionSec = clampInt(
-    remoteGlobals?.questionTransitionSec,
-    0,
-    30
-  );
+  Object.assign(activityGlobals, normalizeActivityGlobals(remoteGlobals));
 }
 
-function updateActivityEstimate(){
-  if (!els.activityEstimateValue) return;
+function setSaveState(state){
+  saveState = state;
 
-  syncDraftsFromUI();
+  const btn = els.btnSaveConfig;
+  if (!btn) return;
 
-  const totalSeconds = computeEstimatedActivitySeconds();
-  els.activityEstimateValue.textContent = formatEstimatedDuration(totalSeconds);
-}
+  btn.classList.remove("dirty", "saving", "saved");
 
-function computeEstimatedActivitySeconds(){
-  let total = 0;
-  const transitionSec = clampInt(activityGlobals.questionTransitionSec, 0, 30);
-
-  for (const t of toolsCatalog){
-    const draft = getToolDraft(t.id);
-    if (!draft.enabled) continue;
-
-    const questionCount = clampInt(draft.questionCount, 1, 200);
-    const timePerQ = clampInt(draft.timePerQ, 5, 999);
-    const answerTime = clampInt(draft.answerTime, 1, 30);
-
-    total += questionCount * (timePerQ + answerTime);
-
-    if (questionCount > 1){
-      total += (questionCount - 1) * transitionSec;
-    }
+  if (state === "dirty"){
+    btn.classList.add("dirty");
+    btn.textContent = "Enregistrer";
   }
 
-  return total;
-}
-
-function formatEstimatedDuration(totalSeconds){
-  const rounded = Math.max(0, Math.round(totalSeconds));
-  const minutes = Math.floor(rounded / 60);
-  const seconds = rounded % 60;
-
-  if (minutes <= 0){
-    return `${seconds} s`;
+  if (state === "saving"){
+    btn.classList.add("saving");
+    btn.textContent = "Enregistrement…";
   }
 
-  if (seconds === 0){
-    return `${minutes} min`;
+  if (state === "saved"){
+    btn.classList.add("saved");
+    btn.textContent = "Enregistré";
   }
-
-  return `${minutes} min ${seconds} s`;
 }
 
 /* =========================
@@ -522,26 +518,14 @@ function formatEstimatedDuration(totalSeconds){
 function ensureConfigDrafts(){
   for (const t of toolsCatalog){
     if (!configDrafts.has(t.id)){
-      configDrafts.set(t.id, {
-        enabled: DEFAULT_TOOL_ROW.enabled,
-        timePerQ: DEFAULT_TOOL_ROW.timePerQ,
-        questionCount: DEFAULT_TOOL_ROW.questionCount,
-        answerTime: DEFAULT_TOOL_ROW.answerTime,
-        settings: null
-      });
+      configDrafts.set(t.id, normalizeToolDraft(DEFAULT_TOOL_ROW));
     }
   }
 }
 
 function getToolDraft(id){
   if (!configDrafts.has(id)){
-    configDrafts.set(id, {
-      enabled: DEFAULT_TOOL_ROW.enabled,
-      timePerQ: DEFAULT_TOOL_ROW.timePerQ,
-      questionCount: DEFAULT_TOOL_ROW.questionCount,
-      answerTime: DEFAULT_TOOL_ROW.answerTime,
-      settings: null
-    });
+    configDrafts.set(id, normalizeToolDraft(DEFAULT_TOOL_ROW));
   }
   return configDrafts.get(id);
 }
@@ -550,13 +534,7 @@ function serializeDrafts(){
   const out = {};
   for (const t of toolsCatalog){
     const draft = getToolDraft(t.id);
-    out[t.id] = {
-      enabled: !!draft.enabled,
-      timePerQ: clampInt(draft.timePerQ, 5, 999),
-      questionCount: clampInt(draft.questionCount, 1, 200),
-      answerTime: clampInt(draft.answerTime, 1, 30),
-      settings: draft.settings == null ? null : cloneData(draft.settings)
-    };
+    out[t.id] = normalizeToolDraft(draft);
   }
   return out;
 }
@@ -569,19 +547,104 @@ function applyRemoteDrafts(remoteDrafts){
     const draft = getToolDraft(t.id);
 
     if (!incoming){
-      draft.enabled = DEFAULT_TOOL_ROW.enabled;
-      draft.timePerQ = DEFAULT_TOOL_ROW.timePerQ;
-      draft.questionCount = DEFAULT_TOOL_ROW.questionCount;
-      draft.answerTime = DEFAULT_TOOL_ROW.answerTime;
-      draft.settings = null;
+      Object.assign(draft, normalizeToolDraft(DEFAULT_TOOL_ROW));
       continue;
     }
 
-    draft.enabled = !!incoming.enabled;
-    draft.timePerQ = clampInt(incoming.timePerQ, 5, 999);
-    draft.questionCount = clampInt(incoming.questionCount, 1, 200);
-    draft.answerTime = clampInt(incoming.answerTime, 1, 30);
-    draft.settings = incoming.settings == null ? null : cloneData(incoming.settings);
+    Object.assign(draft, normalizeToolDraft(incoming));
+  }
+}
+
+function persistCurrentToolSettings(){
+  if (!currentToolSettingsEditor) return;
+
+  persistCurrentToolHeaderControls();
+
+  const host = els.toolConfigHost;
+  if (!host) return;
+
+  const { toolId, tool } = currentToolSettingsEditor;
+  const draft = getToolDraft(toolId);
+
+  try {
+    if (typeof tool.readToolSettings === "function"){
+      draft.settings = tool.readToolSettings(host);
+    } else if (draft.settings == null){
+      draft.settings = getToolDefaultSettings(tool);
+    }
+
+    setSaveState("dirty");
+    setMessage("");
+  } catch (err) {
+    setMessage(err?.message || "Réglages invalides.", true);
+  }
+}
+
+function renderConfigTableSelectionState(){
+  for (const t of toolsCatalog) {
+    const row = document.getElementById(`row_${t.id}`);
+    row?.classList.toggle("active", currentSelectedToolId === t.id);
+  }
+}
+
+function ensureToolHeaderControlsSlot(){
+  const settingsHeader = document.querySelector(".cfg-settings-header");
+  if (!settingsHeader) return null;
+
+  let slot = document.getElementById("toolHeaderControls");
+  if (slot) return slot;
+
+  slot = document.createElement("div");
+  slot.id = "toolHeaderControls";
+  slot.className = "cfg-tool-header-controls";
+
+  const title = els.toolConfigTitle;
+  if (title && title.parentElement === settingsHeader) {
+    title.insertAdjacentElement("afterend", slot);
+  } else {
+    settingsHeader.prepend(slot);
+  }
+
+  return slot;
+}
+
+function clearToolHeaderControls(){
+  const slot = document.getElementById("toolHeaderControls");
+  if (slot) slot.innerHTML = "";
+}
+
+function persistCurrentToolHeaderControls(){
+  if (!currentToolSettingsEditor) return;
+
+  const { toolId, tool } = currentToolSettingsEditor;
+  const draft = getToolDraft(toolId);
+  const slot = document.getElementById("toolHeaderControls");
+  if (!slot) return;
+
+  try {
+    if (typeof tool.readToolHeaderControls === "function"){
+      draft.settings = tool.readToolHeaderControls(slot, cloneData(draft.settings));
+      setSaveState("dirty");
+      setMessage("");
+    }
+  } catch (err) {
+    setMessage(err?.message || "Réglages d’en-tête invalides.", true);
+  }
+}
+
+function renderEmptyToolPanel(){
+  clearToolHeaderControls();
+
+  if (els.toolConfigTitle) {
+    els.toolConfigTitle.textContent = "Configuration de l’outil";
+  }
+
+  if (els.toolConfigHost) {
+    els.toolConfigHost.innerHTML = `
+      <div class="cfg-empty-state">
+        Sélectionne un outil dans la colonne de gauche.
+      </div>
+    `;
   }
 }
 
@@ -613,40 +676,7 @@ function getToolDefaultSettings(tool){
    ========================= */
 
 function goBackDashboard(){
-  const params = new URLSearchParams();
-  params.set("classCode", currentClassCode);
-  window.location.href = `teacher-dashboard.html?${params.toString()}`;
-}
-
-/* =========================
-   OVERLAY OUTIL
-   ========================= */
-
-function openToolOverlay({ title, body, actions, hint }){
-  if (els.toolOverlayTitle) els.toolOverlayTitle.textContent = title ?? "";
-  if (els.toolOverlayBody) els.toolOverlayBody.innerHTML = body ?? "";
-  if (els.toolOverlayHint) els.toolOverlayHint.innerHTML = hint ?? "";
-
-  if (els.toolOverlayActions){
-    els.toolOverlayActions.innerHTML = "";
-    for (const a of (actions ?? [])){
-      const btn = document.createElement("button");
-      btn.className = `btn ${a.primary ? "primary" : ""}`.trim();
-      btn.textContent = a.label;
-      btn.addEventListener("click", a.onClick);
-      els.toolOverlayActions.appendChild(btn);
-    }
-  }
-
-  els.toolOverlay?.classList.remove("hidden");
-}
-
-function closeToolOverlay(){
-  els.toolOverlay?.classList.add("hidden");
-  if (els.toolOverlayActions) els.toolOverlayActions.innerHTML = "";
-  if (els.toolOverlayBody) els.toolOverlayBody.innerHTML = "";
-  if (els.toolOverlayHint) els.toolOverlayHint.innerHTML = "";
-  currentToolSettingsEditor = null;
+  window.location.href = `teacher-dashboard.html?accessCode=${encodeURIComponent(currentAccessCode)}`;
 }
 
 /* =========================
@@ -654,27 +684,13 @@ function closeToolOverlay(){
    ========================= */
 
 function setFatalState(message){
-  setStatus("Erreur", "bad");
   setMessage(message, true);
-
-  if (els.editorMeta){
-    els.editorMeta.textContent = message;
-  }
 
   if (els.btnSaveConfig){
     els.btnSaveConfig.disabled = true;
   }
-}
 
-function setStatus(text, mood){
-  if (els.pillStatus){
-    els.pillStatus.textContent = text;
-    els.pillStatus.classList.remove("good", "warn", "bad");
-
-    if (mood === "good") els.pillStatus.classList.add("good");
-    else if (mood === "warn") els.pillStatus.classList.add("warn");
-    else if (mood === "bad") els.pillStatus.classList.add("bad");
-  }
+  renderEmptyToolPanel();
 }
 
 function setMessage(text, isError = false){
@@ -686,19 +702,6 @@ function setMessage(text, isError = false){
 /* =========================
    HELPERS
    ========================= */
-
-function clampInt(v, min, max){
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
-
-function cloneData(value){
-  if (typeof structuredClone === "function"){
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
-}
 
 function escapeHtml(s){
   return String(s)
