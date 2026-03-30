@@ -64,19 +64,11 @@ export async function mount(container) {
 
   container.innerHTML = `
     <div class="pem-root">
-      <div class="pem-header">
-        <button type="button" class="pem-reset-btn" id="pem_reset">↺</button>
-      </div>
-
       <div class="pem-workspace-wrap">
         <div id="pem_workspace" class="pem-workspace"></div>
       </div>
     </div>
   `;
-
-  container.querySelector("#pem_reset")?.addEventListener("click", () => {
-    reset(container);
-  });
 }
 
 export async function nextQuestion(container, ctx) {

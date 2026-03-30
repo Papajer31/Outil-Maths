@@ -1,6 +1,6 @@
 {
   "module": "maths",
-  "version": 1,
+  "version": 2,
   "tools": {
     "PetitesAdditions": {
       "label": "Petites additions",
@@ -12,7 +12,7 @@
     },
     "ReprésentationDécimale": {
       "label": "Représentation décimale",
-      "entry": "./tools/ReprésentationDécimale/tool.js"
+      "entry": "./tools/RepresentationDecimale/tool.js"
     },
     "NombresLettres": {
       "label": "Nombres en lettres",
@@ -20,7 +20,7 @@
     },
     "DécompoAdditive": {
       "label": "Décomposition additive",
-      "entry": "./tools/DécompoAdditive/tool.js"
+      "entry": "./tools/DecompoAdditive/tool.js"
     },
     "TableDoubles": {
       "label": "Tables des doubles",

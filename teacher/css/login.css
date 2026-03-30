@@ -1,0 +1,31 @@
+.teacher-login-card{
+  width:min(520px, 100%);
+}
+
+.teacher-login-title{
+  font-size:36px;
+}
+
+.teacher-login-form{
+  width:100%;
+}
+
+.teacher-login-input{
+  text-align:left;
+  font-size:22px;
+}
+
+.teacher-login-message{
+  min-height:24px;
+  text-align:center;
+}
+
+@media (max-width: 640px){
+  .teacher-login-title{
+    font-size:30px;
+  }
+
+  .teacher-login-input{
+    font-size:20px;
+  }
+}

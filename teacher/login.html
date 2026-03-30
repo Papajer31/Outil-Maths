@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connexion enseignant</title>
+
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/ui.css">
+  <link rel="stylesheet" href="./css/login.css">
+</head>
+<body>
+  <div class="page-shell">
+    <main class="page-main">
+      <section class="center-card teacher-login-card" aria-labelledby="teacher-login-title">
+        <div class="stack-lg">
+          <header class="stack-sm text-center">
+            <h1 id="teacher-login-title" class="title-xl teacher-login-title">Connexion enseignant</h1>
+          </header>
+
+          <div class="teacher-login-form stack-md">
+            <input
+              id="teacherEmailInput"
+              type="email"
+              class="input-text teacher-login-input"
+              placeholder="Email"
+              autocomplete="username"
+            >
+
+            <input
+              id="teacherPasswordInput"
+              type="password"
+              class="input-text teacher-login-input"
+              placeholder="Mot de passe"
+              autocomplete="current-password"
+            >
+
+            <button class="btn btn-primary" id="btnTeacherLogin" type="button">
+              Connexion
+            </button>
+
+            <div id="teacherLoginMessage" class="home-message teacher-login-message" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <a class="footer-link" href="../index.html">Retour à l’accueil élève</a>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="./js/home.js"></script>
+</body>
+</html>

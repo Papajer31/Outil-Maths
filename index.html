@@ -1,87 +1,55 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Outils Maths</title>
-  <link rel="stylesheet" href="/css/style.css">
-  <link rel="stylesheet" href="css/home.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portail d’outils pédagogiques</title>
+
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/ui.css">
+  <link rel="stylesheet" href="./student/css/student.css">
+  <link rel="stylesheet" href="./student/css/student-core.css">
 </head>
+<body>
+  <div class="page-shell">
+    <main class="page-main">
+      <div id="studentApp" class="student-app">
+        <section class="center-card" aria-labelledby="student-home-title">
+          <div class="stack-lg text-center">
+            <header class="stack-sm">
+              <h1 id="student-home-title" class="title-xl">Entre le code de ta classe</h1>
+            </header>
 
-<body class="home-body">
-
-  <div id="appRoot">
-    <div id="workArea" class="home-workarea">
-      <div class="home-shell">
-
-        <div class="home-grid">
-          <section class="panel home-card">
-            <div class="home-card-top">
-              <div class="home-card-title">Élève</div>
-            </div>
-
-            <div class="home-card-middle">
+            <form id="studentHomeForm" class="home-form stack-md" novalidate>
+              <label class="visually-hidden" for="classCode">Code de la classe</label>
               <input
-                id="classCodeInput"
+                id="classCode"
+                name="classCode"
+                class="input-text"
                 type="text"
-                placeholder="Code"
+                inputmode="text"
                 autocomplete="off"
-                class="home-input"
+                autocapitalize="characters"
+                spellcheck="false"
+                maxlength="12"
+                placeholder="ABC123"
               >
-            </div>
 
-            <div class="home-card-bottom">
-              <button class="btn primary home-btn" id="btnGo" type="button">
-                Connexion élève
-              </button>
-            </div>
-          </section>
+              <button type="submit" class="btn btn-primary">Connexion</button>
 
-          <section class="panel home-card">
-            <div class="home-card-top">
-              <div class="home-card-title">Enseignant</div>
-            </div>
-
-            <div class="home-card-middle">
-              <div class="home-fields-stack">
-
-                <div class="home-spacer"></div>
-                
-                <input
-                  id="teacherEmailInput"
-                  type="email"
-                  placeholder="Email"
-                  autocomplete="username"
-                  class="home-input"
-                >
-
-                <input
-                  id="teacherPasswordInput"
-                  type="password"
-                  placeholder="Mot de passe"
-                  autocomplete="current-password"
-                  class="home-input"
-                >
-
-                <div id="teacherLoginMessage" class="home-message"></div>
-              </div>
-            </div>
-
-            <div class="home-card-bottom">
-              <button class="btn primary home-btn" id="btnTeacherLogin" type="button">
-                Connexion
-              </button>
-            </div>
-          </section>
-        </div>
-
+              <div id="homeMessage" class="home-message" aria-live="polite"></div>
+            </form>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
+
+    <footer class="page-footer" id="studentFooter">
+      <a class="footer-link" href="./teacher/login.html">Accès enseignant</a>
+    </footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="js/home.js"></script>
-
+  <script type="module" src="./student/student-app.js"></script>
 </body>
-
 </html>

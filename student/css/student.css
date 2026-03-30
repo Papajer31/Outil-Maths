@@ -1,0 +1,129 @@
+.student-app{
+  width:100%;
+  display:flex;
+  justify-content:center;
+}
+
+body.student-route-activities .page-footer,
+body.student-route-sessionchoice .page-footer,
+body.student-route-sessionstart .page-footer,
+body.student-route-session .page-footer{
+  display:none;
+}
+
+/* =========================
+   ACTIVITIES VIEW
+   ========================= */
+
+.activities-shell{
+  width:min(1200px, 100%);
+  margin:0 auto;
+  padding:120px 24px 32px;
+}
+
+.activities-list{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  gap:16px;
+}
+
+.activities-list-alone{
+  align-content:start;
+}
+
+.activity-tile{
+  width:100%;
+  min-height:120px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  cursor:pointer;
+  border:none;
+  box-shadow:none;
+
+  font-size:28px;
+  font-weight:900;
+  line-height:1.2;
+  color:var(--text);
+  background:#715716;
+
+  padding:20px;
+  border-radius:20px;
+  transition:transform .12s ease, background .12s ease;
+}
+
+.activity-tile:hover{
+  background:var(--panel-2);
+  transform:translateY(-2px);
+  filter:none;
+}
+
+.activity-tile:active{
+  transform:translateY(0);
+}
+
+.activities-placeholder{
+  min-height:180px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  color:var(--muted);
+  border:1px dashed rgba(255,255,255,.12);
+  border-radius:18px;
+  padding:24px;
+  grid-column:1 / -1;
+}
+
+@media (max-width: 700px){
+  .activities-shell{
+    width:100%;
+    padding:96px 16px 24px;
+  }
+
+  .activities-list{
+    grid-template-columns:1fr;
+  }
+
+  .activity-tile{
+    min-height:96px;
+    font-size:24px;
+  }
+}
+
+
+/* =========================
+   SESSION CHOICE VIEW
+   ========================= */
+
+.sessionchoice-shell{
+  width:min(1200px, 100%);
+  margin:0 auto;
+  padding:120px 24px 32px;
+}
+
+.sessionchoice-content{
+  width:100%;
+}
+
+.sessionchoice-placeholder{
+  min-height:180px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  color:var(--muted);
+  padding:24px;
+}
+
+.sessionchoice-grid{
+  align-content:start;
+}
+
+@media (max-width: 700px){
+  .sessionchoice-shell{
+    width:100%;
+    padding:96px 16px 24px;
+  }
+}

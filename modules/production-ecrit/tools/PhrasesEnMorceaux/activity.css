@@ -1,9 +1,11 @@
 .pem-root{
   width:100%;
-  height:100%;
+  min-height:calc(100vh - 56px);
   display:flex;
   flex-direction:column;
-  gap:14px;
+  align-self:stretch;
+  box-sizing:border-box;
+  padding:104px 0 26px;
   color:var(--text, #f5f7fb);
 }
 
@@ -27,20 +29,23 @@
 
 .pem-workspace-wrap{
   flex:1 1 auto;
-  padding:14px;
-  border-radius:24px;
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.08);
-  overflow:hidden;
+  min-height:0;
+  display:flex;
+  padding:0;
+  background:transparent;
+  border:none;
+  overflow:visible;
 }
 
 .pem-workspace{
   position:relative;
+  flex:1 1 auto;
   width:100%;
   height:100%;
-  min-height:540px;
-  border-radius:18px;
-  background:rgba(255,255,255,.02);
+  min-height:calc(100vh - 210px);
+  border-radius:24px;
+  border:2px dashed rgba(255,255,255,.16);
+  background:transparent;
   overflow:hidden;
 }
 
@@ -74,6 +79,10 @@
 }
 
 @media (max-width: 900px){
+  .pem-root{
+    padding-top:88px;
+  }
+
   .pem-chip{
     font-size:26px;
     min-height:58px;
@@ -81,6 +90,6 @@
   }
 
   .pem-workspace{
-    min-height:420px;
+    min-height:calc(100vh - 170px);
   }
 }
