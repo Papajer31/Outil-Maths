@@ -14,7 +14,6 @@ export const DEFAULT_TOOL_ROW = Object.freeze({
 });
 
 export const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
-  mode: "students",
   questionTransitionSec: 5
 });
 
@@ -31,13 +30,9 @@ export function cloneData(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-export function normalizeActivityMode(value) {
-  return value === "board" ? "board" : "students";
-}
 
 export function normalizeActivityGlobals(globals) {
   return {
-    mode: normalizeActivityMode(globals?.mode),
     questionTransitionSec: clampInt(
       globals?.questionTransitionSec,
       TOOL_LIMITS.questionTransitionSec.min,

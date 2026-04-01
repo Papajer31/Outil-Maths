@@ -13,38 +13,8 @@ let stylesInjected = false;
    API
    ========================= */
 
-export function requiresStudent(settings) {
-  const cfg = normalizeSettingsV2(settings);
-  return cfg.mode === "students";
-}
-
-export function renderToolHeaderControls(container, settings) {
-  injectStyles();
-
-  const cfg = normalizeSettingsV2(settings);
-
-  container.innerHTML = `
-    <div class="pem-mode-pill">
-      <label>
-        <input type="radio" name="pem_mode_header" value="students" ${cfg.mode === "students" ? "checked" : ""}>
-        <span class="pem-mode-option">Élèves</span>
-      </label>
-      <label>
-        <input type="radio" name="pem_mode_header" value="board" ${cfg.mode === "board" ? "checked" : ""}>
-        <span class="pem-mode-option">Tableau</span>
-      </label>
-    </div>
-  `;
-}
-
-export function readToolHeaderControls(container, settings) {
-  const cfg = normalizeSettingsV2(settings);
-  const mode = container.querySelector('[name="pem_mode_header"]:checked')?.value || "students";
-
-  return {
-    ...cfg,
-    mode: mode === "board" ? "board" : "students"
-  };
+export function requiresStudent() {
+  return true;
 }
 
 export function renderToolSettings(container, settings, context = {}) {
@@ -55,8 +25,8 @@ export function renderToolSettings(container, settings, context = {}) {
 
   container.innerHTML = `
     <div class="pem-config-root">
-      ${cfg.mode === "students" ? renderStudentSelector(students, cfg) : ""}
-      ${cfg.mode === "students" ? renderStudentConfigs(students, cfg) : renderBoardPlaceholder()}
+      ${renderStudentSelector(students, cfg)}
+      ${renderStudentConfigs(students, cfg)}
     </div>
   `;
 
@@ -65,7 +35,6 @@ export function renderToolSettings(container, settings, context = {}) {
 
 export function readToolSettings(container, settings = {}) {
   const previous = normalizeSettingsV2(settings);
-  const mode = previous.mode || "students";
 
   const selected = [];
   container.querySelectorAll("[data-student-check]").forEach((el) => {
@@ -92,7 +61,6 @@ export function readToolSettings(container, settings = {}) {
   });
 
   return {
-    mode,
     selectedStudentIds: selected,
     selectionOrder: selected,
     studentConfigs
@@ -158,14 +126,6 @@ function renderStudentConfigs(students, cfg) {
           </section>
         `;
       }).join("")}
-    </div>
-  `;
-}
-
-function renderBoardPlaceholder() {
-  return `
-    <div class="pem-placeholder">
-      Mode tableau activé. La configuration manuelle du déroulé sera ajoutée ensuite.
     </div>
   `;
 }
@@ -261,7 +221,6 @@ function normalizeSettingsV2(settings) {
     : {};
 
   return {
-    mode: settings?.mode === "board" ? "board" : "students",
     selected,
     studentConfigs
   };

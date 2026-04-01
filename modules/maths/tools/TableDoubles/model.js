@@ -1,7 +1,13 @@
+import { normalizeNumericConstraint } from "../../../../shared/value-constraints.js";
+
 export function getDefaultSettings() {
   return {
     minBase: 1,
-    maxBase: 10
+    maxBase: 10,
+    baseMode: "simple",
+    baseStart: 1,
+    baseStep: 1,
+    baseList: []
   };
 }
 
@@ -11,25 +17,37 @@ export function normalizeSettings(settings) {
     ...(settings ?? {})
   };
 
-  base.minBase = clampInt(base.minBase, 1, 99);
-  base.maxBase = clampInt(base.maxBase, 1, 99);
+  const constraint = normalizeNumericConstraint({
+    min: base.minBase,
+    max: base.maxBase,
+    mode: base.baseMode,
+    start: base.baseStart,
+    step: base.baseStep,
+    values: base.baseList
+  }, {
+    inputMin: 1,
+    inputMax: 99,
+    defaultMin: 1,
+    defaultMax: 10,
+    defaultStart: 1,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  if (base.minBase > base.maxBase) {
-    [base.minBase, base.maxBase] = [base.maxBase, base.minBase];
-  }
-
-  return base;
+  return {
+    minBase: constraint.min,
+    maxBase: constraint.max,
+    baseMode: constraint.mode,
+    baseStart: constraint.start,
+    baseStep: constraint.step,
+    baseList: constraint.values,
+    allowedValues: constraint.allowedValues
+  };
 }
 
 export function refillNumberPool(settings, lastN = null) {
   const cfg = normalizeSettings(settings);
-  const values = [];
-
-  for (let n = cfg.minBase; n <= cfg.maxBase; n++) {
-    values.push(n);
-  }
-
-  const pool = shuffle(values);
+  const pool = shuffle(cfg.allowedValues);
 
   if (
     lastN !== null &&
@@ -42,12 +60,6 @@ export function refillNumberPool(settings, lastN = null) {
   }
 
   return pool;
-}
-
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
 }
 
 function shuffle(arr) {

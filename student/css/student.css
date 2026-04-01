@@ -32,14 +32,16 @@ body.student-route-session .page-footer{
 }
 
 .activity-tile{
+  position:relative;
   width:100%;
   min-height:120px;
   display:flex;
+  flex-direction:column;
   align-items:center;
   justify-content:center;
   text-align:center;
   cursor:pointer;
-  border:none;
+  border:1px solid rgba(255,255,255,.08);
   box-shadow:none;
 
   font-size:28px;
@@ -48,9 +50,9 @@ body.student-route-session .page-footer{
   color:var(--text);
   background:#715716;
 
-  padding:20px;
+  padding:22px 20px;
   border-radius:20px;
-  transition:transform .12s ease, background .12s ease;
+  transition:transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 
 .activity-tile:hover{
@@ -61,6 +63,30 @@ body.student-route-session .page-footer{
 
 .activity-tile:active{
   transform:translateY(0);
+}
+
+.activity-tile.is-highlighted{
+  background:linear-gradient(180deg, #5f2d07, #7d450a);
+  border-color:rgba(255, 176, 32, .62);
+  box-shadow:0 0 0 3px rgba(255, 176, 32, .16);
+}
+
+.activity-tile-label{
+  display:block;
+}
+
+.activity-tile-badge{
+  display:inline-flex;
+  align-items:center;
+  margin-top:10px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.14);
+  font-size:12px;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:.02em;
 }
 
 .activities-placeholder{

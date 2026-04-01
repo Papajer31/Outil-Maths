@@ -1,5 +1,6 @@
 import { createMathsModuleRuntime } from "../modules/maths/module.js";
 import { createProductionEcritModuleRuntime } from "../modules/production-ecrit/module.js";
+import { createVocabulaireModuleRuntime } from "../modules/vocabulaire/module.js";
 
 const MODULE_DEFS = {
   maths: {
@@ -11,6 +12,11 @@ const MODULE_DEFS = {
     key: "production-ecrit",
     label: "Production d’écrit",
     createRuntime: createProductionEcritModuleRuntime
+  },
+  vocabulaire: {
+    key: "vocabulaire",
+    label: "Vocabulaire",
+    createRuntime: createVocabulaireModuleRuntime
   }
 };
 

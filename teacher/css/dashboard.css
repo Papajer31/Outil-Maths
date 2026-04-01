@@ -44,6 +44,7 @@
   display:flex;
   align-items:center;
   gap:12px;
+  flex-wrap:wrap;
 }
 
 /* Titre principal du dashboard */
@@ -61,11 +62,53 @@
   font-size:15px;
 }
 
+
+
+/* Code de connexion affiché dans le header */
+.dashboard-access-code-box{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:rgba(255,255,255,.03);
+}
+
+.dashboard-access-code-label{
+  color:var(--muted);
+  font-size:14px;
+}
+
+.dashboard-access-code-value{
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:.4px;
+}
+
+.dashboard-inline-edit-btn{
+  border:none;
+  background:transparent;
+  color:var(--muted);
+  cursor:pointer;
+  padding:0;
+  width:18px;
+  height:18px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+}
+
+.dashboard-inline-edit-btn:hover{
+  color:var(--text);
+}
+
 /* ========================================
    GRILLE PRINCIPALE
 ======================================== */
 
-/* Deux colonnes : classes à gauche, configurations à droite */
+/* Deux colonnes : élèves à gauche, activités ou profil à droite */
 .dashboard-grid{
   display:grid;
   grid-template-columns:410px minmax(0, 1fr);
@@ -92,7 +135,7 @@
    TITRES DE SECTIONS
 ======================================== */
 
-/* Titre d'un cadre comme "Mes classes" ou "Configurations" */
+/* Titre d'un cadre comme "Ma classe" ou "Activités" */
 .dashboard-section-title{
   display: flex;
   align-items: center;
@@ -113,7 +156,7 @@
    BOUTONS
 ======================================== */
 
-/* Bouton rond d'ajout de classe dans le panneau "Mes classes" */
+/* Bouton rond d'ajout d'élève dans le panneau "Ma classe" */
 .dashboard-add-btn{
   width:32px;
   height:32px;
@@ -139,13 +182,11 @@
   cursor:not-allowed;
 }
 
-
-
 /* ========================================
-   LISTES : CLASSES ET CONFIGURATIONS
+   LISTES : ÉLÈVES ET ACTIVITÉS
 ======================================== */
 
-/* Liste verticale des classes */
+/* Liste verticale des élèves */
 .dashboard-class-list,
 .dashboard-config-list{
   display:flex;
@@ -153,43 +194,77 @@
   gap:10px;
 }
 
+.dashboard-class-list,
+.dashboard-config-list{
+  position:relative;
+  align-items:stretch;
+  gap:0;
+  margin-inline:-12px;
+}
+
 .dashboard-class-list{
-  align-items:center;
+  margin-bottom:2px;
+}
+
+.dashboard-config-list{
+  margin-bottom:12px;
+}
+
+
+.dashboard-drop-indicator{
+  position:absolute;
+  left:0;
+  right:0;
+  height:3px;
+  background:rgb(23, 119, 65);
+  transform:translateY(-1.5px);
+  pointer-events:none;
+  z-index:8;
+  box-shadow:0 0 0 1px rgba(23, 119, 65, 0.18);
 }
 
 /* ========================================
-   CARTES DE CLASSES (COLONNE GAUCHE)
+   CARTES ÉLÈVES (COLONNE GAUCHE)
 ======================================== */
 
-/* Carte cliquable représentant une classe */
+/* Carte cliquable représentant un élève */
 .dashboard-class-card{
-  width:min(100%, 380px);
-  border:3px solid var(--border);
-  background:linear-gradient(180deg, #1a1f2a, #151922);
+  width:100%;
+  min-height:56px;
+  border:1px solid var(--border);
+  background:#151922;
   color:var(--text);
-  border-radius:14px;
-  padding:12px;
+  border-radius:0;
+  padding:0;
   display:flex;
   align-items:stretch;
   justify-content:space-between;
-  gap:10px;
+  gap:0;
+  box-shadow:none;
+}
+
+.dashboard-class-card + .dashboard-class-card{
+  margin-top:-1px;
 }
 
 .add-icon{
   display: inline-block;
   font-weight: bold;
-  transform: translateY(-1px);
+  transform: translateY(-2px) translateX(1px);
 }
 
 /* Variation visuelle au survol */
 .dashboard-class-card:hover{
-  background:linear-gradient(180deg, #202634, #181d28);
+  background:#181d28;
 }
 
-/* Carte de la classe actuellement ouverte */
+/* Carte de l’élève actuellement ouvert */
 .dashboard-class-card.is-active{
+  position:relative;
+  z-index:1;
   border-color:rgb(23, 119, 65);
-  box-shadow:0 0 0 1px rgba(58,208,122,.25) inset;
+  background:#18211b;
+  box-shadow:none;
 }
 
 /* Bloc texte principal de la carte */
@@ -199,23 +274,44 @@
   border:none;
   background:transparent;
   color:inherit;
-  padding:0;
+  padding:6px 10px 6px 8px;
   text-align:left;
   cursor:pointer;
+  display:flex;
+  align-items:center;
 }
 
-/* Code de classe affiché en gros */
+/* Ligne prénom + classe */
+.dashboard-class-card-heading{
+  min-width:0;
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+/* Prénom affiché en gros */
 .dashboard-class-card-title{
-  font-size:24px;
-  font-weight:1000;
-  line-height:1.1;
+  flex:0 1 auto;
+  min-width:0;
+  font-size:19px;
+  font-weight:700;
+  line-height:1.05;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
-/* Petite ligne secondaire sous le code classe */
+/* Classe affichée à droite, avec sa police actuelle */
 .dashboard-class-card-subtitle{
-  margin-top:4px;
+  flex:0 1 auto;
+  min-width:0;
+  margin-top:0;
   color:var(--muted);
-  font-size:13px;
+  font-size:12px;
+  line-height:1.05;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 /* Métadonnées à droite (date, info complémentaire, etc.) */
@@ -227,27 +323,33 @@
 
 .dashboard-class-card-actions{
   display:flex;
-  flex-direction:column;
-  justify-content:center;
-  gap:8px;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-end;
+  gap:4px;
   flex:0 0 auto;
+  padding:0 8px 0 0;
+}
+
+.dashboard-class-card-actions .dashboard-icon-btn{
+  font-family:inherit;
 }
 
 /* ========================================
    BOUTONS D'ACTIONS
 ======================================== */
 
-.dashboard-icon-btn{
-  width:34px;
-  height:34px;
-  border-radius:10px;
+ .dashboard-icon-btn{
+  width:28px;
+  height:28px;
+  border-radius:8px;
   border:1px solid var(--border);
   background:#10141d;
   color:var(--text);
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  font-size:16px;
+  font-size:15px;
   cursor:pointer;
   transition:filter .12s ease, transform .12s ease, border-color .12s ease;
 }
@@ -272,6 +374,36 @@
   color:#ffd6d6;
 }
 
+ .dashboard-grip-btn{
+  flex:0 0 28px;
+  align-self:stretch;
+  width:28px;
+  height:auto;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  color:var(--muted);
+  cursor:grab;
+  font-size:20px;
+  letter-spacing:-2px;
+  padding:0 0 0 4px;
+}
+
+.dashboard-grip-btn:hover{
+  filter:none;
+  background:rgba(255,255,255,0.03);
+  color:var(--text);
+}
+
+.dashboard-grip-btn:active{
+  cursor:grabbing;
+  transform:none;
+}
+
+ .dashboard-class-card.is-dragging{
+  opacity:.45;
+}
+
 /* ========================================
    BLOC CONFIGURATIONS (COLONNE DROITE)
 ======================================== */
@@ -285,41 +417,58 @@
   flex-wrap:wrap;
 }
 
-/* Nom ou rappel de la classe sélectionnée */
-.dashboard-selected-class{
-  margin-top:4px;
-  color:var(--muted);
-  font-size:15px;
-}
-
 /* Carte d'une configuration */
 .dashboard-config-card{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:16px;
-  flex-wrap:wrap;
-  padding:14px;
+  gap:12px;
+  flex-wrap:nowrap;
+  padding:0;
   border:1px solid var(--border);
-  border-radius:14px;
-  background:linear-gradient(180deg, #1a1f2a, #151922);
+  border-radius:0;
+  background:#151922;
+}
+
+.dashboard-config-card + .dashboard-config-card{
+  margin-top:-1px;
 }
 
 /* Partie gauche de la carte configuration */
 .dashboard-config-main{
-  min-width:240px;
-  flex:1 1 320px;
+  min-width:0;
+  flex:1 1 auto;
+  padding:10px 12px 10px 0;
 }
 
 /* Nom de la configuration */
 .dashboard-config-title{
-  font-size:22px;
+  font-size:20px;
   font-weight:700;
   line-height:1.15;
 }
 
-.dashboard-icon-btn{
-  font-family: "Segoe Fluent Icons";
+.dashboard-material-icon,
+.dashboard-material-icon-btn{
+  font-family:"MaterialSymbols";
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 300,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+.dashboard-config-actions .dashboard-icon-btn{
+  width:38px;
+  height:38px;
+}
+
+.dashboard-material-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:26px;
+  line-height:1;
 }
 
 /* Ligne des informations secondaires sous le titre */
@@ -353,28 +502,29 @@
 /* Zone des boutons d'action à droite d'une configuration */
 .dashboard-config-actions{
   display:flex;
-  gap:10px;
-  flex-wrap:wrap;
+  align-items:center;
+  gap:4px;
+  flex:0 0 auto;
+  padding:0 8px 0 0;
 }
 
-.editor-table{
-  width:100%;
-  border-collapse:collapse;
+.dashboard-config-card.is-dragging{
+  opacity:.45;
 }
 
-.editor-table th{
-  text-align:left;
-  color:var(--muted);
-  padding:8px;
+.dashboard-config-card.is-highlighted{
+  position:relative;
+  z-index:1;
+  border-color:rgb(23, 119, 65);
+  background:#18211b;
 }
 
-.editor-table td{
-  padding:10px 8px;
-  border-top:1px solid var(--border);
+.dashboard-config-card.is-hidden{
+  opacity:.72;
 }
 
-.editor-toolbar{
-  margin-bottom:10px;
+#accessCodeInput{
+  text-transform:uppercase;
 }
 
 .student-select{
@@ -417,40 +567,6 @@
 .student-select option{
   background: #111722;
   color: var(--text);
-}
-
-#btnSaveClassHeader.is-saved{
-  border-color: rgb(23, 119, 65);
-  box-shadow: 0 0 0 1px rgba(58, 208, 122, .22) inset;
-}
-
-#btnSaveClassHeader.is-dirty{
-  border-color: #d28a1d;
-  box-shadow: 0 0 0 1px rgba(210, 138, 29, .22) inset;
-}
-
-.dashboard-class-title-box{
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-
-.dashboard-class-title-input{
-  width:220px;
-  height:40px;
-  padding:0 14px;
-}
-
-.dashboard-class-title-input[readonly]{
-  cursor:default;
-  opacity:.9;
-  box-shadow:none;
-}
-
-.dashboard-class-title-input[readonly]:focus{
-  border-color:rgba(124, 152, 255, 0.22);
-  box-shadow:none;
-  background:rgba(255, 255, 255, 0.06);
 }
 
 /* ========================================
@@ -498,8 +614,7 @@
 }
 
 /* Champ de saisie dans les overlays */
-#modalClassInput,
-#editClassNameInput{
+#accessCodeInput{
   flex: 0 0 auto;
 }
 
@@ -562,37 +677,82 @@
   box-shadow: 0 0 0 3px rgba(84, 117, 255, 0.18);
 }
 
-#deleteClassText{
+#deleteStudentText{
   color:var(--text);
   line-height:1.45;
 }
 
-
-.dashboard-class-editor{
+.dashboard-student-profile{
   display:flex;
+  margin-inline:12px;
   flex-direction:column;
+  gap:14px;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:linear-gradient(180deg, #1a1f2a, #151922);
+}
+
+.dashboard-student-profile-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
   gap:12px;
 }
 
-.dashboard-editor-header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
+.dashboard-student-name{
+  font-size:32px;
+  line-height:1.1;
+  font-weight:800;
 }
 
-.editor-row{
-  display:grid;
-  grid-template-columns:1fr 120px;
-  gap:10px;
+.dashboard-student-meta{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:14px;
 }
 
-.editor-header{
-  font-weight:bold;
+.dashboard-student-notes-label{
+  font-size:14px;
+  font-weight:700;
   color:var(--muted);
 }
 
-.editor-actions{
-  margin-top:12px;
+.dashboard-student-notes{
+  width:100%;
+  min-height:220px;
+  resize:vertical;
+  padding:16px 18px;
+  border-radius:14px;
+  border:1px solid rgba(124, 152, 255, 0.22);
+  background:rgba(255, 255, 255, 0.06);
+  color:var(--text);
+  font:inherit;
+  line-height:1.5;
+  outline:none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.dashboard-student-notes:hover{
+  background:rgba(255, 255, 255, 0.075);
+  border-color:rgba(124, 152, 255, 0.28);
+}
+
+.dashboard-student-notes:focus{
+  background:rgba(255, 255, 255, 0.08);
+  border-color:rgba(124, 152, 255, 0.65);
+  box-shadow:0 0 0 3px rgba(84, 117, 255, 0.18);
+}
+
+.dashboard-student-notes::placeholder{
+  color:rgba(255,255,255,0.45);
+}
+
+.dashboard-student-help{
+  color:var(--muted);
+  font-size:13px;
+  font-style:italic;
 }
 
 /* ========================================

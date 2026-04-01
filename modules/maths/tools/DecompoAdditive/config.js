@@ -6,7 +6,8 @@ import {
   renderCheckbox,
   readCheckbox,
   clampInt,
-  renderToolSettingsStack
+  renderToolSettingsStack,
+  refreshStepper
 } from "../../../../shared/config-widgets.js";
 import {
   getDefaultSettings,
@@ -27,7 +28,11 @@ export function renderToolSettings(container, settings) {
       maxValue: cfg.maxTop,
       inputMin: 1,
       inputMax: 99,
-      step: 1
+      step: 1,
+      mode: cfg.topMode,
+      startValue: cfg.topStart,
+      stepValue: cfg.topStep,
+      values: cfg.topList
     }),
 
     renderSection("Options", `
@@ -54,28 +59,40 @@ export function renderToolSettings(container, settings) {
 
   const minEl = container.querySelector("#da_top_min");
   const maxEl = container.querySelector("#da_top_max");
+  const startEl = container.querySelector("#da_top_start");
   const allowZeroEl = container.querySelector("#da_allowZero");
 
   const syncSpecific = () => {
-    minEl.value = String(clampInt(minEl.value, 1, 99));
-    maxEl.value = String(clampInt(maxEl.value, 1, 99));
+    [minEl, maxEl, startEl].forEach((el) => {
+      if (!el) return;
+      el.value = String(clampInt(el.value, 1, 99));
+    });
 
-    if (Number(minEl.value) > Number(maxEl.value)) {
+    if (Number(minEl?.value) > Number(maxEl?.value)) {
       minEl.value = maxEl.value;
     }
 
-    if (!allowZeroEl.checked && Number(maxEl.value) < 2) {
+    if (!allowZeroEl.checked && Number(maxEl?.value) < 2) {
       maxEl.value = "2";
-      if (Number(minEl.value) > 2) {
+      if (Number(minEl?.value) > 2) {
         minEl.value = "2";
       }
+      if (Number(startEl?.value) < 2) {
+        startEl.value = "2";
+      }
     }
+
+    refreshStepper(container, "da_top_min", { inputMin: 1, inputMax: 99 });
+    refreshStepper(container, "da_top_max", { inputMin: 1, inputMax: 99 });
+    refreshStepper(container, "da_top_start", { inputMin: 1, inputMax: 99 });
   };
 
   minEl?.addEventListener("input", syncSpecific);
   maxEl?.addEventListener("input", syncSpecific);
+  startEl?.addEventListener("input", syncSpecific);
   minEl?.addEventListener("change", syncSpecific);
   maxEl?.addEventListener("change", syncSpecific);
+  startEl?.addEventListener("change", syncSpecific);
   allowZeroEl?.addEventListener("change", syncSpecific);
 
   syncSpecific();
@@ -91,13 +108,17 @@ export function readToolSettings(container) {
   const allowZero = readCheckbox(container, "da_allowZero");
   const includeSymmetricPairs = readCheckbox(container, "da_includeSymmetricPairs");
 
-  if (!allowZero && topRange.max < 2) {
+  if (!allowZero && topRange.mode !== "list" && topRange.max < 2) {
     throw new Error("Avec 0 interdit, le maximum doit être au moins 2.");
   }
 
   const settings = {
     minTop: topRange.min,
     maxTop: topRange.max,
+    topMode: topRange.mode,
+    topStart: topRange.start,
+    topStep: topRange.step,
+    topList: topRange.values,
     allowZero,
     includeSymmetricPairs
   };

@@ -405,47 +405,6 @@ body{
   gap:16px;
 }
 
-.pem-mode-pill{
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-  padding:4px;
-  border-radius:999px;
-  background:rgba(255,255,255,.06);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
-}
-
-.pem-mode-pill input{
-  display:none;
-}
-
-.pem-mode-option{
-  min-width:110px;
-  height:40px;
-  padding:0 16px;
-  border-radius:999px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:600;
-  color:var(--muted);
-  cursor:pointer;
-  transition:background .12s ease, color .12s ease, transform .12s ease;
-}
-
-.pem-mode-pill input:checked + .pem-mode-option{
-  background:rgba(255,255,255,.14);
-  color:var(--text);
-}
-
-#activityModeSlot{
-  display:inline-flex;
-  align-items:center;
-  flex:0 0 auto;
-  margin-right:14px;
-  transform:translateY(2px);
-}
-
 .cfg-module-block select option{
   background:#1c212b;
   color:var(--text);

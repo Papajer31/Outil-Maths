@@ -1,6 +1,5 @@
 export function normalizeSettings(settings) {
   const base = {
-    mode: "students",
     selectedStudentIds: [],
     selectionOrder: [],
     studentConfigs: {},
@@ -39,7 +38,6 @@ export function normalizeSettings(settings) {
     };
   }
 
-  base.mode = base.mode === "board" ? "board" : "students";
   base.selectedStudentIds = selected;
   base.selectionOrder = selected;
   base.studentConfigs = nextStudentConfigs;
@@ -64,10 +62,6 @@ function normalizePhraseList(list) {
 }
 
 export function getPhrasePoolForStudent(settings, student) {
-  if (settings.mode !== "students") {
-    return [];
-  }
-
   const studentId = String(student?.id || "").trim();
   if (!studentId) {
     return [];
@@ -95,10 +89,6 @@ export function getPhraseCountForStudent(settings, student, fallback = 1) {
 }
 
 export function getPhraseTimeForStudent(settings, student, fallback = 5) {
-  if (settings.mode !== "students") {
-    return fallback;
-  }
-
   const studentId = String(student?.id || "").trim();
   if (!studentId) {
     return fallback;

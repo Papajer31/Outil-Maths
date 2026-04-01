@@ -294,7 +294,27 @@ export function createSessionEngine({
     const ctx = getToolContext(item);
 
     if (generateQuestion) {
-      activeTool.nextQuestion?.(els.workArea, ctx);
+      const maybePromise = activeTool.nextQuestion?.(els.workArea, ctx);
+
+      if (maybePromise && typeof maybePromise.then === "function") {
+        engineState = "LOADING_QUESTION";
+        phase = createPhase("IDLE");
+        hideTimer();
+        setStatus(`${item.title} — chargement…`, "warn");
+
+        Promise.resolve(maybePromise)
+          .then(() => {
+            if (!isSessionRunning || paused) return;
+            beginQuestionPhase(item, remainingMs, {
+              generateQuestion: false,
+              initialGaugeScale
+            });
+          })
+          .catch((err) => {
+            onFatalError?.(err?.message || "Erreur pendant la séance.");
+          });
+        return;
+      }
     }
 
     engineState = "RUNNING_QUESTION";
@@ -575,6 +595,8 @@ export function createSessionEngine({
     if (!item) {
       return {
         sessionItem: null,
+        accessCode,
+        moduleKey,
         settings: {},
         student: selectedStudent,
         studentFirstName: selectedStudent?.first_name ?? ""
@@ -583,6 +605,8 @@ export function createSessionEngine({
 
     return {
       sessionItem: item,
+      accessCode,
+      moduleKey,
       settings: item.settings ?? {},
       student: selectedStudent,
       studentFirstName: selectedStudent?.first_name ?? ""

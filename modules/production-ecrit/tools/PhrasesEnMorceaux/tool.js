@@ -18,14 +18,6 @@ export function estimateDuration({ draft, globals } = {}) {
   const safeGlobals = normalizeActivityGlobals(globals);
   const settings = normalizeSettings(safeDraft.settings);
 
-  if (safeGlobals.mode !== "students") {
-    return estimateStandardToolDuration({
-      draft: safeDraft,
-      globals: safeGlobals,
-      hasAnswerPhase: false,
-      questionCount: 1
-    });
-  }
 
   const selectedStudentIds = Array.isArray(settings.selectedStudentIds)
     ? settings.selectedStudentIds.map((id) => String(id || "").trim()).filter(Boolean)
@@ -89,7 +81,6 @@ export default {
 
   getDefaultSettings() {
     return {
-      mode: "students",
       selectedStudentIds: [],
       selectionOrder: [],
       studentConfigs: {}

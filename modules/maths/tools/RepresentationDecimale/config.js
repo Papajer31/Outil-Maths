@@ -22,7 +22,11 @@ export function renderToolSettings(container, settings) {
       maxValue: cfg.max,
       inputMin: 1,
       inputMax: 69,
-      step: 1
+      step: 1,
+      mode: cfg.valueMode,
+      startValue: cfg.valueStart,
+      stepValue: cfg.valueStep,
+      values: cfg.valueList
     }),
 
     `
@@ -41,6 +45,22 @@ export function renderToolSettings(container, settings) {
           })}
         </div>
       </div>
+
+      <div class="tv-group">
+        <div class="tv-group-title">Affichage</div>
+        <div class="tv-stack">
+          ${renderCheckbox({
+            id: "rd_direction_number_to_repr",
+            label: "Nombre → Représentation décimale",
+            checked: !!cfg.allowNumberToRepresentation
+          })}
+          ${renderCheckbox({
+            id: "rd_direction_repr_to_number",
+            label: "Représentation décimale → Nombre",
+            checked: !!cfg.allowRepresentationToNumber
+          })}
+        </div>
+      </div>
     `
   );
 
@@ -51,7 +71,7 @@ export function renderToolSettings(container, settings) {
 }
 
 export function readToolSettings(container) {
-  const { min, max } = readMinMax(container, "rd_range", {
+  const values = readMinMax(container, "rd_range", {
     inputMin: 1,
     inputMax: 69,
     errorLabel: "Les bornes"
@@ -59,16 +79,28 @@ export function readToolSettings(container) {
 
   const usePicbille = readCheckbox(container, "rd_use_picbille");
   const useDede = readCheckbox(container, "rd_use_dede");
+  const allowNumberToRepresentation = readCheckbox(container, "rd_direction_number_to_repr");
+  const allowRepresentationToNumber = readCheckbox(container, "rd_direction_repr_to_number");
 
   if (!usePicbille && !useDede) {
     throw new Error("Active au moins une représentation : Picbille ou Dédé.");
   }
 
+  if (!allowNumberToRepresentation && !allowRepresentationToNumber) {
+    throw new Error("Active au moins un mode d'affichage.");
+  }
+
   return {
-    min,
-    max,
+    min: values.min,
+    max: values.max,
+    valueMode: values.mode,
+    valueStart: values.start,
+    valueStep: values.step,
+    valueList: values.values,
     usePicbille,
-    useDede
+    useDede,
+    allowNumberToRepresentation,
+    allowRepresentationToNumber
   };
 }
 

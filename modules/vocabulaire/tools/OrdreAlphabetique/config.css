@@ -1,0 +1,85 @@
+.oa-word-settings .tv-settings-stack{
+  gap:18px;
+}
+
+.oa-word-editor{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.oa-word-editor-note{
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.35;
+}
+
+.oa-word-editor-main{
+  display:flex;
+  align-items:stretch;
+  gap:16px;
+}
+
+.oa-word-editor-text{
+  width:min(640px, 100%);
+  min-width:0;
+  min-height:260px;
+  resize:vertical;
+  padding:14px 16px;
+  border-radius:16px;
+  font:inherit;
+  font-size:18px;
+  line-height:1.45;
+  white-space:pre;
+  flex:1 1 auto;
+}
+
+.oa-word-editor-side{
+  width:260px;
+  flex:0 0 260px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.oa-word-editor-actions{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
+}
+
+.oa-word-editor-btn{
+  width:100%;
+}
+
+.oa-word-editor-status{
+  min-height:26px;
+  color:var(--muted);
+  font-size:16px;
+  font-weight:600;
+  line-height:1.3;
+}
+
+.oa-word-editor-status.is-error{
+  color:var(--bad);
+}
+
+.oa-word-editor-status.is-dirty{
+  color:var(--warn);
+}
+
+@media (max-width: 980px){
+  .oa-word-editor-main{
+    flex-direction:column;
+  }
+
+  .oa-word-editor-text{
+    width:100%;
+  }
+
+  .oa-word-editor-side{
+    width:100%;
+    flex:0 0 auto;
+  }
+}

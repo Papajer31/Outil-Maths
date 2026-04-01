@@ -1,11 +1,25 @@
+import { normalizeNumericConstraint } from "../../../../shared/value-constraints.js";
+
 export function getDefaultSettings() {
   return {
     n1Min: 5,
     n1Max: 10,
+    n1Mode: "simple",
+    n1Start: 5,
+    n1Step: 1,
+    n1List: [],
     n2Min: 0,
     n2Max: 10,
+    n2Mode: "simple",
+    n2Start: 0,
+    n2Step: 1,
+    n2List: [],
     resultMin: 0,
-    resultMax: 10
+    resultMax: 10,
+    resultMode: "simple",
+    resultStart: 0,
+    resultStep: 1,
+    resultList: []
   };
 }
 
@@ -15,51 +29,94 @@ export function normalizeSettings(settings) {
     ...(settings ?? {})
   };
 
-  base.n1Min = clampInt(base.n1Min, 0, 99);
-  base.n1Max = clampInt(base.n1Max, 0, 99);
-  base.n2Min = clampInt(base.n2Min, 0, 99);
-  base.n2Max = clampInt(base.n2Max, 0, 99);
-  base.resultMin = clampInt(base.resultMin, 0, 99);
-  base.resultMax = clampInt(base.resultMax, 0, 99);
+  const n1Constraint = normalizeNumericConstraint({
+    min: base.n1Min,
+    max: base.n1Max,
+    mode: base.n1Mode,
+    start: base.n1Start,
+    step: base.n1Step,
+    values: base.n1List
+  }, {
+    inputMin: 0,
+    inputMax: 99,
+    defaultMin: 5,
+    defaultMax: 10,
+    defaultStart: 5,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  if (base.n1Min > base.n1Max) {
-    [base.n1Min, base.n1Max] = [base.n1Max, base.n1Min];
-  }
+  const n1EffectiveMax = n1Constraint.allowedValues.length
+    ? Math.max(...n1Constraint.allowedValues)
+    : n1Constraint.max;
 
-  if (base.n2Min > base.n2Max) {
-    [base.n2Min, base.n2Max] = [base.n2Max, base.n2Min];
-  }
+  const n2Constraint = normalizeNumericConstraint({
+    min: base.n2Min,
+    max: Math.min(base.n2Max, n1EffectiveMax),
+    mode: base.n2Mode,
+    start: Math.min(base.n2Start, n1EffectiveMax),
+    step: base.n2Step,
+    values: base.n2List
+  }, {
+    inputMin: 0,
+    inputMax: n1EffectiveMax,
+    defaultMin: 0,
+    defaultMax: Math.min(10, n1EffectiveMax),
+    defaultStart: 0,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  if (base.resultMin > base.resultMax) {
-    [base.resultMin, base.resultMax] = [base.resultMax, base.resultMin];
-  }
+  const resultConstraint = normalizeNumericConstraint({
+    min: base.resultMin,
+    max: Math.min(base.resultMax, n1EffectiveMax),
+    mode: base.resultMode,
+    start: Math.min(base.resultStart, n1EffectiveMax),
+    step: base.resultStep,
+    values: base.resultList
+  }, {
+    inputMin: 0,
+    inputMax: n1EffectiveMax,
+    defaultMin: 0,
+    defaultMax: Math.min(10, n1EffectiveMax),
+    defaultStart: 0,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  base.n2Min = Math.min(base.n2Min, base.n1Max);
-  base.n2Max = Math.min(base.n2Max, base.n1Max);
-  base.resultMin = Math.min(base.resultMin, base.n1Max);
-  base.resultMax = Math.min(base.resultMax, base.n1Max);
-
-  if (base.n2Min > base.n2Max) {
-    base.n2Min = base.n2Max;
-  }
-
-  if (base.resultMin > base.resultMax) {
-    base.resultMin = base.resultMax;
-  }
-
-  return base;
+  return {
+    n1Min: n1Constraint.min,
+    n1Max: n1Constraint.max,
+    n1Mode: n1Constraint.mode,
+    n1Start: n1Constraint.start,
+    n1Step: n1Constraint.step,
+    n1List: n1Constraint.values,
+    n1AllowedValues: n1Constraint.allowedValues,
+    n2Min: n2Constraint.min,
+    n2Max: n2Constraint.max,
+    n2Mode: n2Constraint.mode,
+    n2Start: n2Constraint.start,
+    n2Step: n2Constraint.step,
+    n2List: n2Constraint.values,
+    n2AllowedValues: n2Constraint.allowedValues,
+    resultMin: resultConstraint.min,
+    resultMax: resultConstraint.max,
+    resultMode: resultConstraint.mode,
+    resultStart: resultConstraint.start,
+    resultStep: resultConstraint.step,
+    resultList: resultConstraint.values,
+    resultAllowedValues: resultConstraint.allowedValues
+  };
 }
 
 export function hasAtLeastOnePossibleSubtraction(settings) {
   const cfg = normalizeSettings(settings);
+  const resultSet = new Set(cfg.resultAllowedValues);
 
-  for (let a = cfg.n1Min; a <= cfg.n1Max; a++) {
-    const bMin = Math.max(cfg.n2Min, 0);
-    const bMax = Math.min(cfg.n2Max, a);
-
-    for (let b = bMin; b <= bMax; b++) {
-      const diff = a - b;
-      if (diff >= cfg.resultMin && diff <= cfg.resultMax) {
+  for (const a of cfg.n1AllowedValues) {
+    for (const b of cfg.n2AllowedValues) {
+      if (b > a) continue;
+      if (resultSet.has(a - b)) {
         return true;
       }
     }
@@ -70,41 +127,21 @@ export function hasAtLeastOnePossibleSubtraction(settings) {
 
 export function pickQuestion(settings) {
   const cfg = normalizeSettings(settings);
+  const resultSet = new Set(cfg.resultAllowedValues);
+  const validQuestions = [];
 
-  for (let i = 0; i < 500; i++) {
-    const a = rand(cfg.n1Min, cfg.n1Max);
-    const bMin = Math.max(cfg.n2Min, 0);
-    const bMax = Math.min(cfg.n2Max, a);
-
-    if (bMin > bMax) continue;
-
-    const b = rand(bMin, bMax);
-    const diff = a - b;
-
-    if (diff < cfg.resultMin || diff > cfg.resultMax) continue;
-    return { n1: a, n2: b, result: diff };
-  }
-
-  for (let a = cfg.n1Min; a <= cfg.n1Max; a++) {
-    const bMin = Math.max(cfg.n2Min, 0);
-    const bMax = Math.min(cfg.n2Max, a);
-
-    for (let b = bMin; b <= bMax; b++) {
+  for (const a of cfg.n1AllowedValues) {
+    for (const b of cfg.n2AllowedValues) {
+      if (b > a) continue;
       const diff = a - b;
-      if (diff < cfg.resultMin || diff > cfg.resultMax) continue;
-      return { n1: a, n2: b, result: diff };
+      if (!resultSet.has(diff)) continue;
+      validQuestions.push({ n1: a, n2: b, result: diff });
     }
   }
 
-  throw new Error("Aucune soustraction possible avec ces réglages.");
-}
+  if (!validQuestions.length) {
+    throw new Error("Aucune soustraction possible avec ces réglages.");
+  }
 
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
-
-function rand(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return validQuestions[Math.floor(Math.random() * validQuestions.length)];
 }

@@ -41,7 +41,11 @@ export function renderToolSettings(container, settings) {
       maxValue: cfg.maxValue,
       inputMin: 1,
       inputMax: cfg.boxCount * DRAW.cellsPerBox,
-      step: 1
+      step: 1,
+      mode: cfg.valueMode,
+      startValue: cfg.valueStart,
+      stepValue: cfg.valueStep,
+      values: cfg.valueList
     })
   );
 
@@ -55,18 +59,19 @@ export function renderToolSettings(container, settings) {
   const boxCountEl = container.querySelector("#fp_boxCount");
   const minEl = container.querySelector("#fp_values_min");
   const maxEl = container.querySelector("#fp_values_max");
+  const startEl = container.querySelector("#fp_values_start");
 
   const syncSpecific = () => {
     const boxCount = clampInt(boxCountEl?.value, 2, 6);
     const absoluteMax = boxCount * DRAW.cellsPerBox;
 
-    minEl.max = String(absoluteMax);
-    maxEl.max = String(absoluteMax);
+    [minEl, maxEl, startEl].forEach((el) => {
+      if (!el) return;
+      el.max = String(absoluteMax);
+      el.value = String(clampInt(el.value, 1, absoluteMax));
+    });
 
-    minEl.value = String(clampInt(minEl.value, 1, absoluteMax));
-    maxEl.value = String(clampInt(maxEl.value, 1, absoluteMax));
-
-    if (Number(minEl.value) > Number(maxEl.value)) {
+    if (Number(minEl?.value) > Number(maxEl?.value)) {
       minEl.value = maxEl.value;
     }
 
@@ -79,13 +84,20 @@ export function renderToolSettings(container, settings) {
       inputMin: 1,
       inputMax: absoluteMax
     });
+
+    refreshStepper(container, "fp_values_start", {
+      inputMin: 1,
+      inputMax: absoluteMax
+    });
   };
 
   boxCountEl?.addEventListener("change", syncSpecific);
   minEl?.addEventListener("input", syncSpecific);
   maxEl?.addEventListener("input", syncSpecific);
+  startEl?.addEventListener("input", syncSpecific);
   minEl?.addEventListener("change", syncSpecific);
   maxEl?.addEventListener("change", syncSpecific);
+  startEl?.addEventListener("change", syncSpecific);
 
   syncSpecific();
 }
@@ -106,7 +118,11 @@ export function readToolSettings(container) {
   return {
     boxCount,
     minValue: values.min,
-    maxValue: values.max
+    maxValue: values.max,
+    valueMode: values.mode,
+    valueStart: values.start,
+    valueStep: values.step,
+    valueList: values.values
   };
 }
 

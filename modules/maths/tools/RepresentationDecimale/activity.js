@@ -6,7 +6,8 @@ import {
 let currentQuestion = {
   n: 10,
   character: "picbille",
-  questionSrc: "",
+  direction: "number_to_representation",
+  promptSrc: "",
   answerSrc: ""
 };
 
@@ -78,37 +79,63 @@ export function mount(container) {
 
 export function nextQuestion(container, ctx) {
   const settings = normalizeSettings(ctx?.settings);
-  const { n, character } = pickQuestion(settings);
+  const { n, character, direction } = pickQuestion(settings);
 
-  const questionSrc = new URL(`./${character}.png`, import.meta.url).href;
-  const answerSrc = new URL(`./graphs/${character}/${n}.png`, import.meta.url).href;
+  const promptSrc = new URL(`./${character}.png`, import.meta.url).href;
+  const representationSrc = new URL(`./graphs/${character}/${n}.png`, import.meta.url).href;
 
-  currentQuestion = { n, character, questionSrc, answerSrc };
+  currentQuestion = {
+    n,
+    character,
+    direction,
+    promptSrc,
+    answerSrc: representationSrc
+  };
 
   const numberEl = container.querySelector("#rd_number");
   const img = container.querySelector("#rd_img");
   const frame = container.querySelector("#rd_answer_frame");
-
   if (!numberEl || !img || !frame) return;
 
-  numberEl.textContent = String(n);
+  resetFrame(frame);
 
-  frame.style.borderColor = "transparent";
-  frame.style.background = "transparent";
-  frame.style.padding = "0";
+  if (direction === "representation_to_number") {
+    numberEl.textContent = "";
+    numberEl.style.visibility = "hidden";
 
-  img.style.width = "70%";
-  img.style.height = "70%";
-  img.style.objectFit = "contain";
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "contain";
 
-  setImageWhenReady(img, questionSrc);
-  preloadImage(answerSrc);
+    frame.style.borderColor = "var(--border, #2b3142)";
+    frame.style.background = "var(--panel, #171a21)";
+    frame.style.padding = "18px";
+
+    setImageWhenReady(img, representationSrc);
+  } else {
+    numberEl.textContent = String(n);
+    numberEl.style.visibility = "visible";
+
+    img.style.width = "70%";
+    img.style.height = "70%";
+    img.style.objectFit = "contain";
+
+    setImageWhenReady(img, promptSrc);
+    preloadImage(representationSrc);
+  }
 }
 
 export function showAnswer(container) {
+  const numberEl = container.querySelector("#rd_number");
   const img = container.querySelector("#rd_img");
   const frame = container.querySelector("#rd_answer_frame");
-  if (!img || !frame) return;
+  if (!numberEl || !img || !frame) return;
+
+  if (currentQuestion.direction === "representation_to_number") {
+    numberEl.textContent = String(currentQuestion.n);
+    numberEl.style.visibility = "visible";
+    return;
+  }
 
   frame.style.borderColor = "var(--border, #2b3142)";
   frame.style.background = "var(--panel, #171a21)";
@@ -126,9 +153,17 @@ export function unmount(container) {
   currentQuestion = {
     n: 10,
     character: "picbille",
-    questionSrc: "",
+    direction: "number_to_representation",
+    promptSrc: "",
     answerSrc: ""
   };
+}
+
+function resetFrame(frame) {
+  if (!frame) return;
+  frame.style.borderColor = "transparent";
+  frame.style.background = "transparent";
+  frame.style.padding = "0";
 }
 
 function preloadImage(src) {

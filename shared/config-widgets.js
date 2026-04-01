@@ -1,3 +1,10 @@
+import {
+  VALUE_CONSTRAINT_MODES,
+  normalizeNumericConstraint,
+  formatConstraintPreview,
+  normalizeValueList
+} from "./value-constraints.js";
+
 export function renderSection(title, innerHtml){
   return `
     <div class="tv-group">
@@ -29,33 +36,166 @@ export function renderMinMax({
   maxValue = 10,
   inputMin = 0,
   inputMax = 99,
-  step = 1
+  step = 1,
+  mode = VALUE_CONSTRAINT_MODES.SIMPLE,
+  startValue = minValue,
+  stepValue = step,
+  values = []
 }){
-  const minSafe = clampInt(minValue, inputMin, inputMax);
-  const maxSafe = clampInt(maxValue, inputMin, inputMax);
+  const constraint = normalizeNumericConstraint({
+    min: minValue,
+    max: maxValue,
+    mode,
+    start: startValue,
+    step: stepValue,
+    values
+  }, {
+    inputMin,
+    inputMax,
+    defaultMin: minValue,
+    defaultMax: maxValue,
+    defaultStart: minValue,
+    defaultStep: step,
+    defaultValues: Array.isArray(values) ? values : normalizeValueList(values, { inputMin, inputMax })
+  });
+
+  const isExpanded = constraint.mode !== VALUE_CONSTRAINT_MODES.SIMPLE;
+  const preview = formatConstraintPreview(constraint.allowedValues);
+  const listValue = constraint.values.join(", ");
 
   const block = `
-    <div class="tv-minmax-inline">
-      ${title ? `<div class="tv-group-title tv-minmax-title">${escapeHtml(title)}</div>` : ""}
+    <div class="tv-minmax" data-tv-minmax="${idPrefix}" data-tv-expanded="${isExpanded ? "true" : "false"}">
+      <div class="tv-minmax-inline">
+        ${title ? `<div class="tv-group-title tv-minmax-title">${escapeHtml(title)}</div>` : ""}
 
-      <div class="tv-minmax-controls">
-        ${renderStepperControl({
-          id: `${idPrefix}_min`,
-          label: minLabel,
-          value: minSafe,
-          inputMin,
-          inputMax,
-          step
-        })}
+        <div class="tv-minmax-header-actions">
+          <div class="tv-minmax-controls">
+            ${renderStepperControl({
+              id: `${idPrefix}_min`,
+              label: minLabel,
+              value: constraint.min,
+              inputMin,
+              inputMax,
+              step
+            })}
 
-        ${renderStepperControl({
-          id: `${idPrefix}_max`,
-          label: maxLabel,
-          value: maxSafe,
-          inputMin,
-          inputMax,
-          step
-        })}
+            ${renderStepperControl({
+              id: `${idPrefix}_max`,
+              label: maxLabel,
+              value: constraint.max,
+              inputMin,
+              inputMax,
+              step
+            })}
+          </div>
+
+          <button
+            class="tv-minmax-toggle"
+            type="button"
+            id="${idPrefix}_toggle"
+            aria-expanded="${isExpanded ? "true" : "false"}"
+            aria-controls="${idPrefix}_advanced"
+            aria-label="Afficher les options avancées"
+          >
+            <span class="tv-stepper-icon" aria-hidden="true">expand_more</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="tv-minmax-advanced${isExpanded ? " is-open" : ""}" id="${idPrefix}_advanced" ${isExpanded ? "" : "hidden"}>
+        <div class="tv-minmax-mode-row">
+          <label class="tv-minmax-radio-row">
+            <input class="tv-minmax-radio" type="radio" name="${idPrefix}_mode" id="${idPrefix}_mode_simple" value="${VALUE_CONSTRAINT_MODES.SIMPLE}" ${constraint.mode === VALUE_CONSTRAINT_MODES.SIMPLE ? "checked" : ""}>
+            <span>Intervalle simple</span>
+          </label>
+        </div>
+
+        <div class="tv-minmax-mode-row tv-minmax-mode-row-advanced">
+          <label class="tv-minmax-radio-row">
+            <input class="tv-minmax-radio" type="radio" name="${idPrefix}_mode" id="${idPrefix}_mode_advanced" value="${VALUE_CONSTRAINT_MODES.ADVANCED}" ${constraint.mode === VALUE_CONSTRAINT_MODES.ADVANCED ? "checked" : ""}>
+            <span>Avancé</span>
+          </label>
+
+          <div class="tv-minmax-advanced-fields">
+            ${renderStepperControl({
+              id: `${idPrefix}_start`,
+              label: "Départ",
+              value: constraint.start,
+              inputMin,
+              inputMax,
+              step
+            })}
+
+            ${renderStepperControl({
+              id: `${idPrefix}_step`,
+              label: "Pas",
+              value: constraint.step,
+              inputMin: 1,
+              inputMax: Math.max(1, inputMax - inputMin),
+              step: 1
+            })}
+          </div>
+        </div>
+
+        <div class="tv-minmax-mode-row tv-minmax-mode-row-list">
+          <label class="tv-minmax-radio-row">
+            <input class="tv-minmax-radio" type="radio" name="${idPrefix}_mode" id="${idPrefix}_mode_list" value="${VALUE_CONSTRAINT_MODES.LIST}" ${constraint.mode === VALUE_CONSTRAINT_MODES.LIST ? "checked" : ""}>
+            <span>Liste de valeurs</span>
+          </label>
+
+          <textarea class="tv-input tv-minmax-textarea" id="${idPrefix}_values" rows="3" placeholder="Ex. : 10, 20, 30">${escapeHtml(listValue)}</textarea>
+        </div>
+
+        <div class="tv-minmax-preview-row">
+          <span class="tv-minmax-preview-label">Aperçu :</span>
+          <span class="tv-minmax-preview" id="${idPrefix}_preview">${escapeHtml(preview)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return title ? `<div class="tv-group tv-group-inline">${block}</div>` : block;
+}
+
+export function renderBasicMinMax({
+  idPrefix,
+  title = "",
+  minLabel = "Minimum",
+  maxLabel = "Maximum",
+  minValue = 0,
+  maxValue = 10,
+  inputMin = 0,
+  inputMax = 99,
+  step = 1
+}){
+  const safeMin = clampInt(minValue, inputMin, inputMax);
+  const safeMax = clampInt(maxValue, inputMin, inputMax);
+  const block = `
+    <div class="tv-minmax tv-minmax-basic" data-tv-basic-minmax="${idPrefix}">
+      <div class="tv-minmax-inline">
+        ${title ? `<div class="tv-group-title tv-minmax-title">${escapeHtml(title)}</div>` : ""}
+
+        <div class="tv-minmax-header-actions">
+          <div class="tv-minmax-controls">
+            ${renderStepperControl({
+              id: `${idPrefix}_min`,
+              label: minLabel,
+              value: Math.min(safeMin, safeMax),
+              inputMin,
+              inputMax,
+              step
+            })}
+
+            ${renderStepperControl({
+              id: `${idPrefix}_max`,
+              label: maxLabel,
+              value: Math.max(safeMin, safeMax),
+              inputMin,
+              inputMax,
+              step
+            })}
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -67,12 +207,21 @@ export function bindMinMax(container, idPrefix, {
   inputMin = 0,
   inputMax = 99
 } = {}){
-  const minEl = container.querySelector(`#${idPrefix}_min`);
-  const maxEl = container.querySelector(`#${idPrefix}_max`);
-  if (!minEl || !maxEl) return;
+  const root = container.querySelector(`[data-tv-minmax="${cssEscape(idPrefix)}"]`);
+  const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
+  const maxEl = container.querySelector(`#${cssEscape(idPrefix)}_max`);
+  const startEl = container.querySelector(`#${cssEscape(idPrefix)}_start`);
+  const stepEl = container.querySelector(`#${cssEscape(idPrefix)}_step`);
+  const valuesEl = container.querySelector(`#${cssEscape(idPrefix)}_values`);
+  const toggleEl = container.querySelector(`#${cssEscape(idPrefix)}_toggle`);
+  const advancedEl = container.querySelector(`#${cssEscape(idPrefix)}_advanced`);
+  const modeEls = Array.from(container.querySelectorAll(`input[name="${cssEscape(idPrefix)}_mode"]`));
+  if (!root || !minEl || !maxEl || !startEl || !stepEl || !valuesEl || !toggleEl || !advancedEl || modeEls.length === 0) return;
 
   bindStepper(minEl, { inputMin, inputMax });
   bindStepper(maxEl, { inputMin, inputMax });
+  bindStepper(startEl, { inputMin, inputMax });
+  bindStepper(stepEl, { inputMin: 1, inputMax: Math.max(1, inputMax - inputMin) });
 
   const syncPair = (source = null) => {
     const minBounds = resolveStepperBounds(minEl, { inputMin, inputMax });
@@ -99,12 +248,107 @@ export function bindMinMax(container, idPrefix, {
     syncStepperUI(maxEl, { inputMin, inputMax });
   };
 
+  const setExpanded = (expanded) => {
+    root.dataset.tvExpanded = expanded ? "true" : "false";
+    toggleEl.setAttribute("aria-expanded", expanded ? "true" : "false");
+    advancedEl.classList.toggle("is-open", expanded);
+    if (expanded) {
+      advancedEl.hidden = false;
+    } else {
+      advancedEl.hidden = true;
+    }
+  };
+
+  const updateModeState = () => {
+    const mode = getCheckedMinMaxMode(modeEls);
+    const isAdvanced = mode === VALUE_CONSTRAINT_MODES.ADVANCED;
+    const isList = mode === VALUE_CONSTRAINT_MODES.LIST;
+
+    setStepperDisabled(minEl, isList, { inputMin, inputMax });
+    setStepperDisabled(maxEl, isList, { inputMin, inputMax });
+    setStepperDisabled(startEl, !isAdvanced, { inputMin, inputMax });
+    setStepperDisabled(stepEl, !isAdvanced, { inputMin: 1, inputMax: Math.max(1, inputMax - inputMin) });
+    valuesEl.disabled = !isList;
+
+    root.querySelector('.tv-minmax-mode-row-advanced')?.classList.toggle('is-active', isAdvanced);
+    root.querySelector('.tv-minmax-mode-row-list')?.classList.toggle('is-active', isList);
+
+    updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
+  };
+
+  const onMinInput = () => {
+    syncPair(minEl);
+    updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
+  };
+  const onMaxInput = () => {
+    syncPair(maxEl);
+    updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
+  };
+
+  minEl.addEventListener("input", onMinInput);
+  minEl.addEventListener("change", onMinInput);
+
+  maxEl.addEventListener("input", onMaxInput);
+  maxEl.addEventListener("change", onMaxInput);
+
+  startEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  startEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  stepEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  stepEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  valuesEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  valuesEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+
+  modeEls.forEach((modeEl) => {
+    modeEl.addEventListener("change", updateModeState);
+  });
+
+  toggleEl.addEventListener("click", () => {
+    setExpanded(root.dataset.tvExpanded !== "true");
+  });
+
+  syncPair();
+  updateModeState();
+}
+
+export function bindBasicMinMax(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99
+} = {}){
+  const root = container.querySelector(`[data-tv-basic-minmax="${cssEscape(idPrefix)}"]`);
+  const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
+  const maxEl = container.querySelector(`#${cssEscape(idPrefix)}_max`);
+  if (!root || !minEl || !maxEl) return;
+
+  bindStepper(minEl, { inputMin, inputMax });
+  bindStepper(maxEl, { inputMin, inputMax });
+
+  const syncPair = (source = null) => {
+    const minBounds = resolveStepperBounds(minEl, { inputMin, inputMax });
+    const maxBounds = resolveStepperBounds(maxEl, { inputMin, inputMax });
+
+    let min = clampInt(minEl.value, minBounds.min, minBounds.max);
+    let max = clampInt(maxEl.value, maxBounds.min, maxBounds.max);
+
+    if (min > max) {
+      if (source === minEl) {
+        max = min;
+      } else {
+        min = max;
+      }
+    }
+
+    minEl.value = String(clampInt(min, minBounds.min, minBounds.max));
+    maxEl.value = String(clampInt(max, maxBounds.min, maxBounds.max));
+
+    syncStepperUI(minEl, { inputMin, inputMax });
+    syncStepperUI(maxEl, { inputMin, inputMax });
+  };
+
   const onMinInput = () => syncPair(minEl);
   const onMaxInput = () => syncPair(maxEl);
 
   minEl.addEventListener("input", onMinInput);
   minEl.addEventListener("change", onMinInput);
-
   maxEl.addEventListener("input", onMaxInput);
   maxEl.addEventListener("change", onMaxInput);
 
@@ -116,16 +360,96 @@ export function readMinMax(container, idPrefix, {
   inputMax = 99,
   errorLabel = "Les bornes"
 } = {}){
-  const min = clampInt(container.querySelector(`#${idPrefix}_min`)?.value, inputMin, inputMax);
-  const max = clampInt(container.querySelector(`#${idPrefix}_max`)?.value, inputMin, inputMax);
+  const constraint = getMinMaxConstraintState(container, idPrefix, { inputMin, inputMax });
 
-  if (min > max){
+  if (constraint.min > constraint.max){
     throw new Error(`${errorLabel} sont invalides.`);
   }
 
-  return { min, max };
+  if (constraint.mode === VALUE_CONSTRAINT_MODES.ADVANCED && constraint.allowedValues.length === 0) {
+    throw new Error(`${errorLabel} avancées ne produisent aucune valeur.`);
+  }
+
+  if (constraint.mode === VALUE_CONSTRAINT_MODES.LIST && constraint.allowedValues.length === 0) {
+    throw new Error("La liste de valeurs ne contient aucune valeur valide.");
+  }
+
+  return constraint;
 }
 
+export function readBasicMinMax(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99,
+  errorLabel = "Les bornes"
+} = {}){
+  const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
+  const maxEl = container.querySelector(`#${cssEscape(idPrefix)}_max`);
+
+  const min = clampInt(minEl?.value, inputMin, inputMax);
+  const max = clampInt(maxEl?.value, inputMin, inputMax);
+
+  if (min > max) {
+    throw new Error(`${errorLabel} sont invalides.`);
+  }
+
+  return normalizeNumericConstraint({
+    min,
+    max,
+    mode: VALUE_CONSTRAINT_MODES.SIMPLE,
+    start: min,
+    step: 1,
+    values: []
+  }, {
+    inputMin,
+    inputMax,
+    defaultMin: min,
+    defaultMax: max,
+    defaultStart: min,
+    defaultStep: 1,
+    defaultValues: []
+  });
+}
+
+export function setMinMaxBounds(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99
+} = {}) {
+  const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
+  const maxEl = container.querySelector(`#${cssEscape(idPrefix)}_max`);
+  const startEl = container.querySelector(`#${cssEscape(idPrefix)}_start`);
+  const stepEl = container.querySelector(`#${cssEscape(idPrefix)}_step`);
+  if (!minEl || !maxEl || !startEl || !stepEl) return;
+
+  const safeMin = Math.floor(Number(inputMin));
+  const safeMax = Math.max(safeMin, Math.floor(Number(inputMax)));
+  const stepMax = Math.max(1, safeMax - safeMin);
+
+  [minEl, maxEl, startEl].forEach((el) => {
+    el.setAttribute("min", String(safeMin));
+    el.setAttribute("max", String(safeMax));
+  });
+
+  stepEl.setAttribute("min", "1");
+  stepEl.setAttribute("max", String(stepMax));
+
+  let minValue = clampInt(minEl.value, safeMin, safeMax);
+  let maxValue = clampInt(maxEl.value, safeMin, safeMax);
+  if (minValue > maxValue) {
+    maxValue = minValue;
+  }
+
+  minEl.value = String(minValue);
+  maxEl.value = String(maxValue);
+  startEl.value = String(clampInt(startEl.value, safeMin, safeMax));
+  stepEl.value = String(clampInt(stepEl.value, 1, stepMax));
+
+  refreshStepper(container, `${idPrefix}_min`, { inputMin: safeMin, inputMax: safeMax });
+  refreshStepper(container, `${idPrefix}_max`, { inputMin: safeMin, inputMax: safeMax });
+  refreshStepper(container, `${idPrefix}_start`, { inputMin: safeMin, inputMax: safeMax });
+  refreshStepper(container, `${idPrefix}_step`, { inputMin: 1, inputMax: stepMax });
+
+  updateMinMaxPreview(container, idPrefix, { inputMin: safeMin, inputMax: safeMax });
+}
 
 export function renderStepperField({
   id,
@@ -211,6 +535,64 @@ export function renderCheckbox({
 
 export function readCheckbox(container, id){
   return !!container.querySelector(`#${id}`)?.checked;
+}
+
+export function renderRadioGroup({
+  title = "",
+  id,
+  value = "",
+  options = [],
+  inline = true
+}){
+  const safeOptions = Array.isArray(options) ? options : [];
+  const rowsHtml = safeOptions.map((opt, index) => {
+    const optionValue = String(opt?.value ?? "");
+    const optionLabel = String(opt?.label ?? optionValue);
+    const optionId = `${id}_${index}`;
+    const checked = optionValue === String(value);
+
+    return `
+      <label class="tv-radio-row">
+        <input
+          class="tv-radio"
+          type="radio"
+          name="${escapeHtml(id)}"
+          id="${escapeHtml(optionId)}"
+          value="${escapeHtml(optionValue)}"
+          ${checked ? "checked" : ""}
+        >
+        <span>${escapeHtml(optionLabel)}</span>
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <div class="tv-group tv-group-inline">
+      <div class="tv-radio-group ${inline ? "tv-radio-group-inline" : ""}" data-tv-radio-group="${escapeHtml(id)}">
+        ${title ? `<div class="tv-group-title tv-radio-group-title">${escapeHtml(title)}</div>` : ""}
+        <div class="tv-radio-options">${rowsHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+export function bindRadio(container, id, {
+  onChange = null
+} = {}){
+  const inputs = Array.from(container.querySelectorAll(`input[name="${cssEscape(id)}"]`));
+  if (!inputs.length) return;
+
+  inputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      onChange?.(input.value);
+    });
+  });
+}
+
+export function readRadio(container, id, fallback = ""){
+  const checked = container.querySelector(`input[name="${cssEscape(id)}"]:checked`);
+  return String(checked?.value ?? fallback);
 }
 
 export function renderSelect({
@@ -405,6 +787,84 @@ export function readSelect(container, id, {
   return parse(el?.value ?? "");
 }
 
+function getCheckedMinMaxMode(modeEls) {
+  const checked = modeEls.find((el) => el.checked);
+  return checked?.value || VALUE_CONSTRAINT_MODES.SIMPLE;
+}
+
+function setStepperDisabled(input, disabled, bounds) {
+  if (!input) return;
+
+  input.disabled = !!disabled;
+  const wrap = input.closest(".tv-stepper");
+  if (!wrap) return;
+
+  wrap.classList.toggle("is-disabled", !!disabled);
+  wrap.querySelectorAll(".tv-stepper-btn").forEach((btn) => {
+    btn.disabled = !!disabled;
+  });
+
+  if (!disabled) {
+    syncStepperUI(input, bounds);
+  }
+}
+
+function getMinMaxConstraintState(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99
+} = {}) {
+  const bounds = resolveMinMaxConstraintBounds(container, idPrefix, { inputMin, inputMax });
+  const min = clampInt(container.querySelector(`#${cssEscape(idPrefix)}_min`)?.value, bounds.inputMin, bounds.inputMax);
+  const max = clampInt(container.querySelector(`#${cssEscape(idPrefix)}_max`)?.value, bounds.inputMin, bounds.inputMax);
+  const start = clampInt(container.querySelector(`#${cssEscape(idPrefix)}_start`)?.value, bounds.inputMin, bounds.inputMax);
+  const step = clampInt(container.querySelector(`#${cssEscape(idPrefix)}_step`)?.value, 1, Math.max(1, bounds.inputMax - bounds.inputMin));
+  const valuesRaw = container.querySelector(`#${cssEscape(idPrefix)}_values`)?.value ?? "";
+  const modeEls = Array.from(container.querySelectorAll(`input[name="${cssEscape(idPrefix)}_mode"]`));
+  const mode = getCheckedMinMaxMode(modeEls);
+
+  return normalizeNumericConstraint({
+    min,
+    max,
+    mode,
+    start,
+    step,
+    values: valuesRaw
+  }, {
+    inputMin: bounds.inputMin,
+    inputMax: bounds.inputMax,
+    defaultMin: min,
+    defaultMax: max,
+    defaultStart: min,
+    defaultStep: 1,
+    defaultValues: []
+  });
+}
+
+function updateMinMaxPreview(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99
+} = {}) {
+  const previewEl = container.querySelector(`#${cssEscape(idPrefix)}_preview`);
+  if (!previewEl) return;
+
+  const constraint = getMinMaxConstraintState(container, idPrefix, { inputMin, inputMax });
+  previewEl.textContent = formatConstraintPreview(constraint.allowedValues);
+}
+
+function resolveMinMaxConstraintBounds(container, idPrefix, {
+  inputMin = 0,
+  inputMax = 99
+} = {}) {
+  const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
+  const rawMin = Number(minEl?.getAttribute("min"));
+  const rawMax = Number(minEl?.getAttribute("max"));
+
+  return {
+    inputMin: Number.isFinite(rawMin) ? rawMin : inputMin,
+    inputMax: Number.isFinite(rawMax) ? Math.max(Number.isFinite(rawMin) ? rawMin : inputMin, rawMax) : inputMax
+  };
+}
+
 export function clampInt(v, min, max){
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n)) return min;
@@ -517,6 +977,12 @@ function syncStepperUI(input, {
   const value = clampInt(input.value, bounds.min, bounds.max);
   const minusBtn = wrap.querySelector('[data-stepper-direction="-1"]');
   const plusBtn = wrap.querySelector('[data-stepper-direction="1"]');
+
+  if (input.disabled) {
+    if (minusBtn) minusBtn.disabled = true;
+    if (plusBtn) plusBtn.disabled = true;
+    return;
+  }
 
   if (minusBtn) minusBtn.disabled = value <= bounds.min;
   if (plusBtn) plusBtn.disabled = value >= bounds.max;

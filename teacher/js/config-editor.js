@@ -17,7 +17,6 @@ import {
   clampInt,
   cloneData,
   normalizeActivityGlobals,
-  normalizeActivityMode,
   normalizeToolDraft
 } from "../../shared/activity-config.js";
 import {
@@ -74,7 +73,6 @@ let currentSelectedToolId = null;
 let activityEstimateRefreshTimer = null;
 let activityEstimateRefreshToken = 0;
 const activityGlobals = {
-  mode: DEFAULT_ACTIVITY_GLOBALS.mode,
   questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec
 };
 
@@ -525,19 +523,6 @@ function countEnabledTools(){
 function renderGlobals(){
   injectSharedToolHeaderStyles();
 
-  const modeSlot = ensureActivityModeSlot();
-  if (modeSlot) {
-    modeSlot.innerHTML = renderActivityModeControl(activityGlobals);
-
-    modeSlot.querySelectorAll('input[name="activityMode"]').forEach((el) => {
-      el.addEventListener("change", () => {
-        activityGlobals.mode = normalizeActivityMode(el.value);
-        setSaveState("dirty");
-        scheduleActivityDurationEstimate();
-      });
-    });
-  }
-
   if (els.questionTransitionSecInput){
     els.questionTransitionSecInput.value = activityGlobals.questionTransitionSec;
   }
@@ -599,7 +584,6 @@ function serializeDrafts(){
   for (const t of toolsCatalog){
     const draft = getToolDraft(t.id);
     const normalized = normalizeToolDraft(draft);
-    normalized.settings = stripSharedModeFromToolSettings(normalized.settings);
     out[t.id] = normalized;
   }
   return out;
@@ -618,7 +602,6 @@ function applyRemoteDrafts(remoteDrafts){
     }
 
     Object.assign(draft, normalizeToolDraft(incoming));
-    draft.settings = stripSharedModeFromToolSettings(draft.settings);
   }
 }
 
@@ -666,7 +649,6 @@ function persistCurrentToolSettings(){
       nextDraft.settings = getToolDefaultSettings(tool);
     }
 
-    nextDraft.settings = stripSharedModeFromToolSettings(nextDraft.settings);
 
     Object.assign(draft, normalizeToolDraft(nextDraft));
     setSaveState("dirty");
@@ -779,46 +761,6 @@ function injectSharedToolHeaderStyles(){
   return;
 }
 
-function ensureActivityModeSlot(){
-  if (!els.questionTransitionSecInput) return null;
-
-  let slot = document.getElementById("activityModeSlot");
-  if (slot) return slot;
-
-  slot = document.createElement("div");
-  slot.id = "activityModeSlot";
-
-  const globalsInline = els.questionTransitionSecInput.closest(".cfg-global-inline");
-  const label = globalsInline?.querySelector(".cfg-global-label");
-
-  if (label?.parentElement === globalsInline) {
-    label.insertAdjacentElement("beforebegin", slot);
-  } else if (globalsInline) {
-    globalsInline.prepend(slot);
-  } else {
-    els.questionTransitionSecInput.insertAdjacentElement("beforebegin", slot);
-  }
-
-  return slot;
-}
-
-function renderActivityModeControl(globals){
-  const mode = normalizeActivityMode(globals?.mode);
-
-  return `
-    <div class="pem-mode-pill">
-      <label>
-        <input type="radio" name="activityMode" value="students" ${mode === "students" ? "checked" : ""}>
-        <span class="pem-mode-option">Élève</span>
-      </label>
-      <label>
-        <input type="radio" name="activityMode" value="board" ${mode === "board" ? "checked" : ""}>
-        <span class="pem-mode-option">Tableau</span>
-      </label>
-    </div>
-  `;
-}
-
 function isPlainObject(value){
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -830,14 +772,6 @@ function mergeToolSettings(baseSettings, nextSettings){
   if (isPlainObject(nextSettings)) return { ...safeBase, ...nextSettings };
 
   return cloneData(nextSettings);
-}
-
-function stripSharedModeFromToolSettings(settings){
-  if (!isPlainObject(settings)) return settings;
-
-  const next = cloneData(settings);
-  delete next.mode;
-  return next;
 }
 
 function getSpecificToolSettingsHost(container){

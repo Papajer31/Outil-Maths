@@ -1,3 +1,5 @@
+import { normalizeNumericConstraint } from "../../../../shared/value-constraints.js";
+
 export const DRAW = {
   cellsPerBox: 10,
 
@@ -26,7 +28,11 @@ export function getDefaultSettings() {
   return {
     boxCount: 6,
     minValue: 11,
-    maxValue: 60
+    maxValue: 60,
+    valueMode: "simple",
+    valueStart: 11,
+    valueStep: 1,
+    valueList: []
   };
 }
 
@@ -39,25 +45,38 @@ export function normalizeSettings(settings) {
   base.boxCount = clampInt(base.boxCount, 2, 6);
 
   const absoluteMax = base.boxCount * DRAW.cellsPerBox;
-  base.minValue = clampInt(base.minValue, 1, absoluteMax);
-  base.maxValue = clampInt(base.maxValue, 1, absoluteMax);
+  const constraint = normalizeNumericConstraint({
+    min: base.minValue,
+    max: base.maxValue,
+    mode: base.valueMode,
+    start: base.valueStart,
+    step: base.valueStep,
+    values: base.valueList
+  }, {
+    inputMin: 1,
+    inputMax: absoluteMax,
+    defaultMin: 11,
+    defaultMax: absoluteMax,
+    defaultStart: 11,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  if (base.minValue > base.maxValue) {
-    [base.minValue, base.maxValue] = [base.maxValue, base.minValue];
-  }
-
-  return base;
+  return {
+    boxCount: base.boxCount,
+    minValue: constraint.min,
+    maxValue: constraint.max,
+    valueMode: constraint.mode,
+    valueStart: constraint.start,
+    valueStep: constraint.step,
+    valueList: constraint.values,
+    allowedValues: constraint.allowedValues
+  };
 }
 
 export function refillValuePool(settings, lastTarget = null) {
   const cfg = normalizeSettings(settings);
-  const values = [];
-
-  for (let n = cfg.minValue; n <= cfg.maxValue; n++) {
-    values.push(n);
-  }
-
-  const pool = shuffle(values);
+  const pool = shuffle(cfg.allowedValues);
 
   if (lastTarget !== null && pool.length > 1 && pool[pool.length - 1] === lastTarget) {
     const lastIndex = pool.length - 1;

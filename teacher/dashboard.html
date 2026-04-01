@@ -21,6 +21,11 @@
 
             <div class="dashboard-title-row">
               <h1 class="dashboard-title">Mon tableau de bord</h1>
+              <div id="accessCodeBox" class="dashboard-access-code-box hidden">
+                <span class="dashboard-access-code-label">Code de connexion :</span>
+                <span id="accessCodeValue" class="dashboard-access-code-value">—</span>
+                <button class="dashboard-inline-edit-btn" id="btnEditAccessCode" type="button" title="Modifier le code de connexion" aria-label="Modifier le code de connexion">✎</button>
+              </div>
               <div id="teacherEmail" class="dashboard-subtitle">Chargement du compte…</div>
               <button class="btn" id="btnLogout" type="button">Déconnexion</button>
             </div>
@@ -33,11 +38,11 @@
           <section class="dashboard-column dashboard-column-left">
             <div class="panel dashboard-panel">
               <div class="dashboard-section-header">
-                <div class="dashboard-section-title">Mes classes</div>
+                <div class="dashboard-section-title">Ma classe</div>
 
-                <button id="btnAddClass" class="dashboard-add-btn" type="button"><span class="add-icon">+</span></button>
+                <button id="btnAddStudent" class="dashboard-add-btn" type="button"><span class="add-icon">+</span></button>
               </div>
-              <div id="classesList" class="dashboard-class-list">
+              <div id="studentsList" class="dashboard-class-list">
                 <div style="color:var(--muted);">Chargement…</div>
               </div>
             </div>
@@ -54,7 +59,7 @@
               </div>
 
               <div id="configsList" class="dashboard-config-list">
-                <div style="color:var(--muted);">Sélectionne une classe pour voir ses configurations.</div>
+                <div style="color:var(--muted);">Choisis un élève pour ouvrir son profil ou crée une activité.</div>
               </div>
             </div>
           </section>
@@ -67,14 +72,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script type="module" src="./js/dashboard.js"></script>
 
-  <div id="classModal" class="modal hidden">
+  <div id="accessCodeModal" class="modal hidden">
     <div class="modal-content">
-      <div class="modal-title">Créer une classe</div>
+      <div class="modal-title">Créer un code de connexion</div>
 
       <input
-        id="modalClassInput"
+        id="accessCodeInput"
         type="text"
-        placeholder="Code classe"
+        placeholder="Code de connexion"
         class="dashboard-class-input modal-text-input"
       >
 
@@ -88,35 +93,30 @@
     </div>
   </div>
 
-  <div id="editClassModal" class="modal hidden">
+  <div id="deleteStudentModal" class="modal hidden">
     <div class="modal-content">
-      <div class="modal-title">Nom de la classe</div>
+      <div class="modal-title">Supprimer l’élève</div>
 
-      <input
-        id="editClassNameInput"
-        type="text"
-        placeholder="Nom affiché de la classe"
-        class="dashboard-class-input modal-text-input"
-      >
+      <div id="deleteStudentText" class="dashboard-message"></div>
 
       <div class="modal-actions">
-        <div id="editClassMessage" class="modal-message"></div>
-        <button id="btnEditClassCancel" class="btn" type="button">Annuler</button>
-        <button id="btnEditClassSave" class="btn primary" type="button">Enregistrer</button>
+        <div id="deleteStudentMessage" class="modal-message"></div>
+        <button id="btnDeleteStudentCancel" class="btn" type="button">Annuler</button>
+        <button id="btnDeleteStudentConfirm" class="btn dashboard-danger-btn" type="button">Supprimer</button>
       </div>
     </div>
   </div>
 
-  <div id="deleteClassModal" class="modal hidden">
+  <div id="deleteActivityModal" class="modal hidden">
     <div class="modal-content">
-      <div class="modal-title">Supprimer la classe</div>
+      <div class="modal-title">Supprimer l’activité</div>
 
-      <div id="deleteClassText" class="dashboard-message"></div>
+      <div id="deleteActivityText" class="dashboard-message"></div>
 
       <div class="modal-actions">
-        <div id="deleteClassMessage" class="modal-message"></div>
-        <button id="btnDeleteClassCancel" class="btn" type="button">Annuler</button>
-        <button id="btnDeleteClassConfirm" class="btn dashboard-danger-btn" type="button">Supprimer</button>
+        <div id="deleteActivityMessage" class="modal-message"></div>
+        <button id="btnDeleteActivityCancel" class="btn" type="button">Annuler</button>
+        <button id="btnDeleteActivityConfirm" class="btn dashboard-danger-btn" type="button">Supprimer</button>
       </div>
     </div>
   </div>

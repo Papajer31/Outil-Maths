@@ -3,5 +3,6 @@ export {
   accessCodeExists,
   listPublicActivitiesForSpace,
   loadPublicActivityConfig,
-  listPublicStudentsForSpace
+  listPublicStudentsForSpace,
+  listPublicVocabularyWordsForSpace
 } from "../teacher/js/users_info.js";

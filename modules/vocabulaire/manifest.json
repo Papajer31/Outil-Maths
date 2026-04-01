@@ -1,0 +1,10 @@
+{
+  "module": "vocabulaire",
+  "version": 1,
+  "tools": {
+    "OrdreAlphabetique": {
+      "label": "Ordre alphabétique",
+      "entry": "./tools/OrdreAlphabetique/tool.js"
+    }
+  }
+}

@@ -29,6 +29,18 @@
     "FrisePicbille": {
       "label": "Frise Picbille",
       "entry": "./tools/FrisePicbille/tool.js"
+    },
+    "BoitesAJetons": {
+      "label": "Boites à jetons",
+      "entry": "./tools/BoitesAJetons/tool.js"
+    },
+    "Furet": {
+      "label": "Furet",
+      "entry": "./tools/Furet/tool.js"
+    },
+    "Operations": {
+      "label": "Opérations",
+      "entry": "./tools/Operations/tool.js"
     }
   }
 }

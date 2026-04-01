@@ -53,13 +53,33 @@ function renderActivitiesContent(){
     `;
   }
 
-  return studentState.activities.map((activity) => `
+  const activities = [...(studentState.activities || [])]
+    .filter((activity) => activity?.is_visible !== false)
+    .sort((a, b) => {
+      const orderA = Number(a?.display_order);
+      const orderB = Number(b?.display_order);
+      if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return String(a?.config_name || "").localeCompare(String(b?.config_name || ""), "fr", { sensitivity: "base" });
+    });
+
+  if (!activities.length){
+    return `
+      <div class="activities-placeholder">
+        Aucune activité disponible.
+      </div>
+    `;
+  }
+
+  return activities.map((activity) => `
     <button
-      class="activity-tile"
+      class="activity-tile ${activity?.is_highlighted ? "is-highlighted" : ""}"
       type="button"
       data-config-name="${escapeAttr(activity?.config_name || "")}"
     >
-      ${escapeHtml(activity?.config_name || "Sans nom")}
+      <span class="activity-tile-label">${escapeHtml(activity?.config_name || "Sans nom")}</span>
+      ${activity?.is_highlighted ? '<span class="activity-tile-badge">Activité du moment</span>' : ''}
     </button>
   `).join("");
 }

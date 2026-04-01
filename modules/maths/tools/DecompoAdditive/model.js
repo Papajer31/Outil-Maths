@@ -1,7 +1,13 @@
+import { normalizeNumericConstraint } from "../../../../shared/value-constraints.js";
+
 export function getDefaultSettings() {
   return {
     minTop: 5,
     maxTop: 9,
+    topMode: "simple",
+    topStart: 5,
+    topStep: 1,
+    topList: [],
     allowZero: false,
     includeSymmetricPairs: true
   };
@@ -13,28 +19,43 @@ export function normalizeSettings(settings) {
     ...(settings ?? {})
   };
 
-  base.minTop = clampInt(base.minTop, 1, 99);
-  base.maxTop = clampInt(base.maxTop, 1, 99);
+  const constraint = normalizeNumericConstraint({
+    min: base.minTop,
+    max: base.maxTop,
+    mode: base.topMode,
+    start: base.topStart,
+    step: base.topStep,
+    values: base.topList
+  }, {
+    inputMin: 1,
+    inputMax: 99,
+    defaultMin: 5,
+    defaultMax: 9,
+    defaultStart: 5,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
-  if (base.minTop > base.maxTop) {
-    [base.minTop, base.maxTop] = [base.maxTop, base.minTop];
-  }
+  const allowedValues = constraint.allowedValues.filter((value) => base.allowZero || value >= 2);
 
-  if (!base.allowZero && base.maxTop < 2) {
-    base.maxTop = 2;
-    if (base.minTop > 2) {
-      base.minTop = 2;
-    }
-  }
-
-  return base;
+  return {
+    minTop: constraint.min,
+    maxTop: constraint.max,
+    topMode: constraint.mode,
+    topStart: constraint.start,
+    topStep: constraint.step,
+    topList: constraint.values,
+    allowedValues,
+    allowZero: !!base.allowZero,
+    includeSymmetricPairs: !!base.includeSymmetricPairs
+  };
 }
 
 export function buildQuestionPool(settings) {
   const cfg = normalizeSettings(settings);
   const pool = [];
 
-  for (let top = cfg.minTop; top <= cfg.maxTop; top++) {
+  cfg.allowedValues.forEach((top) => {
     const minGiven = cfg.allowZero ? 0 : 1;
 
     if (cfg.includeSymmetricPairs) {
@@ -50,7 +71,7 @@ export function buildQuestionPool(settings) {
         pool.push({ top, given, answer });
       }
     }
-  }
+  });
 
   return pool;
 }
@@ -73,12 +94,6 @@ export function refillQuestionPool(settings, lastQuestionKey = null) {
   }
 
   return pool;
-}
-
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
 }
 
 function shuffle(arr) {

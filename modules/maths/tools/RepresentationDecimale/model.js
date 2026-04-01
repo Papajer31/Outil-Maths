@@ -1,9 +1,17 @@
+import { normalizeNumericConstraint } from "../../../../shared/value-constraints.js";
+
 export function getDefaultSettings() {
   return {
     min: 10,
     max: 69,
+    valueMode: "simple",
+    valueStart: 10,
+    valueStep: 1,
+    valueList: [],
     usePicbille: true,
-    useDede: true
+    useDede: true,
+    allowNumberToRepresentation: true,
+    allowRepresentationToNumber: false
   };
 }
 
@@ -13,14 +21,35 @@ export function normalizeSettings(settings) {
     ...(settings ?? {})
   };
 
-  const min = clampInt(s.min, 1, 69);
-  const max = clampInt(s.max, 1, 69);
+  const constraint = normalizeNumericConstraint({
+    min: s.min,
+    max: s.max,
+    mode: s.valueMode,
+    start: s.valueStart,
+    step: s.valueStep,
+    values: s.valueList
+  }, {
+    inputMin: 1,
+    inputMax: 69,
+    defaultMin: 10,
+    defaultMax: 69,
+    defaultStart: 10,
+    defaultStep: 1,
+    defaultValues: []
+  });
 
   return {
-    min: Math.min(min, max),
-    max: Math.max(min, max),
+    min: constraint.min,
+    max: constraint.max,
+    valueMode: constraint.mode,
+    valueStart: constraint.start,
+    valueStep: constraint.step,
+    valueList: constraint.values,
+    allowedValues: constraint.allowedValues,
     usePicbille: !!s.usePicbille,
-    useDede: !!s.useDede
+    useDede: !!s.useDede,
+    allowNumberToRepresentation: !!s.allowNumberToRepresentation,
+    allowRepresentationToNumber: !!s.allowRepresentationToNumber
   };
 }
 
@@ -32,28 +61,36 @@ export function getAvailableCharacters(settings) {
   return available;
 }
 
+export function getAvailableDirections(settings) {
+  const cfg = normalizeSettings(settings);
+  const available = [];
+  if (cfg.allowNumberToRepresentation) available.push("number_to_representation");
+  if (cfg.allowRepresentationToNumber) available.push("representation_to_number");
+  return available;
+}
+
 export function pickQuestion(settings) {
   const cfg = normalizeSettings(settings);
   const availableCharacters = getAvailableCharacters(cfg);
+  const availableDirections = getAvailableDirections(cfg);
 
   if (!availableCharacters.length) {
     throw new Error("Aucune représentation active pour ReprésentationDécimale.");
   }
 
+  if (!availableDirections.length) {
+    throw new Error("Aucun mode d'affichage actif pour ReprésentationDécimale.");
+  }
+
+  if (!cfg.allowedValues.length) {
+    throw new Error("Aucun nombre disponible pour ReprésentationDécimale.");
+  }
+
   return {
-    n: rand(cfg.min, cfg.max),
-    character: pickRandom(availableCharacters)
+    n: pickRandom(cfg.allowedValues),
+    character: pickRandom(availableCharacters),
+    direction: pickRandom(availableDirections)
   };
-}
-
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
-
-function rand(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function pickRandom(arr) {

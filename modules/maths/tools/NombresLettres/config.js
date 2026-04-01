@@ -23,7 +23,11 @@ export function renderToolSettings(container, settings) {
       maxValue: cfg.max,
       inputMin: 0,
       inputMax: NUMBERS.length - 1,
-      step: 1
+      step: 1,
+      mode: cfg.valueMode,
+      startValue: cfg.valueStart,
+      stepValue: cfg.valueStep,
+      values: cfg.valueList
     })
   );
 
@@ -42,7 +46,11 @@ export function readToolSettings(container) {
 
   return {
     min: values.min,
-    max: values.max
+    max: values.max,
+    valueMode: values.mode,
+    valueStart: values.start,
+    valueStep: values.step,
+    valueList: values.values
   };
 }
 

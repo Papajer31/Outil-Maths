@@ -22,7 +22,11 @@ export function renderToolSettings(container, settings) {
       maxValue: cfg.maxBase,
       inputMin: 1,
       inputMax: 99,
-      step: 1
+      step: 1,
+      mode: cfg.baseMode,
+      startValue: cfg.baseStart,
+      stepValue: cfg.baseStep,
+      values: cfg.baseList
     })
   );
 
@@ -41,7 +45,11 @@ export function readToolSettings(container) {
 
   return {
     minBase: base.min,
-    maxBase: base.max
+    maxBase: base.max,
+    baseMode: base.mode,
+    baseStart: base.start,
+    baseStep: base.step,
+    baseList: base.values
   };
 }
 
