@@ -23,7 +23,7 @@ export async function ensureSelectedActivityMeta() {
   }
 
   const remote = await loadPublicActivityConfig(accessCode, configName);
-  if (!remote?.config_json?.drafts) {
+  if (!remote?.config_json?.sequence && !remote?.config_json?.drafts) {
     throw new Error("Configuration introuvable ou invalide.");
   }
 
@@ -39,6 +39,7 @@ export async function ensureSelectedActivityMeta() {
     moduleKey,
     globals: remote.config_json.globals ?? {},
     drafts: remote.config_json.drafts,
+    sequence: remote.config_json.sequence,
     onExitToActivities: () => {},
     onFatalError: () => {}
   });

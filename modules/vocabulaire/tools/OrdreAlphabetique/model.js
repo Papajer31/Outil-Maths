@@ -301,8 +301,8 @@ function pickWordsQuestion(settings, wordEntries, { avoidKey = null, attempts = 
     const subset = pickCandidateSubset(cfg, entries, candidatePools);
     if (!subset || subset.length !== cfg.itemCount) continue;
 
-    const sharedPrefix = getSharedPrefixLength(subset.map((item) => item.word_normalized));
-    if (!matchesPrefixConstraint(sharedPrefix, cfg.commonPrefixLength, cfg.prefixMatchMode)) {
+    const normalizedWords = subset.map((item) => item.word_normalized);
+    if (!matchesWordPrefixConstraint(normalizedWords, cfg)) {
       continue;
     }
 
@@ -352,21 +352,20 @@ function buildCandidatePools(entries, prefixLength) {
 function pickCandidateSubset(settings, entries, candidatePools) {
   const count = settings.itemCount;
 
-  if (settings.commonPrefixLength <= 0) {
+  if (settings.commonPrefixLength <= 0 && settings.prefixMatchMode === PREFIX_MATCH_MODES.AT_LEAST) {
     return pickDistinctItems(entries, count);
   }
 
-  const pool = pickRandom(candidatePools);
+  const pool = settings.commonPrefixLength <= 0
+    ? entries
+    : pickRandom(candidatePools);
+
   if (!pool || pool.length < count) return null;
 
-  if (settings.prefixMatchMode === PREFIX_MATCH_MODES.AT_LEAST) {
-    return pickDistinctItems(pool, count);
-  }
-
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 80; i++) {
     const subset = pickDistinctItems(pool, count);
-    const sharedPrefix = getSharedPrefixLength(subset.map((item) => item.word_normalized));
-    if (sharedPrefix === settings.commonPrefixLength) {
+    const normalizedWords = subset.map((item) => item.word_normalized);
+    if (matchesWordPrefixConstraint(normalizedWords, settings)) {
       return subset;
     }
   }
@@ -374,11 +373,32 @@ function pickCandidateSubset(settings, entries, candidatePools) {
   return null;
 }
 
-function matchesPrefixConstraint(sharedPrefixLength, expectedLength, mode) {
-  if (mode === PREFIX_MATCH_MODES.AT_LEAST) {
-    return sharedPrefixLength >= expectedLength;
+function matchesWordPrefixConstraint(normalizedWords, settings) {
+  const words = Array.isArray(normalizedWords) ? normalizedWords.filter(Boolean) : [];
+  if (!words.length) return false;
+
+  if (settings.prefixMatchMode === PREFIX_MATCH_MODES.AT_LEAST) {
+    return getSharedPrefixLength(words) >= settings.commonPrefixLength;
   }
-  return sharedPrefixLength === expectedLength;
+
+  return hasExactImmediateDivergence(words, settings.commonPrefixLength);
+}
+
+function hasExactImmediateDivergence(words, expectedLength) {
+  if (getSharedPrefixLength(words) !== expectedLength) {
+    return false;
+  }
+
+  const nextChars = [];
+  for (const word of words) {
+    const nextChar = word[expectedLength];
+    if (!nextChar) {
+      return false;
+    }
+    nextChars.push(nextChar);
+  }
+
+  return new Set(nextChars).size === nextChars.length;
 }
 
 function getSharedPrefixLength(values) {

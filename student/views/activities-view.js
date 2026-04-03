@@ -11,7 +11,17 @@ export function renderActivitiesView(root){
         aria-label="Retour"
         data-skip-autofs="true"
       >
-        <span class="student-icon" aria-hidden="true">arrow_back</span>
+        <svg
+          class="student-back-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 -960 960 960"
+          width="24"
+          height="24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="m313-440 224 224-57 56-320-320 320-320 57 56-224 224h487v80H313Z"/>
+        </svg>
       </button>
 
       <div id="activitiesList" class="activities-list activities-list-alone">

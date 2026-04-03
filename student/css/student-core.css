@@ -29,6 +29,13 @@ body.student-route-activities .student-app{
   display:block;
 }
 
+.student-back-icon{
+  width:42px;
+  height:42px;
+  display:block;
+  flex:none;
+}
+
 .student-nav-btn{
   position:fixed;
   top:18px;
@@ -140,6 +147,14 @@ body.student-route-activities .student-app{
   background:var(--warn);
   transform-origin:left center;
   transform:scaleX(1);
+}
+
+.timer-bar.is-question{
+  background:var(--warn);
+}
+
+.timer-bar.is-answer{
+  background:var(--good);
 }
 
 #sessionWorkArea{

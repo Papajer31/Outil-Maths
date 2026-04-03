@@ -280,12 +280,14 @@ async function renderStudentsColumn({ skipRefresh = false } = {}){
             data-student-id="${escapeAttr(studentId)}"
             title="Déplacer l’élève"
             aria-label="Déplacer l’élève"
+            draggable="false"
           >⋮⋮</button>
 
           <button
             class="dashboard-class-card-main"
             type="button"
             data-student-id="${escapeAttr(studentId)}"
+            draggable="false"
           >
             <div class="dashboard-class-card-heading">
               <span class="dashboard-class-card-title">${escapeHtml(student.first_name || "")}</span>
@@ -301,6 +303,7 @@ async function renderStudentsColumn({ skipRefresh = false } = {}){
               data-student-id="${escapeAttr(studentId)}"
               title="Éditer l’élève"
               aria-label="Éditer l’élève"
+              draggable="false"
             >✎</button>
 
             <button
@@ -310,6 +313,7 @@ async function renderStudentsColumn({ skipRefresh = false } = {}){
               data-student-id="${escapeAttr(studentId)}"
               title="Supprimer l’élève"
               aria-label="Supprimer l’élève"
+              draggable="false"
             ><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
           </div>
         </div>
@@ -335,22 +339,6 @@ async function renderStudentsColumn({ skipRefresh = false } = {}){
         const student = currentStudents.find((item) => String(item.id) === String(btn.dataset.studentId));
         if (!student) return;
         openDeleteStudentModal(student);
-      });
-    });
-
-    studentsList.querySelectorAll("[data-action='drag-student']").forEach((btn) => {
-      const activateHandle = () => {
-        dragHandleStudentId = String(btn.dataset.studentId || "");
-      };
-
-      btn.addEventListener("pointerdown", activateHandle);
-      btn.addEventListener("mousedown", activateHandle);
-      btn.addEventListener("touchstart", activateHandle, { passive: true });
-      btn.addEventListener("dragstart", (e) => {
-        e.preventDefault();
-      });
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
       });
     });
 
@@ -428,7 +416,7 @@ function handleStudentDragStart(event){
   const card = event.currentTarget;
   const studentId = String(card?.dataset?.studentCardId || "");
 
-  if (!studentId || dragHandleStudentId !== studentId || isSavingStudentOrder){
+  if (!studentId || isSavingStudentOrder){
     event.preventDefault();
     dragHandleStudentId = null;
     return;
@@ -1004,6 +992,7 @@ async function renderActivitiesForSpace({ forceRefresh = false } = {}){
             data-activity-id="${escapeAttr(activityId)}"
             title="Déplacer l’activité"
             aria-label="Déplacer l’activité"
+            draggable="false"
           >⋮⋮</button>
 
           <div class="dashboard-config-main">
@@ -1015,19 +1004,19 @@ async function renderActivitiesForSpace({ forceRefresh = false } = {}){
           </div>
 
           <div class="dashboard-config-actions">
-            <button class="dashboard-icon-btn dashboard-material-icon-btn ${cfg.is_visible === false ? "is-muted" : ""}" type="button" data-action="toggle-visible" data-activity-id="${escapeAttr(activityId)}" title="${escapeAttr(visibilityLabel)}" aria-label="${escapeAttr(visibilityLabel)}">
-              <span class="dashboard-material-icon" aria-hidden="true">${visibilityIcon}</span>
-            </button>
-
-            <button class="dashboard-icon-btn dashboard-material-icon-btn ${cfg.is_highlighted ? "is-accent" : ""}" type="button" data-action="toggle-highlight" data-activity-id="${escapeAttr(activityId)}" title="${escapeAttr(highlightLabel)}" aria-label="${escapeAttr(highlightLabel)}">
-              <span class="dashboard-material-icon" aria-hidden="true">${highlightIcon}</span>
-            </button>
-
-            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="open" data-config-name="${escapeAttr(cfg.config_name)}" title="Ouvrir l’activité" aria-label="Ouvrir l’activité">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="open" data-config-name="${escapeAttr(cfg.config_name)}" title="Ouvrir l’activité" aria-label="Ouvrir l’activité" draggable="false">
               <span class="dashboard-material-icon" aria-hidden="true">page_info</span>
             </button>
 
-            <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete" data-config-name="${escapeAttr(cfg.config_name)}" title="Supprimer l’activité" aria-label="Supprimer l’activité">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn ${cfg.is_visible === false ? "is-muted" : ""}" type="button" data-action="toggle-visible" data-activity-id="${escapeAttr(activityId)}" title="${escapeAttr(visibilityLabel)}" aria-label="${escapeAttr(visibilityLabel)}" draggable="false">
+              <span class="dashboard-material-icon" aria-hidden="true">${visibilityIcon}</span>
+            </button>
+
+            <button class="dashboard-icon-btn dashboard-material-icon-btn ${cfg.is_highlighted ? "is-accent" : ""}" type="button" data-action="toggle-highlight" data-activity-id="${escapeAttr(activityId)}" title="${escapeAttr(highlightLabel)}" aria-label="${escapeAttr(highlightLabel)}" draggable="false">
+              <span class="dashboard-material-icon" aria-hidden="true">${highlightIcon}</span>
+            </button>
+
+            <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete" data-config-name="${escapeAttr(cfg.config_name)}" title="Supprimer l’activité" aria-label="Supprimer l’activité" draggable="false">
               <span class="dashboard-material-icon" aria-hidden="true">delete</span>
             </button>
           </div>
@@ -1114,22 +1103,6 @@ async function renderActivitiesForSpace({ forceRefresh = false } = {}){
       });
     });
 
-    configsList.querySelectorAll("[data-action='drag-activity']").forEach((btn) => {
-      const activateHandle = () => {
-        dragHandleActivityId = String(btn.dataset.activityId || "");
-      };
-
-      btn.addEventListener("pointerdown", activateHandle);
-      btn.addEventListener("mousedown", activateHandle);
-      btn.addEventListener("touchstart", activateHandle, { passive: true });
-      btn.addEventListener("dragstart", (e) => {
-        e.preventDefault();
-      });
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-      });
-    });
-
     configsList.querySelectorAll(".dashboard-config-card[data-activity-card-id]").forEach((card) => {
       card.addEventListener("dragstart", handleActivityDragStart);
       card.addEventListener("dragend", handleActivityDragEnd);
@@ -1193,7 +1166,7 @@ function handleActivityDragStart(event){
   const card = event.currentTarget;
   const activityId = String(card?.dataset?.activityCardId || "");
 
-  if (!activityId || dragHandleActivityId !== activityId || isSavingActivityOrder){
+  if (!activityId || isSavingActivityOrder){
     event.preventDefault();
     dragHandleActivityId = null;
     return;

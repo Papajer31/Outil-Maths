@@ -30,7 +30,6 @@ export function cloneData(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-
 export function normalizeActivityGlobals(globals) {
   return {
     questionTransitionSec: clampInt(
@@ -61,4 +60,100 @@ export function normalizeToolDraft(draft) {
     ),
     settings: draft?.settings == null ? null : cloneData(draft.settings)
   };
+}
+
+export function createToolInstanceId(toolId = "tool") {
+  const safeToolId = String(toolId || "tool")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "tool";
+
+  if (globalThis.crypto?.randomUUID) {
+    return `${safeToolId}_${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `${safeToolId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function normalizeSequenceItem(item, { fallbackToolId = "" } = {}) {
+  const safeToolId = String(item?.toolId ?? fallbackToolId ?? "").trim();
+  const safeDraft = normalizeToolDraft(item?.draft);
+  safeDraft.enabled = true;
+
+  return {
+    instanceId: normalizeInstanceId(item?.instanceId, safeToolId),
+    toolId: safeToolId,
+    draft: safeDraft
+  };
+}
+
+export function normalizeActivitySequence(sequence, {
+  toolsCatalog = [],
+  legacyDrafts = null
+} = {}) {
+  const safeCatalog = Array.isArray(toolsCatalog) ? toolsCatalog : [];
+  const allowedToolIds = new Set(
+    safeCatalog
+      .map((tool) => String(tool?.id || "").trim())
+      .filter(Boolean)
+  );
+
+  const out = [];
+  const usedInstanceIds = new Set();
+
+  const pushItem = (rawItem) => {
+    const safeItem = normalizeSequenceItem(rawItem);
+    if (!safeItem.toolId) return;
+    if (allowedToolIds.size && !allowedToolIds.has(safeItem.toolId)) return;
+
+    let instanceId = safeItem.instanceId;
+    while (usedInstanceIds.has(instanceId)) {
+      instanceId = createToolInstanceId(safeItem.toolId);
+    }
+
+    usedInstanceIds.add(instanceId);
+    out.push({
+      instanceId,
+      toolId: safeItem.toolId,
+      draft: safeItem.draft
+    });
+  };
+
+  if (Array.isArray(sequence)) {
+    sequence.forEach(pushItem);
+  }
+
+  if (out.length) {
+    return out;
+  }
+
+  const safeLegacyDrafts = legacyDrafts && typeof legacyDrafts === "object"
+    ? legacyDrafts
+    : {};
+
+  const orderedToolIds = safeCatalog.length
+    ? safeCatalog.map((tool) => String(tool?.id || "").trim()).filter(Boolean)
+    : Object.keys(safeLegacyDrafts);
+
+  orderedToolIds.forEach((toolId) => {
+    const safeToolId = String(toolId || "").trim();
+    if (!safeToolId) return;
+
+    const safeDraft = normalizeToolDraft(safeLegacyDrafts[safeToolId]);
+    if (!safeDraft.enabled) return;
+
+    pushItem({
+      toolId: safeToolId,
+      draft: safeDraft
+    });
+  });
+
+  return out;
+}
+
+function normalizeInstanceId(instanceId, toolId) {
+  const safeInstanceId = String(instanceId || "").trim();
+  if (safeInstanceId) return safeInstanceId;
+  return createToolInstanceId(toolId);
 }

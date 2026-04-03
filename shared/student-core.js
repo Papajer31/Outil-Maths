@@ -1,12 +1,12 @@
 import { loadModuleRuntime } from "./module-registry.js";
 import {
   TOOL_LIMITS,
-  DEFAULT_TOOL_ROW,
   DEFAULT_ACTIVITY_GLOBALS,
   clampInt,
   cloneData,
   normalizeActivityGlobals,
-  normalizeToolDraft
+  normalizeToolDraft,
+  normalizeActivitySequence
 } from "./activity-config.js";
 
 export function createSessionEngine({
@@ -16,6 +16,7 @@ export function createSessionEngine({
   moduleKey,
   globals,
   drafts,
+  sequence,
   onExitToActivities,
   onFatalError
 }) {
@@ -40,7 +41,6 @@ export function createSessionEngine({
   let pausedPhase = null;
 
   const toolModuleCache = new Map();
-  const configDrafts = new Map();
 
   let moduleRuntime = null;
   let selectedStudent = null;
@@ -68,9 +68,13 @@ export function createSessionEngine({
   async function init() {
     moduleRuntime = loadModuleRuntime(moduleKey);
     toolsCatalog = await moduleRuntime.loadToolsCatalog();
-    ensureConfigDrafts();
-    applyRemoteDrafts(drafts);
-    await prepareSessionFromDrafts();
+
+    const safeSequence = normalizeActivitySequence(sequence, {
+      toolsCatalog,
+      legacyDrafts: drafts
+    });
+
+    await prepareSessionFromSequence(safeSequence);
 
     if (!session.length) {
       throw new Error("Cette configuration ne contient aucun outil actif.");
@@ -224,6 +228,10 @@ export function createSessionEngine({
     stopAllTimers();
 
     if (snap.kind === "QUESTION") {
+      setTimerPhase("question");
+      showTimer();
+    } else if (snap.kind === "ANSWER") {
+      setTimerPhase("answer");
       showTimer();
     } else {
       hideTimer();
@@ -320,6 +328,7 @@ export function createSessionEngine({
     engineState = "RUNNING_QUESTION";
     phase = createPhase("QUESTION", remainingMs);
     setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionCount}`);
+    setTimerPhase("question");
     showTimer();
     startGauge(remainingMs, { initialScale: initialGaugeScale });
 
@@ -353,7 +362,9 @@ export function createSessionEngine({
 
     engineState = "RUNNING_ANSWER";
     phase = createPhase("ANSWER", remainingMs);
-    hideTimer();
+    setTimerPhase("answer");
+    showTimer();
+    startGauge(remainingMs);
 
     answerTimer = window.setTimeout(() => {
       answerTimer = null;
@@ -489,48 +500,15 @@ export function createSessionEngine({
     return Math.max(1, Math.floor(Number(value) || 0));
   }
 
-  function ensureConfigDrafts() {
-    for (const t of toolsCatalog) {
-      if (!configDrafts.has(t.id)) {
-        configDrafts.set(t.id, normalizeToolDraft(DEFAULT_TOOL_ROW));
-      }
-    }
-  }
-
-  function getToolDraft(id) {
-    if (!configDrafts.has(id)) {
-      configDrafts.set(id, normalizeToolDraft(DEFAULT_TOOL_ROW));
-    }
-    return configDrafts.get(id);
-  }
-
-  function applyRemoteDrafts(remoteDrafts) {
-    ensureConfigDrafts();
-
-    for (const t of toolsCatalog) {
-      const incoming = remoteDrafts?.[t.id];
-      const draft = getToolDraft(t.id);
-
-      if (!incoming) {
-        Object.assign(draft, normalizeToolDraft(DEFAULT_TOOL_ROW));
-        continue;
-      }
-
-      Object.assign(draft, normalizeToolDraft(incoming));
-    }
-  }
-  async function prepareSessionFromDrafts() {
+  async function prepareSessionFromSequence(sequenceItems) {
     const nextSession = [];
     let requiresStudent = false;
     const allowedIds = new Set();
 
-    for (const t of toolsCatalog) {
-      const draft = getToolDraft(t.id);
-      if (!draft.enabled) continue;
-
-      const mod = await loadToolModule(t.id);
+    for (const item of (Array.isArray(sequenceItems) ? sequenceItems : [])) {
+      const mod = await loadToolModule(item.toolId);
       const tool = mod.default ?? {};
-      const normalizedDraft = normalizeToolDraft(draft);
+      const normalizedDraft = normalizeToolDraft(item.draft);
       const settings = normalizedDraft.settings == null
         ? getToolDefaultSettings(tool)
         : cloneData(normalizedDraft.settings);
@@ -555,8 +533,9 @@ export function createSessionEngine({
       });
 
       nextSession.push({
-        id: t.id,
-        title: t.title,
+        id: item.toolId,
+        instanceId: item.instanceId,
+        title: buildSessionItemTitle(item.toolId, item.instanceId, nextSession.length),
         timePerQ: normalizedDraft.timePerQ,
         questionCount: normalizedDraft.questionCount,
         answerTime: normalizedDraft.answerTime,
@@ -582,6 +561,11 @@ export function createSessionEngine({
     }
 
     return await toolModuleCache.get(cacheKey);
+  }
+
+  function buildSessionItemTitle(toolId) {
+    const toolMeta = toolsCatalog.find((tool) => tool.id === toolId);
+    return toolMeta?.title || String(toolId || "Outil");
   }
 
   function getToolDefaultSettings(tool) {
@@ -729,6 +713,18 @@ export function createSessionEngine({
 
   function hideTimer() {
     els.timer?.classList.add("hidden");
+  }
+
+  function setTimerPhase(kind) {
+    if (!els.timerBar) return;
+    els.timerBar.classList.remove("is-question", "is-answer");
+
+    if (kind === "answer") {
+      els.timerBar.classList.add("is-answer");
+      return;
+    }
+
+    els.timerBar.classList.add("is-question");
   }
 
   function clearWorkArea() {

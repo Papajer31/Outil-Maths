@@ -6,6 +6,7 @@ import {
   bindSelect,
   readSelect,
   renderSection,
+  bindCollapsibleSection,
   renderToolSettingsStack
 } from "../../../../shared/config-widgets.js";
 import {
@@ -69,11 +70,11 @@ export function renderToolSettings(container, settings, context = {}) {
             value: cfg.prefixConstraint,
             options: [
               { value: PREFIX_CONSTRAINTS.NONE, label: "Aucune" },
-              { value: PREFIX_CONSTRAINTS.EXACT_1, label: "1" },
+              { value: PREFIX_CONSTRAINTS.EXACT_1, label: "exactement 1" },
+              { value: PREFIX_CONSTRAINTS.EXACT_2, label: "exactement 2" },
+              { value: PREFIX_CONSTRAINTS.EXACT_3, label: "exactement 3" },
               { value: PREFIX_CONSTRAINTS.AT_LEAST_1, label: "au moins 1" },
-              { value: PREFIX_CONSTRAINTS.EXACT_2, label: "2" },
               { value: PREFIX_CONSTRAINTS.AT_LEAST_2, label: "au moins 2" },
-              { value: PREFIX_CONSTRAINTS.EXACT_3, label: "3" },
               { value: PREFIX_CONSTRAINTS.AT_LEAST_3, label: "au moins 3" }
             ]
           }),
@@ -98,7 +99,7 @@ export function renderToolSettings(container, settings, context = {}) {
                 </div>
               </div>
             </div>
-          `)
+          `, { collapsible: true, expanded: false, idPrefix: "oa_word_list_section" })
         )}
       </div>
     `
@@ -109,6 +110,7 @@ export function renderToolSettings(container, settings, context = {}) {
   });
   bindSelect(container, "oa_itemCount");
   bindSelect(container, "oa_prefixConstraint");
+  bindCollapsibleSection(container, "oa_word_list_section");
   bindWordEditor(container, context);
   syncWordSettingsVisibility(container);
   refreshWordEditorUI(container);

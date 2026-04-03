@@ -1,7 +1,8 @@
 import {
   TOOL_LIMITS,
   normalizeToolDraft,
-  normalizeActivityGlobals
+  normalizeActivityGlobals,
+  normalizeActivitySequence
 } from "../../shared/activity-config.js";
 import {
   renderStepperField,
@@ -54,27 +55,26 @@ export function createMathsModuleRuntime() {
   }
 
   async function estimateActivityDuration(configJson = {}) {
-    const manifest = await loadManifest();
-    const toolsMap = manifest.tools || {};
     const safeGlobals = normalizeActivityGlobals(configJson?.globals);
-    const safeDrafts = configJson?.drafts && typeof configJson.drafts === "object"
-      ? configJson.drafts
-      : {};
+    const toolsCatalog = await loadToolsCatalog();
+    const safeSequence = normalizeActivitySequence(configJson?.sequence, {
+      toolsCatalog,
+      legacyDrafts: configJson?.drafts
+    });
 
     const estimates = [];
 
-    for (const toolId of Object.keys(toolsMap)) {
-      const safeDraft = normalizeToolDraft(safeDrafts[toolId]);
-      if (!safeDraft.enabled) continue;
-
-      const mod = await loadToolModule(toolId);
+    for (const item of safeSequence) {
+      const safeDraft = normalizeToolDraft(item.draft);
+      const mod = await loadToolModule(item.toolId);
       const tool = mod.default ?? {};
 
       const estimate = typeof tool.estimateDuration === "function"
         ? tool.estimateDuration({
             draft: safeDraft,
             globals: safeGlobals,
-            toolId
+            toolId: item.toolId,
+            instanceId: item.instanceId
           })
         : estimateStandardToolDuration({
             draft: safeDraft,
@@ -111,7 +111,7 @@ function renderCommonToolSettings(draft) {
     <div class="tv-group">
       <div class="tv-stepper-grid">
         ${renderStepperField({
-          id: "mathToolQuestionCount",
+          id: "moduleToolQuestionCount",
           label: "Nombre de questions",
           value: safeDraft.questionCount,
           inputMin: TOOL_LIMITS.questionCount.min,
@@ -120,7 +120,7 @@ function renderCommonToolSettings(draft) {
         })}
 
         ${renderStepperField({
-          id: "mathToolTimePerQ",
+          id: "moduleToolTimePerQ",
           label: "Temps par question",
           value: safeDraft.timePerQ,
           inputMin: TOOL_LIMITS.timePerQ.min,
@@ -129,7 +129,7 @@ function renderCommonToolSettings(draft) {
         })}
 
         ${renderStepperField({
-          id: "mathToolAnswerTime",
+          id: "moduleToolAnswerTime",
           label: "Temps d’affichage réponse",
           value: safeDraft.answerTime,
           inputMin: TOOL_LIMITS.answerTime.min,
@@ -142,19 +142,19 @@ function renderCommonToolSettings(draft) {
 }
 
 function bindCommonToolSettings(container, { onDirty } = {}) {
-  bindStepperField(container, "mathToolQuestionCount", {
+  bindStepperField(container, "moduleToolQuestionCount", {
     inputMin: TOOL_LIMITS.questionCount.min,
     inputMax: TOOL_LIMITS.questionCount.max,
     onChange: () => onDirty?.()
   });
 
-  bindStepperField(container, "mathToolTimePerQ", {
+  bindStepperField(container, "moduleToolTimePerQ", {
     inputMin: TOOL_LIMITS.timePerQ.min,
     inputMax: TOOL_LIMITS.timePerQ.max,
     onChange: () => onDirty?.()
   });
 
-  bindStepperField(container, "mathToolAnswerTime", {
+  bindStepperField(container, "moduleToolAnswerTime", {
     inputMin: TOOL_LIMITS.answerTime.min,
     inputMax: TOOL_LIMITS.answerTime.max,
     onChange: () => onDirty?.()
@@ -164,20 +164,21 @@ function bindCommonToolSettings(container, { onDirty } = {}) {
 function readCommonToolSettings(container, draft) {
   const nextDraft = normalizeToolDraft(draft);
 
-  nextDraft.questionCount = readStepper(container, "mathToolQuestionCount", {
+  nextDraft.questionCount = readStepper(container, "moduleToolQuestionCount", {
     inputMin: TOOL_LIMITS.questionCount.min,
     inputMax: TOOL_LIMITS.questionCount.max
   });
 
-  nextDraft.timePerQ = readStepper(container, "mathToolTimePerQ", {
+  nextDraft.timePerQ = readStepper(container, "moduleToolTimePerQ", {
     inputMin: TOOL_LIMITS.timePerQ.min,
     inputMax: TOOL_LIMITS.timePerQ.max
   });
 
-  nextDraft.answerTime = readStepper(container, "mathToolAnswerTime", {
+  nextDraft.answerTime = readStepper(container, "moduleToolAnswerTime", {
     inputMin: TOOL_LIMITS.answerTime.min,
     inputMax: TOOL_LIMITS.answerTime.max
   });
 
+  nextDraft.enabled = true;
   return nextDraft;
 }

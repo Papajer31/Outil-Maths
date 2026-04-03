@@ -16,7 +16,6 @@ const wordListCache = new Map();
 
 const CHIP_MARGIN = 18;
 const CHIP_GAP = 12;
-const RANDOM_TRIES = 120;
 const ANSWER_MARGIN = 18;
 const ANSWER_GAP = 18;
 const ANSWER_MIN_GAP = 8;
@@ -139,7 +138,7 @@ function renderFloatingChips(workspace, items) {
     return chip;
   });
 
-  placeRandomly(workspace, chips);
+  placeAlignedAtTop(workspace, chips);
   currentState.chips = chips;
 }
 
@@ -201,50 +200,95 @@ function attachDrag(workspace, chip) {
   });
 }
 
-function placeRandomly(workspace, chips) {
-  const placed = [];
+function placeAlignedAtTop(workspace, chips) {
+  const layoutOrder = shuffleArray([...chips]);
+  const positions = computeTopAlignedLayout(workspace, layoutOrder);
 
-  chips.forEach((chip) => {
-    const pos = findFreePosition(workspace, chip, placed);
+  layoutOrder.forEach((chip, index) => {
+    const pos = positions[index];
+    if (!pos) return;
     chip.style.left = `${pos.x}px`;
     chip.style.top = `${pos.y}px`;
-    placed.push({
-      left: pos.x,
-      top: pos.y,
-      right: pos.x + chip.offsetWidth,
-      bottom: pos.y + chip.offsetHeight
-    });
   });
 }
 
-function findFreePosition(workspace, chip, placed) {
-  const width = chip.offsetWidth;
-  const height = chip.offsetHeight;
-  const minX = CHIP_MARGIN;
-  const minY = CHIP_MARGIN;
-  const maxX = Math.max(minX, workspace.clientWidth - width - CHIP_MARGIN);
-  const maxY = Math.max(minY, workspace.clientHeight - height - CHIP_MARGIN);
+function computeTopAlignedLayout(workspace, chips) {
+  const margin = ANSWER_MARGIN;
+  const workspaceWidth = Math.max(320, workspace.clientWidth);
+  const availableWidth = Math.max(120, workspaceWidth - (margin * 2));
+  const widths = chips.map((chip) => chip.offsetWidth);
+  const heights = chips.map((chip) => chip.offsetHeight);
+  const sumWidths = widths.reduce((sum, width) => sum + width, 0);
 
-  for (let i = 0; i < RANDOM_TRIES; i++) {
-    const x = randomInt(minX, maxX);
-    const y = randomInt(minY, maxY);
-    const rect = { left: x, top: y, right: x + width, bottom: y + height };
-    const overlaps = placed.some((other) => rectsOverlap(rect, other, CHIP_GAP));
-    if (!overlaps) return { x, y };
+  let gap = ANSWER_GAP;
+  if (chips.length > 1) {
+    const maxGap = Math.floor((availableWidth - sumWidths) / (chips.length - 1));
+    gap = Math.max(ANSWER_MIN_GAP, Math.min(ANSWER_GAP, maxGap));
   }
 
-  const stepX = Math.max(28, Math.floor(width * 0.35));
-  const stepY = Math.max(28, Math.floor(height * 0.5));
+  const singleRowWidth = sumWidths + Math.max(0, chips.length - 1) * gap;
 
-  for (let y = minY; y <= maxY; y += stepY) {
-    for (let x = minX; x <= maxX; x += stepX) {
-      const rect = { left: x, top: y, right: x + width, bottom: y + height };
-      const overlaps = placed.some((other) => rectsOverlap(rect, other, CHIP_GAP));
-      if (!overlaps) return { x, y };
+  if (singleRowWidth <= availableWidth) {
+    const startX = Math.round((workspaceWidth - singleRowWidth) / 2);
+    const rowHeight = Math.max(...heights, 0);
+    const y = margin;
+    let x = startX;
+
+    return chips.map((chip, index) => {
+      const pos = {
+        x,
+        y: y + Math.round((rowHeight - heights[index]) / 2)
+      };
+      x += widths[index] + gap;
+      return pos;
+    });
+  }
+
+  const rows = [];
+  let currentRow = [];
+  let currentWidth = 0;
+  let currentHeight = 0;
+
+  chips.forEach((chip, index) => {
+    const chipWidth = widths[index];
+    const chipHeight = heights[index];
+    const nextWidth = currentRow.length === 0 ? chipWidth : currentWidth + ANSWER_GAP + chipWidth;
+
+    if (currentRow.length > 0 && nextWidth > availableWidth) {
+      rows.push({ items: currentRow, width: currentWidth, height: currentHeight });
+      currentRow = [];
+      currentWidth = 0;
+      currentHeight = 0;
     }
+
+    currentRow.push({ chip, index, chipWidth, chipHeight });
+    currentWidth = currentRow.length === 1 ? chipWidth : currentWidth + ANSWER_GAP + chipWidth;
+    currentHeight = Math.max(currentHeight, chipHeight);
+  });
+
+  if (currentRow.length > 0) {
+    rows.push({ items: currentRow, width: currentWidth, height: currentHeight });
   }
 
-  return { x: minX, y: minY };
+  const rowGap = 18;
+  let cursorY = margin;
+  const positions = new Array(chips.length);
+
+  rows.forEach((row) => {
+    let cursorX = Math.max(margin, Math.round((workspaceWidth - row.width) / 2));
+
+    row.items.forEach((item) => {
+      positions[item.index] = {
+        x: cursorX,
+        y: cursorY + Math.round((row.height - item.chipHeight) / 2)
+      };
+      cursorX += item.chipWidth + ANSWER_GAP;
+    });
+
+    cursorY += row.height + rowGap;
+  });
+
+  return positions;
 }
 
 function clampPosition(workspace, chip, x, y) {
@@ -380,9 +424,13 @@ function rectsOverlap(a, b, gap = 0) {
   );
 }
 
-function randomInt(min, max) {
-  if (max <= min) return min;
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function shuffleArray(items) {
+  const out = [...items];
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [out[index], out[swapIndex]] = [out[swapIndex], out[index]];
+  }
+  return out;
 }
 
 function injectStyles() {

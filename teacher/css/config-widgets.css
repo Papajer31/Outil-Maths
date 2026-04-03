@@ -20,6 +20,43 @@
   color:var(--text);
 }
 
+.tv-group-collapsible{
+  gap:10px;
+}
+
+.tv-group-toggle{
+  width:100%;
+  border:none;
+  background:transparent;
+  color:inherit;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  cursor:pointer;
+}
+
+.tv-group-toggle:hover .tv-group-title{
+  color:#fff;
+}
+
+.tv-group-toggle .tv-stepper-icon{
+  transition:transform .12s ease;
+}
+
+.tv-group-toggle[aria-expanded="true"] .tv-stepper-icon{
+  transform:rotate(180deg);
+}
+
+.tv-group-content{
+  display:none;
+}
+
+.tv-group-content.is-open{
+  display:block;
+}
+
 .tv-minmax-inline{
   display:flex;
   align-items:center;

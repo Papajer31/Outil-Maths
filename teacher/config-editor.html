@@ -50,7 +50,10 @@
 
         <section class="cfg-main">
           <aside class="panel cfg-tools-panel">
-            <div class="cfg-panel-title">Outils</div>
+            <div class="cfg-tools-header">
+              <div class="cfg-panel-title">Séquence d’outils</div>
+              <button class="btn cfg-add-tool-btn" id="btnAddSequenceTool" type="button" aria-label="Ajouter un outil"><span class="cfg-material-icon" aria-hidden="true">add</span></button>
+            </div>
             <div id="configRows" class="cfg-tools-list"></div>
           </aside>
 
@@ -66,13 +69,28 @@
 
             <div id="toolConfigHost" class="cfg-tool-config-host">
               <div class="cfg-empty-state">
-                Sélectionne un outil dans la colonne de gauche.
+                Sélectionne un outil dans la séquence.
               </div>
             </div>
           </section>
         </section>
 
       </div>
+    </div>
+  </div>
+
+  <div id="toolPickerOverlay" class="cfg-modal hidden" aria-hidden="true">
+    <div class="cfg-modal-backdrop" data-close-tool-picker="true"></div>
+    <div class="panel cfg-modal-card" role="dialog" aria-modal="true" aria-labelledby="toolPickerTitle">
+      <div class="cfg-modal-header">
+        <div>
+          <div id="toolPickerTitle" class="cfg-modal-title">Ajouter un outil</div>
+          <div class="cfg-modal-subtitle">Choisis un outil du module pour l’ajouter à la séquence.</div>
+        </div>
+        <button class="btn cfg-modal-close" id="btnCloseToolPicker" type="button" aria-label="Fermer">✕</button>
+      </div>
+
+      <div id="toolPickerTiles" class="cfg-tool-picker-grid"></div>
     </div>
   </div>
 

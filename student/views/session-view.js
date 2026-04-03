@@ -89,7 +89,7 @@ export function renderSessionView(root){
       const remote = await loadPublicActivityConfig(accessCode, configName);
       if (disposed) return;
 
-      if (!remote?.config_json?.drafts){
+      if (!remote?.config_json?.sequence && !remote?.config_json?.drafts){
         showFatalError("Configuration introuvable ou invalide.");
         return;
       }
@@ -112,6 +112,7 @@ export function renderSessionView(root){
         moduleKey,
         globals: remote.config_json.globals ?? {},
         drafts: remote.config_json.drafts,
+        sequence: remote.config_json.sequence,
         onExitToActivities: () => {
           goBackToActivities();
         },

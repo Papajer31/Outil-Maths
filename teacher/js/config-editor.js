@@ -17,24 +17,23 @@ import {
   clampInt,
   cloneData,
   normalizeActivityGlobals,
-  normalizeToolDraft
+  normalizeToolDraft,
+  normalizeActivitySequence,
+  createToolInstanceId
 } from "../../shared/activity-config.js";
 import {
   formatDurationEstimate
 } from "../../shared/activity-duration.js";
 import {
   renderSelectControl,
-  bindSelect,
-  readSelect
+  bindSelect
 } from "../../shared/config-widgets.js";
-
-/* =========================
-   DOM
-   ========================= */
 
 const els = {
   btnBackDashboard: document.getElementById("btnBackDashboard"),
   btnSaveConfig: document.getElementById("btnSaveConfig"),
+  btnAddSequenceTool: document.getElementById("btnAddSequenceTool"),
+  btnCloseToolPicker: document.getElementById("btnCloseToolPicker"),
 
   classCodeInput: document.getElementById("classCodeInput"),
   moduleSelectHost: document.getElementById("moduleSelectHost"),
@@ -45,19 +44,18 @@ const els = {
 
   toolConfigTitle: document.getElementById("toolConfigTitle"),
   toolConfigHost: document.getElementById("toolConfigHost"),
-  activityDurationEstimate: document.getElementById("activityDurationEstimate")
-};
+  activityDurationEstimate: document.getElementById("activityDurationEstimate"),
 
-/* =========================
-   STATE
-   ========================= */
+  toolPickerOverlay: document.getElementById("toolPickerOverlay"),
+  toolPickerTiles: document.getElementById("toolPickerTiles")
+};
 
 let currentUser = null;
 let currentAccessCode = "";
 let currentConfigName = "";
 let currentTeacherSpace = null;
 let availableStudents = [];
-let saveState = "saved"; // "dirty" | "saving" | "saved"
+let saveState = "saved";
 
 let currentModuleKey = "maths";
 let availableModules = [];
@@ -66,25 +64,23 @@ let isEditingExistingConfig = false;
 let moduleRuntime = null;
 let toolsCatalog = [];
 const toolModuleCache = new Map();
-const configDrafts = new Map();
+const sequenceDrafts = new Map();
+let activitySequence = [];
 
 let currentToolSettingsEditor = null;
-let currentSelectedToolId = null;
+let currentSelectedInstanceId = null;
 let activityEstimateRefreshTimer = null;
 let activityEstimateRefreshToken = 0;
+let dragState = {
+  draggedInstanceId: "",
+  dropIndex: null
+};
+
 const activityGlobals = {
   questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec
 };
 
-/* =========================
-   INIT
-   ========================= */
-
 boot();
-
-/* =========================
-   BOOT
-   ========================= */
 
 async function boot(){
   setMessage("Chargement…");
@@ -156,6 +152,7 @@ async function boot(){
     renderModuleSelect();
     renderMeta();
     renderGlobals();
+    renderToolPickerTiles();
     renderConfigTable();
     bindEvents();
     await refreshActivityDurationEstimate();
@@ -168,18 +165,16 @@ async function boot(){
   setSaveState("saved");
 }
 
-/* =========================
-   CHARGEMENT
-   ========================= */
-
 function loadExistingConfig(existing){
-  if (!existing?.config_json?.drafts){
+  const safeConfig = existing?.config_json;
+
+  if (!safeConfig?.sequence && !safeConfig?.drafts){
     setMessage("Configuration introuvable, création d’une nouvelle base.", true);
     return;
   }
 
-  applyRemoteGlobals(existing.config_json.globals);
-  applyRemoteDrafts(existing.config_json.drafts);
+  applyRemoteGlobals(safeConfig.globals);
+  applyRemoteSequence(safeConfig.sequence, safeConfig.drafts);
 }
 
 function renderMeta(){
@@ -192,13 +187,27 @@ function renderMeta(){
   }
 }
 
-/* =========================
-   EVENTS
-   ========================= */
-
 function bindEvents(){
   els.btnBackDashboard?.addEventListener("click", goBackDashboard);
   els.btnSaveConfig?.addEventListener("click", saveCurrentConfig);
+  els.btnAddSequenceTool?.addEventListener("click", openToolPicker);
+  els.btnCloseToolPicker?.addEventListener("click", closeToolPicker);
+
+  els.toolPickerOverlay?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-tool-picker='true']")) {
+      closeToolPicker();
+    }
+  });
+
+  els.configRows?.addEventListener("dragover", handleSequenceDragOver);
+  els.configRows?.addEventListener("dragleave", handleSequenceDragLeave);
+  els.configRows?.addEventListener("drop", handleSequenceDrop);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isToolPickerOpen()) {
+      closeToolPicker();
+    }
+  });
 
   els.configNameInput?.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
@@ -284,11 +293,14 @@ async function handleModuleSelectionChange(nextModuleKey){
   const safeNextModuleKey = String(nextModuleKey || "").trim();
   if (!safeNextModuleKey || safeNextModuleKey === currentModuleKey) return;
 
+  persistCurrentToolSettings();
+
   currentModuleKey = safeNextModuleKey;
   await reloadCurrentModule();
   renderModuleSelect();
   renderMeta();
   renderGlobals();
+  renderToolPickerTiles();
   renderConfigTable();
   scheduleActivityDurationEstimate();
   setMessage("");
@@ -297,10 +309,12 @@ async function handleModuleSelectionChange(nextModuleKey){
 
 async function reloadCurrentModule(){
   currentToolSettingsEditor = null;
-  currentSelectedToolId = null;
+  currentSelectedInstanceId = null;
+  dragState = { draggedInstanceId: "", dropIndex: null };
 
   toolModuleCache.clear();
-  configDrafts.clear();
+  sequenceDrafts.clear();
+  activitySequence = [];
 
   moduleRuntime = loadModuleRuntime(currentModuleKey);
   toolsCatalog = await moduleRuntime.loadToolsCatalog();
@@ -308,84 +322,331 @@ async function reloadCurrentModule(){
   if (!Array.isArray(toolsCatalog)) {
     toolsCatalog = [];
   }
-
-  ensureConfigDrafts();
 }
-
-/* =========================
-   TABLE DE CONFIG
-   ========================= */
 
 function renderConfigTable(){
   if (!els.configRows) return;
 
-  els.configRows.innerHTML = toolsCatalog.map((t) => configRowHTML(t)).join("");
+  if (!activitySequence.length) {
+    els.configRows.innerHTML = `
+      <div class="cfg-empty-state cfg-sequence-empty">
+        Aucun outil dans la séquence.<br>Clique sur + pour ajouter une étape.
+      </div>
+    `;
 
-  toolsCatalog.forEach((t) => {
-    const draft = getToolDraft(t.id);
+    renderEmptyToolPanel();
+    return;
+  }
 
-    const row = document.getElementById(`row_${t.id}`);
-    const chk = document.getElementById(`chk_${t.id}`);
-    const btnSettings = document.getElementById(`settings_${t.id}`);
+  const labels = buildSequenceLabels();
 
-    if (!row || !chk || !btnSettings) return;
+  els.configRows.innerHTML = activitySequence.map((item) => {
+    const label = labels.get(item.instanceId) || buildDefaultSequenceLabel(item.toolId);
+    return configRowHTML(item, label);
+  }).join("");
 
-    chk.checked = !!draft.enabled;
-    row.classList.toggle("disabled", !draft.enabled);
-    row.classList.toggle("active", draft.enabled);
+  activitySequence.forEach((item) => {
+    const row = document.getElementById(`row_${cssSafeId(item.instanceId)}`);
+    const btnDelete = document.getElementById(`delete_${cssSafeId(item.instanceId)}`);
 
-    chk.addEventListener("change", (e) => {
-      e.stopPropagation();
-      draft.enabled = chk.checked;
-      row.classList.toggle("disabled", !chk.checked);
-      setSaveState("dirty");
-      scheduleActivityDurationEstimate();
-    });
+    if (!row || !btnDelete) return;
 
-    btnSettings.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openToolSettings(t.id).catch((err) => {
+    row.classList.toggle("active", currentSelectedInstanceId === item.instanceId);
+
+    row.addEventListener("click", () => {
+      openToolSettings(item.instanceId).catch((err) => {
         setMessage(err?.message || "Impossible d’ouvrir les réglages outil.", true);
       });
     });
+
+    btnDelete.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeSequenceItem(item.instanceId);
+    });
+
+    row.addEventListener("dragstart", (event) => handleRowDragStart(event, item.instanceId));
+    row.addEventListener("dragend", handleRowDragEnd);
   });
 
-  renderEmptyToolPanel();
+  renderConfigTableSelectionState();
 }
 
-function configRowHTML(t){
+function configRowHTML(item, label){
+  const safeId = cssSafeId(item.instanceId);
+
   return `
-    <div class="cfg-tool-row" id="row_${t.id}">
-      <input class="cfg-tool-check" type="checkbox" id="chk_${t.id}" aria-label="Activer ${escapeHtml(t.title)}">
-        <div class="cfg-tool-main">
-          <div class="cfg-tool-name">${escapeHtml(t.title)}</div>
-        </div>
-      <button class="btn btn-icon cfg-gear" type="button" id="settings_${t.id}" aria-label="Configurer ${escapeHtml(t.title)}">⚙️</button>
+    <div class="cfg-tool-row" id="row_${safeId}" draggable="true">
+      <div class="cfg-tool-grip" aria-hidden="true">⋮⋮</div>
+      <div class="cfg-tool-main">
+        <div class="cfg-tool-name">${escapeHtml(label.title)}</div>
+        ${label.subtitle ? `<div class="cfg-tool-subtitle">${escapeHtml(label.subtitle)}</div>` : ""}
+      </div>
+      <button class="btn btn-icon cfg-tool-action cfg-tool-delete" type="button" id="delete_${safeId}" aria-label="Supprimer ${escapeHtml(label.title)}"><span class="cfg-material-icon" aria-hidden="true">delete</span></button>
     </div>
   `;
 }
 
-/* =========================
-   RÉGLAGES OUTIL
-   ========================= */
+function renderToolPickerTiles(){
+  if (!els.toolPickerTiles) return;
 
-async function openToolSettings(toolId){
-  const toolMeta = toolsCatalog.find((t) => t.id === toolId);
-  if (!toolMeta) return;
+  if (!toolsCatalog.length) {
+    els.toolPickerTiles.innerHTML = `
+      <div class="cfg-empty-state">
+        Aucun outil disponible dans ce module.
+      </div>
+    `;
+    return;
+  }
+
+  els.toolPickerTiles.innerHTML = toolsCatalog.map((tool) => `
+    <button class="cfg-tool-picker-tile" type="button" data-tool-id="${escapeHtml(tool.id)}">
+      <div class="cfg-tool-picker-tile-title">${escapeHtml(tool.title)}</div>
+    </button>
+  `).join("");
+
+  els.toolPickerTiles.querySelectorAll("[data-tool-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const toolId = String(btn.getAttribute("data-tool-id") || "").trim();
+      addToolToSequence(toolId).catch((err) => {
+        setMessage(err?.message || "Impossible d’ajouter cet outil.", true);
+      });
+    });
+  });
+}
+
+function openToolPicker(){
+  renderToolPickerTiles();
+  els.toolPickerOverlay?.classList.remove("hidden");
+  els.toolPickerOverlay?.setAttribute("aria-hidden", "false");
+}
+
+function closeToolPicker(){
+  els.toolPickerOverlay?.classList.add("hidden");
+  els.toolPickerOverlay?.setAttribute("aria-hidden", "true");
+}
+
+function isToolPickerOpen(){
+  return !!els.toolPickerOverlay && !els.toolPickerOverlay.classList.contains("hidden");
+}
+
+async function addToolToSequence(toolId){
+  const safeToolId = String(toolId || "").trim();
+  if (!safeToolId) return;
+
+  const toolMeta = getToolMeta(safeToolId);
+  if (!toolMeta) {
+    throw new Error("Outil introuvable dans ce module.");
+  }
 
   persistCurrentToolSettings();
 
-  currentSelectedToolId = toolId;
+  const mod = await loadToolModule(safeToolId);
+  const tool = mod.default ?? {};
+  const instanceId = createToolInstanceId(safeToolId);
+  const draft = normalizeToolDraft({
+    ...DEFAULT_TOOL_ROW,
+    enabled: true,
+    settings: getToolDefaultSettings(tool)
+  });
+  draft.enabled = true;
 
-  const draft = getToolDraft(toolId);
-  const mod = await loadToolModule(toolId);
+  activitySequence.push({ instanceId, toolId: safeToolId });
+  sequenceDrafts.set(instanceId, {
+    instanceId,
+    toolId: safeToolId,
+    draft
+  });
+
+  closeToolPicker();
+  renderConfigTable();
+  setSaveState("dirty");
+  scheduleActivityDurationEstimate();
+  setMessage("");
+
+  await openToolSettings(instanceId);
+}
+
+function removeSequenceItem(instanceId){
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId) return;
+
+  persistCurrentToolSettings();
+
+  const index = activitySequence.findIndex((item) => item.instanceId === safeInstanceId);
+  if (index < 0) return;
+
+  activitySequence.splice(index, 1);
+  sequenceDrafts.delete(safeInstanceId);
+
+  const replacement = activitySequence[index] || activitySequence[index - 1] || null;
+
+  if (currentSelectedInstanceId === safeInstanceId) {
+    currentSelectedInstanceId = replacement?.instanceId ?? null;
+    currentToolSettingsEditor = null;
+  }
+
+  renderConfigTable();
+  setSaveState("dirty");
+  scheduleActivityDurationEstimate();
+  setMessage("");
+
+  if (replacement) {
+    openToolSettings(replacement.instanceId).catch((err) => {
+      setMessage(err?.message || "Impossible d’ouvrir les réglages outil.", true);
+    });
+    return;
+  }
+
+  renderEmptyToolPanel();
+}
+
+function handleRowDragStart(event, instanceId) {
+  dragState.draggedInstanceId = instanceId;
+  dragState.dropIndex = null;
+
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", instanceId);
+  event.currentTarget?.classList.add("is-dragging");
+}
+
+function handleRowDragEnd(event) {
+  event.currentTarget?.classList.remove("is-dragging");
+  clearDropMarker();
+}
+
+function handleSequenceDragOver(event) {
+  if (!dragState.draggedInstanceId || !els.configRows) {
+    return;
+  }
+
+  event.preventDefault();
+  const dropIndex = getSequenceDropIndexFromClientY(event.clientY);
+  dragState.dropIndex = dropIndex;
+  renderSequenceDropIndicator(dropIndex);
+  event.dataTransfer.dropEffect = "move";
+}
+
+function handleSequenceDragLeave(event) {
+  if (!els.configRows) return;
+  const relatedTarget = event.relatedTarget;
+  if (relatedTarget instanceof Node && els.configRows.contains(relatedTarget)) return;
+  clearDropMarker();
+}
+
+function handleSequenceDrop(event) {
+  if (!dragState.draggedInstanceId) return;
+
+  event.preventDefault();
+  const draggedInstanceId = String(
+    event.dataTransfer.getData("text/plain") || dragState.draggedInstanceId || ""
+  ).trim();
+  const dropIndex = Number.isInteger(dragState.dropIndex)
+    ? dragState.dropIndex
+    : getSequenceDropIndexFromClientY(event.clientY);
+
+  clearDropMarker();
+  moveSequenceItemToIndex(draggedInstanceId, dropIndex);
+}
+
+function getVisibleSequenceRows() {
+  return Array.from(els.configRows?.querySelectorAll(".cfg-tool-row[id]") || [])
+    .filter((row) => String(row.id || "") !== `row_${cssSafeId(dragState.draggedInstanceId || "")}`);
+}
+
+function getSequenceDropIndexFromClientY(clientY) {
+  const rows = getVisibleSequenceRows();
+  if (!rows.length) return 0;
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const rect = rows[index].getBoundingClientRect();
+    const midpoint = rect.top + (rect.height / 2);
+    if (clientY < midpoint) {
+      return index;
+    }
+  }
+
+  return rows.length;
+}
+
+function ensureSequenceDropIndicator() {
+  if (!els.configRows) return null;
+
+  let indicator = els.configRows.querySelector(":scope > .cfg-drop-indicator");
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.className = "cfg-drop-indicator";
+    indicator.hidden = true;
+    els.configRows.appendChild(indicator);
+  }
+  return indicator;
+}
+
+function renderSequenceDropIndicator(dropIndex) {
+  if (!els.configRows) return;
+
+  const rows = getVisibleSequenceRows();
+  const indicator = ensureSequenceDropIndicator();
+  if (!indicator) return;
+
+  let top = 0;
+  if (rows.length === 0) {
+    top = 0;
+  } else if (dropIndex <= 0) {
+    top = rows[0].offsetTop;
+  } else if (dropIndex >= rows.length) {
+    const lastRow = rows[rows.length - 1];
+    top = lastRow.offsetTop + lastRow.offsetHeight;
+  } else {
+    top = rows[dropIndex].offsetTop;
+  }
+
+  indicator.style.top = `${Math.round(top)}px`;
+  indicator.hidden = false;
+}
+
+function moveSequenceItemToIndex(draggedInstanceId, dropIndex) {
+  const safeDraggedId = String(draggedInstanceId || "").trim();
+  if (!safeDraggedId) return;
+
+  const draggedIndex = activitySequence.findIndex((item) => item.instanceId === safeDraggedId);
+  if (draggedIndex < 0) return;
+
+  const [draggedItem] = activitySequence.splice(draggedIndex, 1);
+  const safeDropIndex = Math.max(0, Math.min(Number(dropIndex) || 0, activitySequence.length));
+  activitySequence.splice(safeDropIndex, 0, draggedItem);
+
+  renderConfigTable();
+  setSaveState("dirty");
+  scheduleActivityDurationEstimate();
+}
+
+
+function clearDropMarker() {
+  dragState.dropIndex = null;
+  els.configRows?.querySelectorAll(".cfg-tool-row").forEach((row) => {
+    row.classList.remove("is-dragging");
+  });
+  els.configRows?.querySelector(":scope > .cfg-drop-indicator")?.remove();
+}
+
+
+async function openToolSettings(instanceId){
+  const entry = getSequenceEntry(instanceId);
+  if (!entry) return;
+
+  persistCurrentToolSettings();
+
+  currentSelectedInstanceId = entry.instanceId;
+
+  const draft = getSequenceDraft(entry.instanceId);
+  const mod = await loadToolModule(entry.toolId);
   const tool = mod.default ?? {};
 
   if (draft.settings == null){
     draft.settings = getToolDefaultSettings(tool);
   }
 
-  currentToolSettingsEditor = { toolId, tool };
+  currentToolSettingsEditor = { instanceId: entry.instanceId, toolId: entry.toolId, tool };
   renderConfigTableSelectionState();
   injectSharedToolHeaderStyles();
 
@@ -395,7 +656,10 @@ async function openToolSettings(toolId){
   }
 
   if (els.toolConfigTitle) {
-    els.toolConfigTitle.textContent = toolMeta.title;
+    const label = buildSequenceLabels().get(entry.instanceId) || buildDefaultSequenceLabel(entry.toolId);
+    els.toolConfigTitle.textContent = label.subtitle
+      ? `${label.title} — ${label.subtitle}`
+      : label.title;
   }
 
   const host = els.toolConfigHost;
@@ -403,7 +667,7 @@ async function openToolSettings(toolId){
 
   const commonSettingsHtml =
     typeof moduleRuntime?.renderCommonToolSettings === "function"
-      ? (moduleRuntime.renderCommonToolSettings(cloneData(draft), getToolEditorContext()) || "")
+      ? (moduleRuntime.renderCommonToolSettings(cloneData(draft), getToolEditorContext(entry.instanceId)) || "")
       : "";
 
   host.innerHTML = `
@@ -418,8 +682,8 @@ async function openToolSettings(toolId){
   if (typeof tool.renderToolSettings === "function"){
     tool.renderToolSettings(
       settingsHost,
-      cloneData(getToolDraft(toolId).settings),
-      getToolEditorContext()
+      cloneData(getSequenceDraft(entry.instanceId).settings),
+      getToolEditorContext(entry.instanceId)
     );
   } else {
     settingsHost.innerHTML = `<div class="cfg-empty-state">Aucun réglage spécifique pour cet outil.</div>`;
@@ -449,10 +713,6 @@ async function openToolSettings(toolId){
   scheduleActivityDurationEstimate();
 }
 
-/* =========================
-   SAUVEGARDE
-   ========================= */
-
 async function saveCurrentConfig(){
   setSaveState("saving");
   const name = String(els.configNameInput?.value || "").trim();
@@ -460,15 +720,16 @@ async function saveCurrentConfig(){
   if (!name){
     setMessage("Entre un nom d’activité.", true);
     els.configNameInput?.focus();
+    setSaveState("dirty");
     return;
   }
 
-  syncDraftsFromUI();
   persistCurrentToolSettings();
 
   const enabledCount = countEnabledTools();
   if (enabledCount === 0){
-    setMessage("Choisis au moins un outil.", true);
+    setMessage("Ajoute au moins un outil dans la séquence.", true);
+    setSaveState("dirty");
     return;
   }
 
@@ -482,9 +743,9 @@ async function saveCurrentConfig(){
       moduleKey: currentModuleKey,
       configName: name,
       configJson: {
-        version: 2,
+        version: 3,
         globals: serializeGlobals(),
-        drafts: serializeDrafts()
+        sequence: serializeSequence()
       }
     });
 
@@ -493,31 +754,12 @@ async function saveCurrentConfig(){
 
     setSaveState("saved");
     setMessage(`Activité "${name}" enregistrée.`);
-    setSaveState("saved");
   } catch (err) {
     setSaveState("dirty");
     setMessage(err?.message || "Impossible d’enregistrer.", true);
-    setSaveState("dirty");
   } finally {
     els.btnSaveConfig.disabled = false;
   }
-}
-
-function syncDraftsFromUI(){
-  for (const t of toolsCatalog){
-    const draft = getToolDraft(t.id);
-    const chk = document.getElementById(`chk_${t.id}`);
-    if (!chk) continue;
-    draft.enabled = !!chk.checked;
-  }
-}
-
-function countEnabledTools(){
-  let total = 0;
-  for (const t of toolsCatalog){
-    if (getToolDraft(t.id).enabled) total += 1;
-  }
-  return total;
 }
 
 function renderGlobals(){
@@ -560,49 +802,67 @@ function setSaveState(state){
   }
 }
 
-/* =========================
-   DRAFTS
-   ========================= */
+function applyRemoteSequence(remoteSequence, legacyDrafts){
+  const safeSequence = normalizeActivitySequence(remoteSequence, {
+    toolsCatalog,
+    legacyDrafts
+  });
 
-function ensureConfigDrafts(){
-  for (const t of toolsCatalog){
-    if (!configDrafts.has(t.id)){
-      configDrafts.set(t.id, normalizeToolDraft(DEFAULT_TOOL_ROW));
-    }
-  }
+  activitySequence = safeSequence.map((item) => ({
+    instanceId: item.instanceId,
+    toolId: item.toolId
+  }));
+
+  sequenceDrafts.clear();
+
+  safeSequence.forEach((item) => {
+    sequenceDrafts.set(item.instanceId, {
+      instanceId: item.instanceId,
+      toolId: item.toolId,
+      draft: normalizeToolDraft(item.draft)
+    });
+  });
 }
 
-function getToolDraft(id){
-  if (!configDrafts.has(id)){
-    configDrafts.set(id, normalizeToolDraft(DEFAULT_TOOL_ROW));
-  }
-  return configDrafts.get(id);
+function getSequenceEntry(instanceId){
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId) return null;
+  return activitySequence.find((item) => item.instanceId === safeInstanceId) || null;
 }
 
-function serializeDrafts(){
-  const out = {};
-  for (const t of toolsCatalog){
-    const draft = getToolDraft(t.id);
-    const normalized = normalizeToolDraft(draft);
-    out[t.id] = normalized;
+function getSequenceDraft(instanceId){
+  const safeInstanceId = String(instanceId || "").trim();
+  const entry = getSequenceEntry(safeInstanceId);
+  if (!entry) return normalizeToolDraft(DEFAULT_TOOL_ROW);
+
+  if (!sequenceDrafts.has(safeInstanceId)) {
+    sequenceDrafts.set(safeInstanceId, {
+      instanceId: safeInstanceId,
+      toolId: entry.toolId,
+      draft: normalizeToolDraft({
+        ...DEFAULT_TOOL_ROW,
+        enabled: true
+      })
+    });
   }
-  return out;
+
+  const stored = sequenceDrafts.get(safeInstanceId);
+  stored.toolId = entry.toolId;
+  stored.draft.enabled = true;
+  return stored.draft;
 }
 
-function applyRemoteDrafts(remoteDrafts){
-  ensureConfigDrafts();
+function serializeSequence(){
+  persistCurrentToolSettings();
 
-  for (const t of toolsCatalog){
-    const incoming = remoteDrafts?.[t.id];
-    const draft = getToolDraft(t.id);
-
-    if (!incoming){
-      Object.assign(draft, normalizeToolDraft(DEFAULT_TOOL_ROW));
-      continue;
-    }
-
-    Object.assign(draft, normalizeToolDraft(incoming));
-  }
+  return activitySequence.map((item) => ({
+    instanceId: item.instanceId,
+    toolId: item.toolId,
+    draft: normalizeToolDraft({
+      ...getSequenceDraft(item.instanceId),
+      enabled: true
+    })
+  }));
 }
 
 function persistCurrentToolSettings(){
@@ -613,11 +873,14 @@ function persistCurrentToolSettings(){
   const host = els.toolConfigHost;
   if (!host) return;
 
-  const { toolId, tool } = currentToolSettingsEditor;
-  const draft = getToolDraft(toolId);
+  const { instanceId, tool } = currentToolSettingsEditor;
+  const draft = getSequenceDraft(instanceId);
 
   try {
-    let nextDraft = normalizeToolDraft(draft);
+    let nextDraft = normalizeToolDraft({
+      ...draft,
+      enabled: true
+    });
 
     if (nextDraft.settings == null){
       nextDraft.settings = getToolDefaultSettings(tool);
@@ -627,7 +890,7 @@ function persistCurrentToolSettings(){
       const nextDraftFromModule = moduleRuntime.readCommonToolSettings(
         host,
         nextDraft,
-        getToolEditorContext()
+        getToolEditorContext(instanceId)
       );
 
       if (nextDraftFromModule) {
@@ -641,7 +904,7 @@ function persistCurrentToolSettings(){
       const nextSettings = tool.readToolSettings(
         settingsHost,
         cloneData(nextDraft.settings),
-        getToolEditorContext()
+        getToolEditorContext(instanceId)
       );
 
       nextDraft.settings = mergeToolSettings(nextDraft.settings, nextSettings);
@@ -649,8 +912,19 @@ function persistCurrentToolSettings(){
       nextDraft.settings = getToolDefaultSettings(tool);
     }
 
+    nextDraft.enabled = true;
 
-    Object.assign(draft, normalizeToolDraft(nextDraft));
+    const stored = sequenceDrafts.get(instanceId) || {
+      instanceId,
+      toolId: currentToolSettingsEditor.toolId,
+      draft: normalizeToolDraft(DEFAULT_TOOL_ROW)
+    };
+
+    stored.toolId = currentToolSettingsEditor.toolId;
+    stored.draft = normalizeToolDraft(nextDraft);
+    stored.draft.enabled = true;
+    sequenceDrafts.set(instanceId, stored);
+
     setSaveState("dirty");
     setMessage("");
   } catch (err) {
@@ -659,10 +933,10 @@ function persistCurrentToolSettings(){
 }
 
 function renderConfigTableSelectionState(){
-  for (const t of toolsCatalog) {
-    const row = document.getElementById(`row_${t.id}`);
-    row?.classList.toggle("active", currentSelectedToolId === t.id);
-  }
+  activitySequence.forEach((item) => {
+    const row = document.getElementById(`row_${cssSafeId(item.instanceId)}`);
+    row?.classList.toggle("active", currentSelectedInstanceId === item.instanceId);
+  });
 }
 
 function ensureToolHeaderControlsSlot(){
@@ -688,15 +962,11 @@ function renderEmptyToolPanel(){
   if (els.toolConfigHost) {
     els.toolConfigHost.innerHTML = `
       <div class="cfg-empty-state">
-        Sélectionne un outil dans la colonne de gauche.
+        Sélectionne un outil dans la séquence.
       </div>
     `;
   }
 }
-
-/* =========================
-   ESTIMATION DE DURÉE
-   ========================= */
 
 function scheduleActivityDurationEstimate(){
   if (activityEstimateRefreshTimer) {
@@ -712,13 +982,12 @@ function scheduleActivityDurationEstimate(){
 async function refreshActivityDurationEstimate(){
   const token = ++activityEstimateRefreshToken;
 
-  syncDraftsFromUI();
   persistCurrentToolSettings();
 
   const estimate = typeof moduleRuntime?.estimateActivityDuration === "function"
     ? await moduleRuntime.estimateActivityDuration({
         globals: serializeGlobals(),
-        drafts: serializeDrafts()
+        sequence: serializeSequence()
       })
     : null;
 
@@ -733,10 +1002,6 @@ async function refreshActivityDurationEstimate(){
     els.activityDurationEstimate.title = text === "—" ? "Durée indisponible" : `Durée estimée : ${text}`;
   }
 }
-
-/* =========================
-   OUTILS / MODULES
-   ========================= */
 
 async function loadToolModule(toolId){
   if (!moduleRuntime){
@@ -778,33 +1043,61 @@ function getSpecificToolSettingsHost(container){
   return container.querySelector("#toolSpecificSettingsHost") || container;
 }
 
-function getToolEditorContext(){
+function getToolEditorContext(instanceId = currentSelectedInstanceId){
   return {
     accessCode: currentAccessCode,
     teacherSpace: cloneData(currentTeacherSpace),
     students: cloneData(availableStudents),
     moduleKey: currentModuleKey,
-    configName: currentConfigName
+    configName: currentConfigName,
+    toolInstanceId: String(instanceId || "")
   };
 }
 
-/* =========================
-   NAVIGATION
-   ========================= */
+function getToolMeta(toolId){
+  return toolsCatalog.find((tool) => tool.id === toolId) || null;
+}
+
+function buildSequenceLabels(){
+  const labels = new Map();
+
+  activitySequence.forEach((item) => {
+    const toolMeta = getToolMeta(item.toolId);
+
+    labels.set(item.instanceId, {
+      title: toolMeta?.title || item.toolId,
+      subtitle: ""
+    });
+  });
+
+  return labels;
+}
+
+function buildDefaultSequenceLabel(toolId){
+  const toolMeta = getToolMeta(toolId);
+  return {
+    title: toolMeta?.title || String(toolId || "Outil"),
+    subtitle: ""
+  };
+}
+
+function countEnabledTools(){
+  return activitySequence.length;
+}
 
 function goBackDashboard(){
   window.location.href = `dashboard.html?accessCode=${encodeURIComponent(currentAccessCode)}`;
 }
-
-/* =========================
-   UI
-   ========================= */
 
 function setFatalState(message){
   setMessage(message, true);
 
   if (els.btnSaveConfig){
     els.btnSaveConfig.disabled = true;
+  }
+
+  if (els.btnAddSequenceTool) {
+    els.btnAddSequenceTool.disabled = true;
   }
 
   renderEmptyToolPanel();
@@ -816,9 +1109,11 @@ function setMessage(text, isError = false){
   els.editorMessage.style.color = isError ? "var(--bad)" : "var(--muted)";
 }
 
-/* =========================
-   HELPERS
-   ========================= */
+function cssSafeId(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "item";
+}
 
 function escapeHtml(s){
   return String(s)

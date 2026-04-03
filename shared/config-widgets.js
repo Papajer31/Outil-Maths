@@ -5,13 +5,58 @@ import {
   normalizeValueList
 } from "./value-constraints.js";
 
-export function renderSection(title, innerHtml){
+export function renderSection(title, innerHtml, { collapsible = false, expanded = true, idPrefix = "" } = {}){
+  if (!collapsible) {
+    return `
+      <div class="tv-group">
+        <div class="tv-group-title">${escapeHtml(title)}</div>
+        ${innerHtml}
+      </div>
+    `;
+  }
+
+  const safeId = String(idPrefix || title || "section")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-") || "section";
+
   return `
-    <div class="tv-group">
-      <div class="tv-group-title">${escapeHtml(title)}</div>
-      ${innerHtml}
+    <div class="tv-group tv-group-collapsible" data-tv-collapsible="${escapeHtml(safeId)}">
+      <button
+        class="tv-group-toggle"
+        type="button"
+        id="${escapeHtml(safeId)}_toggle"
+        aria-expanded="${expanded ? "true" : "false"}"
+        aria-controls="${escapeHtml(safeId)}_content"
+      >
+        <span class="tv-group-title">${escapeHtml(title)}</span>
+        <span class="tv-stepper-icon" aria-hidden="true">expand_more</span>
+      </button>
+      <div class="tv-group-content${expanded ? " is-open" : ""}" id="${escapeHtml(safeId)}_content" ${expanded ? "" : "hidden"}>
+        ${innerHtml}
+      </div>
     </div>
   `;
+}
+
+export function bindCollapsibleSection(container, idPrefix) {
+  const safeId = String(idPrefix || "").trim();
+  if (!safeId) return;
+
+  const toggle = container.querySelector(`#${cssEscape(safeId)}_toggle`);
+  const content = container.querySelector(`#${cssEscape(safeId)}_content`);
+  if (!toggle || !content) return;
+
+  const setExpanded = (expanded) => {
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    content.classList.toggle("is-open", expanded);
+    content.hidden = !expanded;
+  };
+
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    setExpanded(!expanded);
+  });
 }
 
 export function renderToolSettingsStack(...blocks){
@@ -933,22 +978,86 @@ function bindStepper(input, {
   const minusBtn = wrap.querySelector('[data-stepper-direction="-1"]');
   const plusBtn = wrap.querySelector('[data-stepper-direction="1"]');
   const stepValue = Math.max(1, Number(input.step) || 1);
+  const holdDelayMs = 350;
+  const holdIntervalMs = 60;
 
-  minusBtn?.addEventListener("click", () => {
+  function applyStep(direction){
     const bounds = resolveStepperBounds(input, { inputMin, inputMax });
-    const next = clampInt(Number(input.value) - stepValue, bounds.min, bounds.max);
+    const current = clampInt(Number(input.value), bounds.min, bounds.max);
+    const next = clampInt(current + (direction * stepValue), bounds.min, bounds.max);
+
+    if (next === current){
+      syncStepperUI(input, { inputMin, inputMax });
+      return false;
+    }
+
     input.value = String(next);
     syncStepperUI(input, { inputMin, inputMax });
     input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+    return true;
+  }
 
-  plusBtn?.addEventListener("click", () => {
-    const bounds = resolveStepperBounds(input, { inputMin, inputMax });
-    const next = clampInt(Number(input.value) + stepValue, bounds.min, bounds.max);
-    input.value = String(next);
-    syncStepperUI(input, { inputMin, inputMax });
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  function bindStepperButtonHold(button, direction){
+    if (!button) return;
+
+    let holdTimeoutId = null;
+    let holdIntervalId = null;
+    let pointerId = null;
+    let suppressNextClick = false;
+
+    const stopHold = () => {
+      if (holdTimeoutId !== null) {
+        window.clearTimeout(holdTimeoutId);
+        holdTimeoutId = null;
+      }
+      if (holdIntervalId !== null) {
+        window.clearInterval(holdIntervalId);
+        holdIntervalId = null;
+      }
+      pointerId = null;
+    };
+
+    button.addEventListener("pointerdown", (event) => {
+      if (button.disabled || event.button !== 0) return;
+
+      suppressNextClick = true;
+      pointerId = event.pointerId;
+      button.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+
+      if (!applyStep(direction)) {
+        stopHold();
+        return;
+      }
+
+      holdTimeoutId = window.setTimeout(() => {
+        holdTimeoutId = null;
+        holdIntervalId = window.setInterval(() => {
+          if (!applyStep(direction)) {
+            stopHold();
+          }
+        }, holdIntervalMs);
+      }, holdDelayMs);
+    });
+
+    button.addEventListener("pointerup", stopHold);
+    button.addEventListener("pointercancel", stopHold);
+    button.addEventListener("lostpointercapture", stopHold);
+
+    button.addEventListener("click", (event) => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      applyStep(direction);
+    });
+  }
+
+  bindStepperButtonHold(minusBtn, -1);
+  bindStepperButtonHold(plusBtn, 1);
 
   input.addEventListener("input", () => {
     const bounds = resolveStepperBounds(input, { inputMin, inputMax });
