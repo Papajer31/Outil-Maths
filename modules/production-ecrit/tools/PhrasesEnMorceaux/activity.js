@@ -1,6 +1,6 @@
 import {
   normalizeSettings,
-  getPhrasePoolForStudent
+  getPhrasePoolForContext
 } from "./model.js";
 
 /* =========================
@@ -75,9 +75,13 @@ export async function nextQuestion(container, ctx) {
   await injectActivityStyles();
 
   const settings = normalizeSettings(ctx?.settings);
-  const pool = getPhrasePoolForStudent(settings, ctx?.student);
+  const pool = getPhrasePoolForContext(settings, ctx);
 
   if (!Array.isArray(pool) || pool.length === 0) {
+    if (String(ctx?.runMode || "").trim() === "projected-teacher") {
+      throw new Error("Aucune phrase à afficher n’est définie pour le mode projection.");
+    }
+
     state = {
       ...createEmptyState(),
       chips: [

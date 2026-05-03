@@ -3,13 +3,21 @@ import {
   normalizeAccessCode,
   getMyTeacherSpace,
   getMyActivityByName,
-  saveActivityConfig,
-  listPublicStudentsForSpace
-} from "./users_info.js";
+  saveActivityConfig
+} from "./teacher-api.js";
+import { listPublicStudentsForSpace } from "../../shared/public-api.js";
 import {
-  getAvailableModules,
-  loadModuleRuntime
-} from "../../shared/module-registry.js";
+  getAvailableToolRoots,
+  loadToolsRuntime
+} from "../../shared/tool-root-runtime.js";
+import {
+  DEFAULT_ACTIVITY_MODE,
+  getActivityModeLabel,
+  getToolActivityModeSupport,
+  isProjectionActivityMode,
+  isStudentFacingActivityMode,
+  normalizeActivityMode
+} from "../../shared/activity-modes.js";
 import {
   TOOL_LIMITS,
   DEFAULT_TOOL_ROW,
@@ -26,40 +34,140 @@ import {
 } from "../../shared/activity-duration.js";
 import {
   renderSelectControl,
-  bindSelect
+  bindSelect,
+  renderStepperField,
+  bindStepperField,
+  refreshStepper,
+  readStepper,
+  renderInlineRadioControl,
+  bindRadio,
+  readRadio
 } from "../../shared/config-widgets.js";
+import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
+import {
+  getToolProjectionResponseUiSupport
+} from "../../shared/tool-contract.js";
+import {
+  ACTIVITY_SHARE_DISABLED_TITLE,
+  ACTIVITY_SHARE_MESSAGES,
+  isActivityShareable,
+  copyActivityShareLink,
+  openActivityShareLink,
+  downloadActivityShareQrCode
+} from "./activity-share.js";
 
-const els = {
-  btnBackDashboard: document.getElementById("btnBackDashboard"),
-  btnSaveConfig: document.getElementById("btnSaveConfig"),
-  btnAddSequenceTool: document.getElementById("btnAddSequenceTool"),
-  btnCloseToolPicker: document.getElementById("btnCloseToolPicker"),
+let els = createEditorElements();
+let mountOptions = createDefaultMountOptions();
+let editorAbortController = null;
 
-  classCodeInput: document.getElementById("classCodeInput"),
-  moduleSelectHost: document.getElementById("moduleSelectHost"),
-  configNameInput: document.getElementById("configNameInput"),
-  editorMessage: document.getElementById("editorMessage"),
-  questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
-  configRows: document.getElementById("configRows"),
+function createEditorElements(){
+  return {
+    page: document.querySelector(".cfg-page"),
+    btnBackDashboard: document.getElementById("btnBackDashboard"),
+    btnSaveConfig: document.getElementById("btnSaveConfig"),
+    btnShareActivity: document.getElementById("btnShareActivity"),
+    btnShareCopyLink: document.getElementById("btnShareCopyLink"),
+    btnShareOpenLink: document.getElementById("btnShareOpenLink"),
+    btnShareDownloadQr: document.getElementById("btnShareDownloadQr"),
+    sharePopup: document.getElementById("sharePopup"),
+    sharePopupStudentActions: document.getElementById("sharePopupStudentActions"),
+    sharePopupProjectionContent: document.getElementById("sharePopupProjectionContent"),
+    btnAddSequenceTool: document.getElementById("btnAddSequenceTool"),
+    btnCloseToolPicker: document.getElementById("btnCloseToolPicker"),
 
-  toolConfigTitle: document.getElementById("toolConfigTitle"),
-  toolConfigHost: document.getElementById("toolConfigHost"),
-  activityDurationEstimate: document.getElementById("activityDurationEstimate"),
+    classCodeInput: document.getElementById("classCodeInput"),
+    activityModeBadge: document.getElementById("activityModeBadge"),
+    configNameDisplay: document.getElementById("configNameDisplay"),
+    btnRenameConfig: document.getElementById("btnRenameConfig"),
+    btnProjectConfig: document.getElementById("btnProjectConfig"),
+    editorMessage: document.getElementById("editorMessage"),
+    questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
+    projectionResponseUiField: document.getElementById("projectionResponseUiField"),
+    projectionResponseUiSelect: document.getElementById("projectionResponseUiSelect"),
+    configRows: document.getElementById("configRows"),
 
-  toolPickerOverlay: document.getElementById("toolPickerOverlay"),
-  toolPickerTiles: document.getElementById("toolPickerTiles")
-};
+    toolConfigTitle: document.getElementById("toolConfigTitle"),
+    toolConfigHost: document.getElementById("toolConfigHost"),
+    activityDurationEstimate: document.getElementById("activityDurationEstimate"),
+    activityTotalTimeControl: document.getElementById("activityTotalTimeControl"),
+    activityTotalTimeToggleButton: document.getElementById("activityTotalTimeToggleButton"),
+    activityTotalTimePopup: document.getElementById("activityTotalTimePopup"),
+    activityTotalTimeMinutesInput: document.getElementById("activityTotalTimeMinutesInput"),
+    sequenceWarnings: document.getElementById("sequenceWarnings"),
+
+    projectedControlPanel: document.getElementById("projectedControlPanel"),
+    btnProjectedTogglePopupControls: document.getElementById("btnProjectedTogglePopupControls"),
+    projectedTogglePopupControlsIcon: document.getElementById("projectedTogglePopupControlsIcon"),
+    projectedTogglePopupControlsLabel: document.getElementById("projectedTogglePopupControlsLabel"),
+    btnProjectedQuit: document.getElementById("btnProjectedQuit"),
+    btnProjectedPrevTool: document.getElementById("btnProjectedPrevTool"),
+    btnProjectedShowAnswer: document.getElementById("btnProjectedShowAnswer"),
+    btnProjectedNextQuestion: document.getElementById("btnProjectedNextQuestion"),
+    projectedNextQuestionLabel: document.getElementById("projectedNextQuestionLabel"),
+    btnProjectedNextTool: document.getElementById("btnProjectedNextTool"),
+    btnProjectedPause: document.getElementById("btnProjectedPause"),
+    projectedPauseIcon: document.getElementById("projectedPauseIcon"),
+    projectedPauseLabel: document.getElementById("projectedPauseLabel"),
+
+    renameActivityModal: document.getElementById("renameActivityModal"),
+    renameActivityModalTitle: document.getElementById("renameActivityModalTitle"),
+    renameActivityInput: document.getElementById("renameActivityInput"),
+    renameActivityModalMessage: document.getElementById("renameActivityModalMessage"),
+    btnRenameActivityCancel: document.getElementById("btnRenameActivityCancel"),
+    btnRenameActivityConfirm: document.getElementById("btnRenameActivityConfirm"),
+
+    toolPickerOverlay: document.getElementById("toolPickerOverlay"),
+    toolPickerTiles: document.getElementById("toolPickerTiles")
+  };
+}
+
+function createDefaultMountOptions(){
+  return {
+    accessCode: "",
+    configName: "",
+    activityMode: DEFAULT_ACTIVITY_MODE,
+    folderId: "",
+    projected: null,
+    syncUrl: false,
+    onBack: null,
+    onAuthRequired: null,
+    onStateChange: null
+  };
+}
+
+function addScopedListener(target, type, handler, options = undefined){
+  if (!target?.addEventListener) return;
+
+  if (editorAbortController?.signal) {
+    const listenerOptions = options && typeof options === "object"
+      ? { ...options, signal: editorAbortController.signal }
+      : { signal: editorAbortController.signal };
+    target.addEventListener(type, handler, listenerOptions);
+    return;
+  }
+
+  target.addEventListener(type, handler, options);
+}
 
 let currentUser = null;
 let currentAccessCode = "";
 let currentConfigName = "";
+let currentConfigNameDraft = "";
 let currentTeacherSpace = null;
 let availableStudents = [];
 let saveState = "saved";
+let currentActivityMode = DEFAULT_ACTIVITY_MODE;
 
-let currentModuleKey = "maths";
+let currentModuleKey = "tools";
+let currentTargetFolderId = "";
 let availableModules = [];
 let isEditingExistingConfig = false;
+let savedConfigName = "";
+let isProjectedEditorMode = false;
+let projectedSessionLink = null;
+let projectedSessionStatus = null;
+let projectedStatusRequestTimer = null;
+let hasProjectedLiveChanges = false;
 
 let moduleRuntime = null;
 let toolsCatalog = [];
@@ -71,16 +179,164 @@ let currentToolSettingsEditor = null;
 let currentSelectedInstanceId = null;
 let activityEstimateRefreshTimer = null;
 let activityEstimateRefreshToken = 0;
+let hasToolSettingsValidationError = false;
+let activityTotalTimePopupOpen = false;
+let activityTotalTimePopupHideTimer = null;
 let dragState = {
   draggedInstanceId: "",
   dropIndex: null
 };
 
 const activityGlobals = {
-  questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec
+  questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
+  questionTransitionInfinite: DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite,
+  projectionResponseUi: DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi,
+  activityTotalTimeEnabled: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled,
+  activityTotalTimeSec: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec
 };
 
-boot();
+function resetEditorState(){
+  currentUser = null;
+  currentAccessCode = "";
+  currentConfigName = "";
+  currentConfigNameDraft = "";
+  currentTeacherSpace = null;
+  availableStudents = [];
+  saveState = "saved";
+  currentActivityMode = DEFAULT_ACTIVITY_MODE;
+
+  currentModuleKey = "tools";
+  currentTargetFolderId = "";
+  availableModules = [];
+  isEditingExistingConfig = false;
+  savedConfigName = "";
+  isProjectedEditorMode = false;
+  projectedSessionLink = null;
+  projectedSessionStatus = null;
+  projectedStatusRequestTimer = null;
+  hasProjectedLiveChanges = false;
+
+  moduleRuntime = null;
+  toolsCatalog = [];
+  toolModuleCache.clear();
+  sequenceDrafts.clear();
+  activitySequence = [];
+
+  currentToolSettingsEditor = null;
+  currentSelectedInstanceId = null;
+  activityEstimateRefreshTimer = null;
+  activityEstimateRefreshToken = 0;
+  hasToolSettingsValidationError = false;
+  activityTotalTimePopupOpen = false;
+  activityTotalTimePopupHideTimer = null;
+  dragState = {
+    draggedInstanceId: "",
+    dropIndex: null
+  };
+
+  activityGlobals.questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec;
+  activityGlobals.questionTransitionInfinite = DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite;
+  activityGlobals.projectionResponseUi = DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi;
+  activityGlobals.activityTotalTimeEnabled = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled;
+  activityGlobals.activityTotalTimeSec = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec;
+}
+
+function getInitialRouteParams(){
+  const params = new URLSearchParams(window.location.search);
+  const explicitProjected = mountOptions.projected === true || mountOptions.projected === false
+    ? mountOptions.projected
+    : null;
+
+  return {
+    accessCode: normalizeAccessCode(
+      mountOptions.accessCode || params.get("accessCode") || params.get("classCode")
+    ),
+    configName: String(mountOptions.configName || params.get("configName") || "").trim(),
+    activityMode: normalizeActivityMode(mountOptions.activityMode, DEFAULT_ACTIVITY_MODE),
+    folderId: normalizeOptionalFolderId(mountOptions.folderId || params.get("folderId") || ""),
+    projected: explicitProjected ?? (params.get("projected") === "1")
+  };
+}
+
+function normalizeOptionalFolderId(value){
+  const safeValue = String(value || "").trim();
+  return safeValue || "";
+}
+
+function getEditorPublicState(){
+  return {
+    accessCode: currentAccessCode,
+    configName: currentConfigName,
+    activityMode: currentActivityMode,
+    moduleKey: currentModuleKey,
+    projected: isProjectedEditorMode,
+    saveState,
+    hasProjectedLiveChanges,
+    isEditingExistingConfig
+  };
+}
+
+function notifyEditorStateChange(){
+  mountOptions.onStateChange?.(getEditorPublicState());
+}
+
+export function hasConfigEditorPendingChanges(){
+  return saveState !== "saved" || hasProjectedLiveChanges;
+}
+
+export function getConfigEditorLeaveWarningMessage(){
+  if (!hasConfigEditorPendingChanges()) return "";
+
+  if (isProjectedEditorMode || hasProjectedLiveChanges) {
+    return "Des modifications non enregistrées ou seulement envoyées à la projection existent. Quitter l’éditeur ?";
+  }
+
+  return "Des modifications non enregistrées existent. Quitter l’éditeur ?";
+}
+
+export function destroyConfigEditor(){
+  if (activityEstimateRefreshTimer) {
+    clearTimeout(activityEstimateRefreshTimer);
+    activityEstimateRefreshTimer = null;
+  }
+  clearActivityTotalTimePopupAutoClose();
+
+  closeSharePopup();
+  closeRenameActivityModal();
+  closeToolPicker();
+  teardownProjectedSessionLink();
+  clearToolHeaderControls();
+
+  try {
+    editorAbortController?.abort();
+  } catch {}
+
+  editorAbortController = null;
+  mountOptions = createDefaultMountOptions();
+  els = createEditorElements();
+  resetEditorState();
+}
+
+export async function mountConfigEditor(options = {}){
+  destroyConfigEditor();
+
+  mountOptions = {
+    ...createDefaultMountOptions(),
+    ...(options || {})
+  };
+  els = createEditorElements();
+  editorAbortController = new AbortController();
+  resetEditorState();
+
+  await boot();
+
+  return {
+    destroy: destroyConfigEditor,
+    getState: getEditorPublicState,
+    hasPendingChanges: hasConfigEditorPendingChanges,
+    getLeaveWarningMessage: getConfigEditorLeaveWarningMessage
+  };
+}
 
 async function boot(){
   setMessage("Chargement…");
@@ -88,15 +344,22 @@ async function boot(){
   try {
     currentUser = await getCurrentUser();
     if (!currentUser){
+      mountOptions.onAuthRequired?.();
+      if (mountOptions.onAuthRequired) {
+        return;
+      }
       window.location.href = "login.html";
       return;
     }
 
-    const params = new URLSearchParams(window.location.search);
-    currentAccessCode = normalizeAccessCode(
-      params.get("accessCode") || params.get("classCode")
-    );
-    currentConfigName = String(params.get("configName") || "").trim();
+    const initialParams = getInitialRouteParams();
+    currentAccessCode = initialParams.accessCode;
+    currentConfigName = initialParams.configName;
+    currentConfigNameDraft = currentConfigName;
+    savedConfigName = currentConfigName;
+    currentActivityMode = normalizeActivityMode(initialParams.activityMode, DEFAULT_ACTIVITY_MODE);
+    currentTargetFolderId = normalizeOptionalFolderId(initialParams.folderId);
+    isProjectedEditorMode = initialParams.projected === true;
 
     if (!currentAccessCode){
       setFatalState("Code de connexion manquant.");
@@ -125,9 +388,9 @@ async function boot(){
       return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
     });
 
-    availableModules = getAvailableModules();
+    availableModules = getAvailableToolRoots();
     if (!Array.isArray(availableModules) || availableModules.length === 0){
-      setFatalState("Aucun module disponible.");
+      setFatalState("Aucun outil disponible.");
       return;
     }
 
@@ -135,13 +398,20 @@ async function boot(){
 
     if (currentConfigName){
       existingConfig = await getMyActivityByName(currentTeacherSpace.id, currentConfigName);
-
-      if (existingConfig?.module_key){
-        currentModuleKey = existingConfig.module_key;
-      }
-
-      isEditingExistingConfig = !!existingConfig;
     }
+
+    if (existingConfig?.module_key){
+      currentModuleKey = existingConfig.module_key;
+    }
+
+    if (existingConfig?.config_json) {
+      currentActivityMode = normalizeActivityMode(
+        existingConfig.config_json.activity_mode,
+        currentActivityMode
+      );
+    }
+
+    isEditingExistingConfig = !!existingConfig;
 
     await reloadCurrentModule();
 
@@ -149,73 +419,449 @@ async function boot(){
       loadExistingConfig(existingConfig);
     }
 
-    renderModuleSelect();
     renderMeta();
     renderGlobals();
+    syncShareUi();
     renderToolPickerTiles();
     renderConfigTable();
     bindEvents();
+    syncProjectedEditorUi();
+    setupProjectedSessionLink();
+
+    if (activitySequence.length > 0) {
+      try {
+        await openToolSettings(activitySequence[0].instanceId);
+      } catch (err) {
+        setMessage(err?.message || "Impossible d’ouvrir les réglages du premier outil.", true);
+      }
+    }
+
     await refreshActivityDurationEstimate();
 
-    setMessage("");
+    if (!els.editorMessage?.textContent) {
+      setMessage(isProjectedEditorMode ? "Projection active : la séquence est figée." : "");
+    }
   } catch (err) {
     setFatalState(err?.message || "Impossible d’ouvrir l’éditeur.");
   }
 
   setSaveState("saved");
+  notifyEditorStateChange();
 }
 
 function loadExistingConfig(existing){
   const safeConfig = existing?.config_json;
+  const safeConfigName = String(existing?.config_name || currentConfigName || "").trim();
+  if (safeConfigName) {
+    currentConfigName = safeConfigName;
+    currentConfigNameDraft = safeConfigName;
+    savedConfigName = safeConfigName;
+  }
 
-  if (!safeConfig?.sequence && !safeConfig?.drafts){
-    setMessage("Configuration introuvable, création d’une nouvelle base.", true);
+  currentActivityMode = normalizeActivityMode(
+    existing?.activity_mode ?? safeConfig?.activity_mode,
+    currentActivityMode
+  );
+
+  if (!Array.isArray(safeConfig?.sequence)){
+    setMessage("Configuration invalide : séquence manquante ou mal formée.", true);
+    applyRemoteGlobals(safeConfig?.globals);
+    applyRemoteSequence([]);
     return;
   }
 
   applyRemoteGlobals(safeConfig.globals);
-  applyRemoteSequence(safeConfig.sequence, safeConfig.drafts);
+  applyRemoteSequence(safeConfig.sequence);
 }
 
 function renderMeta(){
-  if (els.classCodeInput){
-    els.classCodeInput.value = currentAccessCode;
+  if (els.configNameDisplay){
+    const safeName = String(currentConfigNameDraft || currentConfigName || "").trim();
+    const displayName = safeName || "Activité sans nom";
+    els.configNameDisplay.textContent = displayName;
+    els.configNameDisplay.classList.toggle("is-empty", !safeName);
+    els.configNameDisplay.title = safeName || "Nom de l’activité à définir";
   }
 
-  if (els.configNameInput){
-    els.configNameInput.value = currentConfigName;
+  renderActivityModeBadge();
+  syncProjectionLaunchUi();
+  syncRenameUi();
+  syncShareUi();
+}
+
+function renderActivityModeBadge(){
+  if (!els.activityModeBadge) return;
+
+  const safeMode = normalizeActivityMode(currentActivityMode, DEFAULT_ACTIVITY_MODE);
+  els.activityModeBadge.textContent = getActivityModeLabel(safeMode);
+  els.activityModeBadge.dataset.activityMode = safeMode;
+}
+
+function openProjectedSessionPopup({ accessCode, configName }){
+  const cleanAccessCode = normalizeAccessCode(accessCode);
+  const cleanConfigName = String(configName || "").trim();
+
+  if (!cleanAccessCode || !cleanConfigName) return null;
+
+  const hashParams = new URLSearchParams();
+  hashParams.set("projected", "1");
+  hashParams.set("classCode", cleanAccessCode);
+  hashParams.set("configName", cleanConfigName);
+
+  const popupUrl = `../index.html#/sessionstart?${hashParams.toString()}`;
+  const popupFeatures = [
+    "popup=yes",
+    "width=1400",
+    "height=900",
+    "menubar=no",
+    "toolbar=no",
+    "location=no",
+    "status=no",
+    "resizable=yes",
+    "scrollbars=yes"
+  ].join(",");
+
+  const popup = window.open(popupUrl, "projectedTeacherSession", popupFeatures);
+
+  if (!popup) {
+    alert("La fenêtre de projection a été bloquée par le navigateur.");
+    return null;
+  }
+
+  try {
+    popup.focus();
+  } catch {}
+
+  return popup;
+}
+
+function syncProjectionLaunchUi(){
+  const button = els.btnProjectConfig;
+  if (!button) return;
+
+  const canProject = isProjectionActivityMode(currentActivityMode)
+    && !isProjectedEditorMode
+    && Boolean(String(currentConfigName || "").trim());
+
+  button.hidden = !canProject;
+  button.disabled = !canProject;
+}
+
+function hasShareableActivity(){
+  return isActivityShareable({
+    accessCode: currentAccessCode,
+    configName: currentConfigName
+  });
+}
+
+function syncEditorUrl(){
+  if (!mountOptions.syncUrl) {
+    notifyEditorStateChange();
+    return;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("classCode", currentAccessCode);
+
+    if (currentConfigName) {
+      url.searchParams.set("configName", currentConfigName);
+    } else {
+      url.searchParams.delete("configName");
+    }
+
+    if (isProjectedEditorMode) {
+      url.searchParams.set("projected", "1");
+    } else {
+      url.searchParams.delete("projected");
+    }
+
+    history.replaceState({}, "", url.toString());
+  } catch {}
+
+  notifyEditorStateChange();
+}
+
+function syncShareUi(){
+  const canShare = hasShareableActivity();
+  const isStudentFacingMode = isStudentFacingActivityMode(currentActivityMode);
+  const shareTitle = canShare
+    ? isProjectionActivityMode(currentActivityMode)
+      ? "Partager l’activité Projection"
+      : "Partager l’activité"
+    : ACTIVITY_SHARE_DISABLED_TITLE;
+
+  if (els.btnShareActivity) {
+    els.btnShareActivity.disabled = !canShare;
+    els.btnShareActivity.title = shareTitle;
+    els.btnShareActivity.setAttribute("aria-expanded", isSharePopupOpen() ? "true" : "false");
+  }
+
+  els.sharePopupStudentActions?.classList.toggle("hidden", !isStudentFacingMode);
+  els.sharePopupProjectionContent?.classList.toggle("hidden", isStudentFacingMode);
+
+  if (!canShare) {
+    closeSharePopup();
+  }
+}
+
+function syncRenameUi(){
+  if (!els.btnRenameConfig) return;
+
+  const isBusySaving = saveState === "saving";
+  const isBlocked = isProjectedEditorMode || isBusySaving;
+  els.btnRenameConfig.disabled = isBlocked;
+  els.btnRenameConfig.title = isProjectedEditorMode
+    ? "Le nom est figé pendant la projection"
+    : isBusySaving
+      ? "Enregistrement en cours"
+      : "Renommer l’activité";
+}
+
+function isRenameActivityModalOpen(){
+  return !!els.renameActivityModal && !els.renameActivityModal.classList.contains("hidden");
+}
+
+function openRenameActivityModal(){
+  if (isProjectedEditorMode || saveState === "saving") return;
+  if (!els.renameActivityModal || !els.renameActivityInput) return;
+  if (isRenameActivityModalOpen()) return;
+
+  closeSharePopup();
+
+  const initialName = String(currentConfigNameDraft || currentConfigName || "").trim();
+  if (els.renameActivityModalTitle) {
+    els.renameActivityModalTitle.textContent = initialName
+      ? "Renommer l’activité"
+      : "Nommer l’activité";
+  }
+
+  els.renameActivityInput.value = initialName;
+  els.renameActivityModalMessage.textContent = "";
+  els.renameActivityModalMessage.classList.remove("is-error");
+  els.renameActivityModal.classList.remove("hidden");
+  els.renameActivityModal.setAttribute("aria-hidden", "false");
+
+  window.setTimeout(() => {
+    els.renameActivityInput?.focus();
+    els.renameActivityInput?.select();
+  }, 0);
+}
+
+function closeRenameActivityModal(){
+  if (!els.renameActivityModal) return;
+
+  els.renameActivityModal.classList.add("hidden");
+  els.renameActivityModal.setAttribute("aria-hidden", "true");
+  if (els.renameActivityModalMessage) {
+    els.renameActivityModalMessage.textContent = "";
+    els.renameActivityModalMessage.classList.remove("is-error");
+  }
+}
+
+function submitRenameActivityModal(){
+  if (!els.renameActivityInput || !els.renameActivityModalMessage) return;
+
+  const nextName = String(els.renameActivityInput.value || "").trim();
+  const currentName = String(currentConfigNameDraft || currentConfigName || "").trim();
+
+  if (!nextName) {
+    els.renameActivityModalMessage.textContent = "Entre un nom d’activité.";
+    els.renameActivityModalMessage.classList.add("is-error");
+    els.renameActivityInput.focus();
+    return;
+  }
+
+  if (nextName === currentName) {
+    closeRenameActivityModal();
+    return;
+  }
+
+  currentConfigNameDraft = nextName;
+  renderMeta();
+  setSaveState("dirty");
+  setMessage("");
+  closeRenameActivityModal();
+}
+
+function isSharePopupOpen(){
+  return !els.sharePopup?.classList.contains("hidden");
+}
+
+function openSharePopup(){
+  if (!hasShareableActivity() || !els.sharePopup) return;
+  els.sharePopup.classList.remove("hidden");
+  els.btnShareActivity?.setAttribute("aria-expanded", "true");
+}
+
+function closeSharePopup(){
+  els.sharePopup?.classList.add("hidden");
+  els.btnShareActivity?.setAttribute("aria-expanded", "false");
+}
+
+function toggleSharePopup(){
+  if (isSharePopupOpen()) {
+    closeSharePopup();
+    return;
+  }
+  openSharePopup();
+}
+
+async function copySharedActivityLink(){
+  try {
+    await copyActivityShareLink({
+      accessCode: currentAccessCode,
+      configName: currentConfigName
+    });
+    setMessage(ACTIVITY_SHARE_MESSAGES.copied);
+    closeSharePopup();
+  } catch (err) {
+    setMessage(ACTIVITY_SHARE_MESSAGES.copyError, true);
+  }
+}
+
+function openSharedActivityLink(){
+  if (!hasShareableActivity()) return;
+  openActivityShareLink({
+    accessCode: currentAccessCode,
+    configName: currentConfigName
+  });
+  closeSharePopup();
+}
+
+async function downloadSharedActivityQrCode(){
+  try {
+    setMessage(ACTIVITY_SHARE_MESSAGES.qrLoading);
+    await downloadActivityShareQrCode({
+      accessCode: currentAccessCode,
+      configName: currentConfigName
+    });
+    setMessage(ACTIVITY_SHARE_MESSAGES.qrDownloaded);
+    closeSharePopup();
+  } catch (err) {
+    setMessage(ACTIVITY_SHARE_MESSAGES.qrError, true);
   }
 }
 
 function bindEvents(){
-  els.btnBackDashboard?.addEventListener("click", goBackDashboard);
-  els.btnSaveConfig?.addEventListener("click", saveCurrentConfig);
-  els.btnAddSequenceTool?.addEventListener("click", openToolPicker);
-  els.btnCloseToolPicker?.addEventListener("click", closeToolPicker);
+  addScopedListener(els.btnBackDashboard, "click", goBackDashboard);
+  addScopedListener(els.btnSaveConfig, "click", handlePrimaryAction);
+  addScopedListener(els.btnRenameConfig, "click", () => {
+    openRenameActivityModal();
+  });
+  addScopedListener(els.btnProjectConfig, "click", () => {
+    if (!isProjectionActivityMode(currentActivityMode) || isProjectedEditorMode) return;
 
-  els.toolPickerOverlay?.addEventListener("click", (event) => {
+    const popup = openProjectedSessionPopup({
+      accessCode: currentAccessCode,
+      configName: currentConfigName
+    });
+
+    if (!popup) return;
+
+    isProjectedEditorMode = true;
+    setSaveState(saveState);
+    setupProjectedSessionLink();
+    syncProjectedEditorUi();
+    syncEditorUrl();
+
+    if (!els.editorMessage?.textContent) {
+      setMessage("Projection active : la séquence est figée.");
+    }
+  });
+  addScopedListener(els.btnShareActivity, "click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSharePopup();
+  });
+  addScopedListener(els.btnShareCopyLink, "click", () => {
+    void copySharedActivityLink();
+  });
+  addScopedListener(els.btnShareOpenLink, "click", () => {
+    openSharedActivityLink();
+  });
+  addScopedListener(els.btnShareDownloadQr, "click", () => {
+    void downloadSharedActivityQrCode();
+  });
+  addScopedListener(els.btnAddSequenceTool, "click", () => {
+    if (isProjectedEditorMode) return;
+    openToolPicker();
+  });
+  addScopedListener(els.btnCloseToolPicker, "click", closeToolPicker);
+  addScopedListener(els.btnRenameActivityCancel, "click", closeRenameActivityModal);
+  addScopedListener(els.btnRenameActivityConfirm, "click", () => {
+    submitRenameActivityModal();
+  });
+
+  addScopedListener(els.toolPickerOverlay, "click", (event) => {
     if (event.target.closest("[data-close-tool-picker='true']")) {
       closeToolPicker();
     }
   });
 
-  els.configRows?.addEventListener("dragover", handleSequenceDragOver);
-  els.configRows?.addEventListener("dragleave", handleSequenceDragLeave);
-  els.configRows?.addEventListener("drop", handleSequenceDrop);
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && isToolPickerOpen()) {
-      closeToolPicker();
+  addScopedListener(els.renameActivityModal, "click", (event) => {
+    if (event.target === els.renameActivityModal) {
+      closeRenameActivityModal();
     }
   });
 
-  els.configNameInput?.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    saveCurrentConfig();
+  addScopedListener(els.configRows, "dragover", handleSequenceDragOver);
+  addScopedListener(els.configRows, "dragleave", handleSequenceDragLeave);
+  addScopedListener(els.configRows, "drop", handleSequenceDrop);
+
+  addScopedListener(els.btnProjectedTogglePopupControls, "click", () => {
+    const visible = projectedSessionStatus?.controlsHidden === true;
+    sendProjectedCommand("set-controls-visible", { visible });
+  });
+  addScopedListener(els.btnProjectedQuit, "click", () => sendProjectedCommand("close"));
+  addScopedListener(els.btnProjectedPrevTool, "click", () => sendProjectedCommand("go-prev-tool"));
+  addScopedListener(els.btnProjectedShowAnswer, "click", () => {
+    const actionKind = String(projectedSessionStatus?.projectedPrimaryActionKind || "answer");
+    sendProjectedCommand(actionKind === "validate" ? "validate" : "show-answer");
+  });
+  addScopedListener(els.btnProjectedNextQuestion, "click", () => sendProjectedCommand("next-question"));
+  addScopedListener(els.btnProjectedNextTool, "click", () => sendProjectedCommand("go-next-tool"));
+  addScopedListener(els.btnProjectedPause, "click", () => {
+    const command = projectedSessionStatus?.paused ? "resume" : "pause";
+    sendProjectedCommand(command);
   });
 
-  els.questionTransitionSecInput?.addEventListener("input", () => {
+  addScopedListener(document, "keydown", (event) => {
+    if (event.key === "Escape" && isRenameActivityModalOpen()) {
+      closeRenameActivityModal();
+      return;
+    }
+
+    if (event.key === "Escape" && isToolPickerOpen()) {
+      closeToolPicker();
+      return;
+    }
+
+    if (event.key === "Escape" && isSharePopupOpen()) {
+      closeSharePopup();
+    }
+  });
+
+  addScopedListener(document, "pointerdown", (event) => {
+    if (!isSharePopupOpen()) return;
+    if (els.sharePopup?.contains(event.target) || els.btnShareActivity?.contains(event.target)) return;
+    closeSharePopup();
+  });
+
+  addScopedListener(els.renameActivityModal, "keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeRenameActivityModal();
+      return;
+    }
+
+    if (event.key === "Enter" && event.target === els.renameActivityInput) {
+      event.preventDefault();
+      submitRenameActivityModal();
+    }
+  });
+
+  addScopedListener(els.questionTransitionSecInput, "input", () => {
     activityGlobals.questionTransitionSec = clampInt(
       els.questionTransitionSecInput.value,
       TOOL_LIMITS.questionTransitionSec.min,
@@ -225,7 +871,7 @@ function bindEvents(){
     scheduleActivityDurationEstimate();
   });
 
-  els.questionTransitionSecInput?.addEventListener("change", () => {
+  addScopedListener(els.questionTransitionSecInput, "change", () => {
     const value = clampInt(
       els.questionTransitionSecInput.value,
       TOOL_LIMITS.questionTransitionSec.min,
@@ -237,19 +883,74 @@ function bindEvents(){
     scheduleActivityDurationEstimate();
   });
 
-  els.configNameInput?.addEventListener("input", () => setSaveState("dirty"));
+  addScopedListener(els.projectionResponseUiSelect, "change", () => {
+    activityGlobals.projectionResponseUi = normalizeActivityGlobals({
+      projectionResponseUi: els.projectionResponseUiSelect?.value
+    }).projectionResponseUi;
 
-  els.toolConfigHost?.addEventListener("input", () => {
+    if (els.projectionResponseUiSelect) {
+      els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
+    }
+
     setSaveState("dirty");
     scheduleActivityDurationEstimate();
   });
 
-  els.toolConfigHost?.addEventListener("change", () => {
+
+  bindStepperField(els.activityTotalTimeControl || document, "activityTotalTimeMinutesInput", {
+    inputMin: getActivityTotalTimeMinuteLimits().min,
+    inputMax: getActivityTotalTimeMinuteLimits().max
+  });
+
+  addScopedListener(els.activityTotalTimeToggleButton, "click", () => {
+    if (activityGlobals.activityTotalTimeEnabled === true && !activityTotalTimePopupOpen) {
+      activityTotalTimePopupOpen = true;
+      syncActivityTotalTimeUi();
+      return;
+    }
+
+    persistCurrentToolSettings();
+    activityGlobals.activityTotalTimeEnabled = activityGlobals.activityTotalTimeEnabled !== true;
+    activityTotalTimePopupOpen = activityGlobals.activityTotalTimeEnabled === true;
+    syncActivityTotalTimeUi();
+    renderConfigTable();
+    setSaveState("dirty");
+    scheduleActivityDurationEstimate();
+    rerenderCurrentToolSettingsPanel();
+  });
+
+  addScopedListener(els.activityTotalTimeMinutesInput, "input", () => {
+    activityGlobals.activityTotalTimeSec = readActivityTotalTimeSecFromInput();
+    syncActivityTotalTimeUi({ preserveInput: true });
     setSaveState("dirty");
     scheduleActivityDurationEstimate();
   });
 
-  els.toolConfigHost?.addEventListener("click", (event) => {
+  addScopedListener(els.activityTotalTimeMinutesInput, "change", () => {
+    activityGlobals.activityTotalTimeSec = readActivityTotalTimeSecFromInput();
+    syncActivityTotalTimeUi();
+    setSaveState("dirty");
+    scheduleActivityDurationEstimate();
+  });
+
+  ["pointerdown", "input", "keydown", "focusin"].forEach((eventName) => {
+    addScopedListener(els.activityTotalTimePopup, eventName, scheduleActivityTotalTimePopupAutoClose);
+  });
+
+  addScopedListener(window, "resize", positionActivityTotalTimePopup, { passive: true });
+  addScopedListener(document, "scroll", positionActivityTotalTimePopup, { passive: true, capture: true });
+
+  addScopedListener(els.toolConfigHost, "input", () => {
+    setSaveState("dirty");
+    scheduleActivityDurationEstimate();
+  });
+
+  addScopedListener(els.toolConfigHost, "change", () => {
+    setSaveState("dirty");
+    scheduleActivityDurationEstimate();
+  });
+
+  addScopedListener(els.toolConfigHost, "click", (event) => {
     if (!event.target.closest("[data-paste]")) return;
 
     window.requestAnimationFrame(() => {
@@ -257,54 +958,10 @@ function bindEvents(){
       scheduleActivityDurationEstimate();
     });
   });
-}
 
-function renderModuleSelect(){
-  if (!els.moduleSelectHost) return;
-
-  const options = availableModules.map((mod) => ({
-    value: mod.key,
-    label: mod.label
-  }));
-
-  els.moduleSelectHost.innerHTML = renderSelectControl({
-    id: "moduleSelect",
-    value: currentModuleKey,
-    options,
-    disabled: isEditingExistingConfig,
-    rootClassName: "cfg-module-select"
+  addScopedListener(els.toolConfigHost, "toolsettingsrefresh", () => {
+    persistCurrentToolSettings();
   });
-
-  if (isEditingExistingConfig) {
-    return;
-  }
-
-  bindSelect(els.moduleSelectHost, "moduleSelect", {
-    onChange: (nextModuleKey) => {
-      handleModuleSelectionChange(nextModuleKey).catch((err) => {
-        setMessage(err?.message || "Impossible de charger ce module.", true);
-        renderModuleSelect();
-      });
-    }
-  });
-}
-
-async function handleModuleSelectionChange(nextModuleKey){
-  const safeNextModuleKey = String(nextModuleKey || "").trim();
-  if (!safeNextModuleKey || safeNextModuleKey === currentModuleKey) return;
-
-  persistCurrentToolSettings();
-
-  currentModuleKey = safeNextModuleKey;
-  await reloadCurrentModule();
-  renderModuleSelect();
-  renderMeta();
-  renderGlobals();
-  renderToolPickerTiles();
-  renderConfigTable();
-  scheduleActivityDurationEstimate();
-  setMessage("");
-  setSaveState("dirty");
 }
 
 async function reloadCurrentModule(){
@@ -316,12 +973,31 @@ async function reloadCurrentModule(){
   sequenceDrafts.clear();
   activitySequence = [];
 
-  moduleRuntime = loadModuleRuntime(currentModuleKey);
+  moduleRuntime = await loadToolsRuntime(currentModuleKey);
   toolsCatalog = await moduleRuntime.loadToolsCatalog();
 
   if (!Array.isArray(toolsCatalog)) {
     toolsCatalog = [];
+    return;
   }
+
+  toolsCatalog = await Promise.all(toolsCatalog.map(async (toolMeta) => {
+    const mod = await loadToolModule(toolMeta.id);
+    const tool = mod.default ?? {};
+    const modeSupport = getToolActivityModeSupport(tool, {
+      activityMode: currentActivityMode,
+      accessCode: currentAccessCode,
+      moduleKey: currentModuleKey,
+      toolId: toolMeta.id,
+      settings: getToolDefaultSettings(tool)
+    });
+
+    return {
+      ...toolMeta,
+      supportedActivityModes: modeSupport.supportedModes,
+      compatibleWithCurrentMode: modeSupport.compatible
+    };
+  }));
 }
 
 function renderConfigTable(){
@@ -334,6 +1010,7 @@ function renderConfigTable(){
       </div>
     `;
 
+    renderSequenceWarnings();
     renderEmptyToolPanel();
     return;
   }
@@ -354,13 +1031,18 @@ function renderConfigTable(){
     row.classList.toggle("active", currentSelectedInstanceId === item.instanceId);
 
     row.addEventListener("click", () => {
-      openToolSettings(item.instanceId).catch((err) => {
+      openToolSettings(item.instanceId).then(() => {
+        if (isProjectedEditorMode) {
+          sendProjectedCommand("go-to-instance", { instanceId: item.instanceId });
+        }
+      }).catch((err) => {
         setMessage(err?.message || "Impossible d’ouvrir les réglages outil.", true);
       });
     });
 
     btnDelete.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (isProjectedEditorMode) return;
       removeSequenceItem(item.instanceId);
     });
 
@@ -369,19 +1051,25 @@ function renderConfigTable(){
   });
 
   renderConfigTableSelectionState();
+  renderSequenceWarnings();
+  syncProjectedEditorUi();
 }
 
 function configRowHTML(item, label){
   const safeId = cssSafeId(item.instanceId);
+  const deleteDisabled = isProjectedEditorMode ? ' disabled aria-disabled="true"' : "";
+  const rowDraggable = isProjectedEditorMode ? "false" : "true";
+  const isFinalInfinite = isFinalInfiniteSequenceItem(item);
 
   return `
-    <div class="cfg-tool-row" id="row_${safeId}" draggable="true">
+    <div class="cfg-tool-row${isFinalInfinite ? " is-final-infinite" : ""}" id="row_${safeId}" draggable="${rowDraggable}">
       <div class="cfg-tool-grip" aria-hidden="true">⋮⋮</div>
       <div class="cfg-tool-main">
         <div class="cfg-tool-name">${escapeHtml(label.title)}</div>
         ${label.subtitle ? `<div class="cfg-tool-subtitle">${escapeHtml(label.subtitle)}</div>` : ""}
+        ${isFinalInfinite ? `<div class="cfg-tool-subtitle cfg-tool-final-infinite-badge">Défi final — questions à l’infini</div>` : ""}
       </div>
-      <button class="btn btn-icon cfg-tool-action cfg-tool-delete" type="button" id="delete_${safeId}" aria-label="Supprimer ${escapeHtml(label.title)}"><span class="cfg-material-icon" aria-hidden="true">delete</span></button>
+      <button class="btn btn-icon cfg-tool-action cfg-tool-delete" type="button" id="delete_${safeId}" aria-label="Supprimer ${escapeHtml(label.title)}"${deleteDisabled}><span class="cfg-material-icon" aria-hidden="true">delete</span></button>
     </div>
   `;
 }
@@ -389,16 +1077,18 @@ function configRowHTML(item, label){
 function renderToolPickerTiles(){
   if (!els.toolPickerTiles) return;
 
-  if (!toolsCatalog.length) {
+  const compatibleTools = toolsCatalog.filter((tool) => tool?.compatibleWithCurrentMode !== false);
+
+  if (!compatibleTools.length) {
     els.toolPickerTiles.innerHTML = `
       <div class="cfg-empty-state">
-        Aucun outil disponible dans ce module.
+        Aucun outil disponible en mode ${escapeHtml(getActivityModeLabel(currentActivityMode).toLowerCase())} dans le catalogue d’outils.
       </div>
     `;
     return;
   }
 
-  els.toolPickerTiles.innerHTML = toolsCatalog.map((tool) => `
+  els.toolPickerTiles.innerHTML = compatibleTools.map((tool) => `
     <button class="cfg-tool-picker-tile" type="button" data-tool-id="${escapeHtml(tool.id)}">
       <div class="cfg-tool-picker-tile-title">${escapeHtml(tool.title)}</div>
     </button>
@@ -415,6 +1105,7 @@ function renderToolPickerTiles(){
 }
 
 function openToolPicker(){
+  if (isProjectedEditorMode) return;
   renderToolPickerTiles();
   els.toolPickerOverlay?.classList.remove("hidden");
   els.toolPickerOverlay?.setAttribute("aria-hidden", "false");
@@ -430,12 +1121,18 @@ function isToolPickerOpen(){
 }
 
 async function addToolToSequence(toolId){
+  if (isProjectedEditorMode) return;
+
   const safeToolId = String(toolId || "").trim();
   if (!safeToolId) return;
 
   const toolMeta = getToolMeta(safeToolId);
   if (!toolMeta) {
-    throw new Error("Outil introuvable dans ce module.");
+    throw new Error("Outil introuvable dans le catalogue d’outils.");
+  }
+
+  if (toolMeta.compatibleWithCurrentMode === false) {
+    throw new Error(`Cet outil n’est pas disponible en mode ${getActivityModeLabel(currentActivityMode).toLowerCase()}.`);
   }
 
   persistCurrentToolSettings();
@@ -467,6 +1164,8 @@ async function addToolToSequence(toolId){
 }
 
 function removeSequenceItem(instanceId){
+  if (isProjectedEditorMode) return;
+
   const safeInstanceId = String(instanceId || "").trim();
   if (!safeInstanceId) return;
 
@@ -501,6 +1200,11 @@ function removeSequenceItem(instanceId){
 }
 
 function handleRowDragStart(event, instanceId) {
+  if (isProjectedEditorMode) {
+    event.preventDefault();
+    return;
+  }
+
   dragState.draggedInstanceId = instanceId;
   dragState.dropIndex = null;
 
@@ -515,6 +1219,7 @@ function handleRowDragEnd(event) {
 }
 
 function handleSequenceDragOver(event) {
+  if (isProjectedEditorMode) return;
   if (!dragState.draggedInstanceId || !els.configRows) {
     return;
   }
@@ -527,6 +1232,7 @@ function handleSequenceDragOver(event) {
 }
 
 function handleSequenceDragLeave(event) {
+  if (isProjectedEditorMode) return;
   if (!els.configRows) return;
   const relatedTarget = event.relatedTarget;
   if (relatedTarget instanceof Node && els.configRows.contains(relatedTarget)) return;
@@ -534,6 +1240,7 @@ function handleSequenceDragLeave(event) {
 }
 
 function handleSequenceDrop(event) {
+  if (isProjectedEditorMode) return;
   if (!dragState.draggedInstanceId) return;
 
   event.preventDefault();
@@ -605,6 +1312,8 @@ function renderSequenceDropIndicator(dropIndex) {
 }
 
 function moveSequenceItemToIndex(draggedInstanceId, dropIndex) {
+  if (isProjectedEditorMode) return;
+
   const safeDraggedId = String(draggedInstanceId || "").trim();
   if (!safeDraggedId) return;
 
@@ -646,7 +1355,25 @@ async function openToolSettings(instanceId){
     draft.settings = getToolDefaultSettings(tool);
   }
 
-  currentToolSettingsEditor = { instanceId: entry.instanceId, toolId: entry.toolId, tool };
+  const modeSupport = getToolActivityModeSupport(tool, {
+    activityMode: currentActivityMode,
+    accessCode: currentAccessCode,
+    teacherSpace: cloneData(currentTeacherSpace),
+    moduleKey: currentModuleKey,
+    configName: currentConfigName,
+    globals: serializeGlobals(),
+    projectionResponseUi: activityGlobals.projectionResponseUi,
+    toolId: entry.toolId,
+    toolInstanceId: entry.instanceId,
+    settings: cloneData(draft.settings)
+  });
+
+  currentToolSettingsEditor = {
+    instanceId: entry.instanceId,
+    toolId: entry.toolId,
+    tool,
+    modeSupport
+  };
   renderConfigTableSelectionState();
   injectSharedToolHeaderStyles();
 
@@ -665,21 +1392,46 @@ async function openToolSettings(instanceId){
   const host = els.toolConfigHost;
   if (!host) return;
 
+  if (!modeSupport.compatible) {
+    host.innerHTML = `
+      <div class="cfg-empty-state">
+        ${escapeHtml(modeSupport.blockingMessage || `Cet outil n’est pas disponible en mode ${getActivityModeLabel(currentActivityMode).toLowerCase()}.`)}
+      </div>
+    `;
+    scheduleActivityDurationEstimate();
+    return;
+  }
+
+  const showCommonToolSettings = modeSupport.supportsCommonFlowSettings !== false;
+  const showSpecificToolSettings = modeSupport.showSpecificToolSettings !== false;
+
   const commonSettingsHtml =
-    typeof moduleRuntime?.renderCommonToolSettings === "function"
+    showCommonToolSettings && typeof moduleRuntime?.renderCommonToolSettings === "function"
       ? (moduleRuntime.renderCommonToolSettings(cloneData(draft), getToolEditorContext(entry.instanceId)) || "")
       : "";
 
+  const showProjectionResponseUiRow = shouldShowProjectionResponseUiRow(tool, getToolEditorContext(entry.instanceId));
+  const combinedCommonSettingsHtml = showCommonToolSettings
+    ? buildCombinedCommonFlowSettingsHtml({
+        baseHtml: commonSettingsHtml,
+        questionTransitionSec: activityGlobals.questionTransitionSec,
+        questionTransitionInfinite: activityGlobals.questionTransitionInfinite,
+        showProjectionResponseUiRow,
+        projectionResponseUi: activityGlobals.projectionResponseUi
+      })
+    : "";
+
   host.innerHTML = `
     <div class="cfg-tool-settings-stack">
-      ${commonSettingsHtml}
+      ${combinedCommonSettingsHtml ? `<div id="toolCommonSettingsHost">${combinedCommonSettingsHtml}</div>` : ""}
       <div id="toolSpecificSettingsHost"></div>
     </div>
   `;
 
+  const commonSettingsHost = host.querySelector("#toolCommonSettingsHost");
   const settingsHost = getSpecificToolSettingsHost(host);
 
-  if (typeof tool.renderToolSettings === "function"){
+  if (showSpecificToolSettings && typeof tool.renderToolSettings === "function"){
     tool.renderToolSettings(
       settingsHost,
       cloneData(getSequenceDraft(entry.instanceId).settings),
@@ -689,13 +1441,47 @@ async function openToolSettings(instanceId){
     settingsHost.innerHTML = `<div class="cfg-empty-state">Aucun réglage spécifique pour cet outil.</div>`;
   }
 
-  if (typeof moduleRuntime?.bindCommonToolSettings === "function") {
-    moduleRuntime.bindCommonToolSettings(host, {
+  if (showCommonToolSettings && typeof moduleRuntime?.bindCommonToolSettings === "function") {
+    moduleRuntime.bindCommonToolSettings(commonSettingsHost || host, {
+      forceInfiniteQuestionCount: isFinalInfiniteSequenceItem(entry),
       onDirty: () => {
+        setSaveState("dirty");
+        scheduleActivityDurationEstimate();
+      },
+      onAnswerInfiniteActivated: () => {
+        setQuestionTransitionToZero();
+      }
+    });
+  }
+
+  if (showCommonToolSettings && commonSettingsHost) {
+    bindStepperField(commonSettingsHost, "cfgCommonQuestionTransitionSec", {
+      inputMin: TOOL_LIMITS.questionTransitionSec.min,
+      inputMax: TOOL_LIMITS.questionTransitionSec.max,
+      onChange: () => {
         setSaveState("dirty");
         scheduleActivityDurationEstimate();
       }
     });
+
+    bindInfiniteToggle(commonSettingsHost, {
+      buttonId: "cfgCommonQuestionTransitionSecInfinite",
+      inputId: "cfgCommonQuestionTransitionSec",
+      onChange: (active) => {
+        activityGlobals.questionTransitionInfinite = active;
+        setSaveState("dirty");
+        scheduleActivityDurationEstimate();
+      }
+    });
+
+    if (showProjectionResponseUiRow) {
+      bindRadio(commonSettingsHost, "cfgCommonProjectionResponseUi", {
+        onChange: () => {
+          setSaveState("dirty");
+          scheduleActivityDurationEstimate();
+        }
+      });
+    }
   }
 
   host.querySelectorAll('input[type="number"]').forEach((inp) => {
@@ -715,23 +1501,15 @@ async function openToolSettings(instanceId){
 
 async function saveCurrentConfig(){
   setSaveState("saving");
-  const name = String(els.configNameInput?.value || "").trim();
+  const name = String(currentConfigNameDraft || currentConfigName || "").trim();
 
   if (!name){
     setMessage("Entre un nom d’activité.", true);
-    els.configNameInput?.focus();
     setSaveState("dirty");
     return;
   }
 
   persistCurrentToolSettings();
-
-  const enabledCount = countEnabledTools();
-  if (enabledCount === 0){
-    setMessage("Ajoute au moins un outil dans la séquence.", true);
-    setSaveState("dirty");
-    return;
-  }
 
   setSaveState("saving");
   setMessage("Sauvegarde en cours…");
@@ -741,17 +1519,25 @@ async function saveCurrentConfig(){
     await saveActivityConfig({
       accessCode: currentAccessCode,
       moduleKey: currentModuleKey,
+      existingConfigName: isEditingExistingConfig ? savedConfigName : "",
       configName: name,
+      desiredFolderId: currentTargetFolderId || null,
       configJson: {
-        version: 3,
+        version: 4,
+        activity_mode: currentActivityMode,
         globals: serializeGlobals(),
         sequence: serializeSequence()
       }
     });
 
     currentConfigName = name;
+    currentConfigNameDraft = name;
+    savedConfigName = name;
+    isEditingExistingConfig = true;
+    syncEditorUrl();
     renderMeta();
 
+    hasProjectedLiveChanges = false;
     setSaveState("saved");
     setMessage(`Activité "${name}" enregistrée.`);
   } catch (err) {
@@ -767,7 +1553,138 @@ function renderGlobals(){
 
   if (els.questionTransitionSecInput){
     els.questionTransitionSecInput.value = activityGlobals.questionTransitionSec;
+    const legacyTransitionRow = els.questionTransitionSecInput.closest(".cfg-global-inline");
+    if (legacyTransitionRow?.isConnected) {
+      legacyTransitionRow.remove();
+    }
   }
+
+  if (els.projectionResponseUiSelect) {
+    els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
+  }
+
+  if (els.projectionResponseUiField?.isConnected) {
+    els.projectionResponseUiField.remove();
+  }
+
+  syncActivityTotalTimeUi();
+}
+
+function syncActivityTotalTimeUi({ preserveInput = false } = {}){
+  const enabled = activityGlobals.activityTotalTimeEnabled === true;
+  const popupVisible = enabled && activityTotalTimePopupOpen;
+  const minuteLimits = getActivityTotalTimeMinuteLimits();
+  const totalMinutes = Math.max(
+    minuteLimits.min,
+    Math.round((Number(activityGlobals.activityTotalTimeSec) || DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec) / 60)
+  );
+
+  els.activityTotalTimeControl?.classList.toggle("is-active", enabled);
+
+  if (els.activityTotalTimeToggleButton) {
+    const buttonLabel = enabled
+      ? (popupVisible ? "Désactiver la durée totale" : "Régler la durée totale")
+      : "Durée totale";
+    els.activityTotalTimeToggleButton.classList.toggle("is-active", enabled);
+    els.activityTotalTimeToggleButton.setAttribute("aria-expanded", popupVisible ? "true" : "false");
+    els.activityTotalTimeToggleButton.setAttribute("aria-pressed", enabled ? "true" : "false");
+    els.activityTotalTimeToggleButton.title = buttonLabel;
+    els.activityTotalTimeToggleButton.setAttribute("aria-label", buttonLabel);
+  }
+
+  if (els.activityTotalTimePopup) {
+    els.activityTotalTimePopup.hidden = !popupVisible;
+    if (popupVisible) {
+      window.requestAnimationFrame?.(positionActivityTotalTimePopup);
+      scheduleActivityTotalTimePopupAutoClose();
+    } else {
+      clearActivityTotalTimePopupAutoClose();
+      els.activityTotalTimePopup.style.removeProperty("--cfg-total-time-popup-left");
+      els.activityTotalTimePopup.style.removeProperty("--cfg-total-time-popup-top");
+    }
+  }
+
+  if (els.activityTotalTimeMinutesInput) {
+    if (!preserveInput) {
+      els.activityTotalTimeMinutesInput.value = String(totalMinutes);
+    }
+    els.activityTotalTimeMinutesInput.disabled = !enabled;
+    els.activityTotalTimeMinutesInput.setAttribute("aria-disabled", enabled ? "false" : "true");
+    refreshStepper(els.activityTotalTimeControl || document, "activityTotalTimeMinutesInput", {
+      inputMin: minuteLimits.min,
+      inputMax: minuteLimits.max
+    });
+  }
+}
+
+function scheduleActivityTotalTimePopupAutoClose(){
+  clearActivityTotalTimePopupAutoClose();
+  if (activityGlobals.activityTotalTimeEnabled !== true || activityTotalTimePopupOpen !== true) return;
+
+  activityTotalTimePopupHideTimer = window.setTimeout(() => {
+    activityTotalTimePopupHideTimer = null;
+    activityTotalTimePopupOpen = false;
+    syncActivityTotalTimeUi();
+  }, 5000);
+}
+
+function clearActivityTotalTimePopupAutoClose(){
+  if (activityTotalTimePopupHideTimer === null) return;
+  window.clearTimeout(activityTotalTimePopupHideTimer);
+  activityTotalTimePopupHideTimer = null;
+}
+
+function positionActivityTotalTimePopup(){
+  const popup = els.activityTotalTimePopup;
+  const button = els.activityTotalTimeToggleButton;
+  if (!popup || !button || popup.hidden) return;
+
+  const margin = 10;
+  const buttonRect = button.getBoundingClientRect();
+  const popupRect = popup.getBoundingClientRect();
+  const popupWidth = popupRect.width || 220;
+  const popupHeight = popupRect.height || 120;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || popupWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || popupHeight;
+
+  let left = buttonRect.left + (buttonRect.width / 2) - (popupWidth / 2);
+  left = Math.max(margin, Math.min(left, viewportWidth - popupWidth - margin));
+
+  let top = buttonRect.top - popupHeight - margin;
+  if (top < margin) {
+    top = buttonRect.bottom + margin;
+  }
+  top = Math.max(margin, Math.min(top, viewportHeight - popupHeight - margin));
+
+  popup.style.setProperty("--cfg-total-time-popup-left", `${Math.round(left)}px`);
+  popup.style.setProperty("--cfg-total-time-popup-top", `${Math.round(top)}px`);
+}
+
+function readActivityTotalTimeSecFromInput(){
+  const minuteLimits = getActivityTotalTimeMinuteLimits();
+  const rawMinutes = Math.floor(Number(els.activityTotalTimeMinutesInput?.value));
+  const safeMinutes = Number.isFinite(rawMinutes) ? rawMinutes : Math.round(DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec / 60);
+  const rawSec = safeMinutes * 60;
+  return clampInt(
+    rawSec,
+    TOOL_LIMITS.activityTotalTimeSec.min,
+    TOOL_LIMITS.activityTotalTimeSec.max
+  );
+}
+
+function getActivityTotalTimeMinuteLimits(){
+  return {
+    min: Math.max(1, Math.ceil(TOOL_LIMITS.activityTotalTimeSec.min / 60)),
+    max: Math.max(1, Math.floor(TOOL_LIMITS.activityTotalTimeSec.max / 60))
+  };
+}
+
+function rerenderCurrentToolSettingsPanel(){
+  const selectedId = String(currentSelectedInstanceId || "").trim();
+  if (!selectedId) return;
+  openToolSettings(selectedId).catch((err) => {
+    setMessage(err?.message || "Impossible d’actualiser les réglages outil.", true);
+  });
 }
 
 function serializeGlobals(){
@@ -780,11 +1697,38 @@ function applyRemoteGlobals(remoteGlobals){
 
 function setSaveState(state){
   saveState = state;
+  syncShareUi();
+  syncRenameUi();
 
   const btn = els.btnSaveConfig;
-  if (!btn) return;
+  if (!btn) {
+    notifyEditorStateChange();
+    return;
+  }
 
-  btn.classList.remove("dirty", "saving", "saved");
+  btn.classList.remove("dirty", "saving", "saved", "project-send-btn");
+
+  if (isProjectedEditorMode) {
+    btn.classList.add("project-send-btn");
+
+    if (state === "dirty"){
+      btn.classList.add("dirty");
+      btn.textContent = "Envoyer";
+    }
+
+    if (state === "saving"){
+      btn.classList.add("saving");
+      btn.textContent = "Envoi…";
+    }
+
+    if (state === "saved"){
+      btn.textContent = "Envoyer";
+    }
+
+    btn.disabled = state === "saving";
+    notifyEditorStateChange();
+    return;
+  }
 
   if (state === "dirty"){
     btn.classList.add("dirty");
@@ -800,12 +1744,13 @@ function setSaveState(state){
     btn.classList.add("saved");
     btn.textContent = "Enregistré";
   }
+
+  notifyEditorStateChange();
 }
 
-function applyRemoteSequence(remoteSequence, legacyDrafts){
+function applyRemoteSequence(remoteSequence){
   const safeSequence = normalizeActivitySequence(remoteSequence, {
-    toolsCatalog,
-    legacyDrafts
+    toolsCatalog
   });
 
   activitySequence = safeSequence.map((item) => ({
@@ -867,11 +1812,14 @@ function serializeSequence(){
 
 function persistCurrentToolSettings(){
   if (!currentToolSettingsEditor) return;
+  if (currentToolSettingsEditor.modeSupport?.compatible === false) return;
 
   persistCurrentToolHeaderControls();
 
   const host = els.toolConfigHost;
   if (!host) return;
+
+  readCommonFlowGlobalsFromHost(host);
 
   const { instanceId, tool } = currentToolSettingsEditor;
   const draft = getSequenceDraft(instanceId);
@@ -886,7 +1834,10 @@ function persistCurrentToolSettings(){
       nextDraft.settings = getToolDefaultSettings(tool);
     }
 
-    if (typeof moduleRuntime?.readCommonToolSettings === "function") {
+    if (
+    currentToolSettingsEditor?.modeSupport?.supportsCommonFlowSettings !== false
+      && typeof moduleRuntime?.readCommonToolSettings === "function"
+    ) {
       const nextDraftFromModule = moduleRuntime.readCommonToolSettings(
         host,
         nextDraft,
@@ -920,14 +1871,25 @@ function persistCurrentToolSettings(){
       draft: normalizeToolDraft(DEFAULT_TOOL_ROW)
     };
 
+    const previousSerializedDraft = JSON.stringify(normalizeToolDraft(stored.draft));
+
     stored.toolId = currentToolSettingsEditor.toolId;
     stored.draft = normalizeToolDraft(nextDraft);
     stored.draft.enabled = true;
     sequenceDrafts.set(instanceId, stored);
 
-    setSaveState("dirty");
-    setMessage("");
+    const nextSerializedDraft = JSON.stringify(stored.draft);
+    const hadValidationError = hasToolSettingsValidationError;
+    hasToolSettingsValidationError = false;
+
+    if (previousSerializedDraft !== nextSerializedDraft) {
+      setSaveState("dirty");
+      setMessage("");
+    } else if (hadValidationError) {
+      setMessage("");
+    }
   } catch (err) {
+    hasToolSettingsValidationError = true;
     setMessage(err?.message || "Réglages invalides.", true);
   }
 }
@@ -936,7 +1898,204 @@ function renderConfigTableSelectionState(){
   activitySequence.forEach((item) => {
     const row = document.getElementById(`row_${cssSafeId(item.instanceId)}`);
     row?.classList.toggle("active", currentSelectedInstanceId === item.instanceId);
+    row?.classList.toggle("is-final-infinite", isFinalInfiniteSequenceItem(item));
   });
+}
+
+function renderSequenceWarnings(){
+  if (!els.sequenceWarnings) return;
+  const shouldWarnAboutBlockingInfiniteTool = normalizeActivityMode(currentActivityMode, DEFAULT_ACTIVITY_MODE) === "group";
+
+  if (!shouldWarnAboutBlockingInfiniteTool) {
+    els.sequenceWarnings.innerHTML = "";
+    els.sequenceWarnings.hidden = true;
+    return;
+  }
+
+  const hasBlockingInfiniteTool = activitySequence.some((item, index) => {
+    if (index >= activitySequence.length - 1) return false;
+    return getSequenceDraft(item.instanceId)?.infiniteQuestionCount === true;
+  });
+
+  if (!hasBlockingInfiniteTool) {
+    els.sequenceWarnings.innerHTML = "";
+    els.sequenceWarnings.hidden = true;
+    return;
+  }
+
+  els.sequenceWarnings.innerHTML = `
+    <div class="cfg-sequence-warning">
+      Attention : un outil placé avant la fin de la séquence utilise <strong>Nombre de questions = ∞</strong>.
+      Les outils suivants ne seront donc jamais atteints automatiquement.
+    </div>
+  `;
+  els.sequenceWarnings.hidden = false;
+}
+
+function setQuestionTransitionToZero(){
+  if (activityGlobals.questionTransitionSec === 0) return;
+
+  activityGlobals.questionTransitionSec = 0;
+  if (els.questionTransitionSecInput) {
+    els.questionTransitionSecInput.value = 0;
+  }
+
+  const currentTransitionInput = els.toolConfigHost?.querySelector("#cfgCommonQuestionTransitionSec");
+  if (currentTransitionInput) {
+    currentTransitionInput.value = 0;
+    currentTransitionInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  setSaveState("dirty");
+  scheduleActivityDurationEstimate();
+}
+
+function buildCombinedCommonFlowSettingsHtml({
+  baseHtml = "",
+  questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
+  questionTransitionInfinite = DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite,
+  showProjectionResponseUiRow = false,
+  projectionResponseUi = DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi
+} = {}) {
+  const template = document.createElement("template");
+  template.innerHTML = String(baseHtml || "").trim();
+
+  let group = template.content.querySelector(".tv-group");
+  if (!group) {
+    group = document.createElement("div");
+    group.className = "tv-group";
+    template.content.appendChild(group);
+  }
+
+  let grid = group.querySelector(".tv-stepper-grid");
+  if (!grid) {
+    grid = document.createElement("div");
+    grid.className = "tv-stepper-grid";
+    while (group.firstChild) {
+      grid.appendChild(group.firstChild);
+    }
+    group.appendChild(grid);
+  }
+
+  group.classList.add("cfg-common-flow-group");
+  grid.classList.add("cfg-common-flow-grid");
+
+  const transitionTemplate = document.createElement("template");
+  transitionTemplate.innerHTML = renderStepperField({
+    id: "cfgCommonQuestionTransitionSec",
+    label: "Temps entre les questions",
+    value: questionTransitionSec,
+    inputMin: TOOL_LIMITS.questionTransitionSec.min,
+    inputMax: TOOL_LIMITS.questionTransitionSec.max,
+    step: TOOL_LIMITS.questionTransitionSec.step,
+    fieldClassName: "cfg-common-flow-transition-field",
+    actionButtonHtml: renderInfiniteToggleButton({
+      id: "cfgCommonQuestionTransitionSecInfinite",
+      label: "Temps entre les questions illimité",
+      active: questionTransitionInfinite
+    })
+  }).trim();
+  const transitionField = transitionTemplate.content.firstElementChild;
+  if (transitionField) {
+    grid.appendChild(transitionField);
+  }
+
+  if (showProjectionResponseUiRow) {
+    const projectionTemplate = document.createElement("template");
+    projectionTemplate.innerHTML = renderInlineRadioControl({
+      title: "Réponse en projection",
+      id: "cfgCommonProjectionResponseUi",
+      value: projectionResponseUi,
+      options: [
+        { value: "boxed", label: "Avec" },
+        { value: "free", label: "Sans" }
+      ],
+      rootClassName: "cfg-common-flow-projection-row"
+    }).trim();
+    const projectionRow = projectionTemplate.content.firstElementChild;
+    if (projectionRow) {
+      group.appendChild(projectionRow);
+    }
+  }
+
+  return group.outerHTML;
+}
+
+function shouldShowProjectionResponseUiRow(tool, context = {}) {
+  if (!isProjectionActivityMode(currentActivityMode)) return false;
+
+  const support = getToolProjectionResponseUiSupport(tool, context);
+  return support.boxed === true && support.free === true;
+}
+
+function readCommonFlowGlobalsFromHost(container) {
+  if (!container) return;
+
+  const transitionInput = container.querySelector("#cfgCommonQuestionTransitionSec");
+  if (transitionInput) {
+    activityGlobals.questionTransitionSec = readStepper(container, "cfgCommonQuestionTransitionSec", {
+      inputMin: TOOL_LIMITS.questionTransitionSec.min,
+      inputMax: TOOL_LIMITS.questionTransitionSec.max
+    });
+  }
+
+  const transitionInfiniteToggle = container.querySelector("#cfgCommonQuestionTransitionSecInfinite");
+  if (transitionInfiniteToggle) {
+    activityGlobals.questionTransitionInfinite = isInfiniteToggleActive(container, "cfgCommonQuestionTransitionSecInfinite");
+  }
+
+  const projectionRadio = container.querySelector('input[name="cfgCommonProjectionResponseUi"]:checked');
+  if (projectionRadio) {
+    activityGlobals.projectionResponseUi = normalizeActivityGlobals({
+      projectionResponseUi: readRadio(container, "cfgCommonProjectionResponseUi", activityGlobals.projectionResponseUi)
+    }).projectionResponseUi;
+
+    if (els.projectionResponseUiSelect) {
+      els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
+    }
+  }
+}
+
+function renderInfiniteToggleButton({ id, label, active = false }) {
+  return `
+    <button
+      class="tv-stepper-infinity-btn${active ? " is-active" : ""}"
+      type="button"
+      id="${id}"
+      data-infinite-toggle="true"
+      aria-label="${escapeHtml(label)}"
+      aria-pressed="${active ? "true" : "false"}"
+      title="${escapeHtml(label)}"
+    >
+      <span class="tv-stepper-icon" aria-hidden="true">all_inclusive</span>
+    </button>
+  `;
+}
+
+function bindInfiniteToggle(container, { buttonId, inputId, onChange } = {}) {
+  const button = container.querySelector(`#${cssEscape(buttonId)}`);
+  const input = container.querySelector(`#${cssEscape(inputId)}`);
+  if (!button || !input) return;
+
+  const applyState = (active) => {
+    button.classList.toggle("is-active", !!active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    input.disabled = !!active;
+    input.closest(".tv-stepper")?.classList.toggle("is-disabled", !!active);
+  };
+
+  applyState(button.getAttribute("aria-pressed") === "true");
+
+  button.addEventListener("click", () => {
+    const nextActive = button.getAttribute("aria-pressed") !== "true";
+    applyState(nextActive);
+    onChange?.(nextActive);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function isInfiniteToggleActive(container, buttonId) {
+  return container.querySelector(`#${cssEscape(buttonId)}`)?.getAttribute("aria-pressed") === "true";
 }
 
 function ensureToolHeaderControlsSlot(){
@@ -984,6 +2143,8 @@ async function refreshActivityDurationEstimate(){
 
   persistCurrentToolSettings();
 
+  renderSequenceWarnings();
+
   const estimate = typeof moduleRuntime?.estimateActivityDuration === "function"
     ? await moduleRuntime.estimateActivityDuration({
         globals: serializeGlobals(),
@@ -998,14 +2159,15 @@ async function refreshActivityDurationEstimate(){
     : "—";
 
   if (els.activityDurationEstimate) {
-    els.activityDurationEstimate.textContent = `Durée estimée : ${text}`;
-    els.activityDurationEstimate.title = text === "—" ? "Durée indisponible" : `Durée estimée : ${text}`;
+    const label = activityGlobals.activityTotalTimeEnabled === true ? "Durée fixe" : "Durée estimée";
+    els.activityDurationEstimate.textContent = `${label} : ${text}`;
+    els.activityDurationEstimate.title = text === "—" ? "Durée indisponible" : `${label} : ${text}`;
   }
 }
 
 async function loadToolModule(toolId){
   if (!moduleRuntime){
-    throw new Error("Runtime de module non initialisé.");
+    throw new Error("Runtime d’outils non initialisé.");
   }
 
   if (!toolModuleCache.has(toolId)){
@@ -1044,14 +2206,42 @@ function getSpecificToolSettingsHost(container){
 }
 
 function getToolEditorContext(instanceId = currentSelectedInstanceId){
+  const safeInstanceId = String(instanceId || "");
+
+  const setScopedEditorMessage = (text = "", isError = false) => {
+    if (safeInstanceId && safeInstanceId !== String(currentSelectedInstanceId || "")) return;
+    setMessage(text, isError);
+  };
+
   return {
     accessCode: currentAccessCode,
     teacherSpace: cloneData(currentTeacherSpace),
     students: cloneData(availableStudents),
+    activityMode: currentActivityMode,
     moduleKey: currentModuleKey,
     configName: currentConfigName,
-    toolInstanceId: String(instanceId || "")
+    globals: serializeGlobals(),
+    projectionResponseUi: activityGlobals.projectionResponseUi,
+    isFinalInfiniteSequenceItem: isFinalInfiniteSequenceItem(safeInstanceId),
+    forceInfiniteQuestionCount: isFinalInfiniteSequenceItem(safeInstanceId),
+    tool: currentToolSettingsEditor?.tool || null,
+    toolInstanceId: safeInstanceId,
+    setEditorMessage: setScopedEditorMessage,
+    clearEditorMessage: () => setScopedEditorMessage("")
   };
+}
+
+function isFinalInfiniteSequenceItem(itemOrInstanceId){
+  if (activityGlobals.activityTotalTimeEnabled !== true) return false;
+  if (!activitySequence.length) return false;
+
+  const safeInstanceId = typeof itemOrInstanceId === "string"
+    ? String(itemOrInstanceId || "").trim()
+    : String(itemOrInstanceId?.instanceId || "").trim();
+  if (!safeInstanceId) return false;
+
+  const lastItem = activitySequence[activitySequence.length - 1];
+  return String(lastItem?.instanceId || "") === safeInstanceId;
 }
 
 function getToolMeta(toolId){
@@ -1065,7 +2255,7 @@ function buildSequenceLabels(){
     const toolMeta = getToolMeta(item.toolId);
 
     labels.set(item.instanceId, {
-      title: toolMeta?.title || item.toolId,
+      title: toolMeta?.label || toolMeta?.title || item.toolId,
       subtitle: ""
     });
   });
@@ -1076,7 +2266,7 @@ function buildSequenceLabels(){
 function buildDefaultSequenceLabel(toolId){
   const toolMeta = getToolMeta(toolId);
   return {
-    title: toolMeta?.title || String(toolId || "Outil"),
+    title: toolMeta?.label || toolMeta?.title || String(toolId || "Outil"),
     subtitle: ""
   };
 }
@@ -1085,7 +2275,248 @@ function countEnabledTools(){
   return activitySequence.length;
 }
 
+function handlePrimaryAction(){
+  if (isProjectedEditorMode) {
+    void sendProjectedConfig();
+    return;
+  }
+
+  void saveCurrentConfig();
+}
+
+function setupProjectedSessionLink(){
+  teardownProjectedSessionLink();
+
+  if (!isProjectedEditorMode) {
+    projectedSessionStatus = null;
+    syncProjectedEditorUi();
+    return;
+  }
+
+  projectedSessionLink = createProjectedSessionLink({
+    accessCode: currentAccessCode,
+    configName: currentConfigName,
+    onMessage: handleProjectedSessionMessage
+  });
+
+  if (!projectedSessionLink) {
+    setMessage("Projection active, mais la synchronisation navigateur n’est pas disponible.", true);
+    syncProjectedEditorUi();
+    return;
+  }
+
+  scheduleProjectedStatusRequest();
+  syncProjectedEditorUi();
+}
+
+function teardownProjectedSessionLink(){
+  if (projectedStatusRequestTimer) {
+    clearTimeout(projectedStatusRequestTimer);
+    projectedStatusRequestTimer = null;
+  }
+
+  try {
+    projectedSessionLink?.close?.();
+  } catch {}
+
+  projectedSessionLink = null;
+}
+
+function scheduleProjectedStatusRequest(){
+  if (!isProjectedEditorMode || !projectedSessionLink) return;
+
+  projectedSessionLink.send("request-status");
+
+  if (projectedStatusRequestTimer) {
+    clearTimeout(projectedStatusRequestTimer);
+  }
+
+  projectedStatusRequestTimer = window.setTimeout(() => {
+    projectedStatusRequestTimer = null;
+    projectedSessionLink?.send("request-status");
+  }, 250);
+}
+
+function handleProjectedSessionMessage(message){
+  const type = String(message?.type || "").trim();
+
+  if (type === "projection-closed") {
+    exitProjectedEditorMode("Projection fermée.");
+    return;
+  }
+
+  if (type !== "status") return;
+
+  projectedSessionStatus = {
+    active: message.active !== false,
+    route: String(message.route || "session"),
+    running: message.running === true,
+    paused: message.paused === true,
+    phase: String(message.phase || "IDLE"),
+    currentToolIndex: Number.isInteger(message.currentToolIndex) ? message.currentToolIndex : -1,
+    totalTools: Number.isInteger(message.totalTools) ? message.totalTools : activitySequence.length,
+    currentInstanceId: String(message.currentInstanceId || "").trim(),
+    currentQuestionNumber: Math.max(0, Number(message.currentQuestionNumber) || 0),
+    totalQuestionCountLabel: String(message.totalQuestionCountLabel || "—"),
+    canGoPrevTool: message.canGoPrevTool === true,
+    canGoNextTool: message.canGoNextTool === true,
+    canRevealAnswer: message.canRevealAnswer === true,
+    canAdvanceQuestion: message.canAdvanceQuestion === true,
+    projectedPrimaryActionKind: normalizeProjectedPrimaryActionKind(message.projectedPrimaryActionKind),
+    projectedPrimaryActionLabel: String(message.projectedPrimaryActionLabel || "Réponse"),
+    projectedPrimaryActionIcon: String(message.projectedPrimaryActionIcon || "visibility"),
+    projectedPrimaryActionEnabled: message.projectedPrimaryActionEnabled === true,
+    controlsHidden: message.controlsHidden === true
+  };
+
+  syncProjectedEditorUi();
+
+  if (projectedSessionStatus.currentInstanceId) {
+    syncSelectionWithProjectedStatus(projectedSessionStatus.currentInstanceId);
+  }
+}
+
+function syncSelectionWithProjectedStatus(instanceId){
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId) return;
+  if (!activitySequence.some((item) => item.instanceId === safeInstanceId)) return;
+  if (currentSelectedInstanceId === safeInstanceId) return;
+
+  openToolSettings(safeInstanceId).catch((err) => {
+    setMessage(err?.message || "Impossible de synchroniser l’outil projeté.", true);
+  });
+}
+
+function normalizeProjectedPrimaryActionKind(value){
+  return String(value || "").trim() === "validate" ? "validate" : "answer";
+}
+
+function syncProjectedEditorUi(){
+  els.page?.classList.toggle("is-projection-mode", isProjectedEditorMode);
+  els.projectedControlPanel?.classList.toggle("hidden", !isProjectedEditorMode);
+  syncProjectionLaunchUi();
+
+  if (els.btnAddSequenceTool) {
+    els.btnAddSequenceTool.disabled = isProjectedEditorMode;
+    els.btnAddSequenceTool.title = isProjectedEditorMode
+      ? "Séquence figée pendant la projection"
+      : "Ajouter un outil";
+  }
+
+  if (els.btnSaveConfig) {
+    els.btnSaveConfig.disabled = saveState === "saving";
+  }
+
+  syncRenameUi();
+
+  const status = projectedSessionStatus;
+  const hasStatus = isProjectedEditorMode && !!status;
+  const controlsEnabled = hasStatus && status.active !== false;
+  const popupControlsHidden = status?.controlsHidden === true;
+
+  const nextQuestionText = controlsEnabled
+    ? `Question ${status.currentQuestionNumber || 0}/${status.totalQuestionCountLabel || "—"}`
+    : "Question —/—";
+
+  if (els.projectedNextQuestionLabel) {
+    els.projectedNextQuestionLabel.textContent = nextQuestionText;
+  }
+
+  if (els.projectedPauseIcon) {
+    els.projectedPauseIcon.textContent = status?.paused ? "play_arrow" : "pause";
+  }
+
+  if (els.projectedPauseLabel) {
+    els.projectedPauseLabel.textContent = status?.paused ? "Reprendre" : "Pause";
+  }
+
+  if (els.projectedTogglePopupControlsIcon) {
+    els.projectedTogglePopupControlsIcon.textContent = popupControlsHidden ? "visibility" : "visibility_off";
+  }
+
+  if (els.projectedTogglePopupControlsLabel) {
+    els.projectedTogglePopupControlsLabel.textContent = popupControlsHidden ? "Afficher boutons" : "Masquer boutons";
+  }
+
+  if (els.btnProjectedTogglePopupControls) {
+    els.btnProjectedTogglePopupControls.disabled = !controlsEnabled || status?.route !== "session";
+  }
+
+  if (els.btnProjectedQuit) els.btnProjectedQuit.disabled = !controlsEnabled;
+  if (els.btnProjectedPrevTool) els.btnProjectedPrevTool.disabled = !controlsEnabled || !status?.canGoPrevTool;
+  if (els.btnProjectedShowAnswer) {
+    const actionKind = normalizeProjectedPrimaryActionKind(status?.projectedPrimaryActionKind);
+    const actionLabel = String(status?.projectedPrimaryActionLabel || (actionKind === "validate" ? "Valider" : "Réponse"));
+    const actionIcon = String(status?.projectedPrimaryActionIcon || (actionKind === "validate" ? "task_alt" : "visibility"));
+    els.btnProjectedShowAnswer.disabled = !controlsEnabled || status?.projectedPrimaryActionEnabled !== true;
+    els.btnProjectedShowAnswer.title = actionLabel;
+    els.btnProjectedShowAnswer.setAttribute("aria-label", actionLabel);
+    const iconEl = els.btnProjectedShowAnswer.querySelector(".cfg-material-icon");
+    const labelEl = els.btnProjectedShowAnswer.querySelector("span:not(.cfg-material-icon)");
+    if (iconEl) iconEl.textContent = actionIcon;
+    if (labelEl) labelEl.textContent = actionLabel;
+  }
+  if (els.btnProjectedNextQuestion) els.btnProjectedNextQuestion.disabled = !controlsEnabled || !status?.canAdvanceQuestion;
+  if (els.btnProjectedNextTool) els.btnProjectedNextTool.disabled = !controlsEnabled || !status?.canGoNextTool;
+  if (els.btnProjectedPause) els.btnProjectedPause.disabled = !controlsEnabled || !status?.running;
+}
+
+function sendProjectedCommand(command, payload = {}){
+  if (!isProjectedEditorMode || !projectedSessionLink) return;
+  projectedSessionLink.send("command", {
+    command,
+    ...payload
+  });
+}
+
+async function sendProjectedConfig(){
+  if (!isProjectedEditorMode || !projectedSessionLink) return;
+
+  persistCurrentToolSettings();
+  setSaveState("saving");
+
+  try {
+    projectedSessionLink.send("apply-config", {
+      globals: serializeGlobals(),
+      sequence: serializeSequence()
+    });
+
+    hasProjectedLiveChanges = true;
+    setSaveState("saved");
+    setMessage("Appliqué à la prochaine question.");
+  } catch (err) {
+    setSaveState("dirty");
+    setMessage(err?.message || "Impossible d’envoyer la configuration à la projection.", true);
+  }
+}
+
+function exitProjectedEditorMode(message = ""){
+  const shouldStayDirty = hasProjectedLiveChanges || saveState === "dirty" || saveState === "saving";
+
+  teardownProjectedSessionLink();
+  projectedSessionStatus = null;
+  isProjectedEditorMode = false;
+  closeToolPicker();
+  renderConfigTable();
+  syncProjectedEditorUi();
+  setSaveState(shouldStayDirty ? "dirty" : "saved");
+  if (message) {
+    setMessage(message);
+  }
+
+  syncEditorUrl();
+}
+
 function goBackDashboard(){
+  if (typeof mountOptions.onBack === "function") {
+    mountOptions.onBack({
+      state: getEditorPublicState(),
+      hasPendingChanges: hasConfigEditorPendingChanges(),
+      warningMessage: getConfigEditorLeaveWarningMessage()
+    });
+    return;
+  }
+
   window.location.href = `dashboard.html?accessCode=${encodeURIComponent(currentAccessCode)}`;
 }
 
@@ -1100,7 +2531,10 @@ function setFatalState(message){
     els.btnAddSequenceTool.disabled = true;
   }
 
+  syncRenameUi();
   renderEmptyToolPanel();
+  syncProjectedEditorUi();
+  notifyEditorStateChange();
 }
 
 function setMessage(text, isError = false){
@@ -1113,6 +2547,14 @@ function cssSafeId(value) {
   return String(value || "")
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "") || "item";
+}
+
+function cssEscape(value) {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
 }
 
 function escapeHtml(s){

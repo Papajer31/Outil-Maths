@@ -457,7 +457,8 @@ export function readBasicMinMax(container, idPrefix, {
 
 export function setMinMaxBounds(container, idPrefix, {
   inputMin = 0,
-  inputMax = 99
+  inputMax = 99,
+  alignMaxValueToUpperBound = false
 } = {}) {
   const minEl = container.querySelector(`#${cssEscape(idPrefix)}_min`);
   const maxEl = container.querySelector(`#${cssEscape(idPrefix)}_max`);
@@ -478,7 +479,9 @@ export function setMinMaxBounds(container, idPrefix, {
   stepEl.setAttribute("max", String(stepMax));
 
   let minValue = clampInt(minEl.value, safeMin, safeMax);
-  let maxValue = clampInt(maxEl.value, safeMin, safeMax);
+  let maxValue = alignMaxValueToUpperBound
+    ? safeMax
+    : clampInt(maxEl.value, safeMin, safeMax);
   if (minValue > maxValue) {
     maxValue = minValue;
   }
@@ -503,7 +506,8 @@ export function renderStepperField({
   inputMin = 0,
   inputMax = 99,
   step = 1,
-  fieldClassName = ""
+  fieldClassName = "",
+  actionButtonHtml = ""
 }){
   const safeValue = clampInt(value, inputMin, inputMax);
   const safeClassName = String(fieldClassName || "").trim();
@@ -513,16 +517,19 @@ export function renderStepperField({
     <div class="tv-stepper-field ${safeClassName}">
       <div class="tv-stepper-field-label" id="${fieldLabelId}">${escapeHtml(label)}</div>
       <div class="tv-stepper-field-control">
-        ${renderStepperControl({
-          id,
-          label,
-          value: safeValue,
-          inputMin,
-          inputMax,
-          step,
-          showInlineLabel: false,
-          labelId: fieldLabelId
-        })}
+        <div class="tv-stepper-field-control-row">
+          ${renderStepperControl({
+            id,
+            label,
+            value: safeValue,
+            inputMin,
+            inputMax,
+            step,
+            showInlineLabel: false,
+            labelId: fieldLabelId
+          })}
+          ${actionButtonHtml || ""}
+        </div>
       </div>
     </div>
   `;
@@ -590,6 +597,47 @@ export function renderRadioGroup({
   inline = true
 }){
   const safeOptions = Array.isArray(options) ? options : [];
+const rowsHtml = safeOptions.map((opt, index) => {
+  const optionValue = String(opt?.value ?? "");
+  const optionLabel = String(opt?.label ?? optionValue);
+  const optionId = `${id}_${index}`;
+  const checked = optionValue === String(value);
+  const disabled = opt?.disabled === true;
+
+  return `
+    <label class="tv-radio-row${disabled ? " is-disabled" : ""}">
+      <input
+        class="tv-radio"
+        type="radio"
+        name="${escapeHtml(id)}"
+        id="${escapeHtml(optionId)}"
+        value="${escapeHtml(optionValue)}"
+        ${checked ? "checked" : ""}
+        ${disabled ? "disabled" : ""}
+      >
+      <span>${escapeHtml(optionLabel)}</span>
+    </label>
+  `;
+}).join("");
+
+  return `
+    <div class="tv-group tv-group-inline">
+      <div class="tv-radio-group ${inline ? "tv-radio-group-inline" : ""}" data-tv-radio-group="${escapeHtml(id)}">
+        ${title ? `<div class="tv-group-title tv-radio-group-title">${escapeHtml(title)}</div>` : ""}
+        <div class="tv-radio-options">${rowsHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+export function renderInlineRadioControl({
+  title = "",
+  id,
+  value = "",
+  options = [],
+  rootClassName = ""
+}){
+  const safeOptions = Array.isArray(options) ? options : [];
   const rowsHtml = safeOptions.map((opt, index) => {
     const optionValue = String(opt?.value ?? "");
     const optionLabel = String(opt?.label ?? optionValue);
@@ -612,11 +660,9 @@ export function renderRadioGroup({
   }).join("");
 
   return `
-    <div class="tv-group tv-group-inline">
-      <div class="tv-radio-group ${inline ? "tv-radio-group-inline" : ""}" data-tv-radio-group="${escapeHtml(id)}">
-        ${title ? `<div class="tv-group-title tv-radio-group-title">${escapeHtml(title)}</div>` : ""}
-        <div class="tv-radio-options">${rowsHtml}</div>
-      </div>
+    <div class="tv-radio-group tv-radio-group-inline ${escapeHtml(rootClassName)}" data-tv-radio-group="${escapeHtml(id)}">
+      ${title ? `<div class="tv-group-title tv-radio-group-title">${escapeHtml(title)}</div>` : ""}
+      <div class="tv-radio-options">${rowsHtml}</div>
     </div>
   `;
 }

@@ -1,0 +1,72 @@
+.qr-config-root .tv-group,
+.qr-config-root .tv-minmax {
+  min-height: 38px;
+}
+
+.qr-config-root .tv-radio-row {
+  min-height: 38px;
+}
+
+.qr-config-bank-group {
+  gap: 8px;
+}
+
+.qr-config-bank-line {
+  min-height: 38px;
+}
+
+.qr-config-bank-control {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.qr-config-bank-select {
+  width: min(520px, 48vw);
+  min-width: 260px;
+}
+
+.qr-config-bank-select .tv-custom-select-trigger {
+  min-height: 38px;
+  height: 38px;
+  padding-block: 0;
+  border-radius: 12px;
+}
+
+.qr-config-bank-count {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+
+.qr-config-root .tv-radio-options {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 980px) {
+  .qr-config-bank-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .qr-config-bank-select {
+    width: 100%;
+    min-width: 0;
+  }
+}

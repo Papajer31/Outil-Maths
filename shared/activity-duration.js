@@ -6,6 +6,10 @@ import {
 export function normalizeDurationEstimate(estimate) {
   if (!estimate || typeof estimate !== "object") return null;
 
+  if (estimate.infinite === true) {
+    return { infinite: true };
+  }
+
   const minSec = toSafeSec(estimate.minSec);
   const maxSec = toSafeSec(estimate.maxSec);
 
@@ -40,7 +44,15 @@ export function estimateStandardToolDuration({
     ? clampNonNegativeInt(answerTime ?? safeDraft.answerTime, safeDraft.answerTime)
     : 0;
 
+  if (safeDraft.infiniteQuestionCount || safeDraft.infiniteTimePerQ || (hasAnswerPhase && safeDraft.infiniteAnswerTime)) {
+    return { infinite: true };
+  }
+
   const transitionCount = Math.max(0, safeQuestionCount - 1);
+
+  if (safeGlobals.questionTransitionInfinite && transitionCount > 0) {
+    return { infinite: true };
+  }
 
   const totalSec =
     (safeQuestionCount * safeTimePerQ)
@@ -59,6 +71,7 @@ export function addDurationEstimates(baseEstimate, nextEstimate) {
 
   if (!safeBase) return safeNext;
   if (!safeNext) return safeBase;
+  if (safeBase.infinite || safeNext.infinite) return { infinite: true };
 
   return {
     minSec: safeBase.minSec + safeNext.minSec,
@@ -76,6 +89,7 @@ export function sumDurationEstimates(estimates) {
 export function formatDurationEstimate(estimate) {
   const safeEstimate = normalizeDurationEstimate(estimate);
   if (!safeEstimate) return "—";
+  if (safeEstimate.infinite) return "∞";
 
   if (safeEstimate.minSec === safeEstimate.maxSec) {
     return formatDurationValue(safeEstimate.minSec);

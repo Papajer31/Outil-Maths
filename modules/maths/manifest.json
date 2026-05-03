@@ -1,46 +1,16 @@
 {
   "module": "maths",
   "version": 2,
-  "tools": {
-    "PetitesAdditions": {
-      "label": "Petites additions",
-      "entry": "./tools/PetitesAdditions/tool.js"
-    },
-    "PetitesSoustractions": {
-      "label": "Petites soustractions",
-      "entry": "./tools/PetitesSoustractions/tool.js"
-    },
-    "ReprésentationDécimale": {
-      "label": "Représentation décimale",
-      "entry": "./tools/RepresentationDecimale/tool.js"
-    },
-    "NombresLettres": {
-      "label": "Nombres en lettres",
-      "entry": "./tools/NombresLettres/tool.js"
-    },
-    "DécompoAdditive": {
-      "label": "Décomposition additive",
-      "entry": "./tools/DecompoAdditive/tool.js"
-    },
-    "TableDoubles": {
-      "label": "Tables des doubles",
-      "entry": "./tools/TableDoubles/tool.js"
-    },
-    "FrisePicbille": {
-      "label": "Frise Picbille",
-      "entry": "./tools/FrisePicbille/tool.js"
-    },
-    "BoitesAJetons": {
-      "label": "Boites à jetons",
-      "entry": "./tools/BoitesAJetons/tool.js"
-    },
-    "Furet": {
-      "label": "Furet",
-      "entry": "./tools/Furet/tool.js"
-    },
-    "Operations": {
-      "label": "Opérations",
-      "entry": "./tools/Operations/tool.js"
-    }
-  }
+  "tools": [
+    "PetitesAdditions",
+    "PetitesSoustractions",
+    "ReprésentationDécimale",
+    "NombresLettres",
+    "DécompoAdditive",
+    "TableDoubles",
+    "FrisePicbille",
+    "BoitesAJetons",
+    "Furet",
+    "Operations"
+  ]
 }

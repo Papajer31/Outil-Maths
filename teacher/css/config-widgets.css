@@ -11,6 +11,8 @@
 .tv-group-inline{
   padding-top:12px;
   padding-bottom:12px;
+  min-height:38px;
+  box-sizing:border-box;
 }
 
 .tv-group-title{
@@ -63,6 +65,7 @@
   justify-content:space-between;
   gap:24px;
   min-width:0;
+  min-height:38px;
 }
 
 .tv-minmax-title{
@@ -216,9 +219,13 @@
 }
 
 .tv-stepper-field-label{
-  font-weight:700;
+  font-weight:600;
   line-height:1.15;
   color:var(--text);
+}
+
+.cfg-common-flow-infinite-gauge-row .tv-stepper-field-label{
+  font-size:20px;
 }
 
 .tv-stepper-field-control{
@@ -227,15 +234,57 @@
   justify-content:flex-start;
 }
 
+.tv-stepper-field-control-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.tv-stepper-infinity-btn{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  border:none;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  color:var(--text);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
+  transition:background-color .12s ease, box-shadow .12s ease, color .12s ease, opacity .12s ease;
+}
+
+.tv-stepper-infinity-btn:hover{
+  background:rgba(255,255,255,.16);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.tv-stepper-infinity-btn.is-active{
+  background:rgba(47, 92, 255, .28);
+  color:#fff;
+  box-shadow:inset 0 0 0 1px rgba(47, 92, 255, .48);
+}
+
+.tv-stepper-infinity-btn.is-active:hover{
+  background:rgba(47, 92, 255, .38);
+}
+
+.tv-stepper-infinity-btn:disabled{
+  opacity:.35;
+  cursor:default;
+}
+
 .tv-stepper{
   display:grid;
-  grid-template-columns:auto 36px 72px 36px;
+  grid-template-columns:auto 38px 72px 38px;
   align-items:center;
   gap:4px;
 }
 
 .tv-stepper.tv-stepper-no-inline-label{
-  grid-template-columns:36px 72px 36px;
+  grid-template-columns:38px 72px 38px;
 }
 
 .tv-stepper-label{
@@ -277,9 +326,9 @@
 }
 
 .tv-stepper-btn{
-  width:36px;
-  height:36px;
-  min-width:36px;
+  width:38px;
+  height:38px;
+  min-width:38px;
   padding:0;
   border:none;
   border-radius:999px;
@@ -313,7 +362,7 @@
 }
 
 .tv-stepper-icon{
-  font-family:"Material Symbols";
+  font-family:"MaterialSymbols";
   font-size:22px;
   line-height:1;
   font-style:normal;
@@ -332,7 +381,7 @@
   display:flex;
   align-items:center;
   gap:10px;
-  font-size:18px;
+  font-size:20px;
   font-weight:600;
   color:var(--text);
 }
@@ -366,6 +415,7 @@
   justify-content:space-between;
   gap:24px;
   min-width:0;
+  min-height:38px;
 }
 
 .tv-select-inline-title{
@@ -393,8 +443,8 @@
 
 .tv-custom-select-trigger{
   width:100%;
-  min-height:44px;
-  padding:10px 14px;
+  min-height:38px;
+  padding:7px 14px;
   border-radius:12px;
   display:flex;
   align-items:center;
@@ -549,12 +599,17 @@
   gap:12px;
 }
 
+.tv-radio-inline-control{
+  width:100%;
+}
+
 .tv-radio-group-inline{
   flex-direction:row;
   align-items:center;
   justify-content:space-between;
   gap:24px;
   min-width:0;
+  min-height:38px;
 }
 
 .tv-radio-group-title{
@@ -577,6 +632,11 @@
   font-size:18px;
   font-weight:600;
   color:var(--text);
+}
+
+.tv-radio-row.is-disabled{
+  opacity:.42;
+  cursor:not-allowed;
 }
 
 .tv-radio{

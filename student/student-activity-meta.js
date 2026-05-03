@@ -3,9 +3,13 @@ import {
   normalizeAccessCode,
   loadPublicActivityConfig
 } from "./student-api.js";
+import {
+  DEFAULT_ACTIVITY_MODE,
+  normalizeActivityMode
+} from "../shared/activity-modes.js";
 import { createSessionEngine } from "../shared/student-core.js";
 
-export async function ensureSelectedActivityMeta() {
+export async function ensureSelectedActivityMeta({ runMode = studentState.sessionMode || "student" } = {}) {
   const accessCode = normalizeAccessCode(studentState.accessCode);
   const configName = String(studentState.selectedConfig?.config_name || "").trim();
 
@@ -17,17 +21,18 @@ export async function ensureSelectedActivityMeta() {
   if (
     cached &&
     cached.accessCode === accessCode &&
-    cached.configName === configName
+    cached.configName === configName &&
+    cached.runMode === runMode
   ) {
     return cloneMeta(cached);
   }
 
   const remote = await loadPublicActivityConfig(accessCode, configName);
-  if (!remote?.config_json?.sequence && !remote?.config_json?.drafts) {
+  if (!Array.isArray(remote?.config_json?.sequence)) {
     throw new Error("Configuration introuvable ou invalide.");
   }
 
-  const moduleKey = String(remote.module_key ?? remote.module ?? "maths").trim();
+  const moduleKey = String(remote.module_key ?? remote.module ?? "tools").trim();
   if (!moduleKey) {
     throw new Error("Module d’activité introuvable.");
   }
@@ -38,10 +43,11 @@ export async function ensureSelectedActivityMeta() {
     configName,
     moduleKey,
     globals: remote.config_json.globals ?? {},
-    drafts: remote.config_json.drafts,
     sequence: remote.config_json.sequence,
+    activityMode: normalizeActivityMode(remote.activity_mode, DEFAULT_ACTIVITY_MODE),
     onExitToActivities: () => {},
-    onFatalError: () => {}
+    onFatalError: () => {},
+    runMode
   });
 
   try {
@@ -51,10 +57,12 @@ export async function ensureSelectedActivityMeta() {
     const meta = {
       accessCode,
       configName,
+      runMode,
       requiresStudent: !!rawMeta.requiresStudent,
       allowedStudentIds: Array.isArray(rawMeta.allowedStudentIds)
         ? rawMeta.allowedStudentIds.map((id) => String(id || "").trim()).filter(Boolean)
-        : []
+        : [],
+      blockingMessage: String(rawMeta.blockingMessage || "").trim()
     };
 
     studentState.selectedConfigMeta = meta;
@@ -74,8 +82,10 @@ function emptyMeta() {
   return {
     accessCode: "",
     configName: "",
+    runMode: "student",
     requiresStudent: false,
-    allowedStudentIds: []
+    allowedStudentIds: [],
+    blockingMessage: ""
   };
 }
 
@@ -83,9 +93,11 @@ function cloneMeta(meta) {
   return {
     accessCode: String(meta?.accessCode || ""),
     configName: String(meta?.configName || ""),
+    runMode: String(meta?.runMode || "student"),
     requiresStudent: !!meta?.requiresStudent,
     allowedStudentIds: Array.isArray(meta?.allowedStudentIds)
       ? [...meta.allowedStudentIds]
-      : []
+      : [],
+    blockingMessage: String(meta?.blockingMessage || "")
   };
 }

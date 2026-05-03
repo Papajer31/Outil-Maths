@@ -1,0 +1,7 @@
+.tv-settings-stack .nl-direction-control .tv-minmax-inline{
+  min-height:38px;
+}
+
+.tv-settings-stack .nl-direction-options{
+  justify-content:flex-end;
+}

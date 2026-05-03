@@ -1,8 +1,10 @@
 import {
-  normalizeAccessCode,
+  normalizeAccessCode
+} from "../../shared/api-common.js";
+import {
   getCurrentUser,
   signInUser
-} from "./users_info.js";
+} from "./teacher-api.js";
 
 /* =========================
    DOM
@@ -39,6 +41,15 @@ classCodeInput?.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   e.preventDefault();
   goToActivities();
+});
+
+classCodeInput?.addEventListener("input", () => {
+  const start = classCodeInput.selectionStart ?? classCodeInput.value.length;
+  const end = classCodeInput.selectionEnd ?? classCodeInput.value.length;
+  classCodeInput.value = String(classCodeInput.value || "").toUpperCase();
+  try {
+    classCodeInput.setSelectionRange(start, end);
+  } catch {}
 });
 
 teacherEmailInput?.addEventListener("keydown", (e) => {
@@ -162,4 +173,3 @@ function setTeacherMessage(text, isError = false){
   teacherLoginMessage.textContent = text;
   teacherLoginMessage.style.color = isError ? "var(--bad)" : "var(--muted)";
 }
-

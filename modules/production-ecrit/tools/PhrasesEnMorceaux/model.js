@@ -3,6 +3,8 @@ export function normalizeSettings(settings) {
     selectedStudentIds: [],
     selectionOrder: [],
     studentConfigs: {},
+    projectionEnabled: false,
+    commonConfig: defaultPhraseConfig(),
     ...(settings ?? {})
   };
 
@@ -24,25 +26,143 @@ export function normalizeSettings(settings) {
   for (const [studentId, cfg] of Object.entries(rawStudentConfigs)) {
     const id = String(studentId || "").trim();
     if (!id) continue;
-
-    const phraseTimeSec = clampInt(cfg?.phraseTimeSec, 1, 300, 5);
-    const phrasesText = String(cfg?.phrasesText || "");
-    const phrases = Array.isArray(cfg?.phrases) && cfg.phrases.length
-      ? normalizePhraseList(cfg.phrases)
-      : parsePhrasesFromTextarea(phrasesText);
-
-    nextStudentConfigs[id] = {
-      phraseTimeSec,
-      phrasesText,
-      phrases
-    };
+    nextStudentConfigs[id] = normalizePhraseConfig(cfg);
   }
 
   base.selectedStudentIds = selected;
   base.selectionOrder = selected;
   base.studentConfigs = nextStudentConfigs;
+  base.commonConfig = normalizePhraseConfig(base.commonConfig);
+  base.projectionEnabled = normalizeProjectionEnabled(base.projectionEnabled, base.commonConfig);
 
   return base;
+}
+
+export function getRunProfileForContext(settings, ctx = {}) {
+  const safeSettings = normalizeSettings(settings);
+  const runMode = String(ctx?.runMode || "student").trim();
+
+  if (runMode === "projected-teacher") {
+    if (!safeSettings.projectionEnabled) {
+      return {
+        requiresStudent: false,
+        allowedStudentIds: [],
+        blockingMessage: "Le mode projection n’est pas activé pour cet outil."
+      };
+    }
+
+    const commonPool = getCommonPhrasePool(safeSettings);
+    return {
+      requiresStudent: false,
+      allowedStudentIds: [],
+      blockingMessage: commonPool.length
+        ? ""
+        : "Aucune phrase à afficher n’est définie pour le mode projection."
+    };
+  }
+
+  return {
+    requiresStudent: true,
+    allowedStudentIds: getSelectedStudentIds(safeSettings),
+    blockingMessage: ""
+  };
+}
+
+export function getPhrasePoolForContext(settings, ctx = {}) {
+  const safeSettings = normalizeSettings(settings);
+  const runMode = String(ctx?.runMode || "student").trim();
+
+  if (runMode === "projected-teacher") {
+    return safeSettings.projectionEnabled ? getCommonPhrasePool(safeSettings) : [];
+  }
+
+  return getPhrasePoolForStudent(safeSettings, ctx?.student);
+}
+
+export function getPhraseCountForContext(settings, ctx = {}, fallback = 1) {
+  const pool = getPhrasePoolForContext(settings, ctx);
+  return Math.max(1, Array.isArray(pool) ? pool.length : 0) || fallback;
+}
+
+export function getPhraseTimeForContext(settings, ctx = {}, fallback = 5) {
+  const safeSettings = normalizeSettings(settings);
+  const runMode = String(ctx?.runMode || "student").trim();
+
+  if (runMode === "projected-teacher") {
+    return getPhraseTimeFromConfig(safeSettings.commonConfig, fallback);
+  }
+
+  return getPhraseTimeForStudent(safeSettings, ctx?.student, fallback);
+}
+
+export function getCommonPhrasePool(settings) {
+  const safeSettings = normalizeSettings(settings);
+  return getPhrasePoolFromConfig(safeSettings.commonConfig);
+}
+
+export function getPhrasePoolForStudent(settings, student) {
+  const safeSettings = normalizeSettings(settings);
+  const studentId = String(student?.id || "").trim();
+  if (!studentId) {
+    return [];
+  }
+
+  return getPhrasePoolFromConfig(safeSettings.studentConfigs?.[studentId]);
+}
+
+export function getPhraseCountForStudent(settings, student, fallback = 1) {
+  const pool = getPhrasePoolForStudent(settings, student);
+  return Math.max(1, Array.isArray(pool) ? pool.length : 0) || fallback;
+}
+
+export function getPhraseTimeForStudent(settings, student, fallback = 5) {
+  const safeSettings = normalizeSettings(settings);
+  const studentId = String(student?.id || "").trim();
+  if (!studentId) {
+    return fallback;
+  }
+
+  return getPhraseTimeFromConfig(safeSettings.studentConfigs?.[studentId], fallback);
+}
+
+export function parsePhrasesFromTextarea(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({
+      segments: line
+        .split("/")
+        .map((s) => formatSegmentWithSilent(s.trim()))
+        .filter(Boolean)
+    }))
+    .filter((p) => p.segments.length > 0);
+}
+
+export function defaultPhraseConfig() {
+  return {
+    phraseTimeSec: 5,
+    infinitePhraseTime: false,
+    phrasesText: "",
+    phrases: []
+  };
+}
+
+function normalizePhraseConfig(cfg) {
+  const fallback = defaultPhraseConfig();
+  const phraseTimeSec = clampInt(cfg?.phraseTimeSec, 1, 300, fallback.phraseTimeSec);
+  const infinitePhraseTime = cfg?.infinitePhraseTime === true;
+  const phrasesText = String(cfg?.phrasesText || "");
+  const phrases = Array.isArray(cfg?.phrases) && cfg.phrases.length
+    ? normalizePhraseList(cfg.phrases)
+    : parsePhrasesFromTextarea(phrasesText);
+
+  return {
+    phraseTimeSec,
+    infinitePhraseTime,
+    phrasesText,
+    phrases
+  };
 }
 
 function normalizePhraseList(list) {
@@ -61,55 +181,44 @@ function normalizePhraseList(list) {
     .filter((phrase) => phrase.segments.length > 0);
 }
 
-export function getPhrasePoolForStudent(settings, student) {
-  const studentId = String(student?.id || "").trim();
-  if (!studentId) {
-    return [];
+function getPhrasePoolFromConfig(config) {
+  const safeConfig = normalizePhraseConfig(config);
+
+  if (Array.isArray(safeConfig.phrases) && safeConfig.phrases.length) {
+    return safeConfig.phrases;
   }
 
-  const config = settings.studentConfigs?.[studentId];
-  if (!config) {
-    return [];
-  }
-
-  if (Array.isArray(config.phrases) && config.phrases.length) {
-    return config.phrases;
-  }
-
-  if (typeof config.phrasesText === "string" && config.phrasesText.trim()) {
-    return parsePhrasesFromTextarea(config.phrasesText);
+  if (typeof safeConfig.phrasesText === "string" && safeConfig.phrasesText.trim()) {
+    return parsePhrasesFromTextarea(safeConfig.phrasesText);
   }
 
   return [];
 }
 
-export function getPhraseCountForStudent(settings, student, fallback = 1) {
-  const pool = getPhrasePoolForStudent(settings, student);
-  return Math.max(1, Array.isArray(pool) ? pool.length : 0) || fallback;
-}
-
-export function getPhraseTimeForStudent(settings, student, fallback = 5) {
-  const studentId = String(student?.id || "").trim();
-  if (!studentId) {
-    return fallback;
+function getPhraseTimeFromConfig(config, fallback = 5) {
+  const safeConfig = normalizePhraseConfig(config);
+  if (safeConfig.infinitePhraseTime) {
+    return Number.POSITIVE_INFINITY;
   }
 
-  const value = settings.studentConfigs?.[studentId]?.phraseTimeSec;
-  return clampInt(value, 1, 300, fallback);
+  return clampInt(safeConfig.phraseTimeSec, 1, 300, fallback);
 }
 
-export function parsePhrasesFromTextarea(raw) {
-  return String(raw || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => ({
-      segments: line
-        .split("/")
-        .map((s) => formatSegmentWithSilent(s.trim()))
-        .filter(Boolean)
-    }))
-    .filter((p) => p.segments.length > 0);
+function getSelectedStudentIds(settings) {
+  return Array.isArray(settings?.selectionOrder) && settings.selectionOrder.length
+    ? settings.selectionOrder.map((id) => String(id || "").trim()).filter(Boolean)
+    : Array.isArray(settings?.selectedStudentIds)
+      ? settings.selectedStudentIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+}
+
+function normalizeProjectionEnabled(flag, commonConfig) {
+  if (flag === true || flag === false) {
+    return flag;
+  }
+
+  const safeConfig = normalizePhraseConfig(commonConfig);
+  return getPhrasePoolFromConfig(safeConfig).length > 0;
 }
 
 function clampInt(value, min, max, fallback) {

@@ -1,7 +1,8 @@
 import * as config from "./config.js";
 import * as activity from "./activity.js";
+import { defineTool } from "../../../../shared/tool-contract.js";
 
-export default {
+export default defineTool("Furet", "Furet", {
   meta: { version: 2 },
 
   getDefaultSettings: config.getDefaultSettings,
@@ -13,4 +14,4 @@ export default {
   nextQuestion: activity.nextQuestion,
   showAnswer: activity.showAnswer,
   unmount: activity.unmount
-};
+});

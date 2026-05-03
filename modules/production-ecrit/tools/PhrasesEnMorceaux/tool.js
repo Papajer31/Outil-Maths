@@ -3,7 +3,8 @@ import * as activity from "./activity.js";
 import {
   normalizeSettings,
   getPhraseCountForStudent,
-  getPhraseTimeForStudent
+  getPhraseTimeForStudent,
+  getRunProfileForContext
 } from "./model.js";
 import {
   normalizeActivityGlobals,
@@ -12,6 +13,7 @@ import {
 import {
   estimateStandardToolDuration
 } from "../../../../shared/activity-duration.js";
+import { defineTool } from "../../../../shared/tool-contract.js";
 
 export function estimateDuration({ draft, globals } = {}) {
   const safeDraft = normalizeToolDraft(draft);
@@ -58,9 +60,10 @@ export function estimateDuration({ draft, globals } = {}) {
   };
 }
 
-export default {
+export default defineTool("PhrasesEnMorceaux", "Phrases en morceaux", {
   meta: { version: 2 },
 
+  hideCommonToolSettings: true,
   hasAnswerPhase: false,
 
   getQuestionCount(ctx) {
@@ -77,13 +80,24 @@ export default {
     );
   },
 
+  getRunProfile(ctx) {
+    return getRunProfileForContext(ctx?.settings, ctx);
+  },
+
   estimateDuration,
 
   getDefaultSettings() {
     return {
       selectedStudentIds: [],
       selectionOrder: [],
-      studentConfigs: {}
+      projectionEnabled: false,
+      studentConfigs: {},
+      commonConfig: {
+        phraseTimeSec: 5,
+        infinitePhraseTime: false,
+        phrasesText: "",
+        phrases: []
+      }
     };
   },
 
@@ -96,4 +110,4 @@ export default {
   nextQuestion: activity.nextQuestion,
   showAnswer: () => {},
   unmount: activity.unmount
-};
+});

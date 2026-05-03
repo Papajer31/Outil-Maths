@@ -1,0 +1,599 @@
+.phono-config-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.phono-mode-group,
+.phono-validation-group {
+  min-height: 38px;
+}
+
+.phono-validation-group {
+  min-width: 0;
+}
+
+.phono-mode-group .tv-radio-group,
+.phono-validation-line {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  width: 100%;
+  min-width: 0;
+}
+
+.phono-validation-line {
+  gap: 16px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.phono-validation-title {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.phono-mode-radio-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.phono-validation-radio-control {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.phono-mode-radio-control .tv-radio-options,
+.phono-validation-radio-control .tv-radio-options {
+  flex-wrap: nowrap;
+}
+
+.phono-mode-radio-control .tv-radio-row,
+.phono-validation-radio-control .tv-radio-row {
+  white-space: nowrap;
+}
+
+.phono-attempts-field.tv-stepper-field {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+  min-height: 38px;
+}
+
+.phono-attempts-field.is-disabled {
+  opacity: 0.48;
+}
+
+.phono-attempts-field .tv-stepper-field-label {
+  display: none;
+}
+
+.phono-attempts-field .tv-stepper-field-control,
+.phono-attempts-field .tv-stepper-field-control-row {
+  min-width: 0;
+}
+
+.phono-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phono-library-head-right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phono-usage-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 6;
+}
+
+.phono-usage-help-trigger {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
+  color: #dfe8ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+
+.phono-usage-help-trigger:hover,
+.phono-usage-help-trigger:focus-visible {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.28);
+  outline: none;
+}
+
+.phono-usage-help-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(720px, calc(100vw - 64px));
+  max-height: min(420px, calc(100vh - 120px));
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #111722, #0d121b);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+
+.phono-usage-help:hover .phono-usage-help-popup,
+.phono-usage-help:focus-within .phono-usage-help-popup {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.phono-usage-help-title {
+  color: #eef3ff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.phono-usage-help-meta {
+  color: #9fb0d5;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.phono-usage-help-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.phono-usage-pill {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #eef3ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.phono-usage-pill-graph {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.phono-usage-pill-times {
+  color: #d7e0f5;
+}
+
+.phono-usage-help-empty {
+  color: #9fb0d5;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.phono-library-summary {
+  color: #aeb8d5;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.phono-library-summary.is-warning {
+  color: #ffd27a;
+}
+
+.phono-library-help {
+  grid-area: help;
+  display: grid;
+  gap: 4px;
+  color: #9aa6c8;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.phono-library-meta-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-areas:
+    "help preview"
+    "controls preview";
+  gap: 12px 16px;
+  align-items: start;
+}
+
+.phono-preset-main {
+  grid-area: controls;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.phono-preset-inline-row {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: auto minmax(220px, 340px) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.phono-preset-label {
+  white-space: nowrap;
+}
+
+.phono-preset-select-control {
+  min-width: 0;
+}
+
+.phono-preset-actions {
+  min-height: 44px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.phono-toolbar-btn {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: #eef3ff;
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.phono-toolbar-btn:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.phono-toolbar-btn[disabled] {
+  opacity: .45;
+  cursor: default;
+}
+
+.phono-toolbar-btn.is-primary {
+  border-color: rgba(87,174,222,.34);
+  background: rgba(87,174,222,.14);
+}
+
+.phono-icon-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  color: #eef3ff;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.phono-icon-btn:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.phono-icon-btn[disabled] {
+  opacity: .45;
+  cursor: default;
+}
+
+.phono-material-icon {
+  font-family: "MaterialSymbols";
+  font-style: normal;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  user-select: none;
+  pointer-events: none;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+.phono-hover-preview-wrap {
+  grid-area: preview;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  justify-items: start;
+}
+
+.phono-hover-preview {
+  width: 220px;
+  max-width: 100%;
+  aspect-ratio: 1109 / 733;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 0;
+  background: rgba(255,255,255,.03);
+  display: block;
+  overflow: hidden;
+}
+
+.phono-hover-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: rgba(255,255,255,.02);
+}
+
+.phono-hover-preview-empty {
+  width: 100%;
+  height: 100%;
+  background: rgba(255,255,255,.02);
+}
+
+.phono-graph-board {
+  position: relative;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  background: rgba(255,255,255,.03);
+}
+
+.phono-graph-tile {
+  position: relative;
+  aspect-ratio: 1109 / 733;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  display: block;
+  cursor: pointer;
+  opacity: .34;
+  overflow: visible;
+}
+
+.phono-graph-tile:hover {
+  border-color: rgba(255,255,255,.28);
+}
+
+.phono-graph-tile.is-selected {
+  opacity: 1;
+  border-color: rgba(87,174,222,.52);
+  box-shadow: 0 0 0 1px rgba(87,174,222,.16);
+}
+
+.phono-graph-tile.is-dragging {
+  opacity: .28;
+}
+
+.phono-drop-indicator {
+  position: absolute;
+  width: 8px;
+  border-radius: 999px;
+  background: #5ce36a;
+  box-shadow: 0 0 0 1px rgba(8, 15, 12, .45), 0 0 14px rgba(92, 227, 106, .55);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.phono-drop-indicator[hidden] {
+  display: none;
+}
+
+.phono-graph-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+
+.phono-preset-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 8, 14, 0.52);
+  backdrop-filter: blur(2px);
+}
+
+.phono-preset-dialog .modal-content {
+  width: min(360px, calc(100vw - 48px));
+  background: linear-gradient(180deg, #111722, #0d121b);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.phono-preset-dialog .modal-title {
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.phono-preset-dialog .modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.phono-preset-dialog .modal-message {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.phono-preset-dialog .modal-actions button {
+  flex: 0 0 auto;
+}
+
+.phono-preset-dialog .modal-message.is-error {
+  color: var(--bad);
+}
+
+.phono-preset-dialog .modal-text-input {
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 152, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.phono-preset-dialog .modal-text-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.phono-preset-dialog .modal-text-input:hover {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(124, 152, 255, 0.28);
+}
+
+.phono-preset-dialog .modal-text-input:focus {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(124, 152, 255, 0.52);
+  box-shadow: 0 0 0 3px rgba(124, 152, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.tv-custom-select-trigger.is-dirty .tv-custom-select-text {
+  color: #ffb347;
+  font-style: italic;
+}
+
+.phono-modal-text {
+  color: #a8b4d4;
+  line-height: 1.45;
+}
+
+.phono-modal-text--danger {
+  color: #eef3ff;
+}
+
+@media (max-width: 1080px) {
+  .phono-library-meta-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "help"
+      "controls"
+      "preview";
+  }
+
+  .phono-hover-preview-wrap {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 920px) {
+  .phono-library-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .phono-library-head-right {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .phono-library-summary {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .phono-usage-help-popup {
+    right: auto;
+    left: 0;
+  }
+
+  .phono-usage-help-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .phono-usage-help-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .phono-preset-inline-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .phono-preset-actions {
+    justify-content: flex-start;
+  }
+}

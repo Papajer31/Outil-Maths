@@ -1,13 +1,25 @@
-import { loadModuleRuntime } from "./module-registry.js";
+import { loadToolsRuntime } from "./tool-root-runtime.js";
 import {
-  TOOL_LIMITS,
   DEFAULT_ACTIVITY_GLOBALS,
   clampInt,
   cloneData,
+  getCommonInfiniteGaugeSettings,
   normalizeActivityGlobals,
+  normalizeProjectionResponseUi,
   normalizeToolDraft,
   normalizeActivitySequence
 } from "./activity-config.js";
+import {
+  DEFAULT_ACTIVITY_MODE,
+  normalizeActivityMode
+} from "./activity-modes.js";
+import {
+  createToolActivityRuntime,
+  getToolRunProfile as getContractToolRunProfile,
+  getToolRuntimeCapabilities,
+  getToolProjectionResponseUiSupport,
+  resolveEffectiveProjectionResponseUi
+} from "./tool-contract.js";
 
 export function createSessionEngine({
   els,
@@ -15,10 +27,13 @@ export function createSessionEngine({
   configName,
   moduleKey,
   globals,
-  drafts,
   sequence,
   onExitToActivities,
-  onFatalError
+  onFatalError,
+  onStateChange,
+  manualControlsEnabled = true,
+  runMode = "student",
+  activityMode = DEFAULT_ACTIVITY_MODE
 }) {
   let toolsCatalog = [];
   let session = [];
@@ -33,6 +48,7 @@ export function createSessionEngine({
   let gaugeStart = 0;
   let gaugeDurationMs = 0;
   let gaugeCurrentScale = 1;
+  let manualActionHandler = null;
 
   let paused = false;
   let engineState = "IDLE";
@@ -44,13 +60,42 @@ export function createSessionEngine({
 
   let moduleRuntime = null;
   let selectedStudent = null;
+  let selectedStudents = [];
+  let groupScores = new Map();
   let sessionRequiresStudent = false;
   let allowedStudentIds = [];
+  let sessionBlockingMessage = "";
+  let activeRuntime = null;
+  let activityClockStartedAt = 0;
+  let activityClockElapsedBeforePauseMs = 0;
+  let activityClockPaused = true;
+  let finalChallengeTicker = null;
+
+  const GAUGE_EPSILON = 1e-6;
+  const GAUGE_PROGRESS_PRECISION = 1000;
 
   const activityGlobals = {
     ...DEFAULT_ACTIVITY_GLOBALS,
     ...normalizeActivityGlobals(globals)
   };
+  const sessionActivityMode = normalizeActivityMode(activityMode, DEFAULT_ACTIVITY_MODE);
+
+  function emitStateChange() {
+    onStateChange?.(getUiState());
+  }
+
+  function wait(ms = 0) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, Math.max(0, Math.floor(Number(ms) || 0)));
+    });
+  }
+
+  function normalizeGaugeProgress(value) {
+    return Math.max(
+      0,
+      Math.min(1, Math.round((Number(value) || 0) * GAUGE_PROGRESS_PRECISION) / GAUGE_PROGRESS_PRECISION)
+    );
+  }
 
   return {
     init,
@@ -58,20 +103,460 @@ export function createSessionEngine({
     startSession,
     pauseForInterruption,
     resumeAfterPause,
+    handleManualAction,
+    goToPreviousTool,
+    goToNextTool,
+    goToToolByInstanceId,
+    revealAnswerNow,
+    triggerShellValidate,
+    goToNextQuestionNow,
+    applyLiveConfig,
+    getUiState,
+    toggleShellAnswerDisplay,
     isRunning,
     isPaused,
     stop,
     getSessionMeta,
-    setSelectedStudent
+    getGroupScores,
+    setSelectedStudent,
+    setSelectedStudents
   };
 
+  async function goToPreviousTool() {
+    if (paused) return false;
+    return jumpToTool(currentToolIndex - 1);
+  }
+
+  async function goToNextTool() {
+    if (paused) return false;
+
+    if (phase.kind === "BETWEEN_TOOLS") {
+      const item = session[currentToolIndex];
+      if (!item) return false;
+
+      try {
+        await beginTool(item);
+        emitStateChange();
+        return true;
+      } catch (err) {
+        onFatalError?.(err?.message || "Erreur pendant le chargement de l’outil.");
+        return false;
+      }
+    }
+
+    return jumpToTool(currentToolIndex + 1);
+  }
+
+  function revealAnswerNow() {
+    if (paused || !isSessionRunning) return false;
+
+    const item = session[currentToolIndex];
+    if (!item || phase.kind !== "QUESTION" || item.hasAnswerPhase === false) {
+      return false;
+    }
+
+    beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
+    emitStateChange();
+    return true;
+  }
+
+  function triggerShellValidate() {
+    if (paused || !isSessionRunning) return false;
+
+    const item = session[currentToolIndex];
+    if (!item || phase.kind !== "QUESTION") {
+      return false;
+    }
+
+    if (!shouldUseShellValidation(item)) {
+      return false;
+    }
+
+    try {
+      return activeRuntime?.validate?.(els.workArea, getToolContext(item)) === true;
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant la validation.");
+      return false;
+    }
+  }
+
+  async function goToNextQuestionNow() {
+    if (paused || !isSessionRunning) return false;
+
+    const item = session[currentToolIndex];
+    if (!item) return false;
+
+    try {
+      if (phase.kind === "TRANSITION") {
+        beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+        emitStateChange();
+        return true;
+      }
+
+      if (phase.kind === "ANSWER" && shouldUseGroupAnswerAttribution(item)) {
+        openGroupAnswerAttributionOverlay(item);
+        emitStateChange();
+        return true;
+      }
+
+      if (phase.kind === "QUESTION" || phase.kind === "ANSWER") {
+        await nextQuestion(item, false);
+        emitStateChange();
+        return true;
+      }
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant la séance.");
+    }
+
+    return false;
+  }
+
+  async function jumpToTool(targetIndex) {
+    const safeIndex = Math.floor(Number(targetIndex));
+
+    if (!Number.isInteger(safeIndex)) return false;
+    if (safeIndex < 0 || safeIndex >= session.length) return false;
+
+    stopAllTimers();
+    clearSessionStage();
+    hideManualAction();
+    hideTimer();
+
+    paused = false;
+    pausedPhase = null;
+    isSessionRunning = true;
+
+    if (activeRuntime?.unmount) {
+      try {
+        await activeRuntime.unmount(els.workArea, getToolContext(session[currentToolIndex]));
+      } catch {}
+    }
+
+    activeTool = null;
+    activeRuntime = null;
+    applyWorkAreaLayout(null);
+    currentToolIndex = safeIndex;
+    currentQuestionIndex = -1;
+
+    try {
+      await beginTool(session[currentToolIndex]);
+      emitStateChange();
+      return true;
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant le chargement de l’outil.");
+      return false;
+    }
+  }
+
+  async function goToToolByInstanceId(instanceId) {
+    const safeInstanceId = String(instanceId || "").trim();
+    if (!safeInstanceId) return false;
+
+    const targetIndex = session.findIndex((item) => String(item.instanceId || "") === safeInstanceId);
+    if (targetIndex < 0) return false;
+
+    return jumpToTool(targetIndex);
+  }
+
+  async function applyLiveConfig({ globals: nextGlobals = {}, sequence: nextSequence = [] } = {}) {
+    const safeSequence = normalizeActivitySequence(nextSequence, {
+      toolsCatalog
+    });
+
+    if (safeSequence.length !== session.length) {
+      return false;
+    }
+
+    for (let index = 0; index < safeSequence.length; index += 1) {
+      const nextItem = safeSequence[index];
+      const currentItem = session[index];
+      if (!currentItem) return false;
+      if (String(nextItem.instanceId || "") !== String(currentItem.instanceId || "")) return false;
+      if (String(nextItem.toolId || "") !== String(currentItem.id || "")) return false;
+    }
+
+    Object.assign(activityGlobals, normalizeActivityGlobals(nextGlobals));
+    await prepareSessionFromSequence(safeSequence);
+
+    for (let index = 0; index < session.length; index += 1) {
+      await refreshComputedSessionValues(session[index]);
+    }
+
+    emitStateChange();
+    return true;
+  }
+
+  async function refreshComputedSessionValues(item) {
+    if (!item) return;
+
+    const mod = await loadToolModule(item.id);
+    const tool = mod.default ?? {};
+    refreshComputedSessionValuesWithTool(item, tool);
+  }
+
+  function refreshComputedSessionValuesWithTool(item, tool) {
+    if (!item) return;
+
+    const instructionMeta = getToolInstructionMeta(tool);
+
+    item.questionCount = item.draftQuestionCount;
+    item.timePerQ = item.draftTimePerQ;
+    item.answerTime = item.draftAnswerTime;
+    item.infiniteQuestionCount = item.draftInfiniteQuestionCount === true;
+    item.infiniteTimePerQ = item.draftInfiniteTimePerQ === true;
+    item.infiniteAnswerTime = item.draftInfiniteAnswerTime === true;
+    item.defaultInstruction = instructionMeta.defaultInstruction;
+    item.supportsCustomInstruction = instructionMeta.supportsCustomInstruction;
+
+    const ctx = getToolContext(item);
+
+    if (!item.infiniteQuestionCount && typeof tool.getQuestionCount === "function") {
+      const nextQuestionCount = tool.getQuestionCount(ctx);
+
+      if (nextQuestionCount === Number.POSITIVE_INFINITY) {
+        item.infiniteQuestionCount = true;
+      } else {
+        item.questionCount = clampInt(
+          nextQuestionCount,
+          1,
+          999,
+          item.questionCount
+        );
+      }
+    }
+
+    if (!item.infiniteTimePerQ && typeof tool.getQuestionTime === "function") {
+      const nextQuestionTime = tool.getQuestionTime(ctx);
+
+      if (nextQuestionTime === Number.POSITIVE_INFINITY) {
+        item.infiniteTimePerQ = true;
+      } else {
+        item.timePerQ = clampInt(
+          nextQuestionTime,
+          1,
+          300,
+          item.timePerQ
+        );
+      }
+    }
+
+    if (isFinalChallengeItem(item)) {
+      item.infiniteQuestionCount = true;
+      item.individualGauge = null;
+    }
+  }
+
+  function getUiState() {
+    const item = session[currentToolIndex] ?? null;
+    const betweenTools = phase.kind === "BETWEEN_TOOLS";
+    const shellValidation = getShellValidationState(item);
+    const shellAnswerToggle = getShellAnswerToggleState(item);
+    const projectedPrimaryAction = getProjectedPrimaryActionState(item, shellValidation);
+
+    return {
+      running: isSessionRunning,
+      paused,
+      phase: phase.kind,
+      activityMode: sessionActivityMode,
+      currentToolIndex,
+      totalTools: session.length,
+      currentInstanceId: String(item?.instanceId || ""),
+      currentQuestionNumber: currentQuestionIndex >= 0 ? currentQuestionIndex + 1 : 0,
+      questionCount: item?.questionCount ?? 0,
+      infiniteQuestionCount: item?.infiniteQuestionCount === true,
+      totalQuestionCountLabel: item ? (item.infiniteQuestionCount ? "∞" : String(item.questionCount || 0)) : "—",
+      finalChallenge: getFinalChallengeUiState(item),
+      individualGauge: getIndividualGaugeUiState(item),
+      canGoPrevTool: !paused && currentToolIndex > 0,
+      canGoNextTool: !paused && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
+      canRevealAnswer: !paused && !!item && phase.kind === "QUESTION" && item.hasAnswerPhase !== false && shellValidation.visible !== true,
+      canAdvanceQuestion: !paused && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
+      shellValidateVisible: shellValidation.visible === true,
+      shellValidateEnabled: shellValidation.enabled === true,
+      shellAnswerToggleVisible: shellAnswerToggle.visible === true,
+      shellAnswerToggleEnabled: shellAnswerToggle.enabled === true,
+      shellAnswerToggleLabel: shellAnswerToggle.label,
+      shellAnswerToggleIcon: shellAnswerToggle.icon,
+      projectedPrimaryActionKind: projectedPrimaryAction.kind,
+      projectedPrimaryActionLabel: projectedPrimaryAction.label,
+      projectedPrimaryActionIcon: projectedPrimaryAction.icon,
+      projectedPrimaryActionEnabled: projectedPrimaryAction.enabled === true
+    };
+  }
+
+
+  function isProjectedBoxedValidationMode(item) {
+    return runMode === "projected-teacher"
+      && !!item
+      && String(item.projectionResponseUi || "").trim().toLowerCase() === "boxed";
+  }
+
+  function runtimeSupportsShellValidation(item) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return false;
+    if (typeof activeRuntime.supportsShellValidation !== "function") return false;
+
+    try {
+      return activeRuntime.supportsShellValidation(getToolContext(item)) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldUseShellValidation(item) {
+    if (!item) return false;
+    if (sessionActivityMode === "individual" && runMode !== "projected-teacher") {
+      return runtimeSupportsShellValidation(item);
+    }
+    if (isProjectedBoxedValidationMode(item)) {
+      return runtimeSupportsShellValidation(item);
+    }
+    return false;
+  }
+
+  function getShellValidationState(item) {
+    if (!item || paused || phase.kind !== "QUESTION") {
+      return { visible: false, enabled: false };
+    }
+
+    if (!shouldUseShellValidation(item)) {
+      return { visible: false, enabled: false };
+    }
+
+    let enabled = false;
+    try {
+      enabled = activeRuntime?.canValidate?.(els.workArea, getToolContext(item)) === true;
+    } catch {
+      enabled = false;
+    }
+
+    return {
+      visible: true,
+      enabled
+    };
+  }
+
+  function normalizeShellAnswerDisplayMode(value) {
+    return String(value || "").trim().toLowerCase() === "student" ? "student" : "correction";
+  }
+
+  function getShellAnswerToggleState(item) {
+    const hiddenState = {
+      visible: false,
+      enabled: false,
+      mode: "correction",
+      label: "Voir ma réponse",
+      icon: "sync"
+    };
+
+    if (!item || !activeRuntime || session[currentToolIndex] !== item || phase.kind !== "ANSWER") {
+      return hiddenState;
+    }
+
+    if (
+      typeof activeRuntime.getShellAnswerDisplayState !== "function"
+      || typeof activeRuntime.setShellAnswerDisplayMode !== "function"
+    ) {
+      return hiddenState;
+    }
+
+    try {
+      const runtimeState = activeRuntime.getShellAnswerDisplayState(els.workArea, getToolContext(item));
+      if (!runtimeState || typeof runtimeState.then === "function") {
+        return hiddenState;
+      }
+
+      const canToggle = runtimeState.canToggle === true;
+      const mode = normalizeShellAnswerDisplayMode(runtimeState.mode);
+
+      return {
+        visible: canToggle,
+        enabled: canToggle && !paused,
+        mode,
+        label: mode === "student" ? "Voir la correction" : "Voir ma réponse",
+        icon: "sync"
+      };
+    } catch {
+      return hiddenState;
+    }
+  }
+
+  async function applyShellAnswerDisplayMode(item, mode) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) {
+      return false;
+    }
+
+    if (typeof activeRuntime.setShellAnswerDisplayMode !== "function") {
+      return false;
+    }
+
+    try {
+      const result = activeRuntime.setShellAnswerDisplayMode(
+        els.workArea,
+        getToolContext(item),
+        normalizeShellAnswerDisplayMode(mode)
+      );
+
+      if (result && typeof result.then === "function") {
+        await result;
+        return true;
+      }
+
+      return result !== false;
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant l’affichage de la réponse.");
+      return false;
+    }
+  }
+
+  async function toggleShellAnswerDisplay() {
+    if (!isSessionRunning) {
+      return false;
+    }
+
+    const item = session[currentToolIndex];
+    const shellAnswerToggle = getShellAnswerToggleState(item);
+    if (!item || shellAnswerToggle.visible !== true || shellAnswerToggle.enabled !== true) {
+      return false;
+    }
+
+    const nextMode = shellAnswerToggle.mode === "student" ? "correction" : "student";
+    const didToggle = await applyShellAnswerDisplayMode(item, nextMode);
+
+    if (didToggle) {
+      emitStateChange();
+    }
+
+    return didToggle;
+  }
+
+  function getProjectedPrimaryActionState(item, shellValidation = getShellValidationState(item)) {
+    if (!item || runMode !== "projected-teacher") {
+      return { kind: "answer", label: "Réponse", icon: "visibility", enabled: false };
+    }
+
+    if (shellValidation.visible === true) {
+      return {
+        kind: "validate",
+        label: "Valider",
+        icon: "task_alt",
+        enabled: shellValidation.enabled === true
+      };
+    }
+
+    return {
+      kind: "answer",
+      label: "Réponse",
+      icon: "visibility",
+      enabled: !paused && phase.kind === "QUESTION" && item.hasAnswerPhase !== false
+    };
+  }
+
   async function init() {
-    moduleRuntime = loadModuleRuntime(moduleKey);
+    moduleRuntime = await loadToolsRuntime(moduleKey);
     toolsCatalog = await moduleRuntime.loadToolsCatalog();
 
     const safeSequence = normalizeActivitySequence(sequence, {
-      toolsCatalog,
-      legacyDrafts: drafts
+      toolsCatalog
     });
 
     await prepareSessionFromSequence(safeSequence);
@@ -79,6 +564,8 @@ export function createSessionEngine({
     if (!session.length) {
       throw new Error("Cette configuration ne contient aucun outil actif.");
     }
+
+    emitStateChange();
   }
 
   async function openStartOverlay(){
@@ -95,29 +582,53 @@ export function createSessionEngine({
 
   function stop() {
     stopAllTimers();
+    stopFinalChallengeTicker();
+
+    if (activeRuntime?.unmount) {
+      try {
+        void activeRuntime.unmount(els.workArea, getToolContext(session[currentToolIndex]));
+      } catch {}
+    }
+
     isSessionRunning = false;
     paused = false;
     pausedPhase = null;
+    resetActivityClock();
     engineState = "IDLE";
     phase = createPhase("IDLE");
     activeTool = null;
+    activeRuntime = null;
     hideTimer();
+    hideManualAction();
     clearWorkArea();
+    emitStateChange();
   }
 
   async function startSession() {
-    if (sessionRequiresStudent && !selectedStudent) {
+    if (sessionBlockingMessage) {
+      onFatalError?.(sessionBlockingMessage);
+      return;
+    }
+
+    const hasSingleSelection = !!selectedStudent;
+    const hasGroupSelection = Array.isArray(selectedStudents) && selectedStudents.length >= 2;
+
+    if (sessionRequiresStudent && !hasSingleSelection && !hasGroupSelection) {
       onFatalError?.("Aucun élève sélectionné pour cette activité.");
       return;
     }
 
     currentToolIndex = -1;
     currentQuestionIndex = -1;
+    resetSessionGaugeStates();
+    resetGroupScores();
+    startActivityClock();
     isSessionRunning = true;
     paused = false;
     pausedPhase = null;
     engineState = "IDLE";
     phase = createPhase("IDLE");
+    emitStateChange();
 
     try {
       await nextTool(true);
@@ -129,39 +640,52 @@ export function createSessionEngine({
   async function nextTool(isFirst) {
     stopAllTimers();
 
-    if (activeTool?.unmount) {
+    if (activeRuntime?.unmount) {
       try {
-        activeTool.unmount(els.workArea, getToolContext(session[currentToolIndex]));
+        await activeRuntime.unmount(els.workArea, getToolContext(session[currentToolIndex]));
       } catch {}
     }
     activeTool = null;
+    activeRuntime = null;
+    applyWorkAreaLayout(null);
 
     currentToolIndex += 1;
     currentQuestionIndex = -1;
 
     if (currentToolIndex >= session.length) {
-      hideTimer();
-      engineState = "DONE";
-      phase = createPhase("DONE");
-      isSessionRunning = false;
-      setStatus("Séance terminée", "good");
-      showSessionMessage({
-        title: "Bravo, la séance est terminée.",
-        buttonLabel: "Retour aux activités",
-        onClick: onExitToActivities
-      });
+      finishSession({ title: "Bravo, la séance est terminée." });
       return;
     }
 
     const item = session[currentToolIndex];
+    if (isFinalChallengeItem(item) && getActivityTotalRemainingMs() <= 0) {
+      finishSession({ title: "Temps écoulé — la séance est terminée." });
+      return;
+    }
+
     setStatus(`${item.title} — prêt`, "warn");
 
     if (!isFirst) {
       openNextToolOverlay(item);
+      emitStateChange();
       return;
     }
 
     await beginTool(item);
+    emitStateChange();
+  }
+
+  function getWorkAreaLayoutForTool(tool) {
+    const raw = String(tool?.workAreaLayout ?? tool?.meta?.workAreaLayout ?? "").trim().toLowerCase();
+    return raw === "stretch" ? "stretch" : "center";
+  }
+
+  function applyWorkAreaLayout(tool = null) {
+    if (!els.workArea) return;
+
+    const layout = getWorkAreaLayoutForTool(tool);
+    els.workArea.dataset.layoutMode = layout;
+    els.workArea.classList.toggle("session-workarea-stretch", layout === "stretch");
   }
 
   async function beginTool(item) {
@@ -169,28 +693,30 @@ export function createSessionEngine({
 
     const mod = await loadToolModule(item.id);
     activeTool = mod.default ?? {};
-
     const ctx = getToolContext(item);
 
-    if (typeof activeTool.getQuestionCount === "function") {
-      item.questionCount = clampInt(
-        activeTool.getQuestionCount(ctx),
-        1,
-        999,
-        item.questionCount
-      );
+    refreshComputedSessionValuesWithTool(item, activeTool);
+
+    if (isFinalChallengeItem(item)) {
+      ensureFinalChallengeStarted(item);
+      if (getActivityTotalRemainingMs() <= 0) {
+        finishSession({ title: "Temps écoulé — la séance est terminée." });
+        return;
+      }
+      startFinalChallengeTicker();
+    } else {
+      stopFinalChallengeTicker();
     }
 
-    if (typeof activeTool.getQuestionTime === "function") {
-      item.timePerQ = clampInt(
-        activeTool.getQuestionTime(ctx),
-        1,
-        300,
-        item.timePerQ
-      );
+    const runProfile = getToolRunProfile(activeTool, item);
+    if (runProfile.blockingMessage) {
+      throw new Error(runProfile.blockingMessage);
     }
 
-    activeTool.mount?.(els.workArea, ctx);
+    activeRuntime = createToolActivityRuntime(activeTool, ctx);
+    applyWorkAreaLayout(activeTool);
+
+    await activeRuntime.mount(els.workArea, ctx);
 
     await nextQuestion(item, true);
   }
@@ -198,24 +724,45 @@ export function createSessionEngine({
   async function nextQuestion(item, isFirstQuestion) {
     stopAllTimers();
 
+    if (isFinalChallengeItem(item) && getActivityTotalRemainingMs() <= 0) {
+      finishSession({ title: "Temps écoulé — la séance est terminée." });
+      return;
+    }
+
+    if (!isFirstQuestion) {
+      const completedByGauge = commitCurrentQuestionOutcomeOnce(item);
+      emitStateChange();
+      if (completedByGauge) {
+        await wait(700);
+        hideTimer();
+        hideManualAction();
+        await nextTool(false);
+        return;
+      }
+    }
+
     currentQuestionIndex += 1;
 
-    if (currentQuestionIndex >= item.questionCount) {
+    if (!item.infiniteQuestionCount && currentQuestionIndex >= item.questionCount) {
       hideTimer();
+      hideManualAction();
       await nextTool(false);
       return;
     }
 
     if (!isFirstQuestion) {
       beginQuestionTransition(item);
+      emitStateChange();
       return;
     }
 
     beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+    emitStateChange();
   }
 
   function pauseForInterruption() {
     if (!isSessionRunning) return;
+    if (phase.kind === "GROUP_ATTRIBUTION") return;
     if (paused) return;
 
     const snap = captureCurrentPhase();
@@ -224,13 +771,17 @@ export function createSessionEngine({
       : snap;
     paused = true;
     engineState = "PAUSED";
+    pauseActivityClock();
+    stopFinalChallengeTicker();
 
     stopAllTimers();
 
-    if (snap.kind === "QUESTION") {
+    hideManualAction();
+
+    if (snap.kind === "QUESTION" && Number.isFinite(snap.remainingMs)) {
       setTimerPhase("question");
       showTimer();
-    } else if (snap.kind === "ANSWER") {
+    } else if (snap.kind === "ANSWER" && Number.isFinite(snap.remainingMs)) {
       setTimerPhase("answer");
       showTimer();
     } else {
@@ -239,6 +790,7 @@ export function createSessionEngine({
 
     renderPauseStage();
     setStatus("PAUSE", "warn");
+    emitStateChange();
   }
 
   function resumeAfterPause() {
@@ -256,6 +808,16 @@ export function createSessionEngine({
     if (!item) {
       pausedPhase = null;
       return;
+    }
+
+    resumeActivityClock();
+    if (isFinalChallengeItem(item)) {
+      if (getActivityTotalRemainingMs() <= 0) {
+        finishSession({ title: "Temps écoulé — la séance est terminée." });
+        pausedPhase = null;
+        return;
+      }
+      startFinalChallengeTicker();
     }
 
     const snap = pausedPhase ?? createPhase("IDLE");
@@ -284,6 +846,7 @@ export function createSessionEngine({
       default:
         engineState = "RUNNING_QUESTION";
         phase = createPhase("IDLE");
+        emitStateChange();
         return;
     }
   }
@@ -297,18 +860,27 @@ export function createSessionEngine({
     if (!activeTool || !item) return;
 
     clearSessionStage();
+    hideManualAction();
 
     const remainingMs = clampPhaseDuration(durationMs);
     const ctx = getToolContext(item);
 
     if (generateQuestion) {
-      const maybePromise = activeTool.nextQuestion?.(els.workArea, ctx);
+      const runProfile = getToolRunProfile(activeTool, item);
+      if (runProfile.blockingMessage) {
+        onFatalError?.(runProfile.blockingMessage);
+        return;
+      }
+
+      const maybePromise = activeRuntime?.next?.(els.workArea, ctx);
 
       if (maybePromise && typeof maybePromise.then === "function") {
         engineState = "LOADING_QUESTION";
         phase = createPhase("IDLE");
         hideTimer();
         setStatus(`${item.title} — chargement…`, "warn");
+
+        emitStateChange();
 
         Promise.resolve(maybePromise)
           .then(() => {
@@ -326,8 +898,28 @@ export function createSessionEngine({
     }
 
     engineState = "RUNNING_QUESTION";
-    phase = createPhase("QUESTION", remainingMs);
-    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionCount}`);
+    phase = createPhase("QUESTION", item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : remainingMs);
+    item.currentQuestionResolvedCorrectly = false;
+    item.currentQuestionOutcomeCommitted = false;
+    item.lastQuestionOutcome = "pending";
+    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.infiniteQuestionCount ? "∞" : item.questionCount}`);
+
+    if (item.infiniteTimePerQ) {
+      hideTimer();
+
+      if (item.usesCustomQuestionFlow === true) {
+        refreshShellManualAction(item);
+        emitStateChange();
+        return;
+      }
+
+      refreshShellManualAction(item);
+      emitStateChange();
+      return;
+    }
+
+    refreshShellManualAction(item);
+    emitStateChange();
     setTimerPhase("question");
     showTimer();
     startGauge(remainingMs, { initialScale: initialGaugeScale });
@@ -336,13 +928,11 @@ export function createSessionEngine({
       questionTimer = null;
 
       if (item.hasAnswerPhase === false) {
-        nextQuestion(item, false).catch((err) => {
-          onFatalError?.(err?.message || "Erreur pendant la séance.");
-        });
+        void advanceToNextQuestion(item);
         return;
       }
 
-      beginAnswerPhase(item, item.answerTime * 1000, { showAnswerNow: true });
+      beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
     }, remainingMs);
   }
 
@@ -352,41 +942,79 @@ export function createSessionEngine({
     if (!activeTool || !item) return;
 
     clearSessionStage();
+    hideManualAction();
 
     const remainingMs = clampPhaseDuration(durationMs);
+    commitCurrentQuestionOutcomeOnce(item);
 
     if (showAnswerNow) {
       const showCtx = getToolContext(item);
-      activeTool.showAnswer?.(els.workArea, showCtx);
+      const maybePromise = activeRuntime?.showAnswer?.(els.workArea, showCtx);
+      if (maybePromise && typeof maybePromise.then === "function") {
+        Promise.resolve(maybePromise)
+          .then(() => {
+            if (!isSessionRunning) return;
+            emitStateChange();
+          })
+          .catch((err) => {
+            onFatalError?.(err?.message || "Erreur pendant la séance.");
+          });
+      }
     }
 
     engineState = "RUNNING_ANSWER";
-    phase = createPhase("ANSWER", remainingMs);
+    phase = createPhase("ANSWER", item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : remainingMs);
+
+    if (!Number.isFinite(remainingMs)) {
+      hideTimer();
+
+      if (item.usesCustomQuestionFlow === true) {
+        refreshShellManualAction(item);
+        emitStateChange();
+        return;
+      }
+
+      refreshShellManualAction(item);
+      emitStateChange();
+      return;
+    }
+
+    refreshShellManualAction(item);
+    emitStateChange();
     setTimerPhase("answer");
     showTimer();
     startGauge(remainingMs);
 
     answerTimer = window.setTimeout(() => {
       answerTimer = null;
-      nextQuestion(item, false).catch((err) => {
-        onFatalError?.(err?.message || "Erreur pendant la séance.");
-      });
+      completeAnswerPhase(item);
     }, remainingMs);
   }
 
   function beginQuestionTransition(item, durationMs = activityGlobals.questionTransitionSec * 1000) {
     stopAllTimers();
+    hideManualAction();
 
-    const remainingMs = Math.max(0, Math.floor(Number(durationMs) || 0));
+    const infiniteQuestionTransition = activityGlobals.questionTransitionInfinite === true;
+    const remainingMs = infiniteQuestionTransition
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, Math.floor(Number(durationMs) || 0));
 
-    if (remainingMs <= 0) {
+    if (!infiniteQuestionTransition && remainingMs <= 0) {
       beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+      emitStateChange();
       return;
     }
 
     engineState = "BETWEEN_QUESTIONS";
     phase = createPhase("TRANSITION", remainingMs);
     hideTimer();
+
+    if (infiniteQuestionTransition) {
+      renderQuestionTransitionOverlay(item);
+      emitStateChange();
+      return;
+    }
 
     renderSessionStage(`
       <div class="session-stage session-stage-transition">
@@ -398,6 +1026,7 @@ export function createSessionEngine({
     `);
 
     animateMiniTimer(remainingMs);
+    emitStateChange();
 
     transitionTimer = window.setTimeout(() => {
       transitionTimer = null;
@@ -405,9 +1034,26 @@ export function createSessionEngine({
     }, remainingMs);
   }
 
+  function renderQuestionTransitionOverlay(item) {
+    renderSessionStage(`
+      <button
+        class="session-stage session-stage-transition session-stage-transition-ready"
+        id="btnContinueQuestionTransition"
+        type="button"
+      >
+        <div class="session-transition-title">Prêt pour la question suivante</div>
+      </button>
+    `);
+
+    document.getElementById("btnContinueQuestionTransition")?.addEventListener("click", () => {
+      beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
+    });
+  }
+
   function openNextToolOverlay(item) {
     stopAllTimers();
     hideTimer();
+    hideManualAction();
     engineState = "BETWEEN_TOOLS";
     phase = createPhase("BETWEEN_TOOLS");
 
@@ -416,6 +1062,7 @@ export function createSessionEngine({
         <button class="btn primary btn-big session-next-btn" id="btnNextActivity" type="button">Activité suivante</button>
       </div>
     `);
+    emitStateChange();
 
     document.getElementById("btnNextActivity")?.addEventListener("click", () => {
       beginTool(item).catch((err) => {
@@ -451,12 +1098,17 @@ export function createSessionEngine({
     els.stageLayer.classList.add("hidden");
   }
 
-  function showSessionMessage({ title = "", body = "", buttonLabel = "", onClick = null } = {}) {
+  function showSessionMessage({ title = "", body = "", bodyHtml = "", buttonLabel = "", onClick = null, cardClass = "" } = {}) {
+    const safeCardClass = String(cardClass || "").trim();
+    const bodyMarkup = bodyHtml
+      ? String(bodyHtml)
+      : (body ? `<div class="session-message-text">${escapeHtml(body)}</div>` : "");
+
     renderSessionStage(`
-      <div class="session-stage">
-        <div class="session-message-card">
+      <div class="session-stage session-stage-message">
+        <div class="session-message-card ${escapeHtml(safeCardClass)}">
           ${title ? `<div class="session-message-title">${escapeHtml(title)}</div>` : ""}
-          ${body ? `<div class="session-message-text">${escapeHtml(body)}</div>` : ""}
+          ${bodyMarkup}
           ${buttonLabel ? `<button class="btn primary btn-big" id="sessionStageActionBtn" type="button">${escapeHtml(buttonLabel)}</button>` : ""}
         </div>
       </div>
@@ -504,54 +1156,101 @@ export function createSessionEngine({
     const nextSession = [];
     let requiresStudent = false;
     const allowedIds = new Set();
+    let blockingMessage = "";
 
     for (const item of (Array.isArray(sequenceItems) ? sequenceItems : [])) {
       const mod = await loadToolModule(item.toolId);
       const tool = mod.default ?? {};
+      const instructionMeta = getToolInstructionMeta(tool);
       const normalizedDraft = normalizeToolDraft(item.draft);
       const settings = normalizedDraft.settings == null
         ? getToolDefaultSettings(tool)
         : cloneData(normalizedDraft.settings);
 
-      const toolRequiresStudent = typeof tool.requiresStudent === "function"
-        ? !!tool.requiresStudent(settings)
-        : tool.requiresStudent === true;
+      const sessionItem = {
+        id: item.toolId,
+        instanceId: item.instanceId,
+        title: buildSessionItemTitle(item.toolId, item.instanceId, nextSession.length),
+        draftTimePerQ: normalizedDraft.timePerQ,
+        draftQuestionCount: normalizedDraft.questionCount,
+        draftAnswerTime: normalizedDraft.answerTime,
+        draftInfiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
+        draftInfiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
+        draftInfiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
+        timePerQ: normalizedDraft.timePerQ,
+        questionCount: normalizedDraft.questionCount,
+        answerTime: normalizedDraft.answerTime,
+        infiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
+        infiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
+        infiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
+        defaultInstruction: instructionMeta.defaultInstruction,
+        supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
+        settings,
+        individualGauge: null,
+        currentQuestionResolvedCorrectly: false,
+        currentQuestionOutcomeCommitted: false,
+        lastQuestionOutcome: "pending"
+      };
 
-      if (toolRequiresStudent) {
+      const baseToolContext = {
+        sessionItem,
+        accessCode,
+        moduleKey,
+        activityMode: sessionActivityMode,
+        sessionMode: runMode,
+        settings,
+        globals: cloneData(activityGlobals),
+        projectionResponseUi: normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+        student: selectedStudent,
+        students: cloneData(selectedStudents),
+        selectedStudents: cloneData(selectedStudents),
+        services: {}
+      };
+
+      const runtimeCapabilities = getToolRuntimeCapabilities(tool, baseToolContext);
+      const projectionResponseUiSupport = getToolProjectionResponseUiSupport(tool, baseToolContext);
+      const effectiveProjectionResponseUi = sessionActivityMode === "projection"
+        ? resolveEffectiveProjectionResponseUi(tool, baseToolContext.projectionResponseUi, baseToolContext)
+        : null;
+
+      sessionItem.hasAnswerPhase = runtimeCapabilities.answerPhase !== "unsupported";
+      sessionItem.usesCustomQuestionFlow = runtimeCapabilities.transitionPhase !== "required";
+      sessionItem.supportsCommonFlowSettings = runtimeCapabilities.supportsCommonFlowSettings !== false;
+      sessionItem.runtimeCapabilities = runtimeCapabilities;
+      sessionItem.projectionResponseUiSupport = projectionResponseUiSupport;
+      sessionItem.requestedProjectionResponseUi = baseToolContext.projectionResponseUi;
+      sessionItem.projectionResponseUi = effectiveProjectionResponseUi || baseToolContext.projectionResponseUi;
+
+      const runProfile = getToolRunProfile(tool, sessionItem);
+
+      if (runProfile.requiresStudent) {
         requiresStudent = true;
       }
 
-      const selectedIds = Array.isArray(settings?.selectionOrder) && settings.selectionOrder.length
-        ? settings.selectionOrder
-        : Array.isArray(settings?.selectedStudentIds)
-          ? settings.selectedStudentIds
-          : [];
-
-      selectedIds.forEach((id) => {
+      runProfile.allowedStudentIds.forEach((id) => {
         const cleanId = String(id || "").trim();
         if (cleanId) allowedIds.add(cleanId);
       });
 
-      nextSession.push({
-        id: item.toolId,
-        instanceId: item.instanceId,
-        title: buildSessionItemTitle(item.toolId, item.instanceId, nextSession.length),
-        timePerQ: normalizedDraft.timePerQ,
-        questionCount: normalizedDraft.questionCount,
-        answerTime: normalizedDraft.answerTime,
-        hasAnswerPhase: tool.hasAnswerPhase !== false,
-        settings
-      });
+      if (!blockingMessage && runProfile.blockingMessage) {
+        blockingMessage = runProfile.blockingMessage;
+      }
+
+      nextSession.push(sessionItem);
     }
+
+    applyFinalChallengeFlags(nextSession);
 
     sessionRequiresStudent = requiresStudent;
     allowedStudentIds = [...allowedIds];
+    sessionBlockingMessage = blockingMessage;
     session = nextSession;
+    resetSessionGaugeStates();
   }
 
   async function loadToolModule(toolId) {
     if (!moduleRuntime) {
-      throw new Error("Runtime de module non initialisé.");
+      throw new Error("Runtime d’outils non initialisé.");
     }
 
     const cacheKey = `${moduleKey}::${toolId}`;
@@ -565,7 +1264,7 @@ export function createSessionEngine({
 
   function buildSessionItemTitle(toolId) {
     const toolMeta = toolsCatalog.find((tool) => tool.id === toolId);
-    return toolMeta?.title || String(toolId || "Outil");
+    return toolMeta?.label || toolMeta?.title || String(toolId || "Outil");
   }
 
   function getToolDefaultSettings(tool) {
@@ -575,25 +1274,446 @@ export function createSessionEngine({
     return {};
   }
 
+  function isActivityTotalTimeEnabled() {
+    return activityGlobals.activityTotalTimeEnabled === true
+      && Math.floor(Number(activityGlobals.activityTotalTimeSec) || 0) > 0;
+  }
+
+  function getActivityTotalTimeMs() {
+    return Math.max(0, Math.floor(Number(activityGlobals.activityTotalTimeSec) || 0) * 1000);
+  }
+
+  function resetActivityClock() {
+    activityClockStartedAt = 0;
+    activityClockElapsedBeforePauseMs = 0;
+    activityClockPaused = true;
+  }
+
+  function startActivityClock() {
+    activityClockStartedAt = performance.now();
+    activityClockElapsedBeforePauseMs = 0;
+    activityClockPaused = false;
+  }
+
+  function pauseActivityClock() {
+    if (activityClockPaused) return;
+    activityClockElapsedBeforePauseMs += Math.max(0, performance.now() - activityClockStartedAt);
+    activityClockStartedAt = performance.now();
+    activityClockPaused = true;
+  }
+
+  function resumeActivityClock() {
+    if (!activityClockPaused) return;
+    activityClockStartedAt = performance.now();
+    activityClockPaused = false;
+  }
+
+  function getActivityElapsedMs() {
+    if (!isSessionRunning && !activityClockStartedAt) return 0;
+    const livePart = activityClockPaused
+      ? 0
+      : Math.max(0, performance.now() - activityClockStartedAt);
+    return Math.max(0, activityClockElapsedBeforePauseMs + livePart);
+  }
+
+  function getActivityTotalRemainingMs() {
+    if (!isActivityTotalTimeEnabled()) return Number.POSITIVE_INFINITY;
+    return Math.max(0, getActivityTotalTimeMs() - getActivityElapsedMs());
+  }
+
+  function applyFinalChallengeFlags(items = []) {
+    const enabled = isActivityTotalTimeEnabled();
+    const lastIndex = Array.isArray(items) ? items.length - 1 : -1;
+    (Array.isArray(items) ? items : []).forEach((item, index) => {
+      item.isFinalInfiniteSequenceItem = enabled && index === lastIndex;
+      item.finalChallengeCorrectCount = 0;
+      item.finalChallengeStarted = false;
+      if (item.isFinalInfiniteSequenceItem) {
+        item.infiniteQuestionCount = true;
+        item.individualGauge = null;
+      }
+    });
+  }
+
+  function isFinalChallengeItem(item) {
+    return isActivityTotalTimeEnabled() && item?.isFinalInfiniteSequenceItem === true;
+  }
+
+  function ensureFinalChallengeStarted(item) {
+    if (!isFinalChallengeItem(item)) return;
+    if (item.finalChallengeStarted === true) return;
+    item.finalChallengeStarted = true;
+    item.finalChallengeCorrectCount = 0;
+  }
+
+  function incrementFinalChallengeCorrectCount(item) {
+    if (!isFinalChallengeItem(item)) return;
+    item.finalChallengeCorrectCount = Math.max(0, Math.floor(Number(item.finalChallengeCorrectCount) || 0)) + 1;
+  }
+
+  function getFinalChallengeUiState(item) {
+    if (!isSessionRunning || phase.kind === "DONE" || !isFinalChallengeItem(item) || item.finalChallengeStarted !== true) {
+      return { active: false };
+    }
+
+    const remainingMs = getActivityTotalRemainingMs();
+    return {
+      active: true,
+      correctCount: Math.max(0, Math.floor(Number(item.finalChallengeCorrectCount) || 0)),
+      remainingMs,
+      timeLabel: formatCountdown(remainingMs)
+    };
+  }
+
+  function formatCountdown(ms) {
+    const safeSec = Math.max(0, Math.ceil(Number(ms) / 1000));
+    const minutes = Math.floor(safeSec / 60);
+    const seconds = safeSec % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function startFinalChallengeTicker() {
+    stopFinalChallengeTicker();
+    if (!isFinalChallengeItem(session[currentToolIndex]) || paused || !isSessionRunning) return;
+
+    finalChallengeTicker = window.setInterval(() => {
+      const item = session[currentToolIndex];
+      if (!isFinalChallengeItem(item) || paused || !isSessionRunning) {
+        stopFinalChallengeTicker();
+        return;
+      }
+
+      if (getActivityTotalRemainingMs() <= 0) {
+        finishSession({ title: "Temps écoulé — la séance est terminée." });
+        return;
+      }
+
+      emitStateChange();
+    }, 250);
+  }
+
+  function stopFinalChallengeTicker() {
+    if (finalChallengeTicker) {
+      clearInterval(finalChallengeTicker);
+      finalChallengeTicker = null;
+    }
+  }
+
+  function finishSession({ title = "Bravo, la séance est terminée." } = {}) {
+    stopAllTimers();
+    stopFinalChallengeTicker();
+    hideTimer();
+    hideManualAction();
+    engineState = "DONE";
+    phase = createPhase("DONE");
+    isSessionRunning = false;
+    setStatus("Séance terminée", "good");
+    emitStateChange();
+    showSessionMessage({
+      title,
+      bodyHtml: renderGroupSessionSummaryHtml(),
+      cardClass: getGroupScoreRows().length ? "session-message-card-group-summary" : "",
+      buttonLabel: "Retour aux activités",
+      onClick: onExitToActivities
+    });
+  }
+
+
+  function createIndividualGaugeState(item) {
+    if (sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+      return null;
+    }
+
+    if (!item || isFinalChallengeItem(item)) return null;
+
+    if (item.infiniteQuestionCount) {
+      const infiniteGaugeSettings = getCommonInfiniteGaugeSettings(item.settings);
+      const milestones = [];
+      const milestoneCount = Math.max(0, Number(infiniteGaugeSettings.infiniteGaugeMilestones) || 0);
+      for (let index = 1; index <= milestoneCount; index += 1) {
+        milestones.push(index / (milestoneCount + 1));
+      }
+
+      return {
+        mode: "infinite",
+        progress: normalizeGaugeProgress(0),
+        lockedFloor: normalizeGaugeProgress(0),
+        milestones,
+        step: Math.max(0, Math.min(1, 1 / Math.max(1, Number(infiniteGaugeSettings.infiniteGaugeRequiredCorrect) || 1))),
+        completed: false,
+        launching: false,
+        rocketState: "off"
+      };
+    }
+
+    const segmentCount = Math.max(1, clampInt(item.questionCount, 1, 999, 1));
+    return {
+      mode: "finite",
+      segments: Array.from({ length: segmentCount }, () => "pending"),
+      completed: false,
+      launching: false,
+      rocketState: "off"
+    };
+  }
+
+  function resetSessionGaugeStates() {
+    session.forEach((item) => {
+      item.individualGauge = createIndividualGaugeState(item);
+      if (isFinalChallengeItem(item)) {
+        item.finalChallengeStarted = false;
+        item.finalChallengeCorrectCount = 0;
+      }
+      item.currentQuestionResolvedCorrectly = false;
+      item.currentQuestionOutcomeCommitted = false;
+      item.lastQuestionOutcome = "pending";
+    });
+  }
+
+  function hasCompletedInfiniteGauge(item) {
+    const gauge = item?.individualGauge;
+    return gauge?.mode === "infinite" && gauge.completed === true;
+  }
+
+  function commitCurrentQuestionOutcomeOnce(item) {
+    if (!item) return false;
+
+    if (item.currentQuestionOutcomeCommitted === true) {
+      return hasCompletedInfiniteGauge(item);
+    }
+
+    const completedByGauge = commitCurrentQuestionOutcome(item);
+    item.currentQuestionOutcomeCommitted = true;
+    return completedByGauge;
+  }
+
+  function getIndividualGaugeUiState(item) {
+    if (sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+      return null;
+    }
+
+    if (!item?.individualGauge || isFinalChallengeItem(item)) return null;
+
+    const gauge = item.individualGauge;
+    if (gauge.mode === "infinite") {
+      return {
+        mode: "infinite",
+        progress: normalizeGaugeProgress(gauge.progress),
+        lockedFloor: normalizeGaugeProgress(gauge.lockedFloor),
+        milestones: Array.isArray(gauge.milestones) ? gauge.milestones.map((value) => normalizeGaugeProgress(value)) : [],
+        step: Math.max(0, Math.min(1, Number(gauge.step) || 0.1)),
+        completed: gauge.completed === true,
+        launching: gauge.launching === true,
+        rocketState: gauge.rocketState === "on" ? "on" : "off"
+      };
+    }
+
+    return {
+      mode: "finite",
+      segments: Array.isArray(gauge.segments) ? gauge.segments.map((value) => {
+        const safe = String(value || "pending").trim();
+        return safe === "correct" || safe === "incorrect" ? safe : "pending";
+      }) : [],
+      completed: gauge.completed === true,
+      launching: false,
+      rocketState: "off"
+    };
+  }
+
+  function commitCurrentQuestionOutcome(item) {
+    const isCorrect = item?.currentQuestionResolvedCorrectly === true;
+    if (isFinalChallengeItem(item) && isCorrect) {
+      incrementFinalChallengeCorrectCount(item);
+    }
+
+    if (!item || sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+      if (item) item.currentQuestionResolvedCorrectly = false;
+      return false;
+    }
+
+    const gauge = item.individualGauge;
+    if (!gauge) {
+      item.currentQuestionResolvedCorrectly = false;
+      return false;
+    }
+
+    item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
+    item.currentQuestionResolvedCorrectly = false;
+
+    if (gauge.mode === "finite") {
+      if (Array.isArray(gauge.segments) && currentQuestionIndex >= 0 && currentQuestionIndex < gauge.segments.length) {
+        gauge.segments[currentQuestionIndex] = isCorrect ? "correct" : "incorrect";
+      }
+      gauge.completed = Array.isArray(gauge.segments) && gauge.segments.every((value) => value === "correct" || value === "incorrect");
+      gauge.launching = false;
+      gauge.rocketState = "off";
+      return false;
+    }
+
+    if (gauge.mode === "infinite") {
+      if (isCorrect) {
+        gauge.progress = normalizeGaugeProgress((Number(gauge.progress) || 0) + (Number(gauge.step) || 0.1));
+        const milestones = Array.isArray(gauge.milestones) ? gauge.milestones : [];
+        const reached = milestones.filter((value) => gauge.progress + GAUGE_EPSILON >= normalizeGaugeProgress(value));
+        if (reached.length) {
+          gauge.lockedFloor = normalizeGaugeProgress(Math.max(gauge.lockedFloor || 0, reached[reached.length - 1]));
+        }
+      } else {
+        gauge.progress = normalizeGaugeProgress(gauge.lockedFloor);
+      }
+
+      gauge.progress = normalizeGaugeProgress(gauge.progress);
+      gauge.lockedFloor = normalizeGaugeProgress(gauge.lockedFloor);
+
+      if (gauge.progress + GAUGE_EPSILON >= 1) {
+        gauge.progress = 1;
+        gauge.completed = true;
+        gauge.launching = true;
+        gauge.rocketState = "on";
+        return true;
+      }
+
+      gauge.completed = false;
+      gauge.launching = false;
+      gauge.rocketState = "off";
+    }
+
+    return false;
+  }
+
+  function getToolRunProfile(tool, item) {
+    return getContractToolRunProfile(tool, getToolContext(item));
+  }
+
+  function getToolInstructionMeta(tool) {
+    const safeTool = tool && typeof tool === "object" && !Array.isArray(tool)
+      ? tool
+      : {};
+
+    return {
+      defaultInstruction: String(safeTool.defaultInstruction || "").trim(),
+      supportsCustomInstruction: safeTool.supportsCustomInstruction !== false
+    };
+  }
+
+  function getContextInstructionMeta(item = null) {
+    const activeInstructionMeta = getToolInstructionMeta(activeTool);
+
+    if (item) {
+      return {
+        defaultInstruction: String(item.defaultInstruction || activeInstructionMeta.defaultInstruction || "").trim(),
+        supportsCustomInstruction: item.supportsCustomInstruction != null
+          ? item.supportsCustomInstruction !== false
+          : activeInstructionMeta.supportsCustomInstruction
+      };
+    }
+
+    return activeInstructionMeta;
+  }
+
   function getToolContext(item) {
+    const instructionMeta = getContextInstructionMeta(item);
+
     if (!item) {
+      const sessionControls = createToolSessionControls(null);
       return {
         sessionItem: null,
         accessCode,
         moduleKey,
+        activityMode: sessionActivityMode,
+        sessionMode: runMode,
+        runMode,
         settings: {},
         student: selectedStudent,
-        studentFirstName: selectedStudent?.first_name ?? ""
+        students: cloneData(selectedStudents),
+        selectedStudents: cloneData(selectedStudents),
+        studentIds: cloneData(selectedStudents.map((item) => item?.id).filter(Boolean)),
+        studentFirstName: selectedStudent?.first_name ?? "",
+        defaultInstruction: instructionMeta.defaultInstruction,
+        supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
+        projectionResponseUi: normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+        globals: cloneData(activityGlobals),
+        isFinalInfiniteSequenceItem: false,
+        finalInfiniteSequenceItem: false,
+        services: {
+          sessionControls,
+          requestAnswerPhase: sessionControls.requestAnswerPhase,
+          requestNextQuestion: sessionControls.requestNextQuestion,
+          getPhaseKind: sessionControls.getPhaseKind
+        },
+        sessionControls
       };
     }
+
+    const sessionControls = createToolSessionControls(item);
 
     return {
       sessionItem: item,
       accessCode,
       moduleKey,
+      activityMode: sessionActivityMode,
+      sessionMode: runMode,
+      runMode,
       settings: item.settings ?? {},
       student: selectedStudent,
-      studentFirstName: selectedStudent?.first_name ?? ""
+      students: cloneData(selectedStudents),
+      selectedStudents: cloneData(selectedStudents),
+      studentIds: cloneData(selectedStudents.map((entry) => entry?.id).filter(Boolean)),
+      studentFirstName: selectedStudent?.first_name ?? "",
+      defaultInstruction: instructionMeta.defaultInstruction,
+      supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
+      projectionResponseUi: item.projectionResponseUi || normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+      requestedProjectionResponseUi: item.requestedProjectionResponseUi || normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+      projectionResponseUiSupport: cloneData(item.projectionResponseUiSupport || {}),
+      globals: cloneData(activityGlobals),
+      isFinalInfiniteSequenceItem: isFinalChallengeItem(item),
+      finalInfiniteSequenceItem: isFinalChallengeItem(item),
+      services: {
+        sessionControls,
+        requestAnswerPhase: sessionControls.requestAnswerPhase,
+        requestNextQuestion: sessionControls.requestNextQuestion,
+        getPhaseKind: sessionControls.getPhaseKind,
+        notifyValidationStateChanged: sessionControls.notifyValidationStateChanged
+      },
+      sessionControls
+    };
+  }
+
+  function createToolSessionControls(item) {
+    return {
+      requestAnswerPhase({ manual = false, showAnswerNow = true, wasCorrect = false } = {}) {
+        if (!item || !isSessionRunning || paused) return false;
+        if (session[currentToolIndex] !== item) return false;
+        if (phase.kind !== "QUESTION") return false;
+
+        item.currentQuestionResolvedCorrectly = wasCorrect === true;
+
+        const durationMs = manual
+          ? Number.POSITIVE_INFINITY
+          : (item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000);
+
+        beginAnswerPhase(item, durationMs, { showAnswerNow });
+        emitStateChange();
+        return true;
+      },
+
+      requestNextQuestion() {
+        if (!item || !isSessionRunning || paused) return false;
+        if (session[currentToolIndex] !== item) return false;
+        if (phase.kind !== "ANSWER") return false;
+        completeAnswerPhase(item);
+        return true;
+      },
+
+      notifyValidationStateChanged() {
+        if (!item || session[currentToolIndex] !== item) return false;
+        refreshShellManualAction(item);
+        emitStateChange();
+        return true;
+      },
+
+      getPhaseKind() {
+        return phase.kind;
+      }
     };
   }
 
@@ -601,12 +1721,266 @@ export function createSessionEngine({
     return {
       requiresStudent: sessionRequiresStudent,
       allowedStudentIds: cloneData(allowedStudentIds),
-      selectedStudent: selectedStudent ? cloneData(selectedStudent) : null
+      blockingMessage: sessionBlockingMessage,
+      selectedStudent: selectedStudent ? cloneData(selectedStudent) : null,
+      selectedStudents: cloneData(selectedStudents),
+      selectedStudentIds: cloneData(selectedStudents.map((entry) => entry?.id).filter(Boolean)),
+      groupScores: getGroupScores()
     };
   }
 
   function setSelectedStudent(student) {
     selectedStudent = student ? cloneData(student) : null;
+    selectedStudents = selectedStudent ? [cloneData(selectedStudent)] : [];
+    resetGroupScores();
+  }
+
+  function setSelectedStudents(students) {
+    selectedStudents = Array.isArray(students)
+      ? students.map((student) => cloneData(student)).filter(Boolean)
+      : [];
+    selectedStudent = selectedStudents.length === 1 ? cloneData(selectedStudents[0]) : null;
+    resetGroupScores();
+  }
+
+  function getStudentId(student) {
+    return String(student?.id ?? student?.student_id ?? "").trim();
+  }
+
+  function getStudentFirstName(student) {
+    return String(student?.first_name ?? student?.firstname ?? student?.name ?? "Élève").trim() || "Élève";
+  }
+
+  function getGroupScoreRows() {
+    if (sessionActivityMode !== "group" || runMode === "projected-teacher") {
+      return [];
+    }
+
+    return selectedStudents
+      .map((student) => {
+        const id = getStudentId(student);
+        if (!id) return null;
+        const score = groupScores.get(id) || { correct: 0, total: 0 };
+        return {
+          id,
+          firstName: getStudentFirstName(student),
+          correct: Math.max(0, Math.floor(Number(score.correct) || 0)),
+          total: Math.max(0, Math.floor(Number(score.total) || 0))
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function getGroupScores() {
+    return cloneData(getGroupScoreRows());
+  }
+
+  function resetGroupScores() {
+    groupScores = new Map();
+    if (sessionActivityMode !== "group" || runMode === "projected-teacher") return;
+
+    selectedStudents.forEach((student) => {
+      const id = getStudentId(student);
+      if (!id) return;
+      groupScores.set(id, { correct: 0, total: 0 });
+    });
+  }
+
+  function ensureGroupScoreEntry(student) {
+    const id = getStudentId(student);
+    if (!id) return null;
+
+    if (!groupScores.has(id)) {
+      groupScores.set(id, { correct: 0, total: 0 });
+    }
+
+    return groupScores.get(id);
+  }
+
+  function commitGroupAnswerAttribution(correctStudentIds = []) {
+    if (sessionActivityMode !== "group" || runMode === "projected-teacher") return;
+
+    const correctIds = new Set(
+      (Array.isArray(correctStudentIds) ? correctStudentIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+
+    if (isFinalChallengeItem(session[currentToolIndex]) && correctIds.size > 0) {
+      incrementFinalChallengeCorrectCount(session[currentToolIndex]);
+    }
+
+    selectedStudents.forEach((student) => {
+      const id = getStudentId(student);
+      if (!id) return;
+      const entry = ensureGroupScoreEntry(student);
+      if (!entry) return;
+      entry.total = Math.max(0, Math.floor(Number(entry.total) || 0)) + 1;
+      if (correctIds.has(id)) {
+        entry.correct = Math.max(0, Math.floor(Number(entry.correct) || 0)) + 1;
+      }
+    });
+  }
+
+  function shouldUseGroupAnswerAttribution(item) {
+    return sessionActivityMode === "group"
+      && runMode !== "projected-teacher"
+      && !!item
+      && phase.kind === "ANSWER"
+      && item.hasAnswerPhase !== false
+      && Array.isArray(selectedStudents)
+      && selectedStudents.length >= 2;
+  }
+
+  function completeAnswerPhase(item) {
+    if (shouldUseGroupAnswerAttribution(item)) {
+      openGroupAnswerAttributionOverlay(item);
+      return;
+    }
+
+    void advanceToNextQuestion(item);
+  }
+
+  function openGroupAnswerAttributionOverlay(item) {
+    if (!shouldUseGroupAnswerAttribution(item)) {
+      void advanceToNextQuestion(item);
+      return;
+    }
+
+    stopAllTimers();
+    hideTimer();
+    hideManualAction();
+    engineState = "GROUP_ATTRIBUTION";
+    phase = createPhase("GROUP_ATTRIBUTION");
+
+    const studentRows = getGroupAnswerRows(selectedStudents).map((row) => `
+      <div class="session-group-answer-student-row">
+        ${row.map(renderGroupAnswerStudentButton).join("")}
+      </div>
+    `).join("");
+
+    renderSessionStage(`
+      <div class="session-stage session-stage-group-attribution" data-skip-autofs="true">
+        <div class="session-group-attribution-title">Qui a la bonne réponse&nbsp;?</div>
+        <div class="session-group-attribution-grid session-group-answer-student-rows" role="group" aria-label="Élèves ayant donné la bonne réponse">
+          ${studentRows}
+        </div>
+        <button class="btn primary btn-big session-group-attribution-submit" id="btnGroupAttributionSubmit" type="button">
+          Valider
+        </button>
+      </div>
+    `);
+
+    const root = els.stageLayer?.querySelector(".session-stage-group-attribution");
+    const submitButton = root?.querySelector("#btnGroupAttributionSubmit");
+    let submitted = false;
+
+    root?.querySelectorAll(".session-group-student-btn").forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextState = !button.classList.contains("is-lit");
+        button.classList.toggle("is-lit", nextState);
+        button.setAttribute("aria-pressed", nextState ? "true" : "false");
+      });
+    });
+
+    submitButton?.addEventListener("click", async () => {
+      if (submitted) return;
+      submitted = true;
+      submitButton.disabled = true;
+
+      const correctIds = [...(root?.querySelectorAll(".session-group-student-btn.is-lit") || [])]
+        .map((button) => String(button.getAttribute("data-student-id") || "").trim())
+        .filter(Boolean);
+
+      commitGroupAnswerAttribution(correctIds);
+      await advanceToNextQuestion(item);
+    });
+
+    emitStateChange();
+  }
+
+  function getGroupAnswerRows(students = []) {
+    const safeStudents = (Array.isArray(students) ? students : [])
+      .filter((student) => !!getStudentId(student));
+    const count = safeStudents.length;
+
+    if (count <= 0) return [];
+    if (count <= 3) return [safeStudents];
+    if (count === 4) return [safeStudents.slice(0, 2), safeStudents.slice(2, 4)];
+    if (count === 5) return [safeStudents.slice(0, 3), safeStudents.slice(3, 5)];
+    if (count === 6) return [safeStudents.slice(0, 3), safeStudents.slice(3, 6)];
+
+    const rows = [];
+    for (let i = 0; i < count; i += 4) {
+      rows.push(safeStudents.slice(i, i + 4));
+    }
+    return rows;
+  }
+
+  function renderGroupAnswerStudentButton(student) {
+    const id = getStudentId(student);
+    const firstName = getStudentFirstName(student);
+    return `
+      <button
+        class="session-group-student-btn"
+        type="button"
+        data-student-id="${escapeHtml(id)}"
+        aria-pressed="false"
+      >${escapeHtml(firstName)}</button>
+    `;
+  }
+
+  function renderGroupSessionSummaryHtml() {
+    const rows = getGroupScoreRows();
+    if (!rows.length) return "";
+
+    return `
+      <div class="session-group-summary-line" aria-label="Bilan discret du groupe">
+        ${rows.map((row) => `
+          <span class="session-group-summary-item">
+            <span class="session-group-summary-name">${escapeHtml(row.firstName)}&nbsp;:</span>
+            ${renderGroupProgressDisc(row.correct, row.total, row.firstName)}
+          </span>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderGroupProgressDisc(correct, total, firstName = "") {
+    const safeTotal = Math.max(0, Math.floor(Number(total) || 0));
+    const safeCorrect = Math.max(0, Math.min(safeTotal, Math.floor(Number(correct) || 0)));
+    const ratio = safeTotal > 0 ? Math.max(0, Math.min(1, safeCorrect / safeTotal)) : 0;
+    const label = `${firstName || "Élève"} : ${safeCorrect} sur ${safeTotal}`;
+
+    if (ratio <= 0) {
+      return `
+        <svg class="session-group-progress-disc" viewBox="0 0 32 32" role="img" aria-label="${escapeHtml(label)}">
+          <circle class="session-group-progress-disc-bg" cx="16" cy="16" r="14"></circle>
+        </svg>
+      `;
+    }
+
+    if (ratio >= 1) {
+      return `
+        <svg class="session-group-progress-disc" viewBox="0 0 32 32" role="img" aria-label="${escapeHtml(label)}">
+          <circle class="session-group-progress-disc-bg" cx="16" cy="16" r="14"></circle>
+          <circle class="session-group-progress-disc-fill" cx="16" cy="16" r="14"></circle>
+        </svg>
+      `;
+    }
+
+    const angle = (ratio * Math.PI * 2) - (Math.PI / 2);
+    const endX = 16 + (14 * Math.cos(angle));
+    const endY = 16 + (14 * Math.sin(angle));
+    const largeArc = ratio > 0.5 ? 1 : 0;
+    const path = `M 16 16 L 16 2 A 14 14 0 ${largeArc} 1 ${endX.toFixed(3)} ${endY.toFixed(3)} Z`;
+
+    return `
+      <svg class="session-group-progress-disc" viewBox="0 0 32 32" role="img" aria-label="${escapeHtml(label)}">
+        <circle class="session-group-progress-disc-bg" cx="16" cy="16" r="14"></circle>
+        <path class="session-group-progress-disc-fill" d="${path}"></path>
+      </svg>
+    `;
   }
 
   function startGauge(durationMs, { initialScale = null } = {}) {
@@ -660,7 +2034,7 @@ export function createSessionEngine({
     }
   }
 
-    function getGaugeScale() {
+  function getGaugeScale() {
     if (!els.timerBar) return gaugeCurrentScale;
 
     const transform = els.timerBar.style.transform || "";
@@ -690,6 +2064,92 @@ export function createSessionEngine({
       transitionTimer = null;
     }
     stopGauge();
+  }
+
+  function handleManualAction() {
+    manualActionHandler?.();
+  }
+
+  async function advanceToNextQuestion(item) {
+    try {
+      await nextQuestion(item, false);
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant la séance.");
+    }
+  }
+
+  function refreshShellManualAction(item) {
+    if (runMode === "projected-teacher") {
+      hideManualAction();
+      return;
+    }
+
+    if (!item || !isSessionRunning || paused) {
+      hideManualAction();
+      return;
+    }
+
+    const shellValidation = getShellValidationState(item);
+    if (shellValidation.visible === true) {
+      showManualAction("Valider", () => {
+        triggerShellValidate();
+      }, {
+        enabled: shellValidation.enabled === true
+      });
+      return;
+    }
+
+    if (phase.kind === "QUESTION" && item.infiniteTimePerQ && item.usesCustomQuestionFlow !== true) {
+      showManualAction(item.hasAnswerPhase === false ? "Question suivante" : "Afficher la réponse", async () => {
+        hideManualAction();
+
+        if (item.hasAnswerPhase === false) {
+          await advanceToNextQuestion(item);
+          return;
+        }
+
+        beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
+      });
+      return;
+    }
+
+    if (phase.kind === "ANSWER" && item.infiniteAnswerTime && item.usesCustomQuestionFlow !== true) {
+      if (shouldUseGroupAnswerAttribution(item)) {
+        showManualAction("Qui a la bonne réponse ?", () => {
+          openGroupAnswerAttributionOverlay(item);
+        });
+        return;
+      }
+
+      showManualAction("Question suivante", async () => {
+        hideManualAction();
+        await advanceToNextQuestion(item);
+      });
+      return;
+    }
+
+    hideManualAction();
+  }
+
+  function showManualAction(label, onClick, { enabled = true } = {}) {
+    if (!manualControlsEnabled) {
+      hideManualAction();
+      return;
+    }
+
+    manualActionHandler = typeof onClick === "function" ? onClick : null;
+    if (!els.manualActionBtn) return;
+    els.manualActionBtn.textContent = String(label || "");
+    els.manualActionBtn.classList.remove("hidden");
+    els.manualActionBtn.disabled = !manualActionHandler || paused || enabled !== true;
+  }
+
+  function hideManualAction() {
+    manualActionHandler = null;
+    if (!els.manualActionBtn) return;
+    els.manualActionBtn.textContent = "";
+    els.manualActionBtn.disabled = true;
+    els.manualActionBtn.classList.add("hidden");
   }
 
   function setStatus(text, mood) {
@@ -729,6 +2189,7 @@ export function createSessionEngine({
 
   function clearWorkArea() {
     clearSessionStage();
+    applyWorkAreaLayout(null);
 
     if (els.workArea) {
       els.workArea.innerHTML = "";
