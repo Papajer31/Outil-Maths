@@ -24,8 +24,7 @@ export default defineTool("monnaie", "Monnaie", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

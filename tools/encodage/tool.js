@@ -23,8 +23,7 @@ export default defineTool("encodage", "Encodage", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

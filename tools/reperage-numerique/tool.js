@@ -23,8 +23,7 @@ export default defineTool("reperage-numerique", "Repérage numérique", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

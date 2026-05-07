@@ -11,7 +11,7 @@ Construire une plateforme pédagogique web pensée pour un usage réel en classe
 Le cap actuel est clairement **tools-first** :
 - le coeur actif du projet vit autour d’un registre d’outils ;
 - chaque nouvel outil doit être autonome ;
-- l’ancien monde `modules/` reste présent comme héritage / réserve de code, mais il n’est plus l’entrée active des outils modernes.
+- l’ancien monde `modules/` reste présent comme héritage / archive de code consultable, mais il n’est plus l’entrée active des outils modernes et ne doit pas être considéré comme chargeable tel quel.
 
 ---
 
@@ -56,16 +56,18 @@ Routes élève visibles dans le dépôt :
 
 `#/sessionchoice` sert surtout de point d’entrée / redirection pour les liens de séance partagée ou projetée.
 
-### C. Modes actifs
+### C. Modes actifs et projection
 
-Les modes actifs sont :
+Les modes pédagogiques actifs sont désormais :
 - `individual` ;
-- `group` ;
-- `projection`.
+- `group`.
 
-Le mode projection gère deux variantes d’UI de réponse :
-- `boxed` ;
-- `free`.
+`projection` n’est plus un mode d’activité stocké dans `activity_mode`.
+La projection est une **action de lancement** / un contexte d’exécution :
+- une activité `individual` projetée garde une UI de réponse `boxed` ;
+- une activité `group` projetée garde une UI libre `free`.
+
+Le contexte technique de projection est porté par le runtime, notamment via `runMode = "projected-teacher"`.
 
 ---
 
@@ -84,11 +86,12 @@ Le mode projection gère deux variantes d’UI de réponse :
 - le champ Supabase `activity_configs.module_key` existe toujours ;
 - plusieurs variables du front gardent encore des noms historiques comme `moduleKey` ou `moduleRuntime` ;
 - la valeur logique active attendue reste généralement `tools` ;
-- le dossier `modules/` existe encore avec deux anciens modules : `maths` et `production-ecrit`.
+- le dossier `modules/` existe encore avec deux anciens modules : `maths` et `production-ecrit` ;
+- ces anciens modules sont à considérer comme une archive de code, pas comme une cible chargeable telle quelle, car l’ancienne façade `shared/module-factory.js` n’est plus présente dans le zip courant.
 
 Conclusion :
 - le projet est **réellement tools-first dans le flux actif** ;
-- la transition historique survit surtout dans le vocabulaire de certaines variables, dans le champ `module_key` en base et dans le dossier legacy `modules/`.
+- la transition historique survit surtout dans le vocabulaire de certaines variables, dans le champ `module_key` en base et dans le dossier legacy `modules/`, qui sert désormais de réserve consultable plutôt que de runtime actif.
 
 ---
 
@@ -102,7 +105,7 @@ Le contrat gère notamment :
 - `defineTool(...)` ;
 - les modes d’activité ;
 - les capacités runtime ;
-- l’UI de réponse `boxed/free` en projection ;
+- la projection comme contexte d’exécution, avec UI `boxed/free` dérivée du mode pédagogique ;
 - `buildRuntimeConfig(...)` ;
 - `createActivity(...)` ;
 - la résolution d’une consigne via `resolveToolInstruction(...)` ;
@@ -151,11 +154,18 @@ Dans le flux actif actuel, la couche commune gère :
 - leurs variantes infinies ;
 - `questionTransitionSec` ;
 - `questionTransitionInfinite` ;
-- `projectionResponseUi` ;
 - la **consigne personnalisée** ;
 - les réglages de **jauge infinie** :
   - `Nombre de paliers` ;
   - `Réponses requises`.
+
+`questionTransitionSec` et `questionTransitionInfinite` sont portés par le draft de chaque item de séquence : chaque outil peut donc définir son propre temps entre deux questions.
+
+La durée totale d’activité reste un réglage global via `activityTotalTimeEnabled` et `activityTotalTimeSec`. Quand elle est activée, l’éditeur traite le dernier outil de la séquence comme un **défi final** : son nombre de questions est forcé à `∞`, afin que la séance puisse occuper la durée globale demandée.
+
+La variante de réponse en projection n’est plus un réglage enseignant global : elle est automatiquement déduite du mode pédagogique de l’activité (`individual` → `boxed`, `group` → `free`).
+
+La projection reste un contexte d’exécution, pas un mode d’activité.
 
 ---
 
@@ -189,8 +199,8 @@ L’outil couvre trois familles d’exercices :
 
 État réel :
 - outil moderne sous `tools/nombre-cible/` ;
-- modes `individual`, `group` et `projection` supportés ;
-- projection `boxed/free` supportée ;
+- modes pédagogiques `individual` et `group` supportés ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté ;
 - layout outil en mode `stretch`.
@@ -215,8 +225,8 @@ Options prévues mais désactivées dans l’UI actuelle :
 État réel :
 - outil moderne sous `tools/monnaie/` ;
 - assets locaux pour les pièces et billets dans `tools/monnaie/assets/` ;
-- modes `individual`, `group` et `projection` supportés ;
-- projection `boxed/free` supportée ;
+- modes pédagogiques `individual` et `group` supportés ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté ;
 - layout outil en mode `stretch`.
@@ -237,8 +247,8 @@ L’outil couvre :
 
 État réel :
 - outil moderne sous `tools/operations-trous/` ;
-- modes `individual`, `group` et `projection` supportés ;
-- projection `boxed/free` supportée ;
+- modes pédagogiques `individual` et `group` supportés ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté.
 
@@ -293,7 +303,7 @@ L’outil couvre :
 - mode `libre` ;
 - mode `cases` ;
 - presets enseignant ;
-- projection.
+- projection comme contexte d’exécution.
 
 État réel :
 - outil modernisé sous `tools/` ;
@@ -304,8 +314,9 @@ L’outil couvre :
 - toggle correction / réponse élève.
 
 Particularité projection :
-- si le mode de réponse de l’outil est `libre`, seule la projection `free` est supportée ;
-- sinon, seule la projection `boxed` est supportée.
+- la projection reste un contexte d’exécution, pas un mode d’activité ;
+- si le mode de réponse de l’outil est `libre`, l’exécution projetée utilise une UI `free` ;
+- sinon, l’exécution projetée utilise une UI `boxed`.
 
 ## 5.8. `Nombres en lettres`
 
@@ -321,7 +332,7 @@ L’outil couvre :
 État réel :
 - plus d’assets de mots ;
 - génération dynamique du texte ;
-- vraie réponse élève en individuel / projection boxed ;
+- vraie réponse élève en individuel et en projection d’une activité individuelle (`boxed`) ;
 - toggle shell pour revoir la réponse élève.
 
 ## 5.9. `Repérage numérique`

@@ -24,8 +24,7 @@ export default defineTool("question-reponse", "Question/Réponse", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

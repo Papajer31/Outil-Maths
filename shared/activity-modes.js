@@ -5,16 +5,14 @@ import {
 
 export const ACTIVITY_MODE_VALUES = Object.freeze([
   "individual",
-  "group",
-  "projection"
+  "group"
 ]);
 
 export const DEFAULT_ACTIVITY_MODE = "individual";
 
 export const ACTIVITY_MODE_LABELS = Object.freeze({
   individual: "Individuel",
-  group: "Groupe",
-  projection: "Projection"
+  group: "Groupe"
 });
 
 export const STUDENT_FACING_ACTIVITY_MODES = Object.freeze([
@@ -39,7 +37,7 @@ export function getActivityModeLabel(value) {
 }
 
 export function isProjectionActivityMode(value) {
-  return normalizeActivityMode(value) === "projection";
+  return false;
 }
 
 export function isStudentFacingActivityMode(value) {
@@ -68,13 +66,5 @@ export function getToolActivityModeSupport(tool, context = {}) {
 }
 
 export function getToolProjectionCompatibility(tool, context = {}) {
-  const profile = getContractToolActivityModeProfile(tool, {
-    ...context,
-    activityMode: "projection"
-  });
-  const blockingMessage = String(profile?.projection?.reason || profile?.blockingMessage || "").trim();
-  return {
-    compatible: profile?.projection?.supported !== false && !blockingMessage,
-    blockingMessage
-  };
+  return { compatible: true, blockingMessage: "" };
 }

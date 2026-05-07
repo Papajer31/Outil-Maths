@@ -1552,6 +1552,16 @@ body.student-route-selectstudents .student-selection-grid.selectstudents-grid{
   }
 }
 
+@keyframes sessionToolCountdownPulse{
+  0%,
+  100%{
+    transform:scale(1);
+  }
+  50%{
+    transform:scale(1.12);
+  }
+}
+
 .session-page .session-chrome-bottom{
   display:grid;
   grid-template-columns:150px minmax(0, 1620px) 150px;
@@ -1589,6 +1599,39 @@ body.student-route-selectstudents .student-selection-grid.selectstudents-grid{
 
 .session-page .session-bottom-slot-right{
   justify-content:flex-end;
+  padding-right:18px;
+  box-sizing:border-box;
+}
+
+.session-page .session-tool-countdown-pill{
+  min-width:108px;
+  height:52px;
+  padding:0 16px;
+  box-sizing:border-box;
+  border-radius:999px;
+  border:3px solid rgba(255, 255, 255, .9);
+  background:rgba(16, 19, 26, .78);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-family:"Andika", system-ui, sans-serif;
+  font-size:30px;
+  font-weight:1000;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  box-shadow:0 12px 28px rgba(0, 0, 0, .22), inset 0 0 0 1px rgba(255, 255, 255, .18);
+  transform-origin:center;
+  will-change:transform;
+  pointer-events:none;
+}
+
+.session-page .session-tool-countdown-pill.hidden{
+  display:none;
+}
+
+.session-page .session-tool-countdown-pill.is-expired{
+  animation:sessionToolCountdownPulse 1.05s ease-in-out infinite;
 }
 
 .session-page #sessionWorkArea,

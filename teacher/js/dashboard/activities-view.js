@@ -1,13 +1,15 @@
-import { getToolRootLabel } from "../../../shared/tool-root-runtime.js";
 import {
   ACTIVITY_MODE_VALUES,
   DEFAULT_ACTIVITY_MODE,
   getActivityModeLabel,
-  isProjectionActivityMode,
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../../shared/activity-modes.js";
-import { normalizeAccessCode } from "../../../shared/api-common.js";
+
+import {
+  normalizeAccessCode,
+  normalizeConfigName
+} from "../../../shared/api-common.js";
 import {
   ACTIVITY_SHARE_DISABLED_TITLE,
   isActivityShareable
@@ -21,6 +23,41 @@ import {
   escapeAttr,
   escapeHtml
 } from "./text-utils.js";
+
+const ACTIVITY_MODE_FILTER_ALL = "all";
+const ACTIVITY_MODE_FILTER_VALUES = Object.freeze([
+  ACTIVITY_MODE_FILTER_ALL,
+  ...ACTIVITY_MODE_VALUES
+]);
+
+function normalizeActivityModeFilter(value){
+  const safeValue = String(value || "").trim().toLowerCase();
+  return ACTIVITY_MODE_FILTER_VALUES.includes(safeValue)
+    ? safeValue
+    : ACTIVITY_MODE_FILTER_ALL;
+}
+
+function isAllActivityModeFilter(value){
+  return normalizeActivityModeFilter(value) === ACTIVITY_MODE_FILTER_ALL;
+}
+
+function getActivityModeFilterLabel(value){
+  return isAllActivityModeFilter(value)
+    ? "Tous"
+    : getActivityModeLabel(value);
+}
+
+function getActivityCreationModeFromFilter(value){
+  return isAllActivityModeFilter(value)
+    ? DEFAULT_ACTIVITY_MODE
+    : normalizeActivityMode(value, DEFAULT_ACTIVITY_MODE);
+}
+
+function getInitialActivityCreationModeFromFilter(value){
+  return isAllActivityModeFilter(value)
+    ? ""
+    : normalizeActivityMode(value, DEFAULT_ACTIVITY_MODE);
+}
 
 export function createActivitiesViewController({
   configHeader,
@@ -63,9 +100,13 @@ export function createActivitiesViewController({
     activities = getCachedActivities(),
     mode = getCurrentActivityModeFilter()
   ){
-    const safeMode = normalizeActivityMode(mode, DEFAULT_ACTIVITY_MODE);
+    const safeFilter = normalizeActivityModeFilter(mode);
+    if (safeFilter === ACTIVITY_MODE_FILTER_ALL) {
+      return Array.isArray(activities) ? [...activities] : [];
+    }
+
     return (activities || []).filter((activity) => (
-      normalizeActivityMode(activity?.activity_mode, DEFAULT_ACTIVITY_MODE) === safeMode
+      normalizeActivityMode(activity?.activity_mode, DEFAULT_ACTIVITY_MODE) === safeFilter
     ));
   }
 
@@ -149,6 +190,210 @@ export function createActivitiesViewController({
     return popup;
   }
 
+
+  function activityNameAlreadyExists(name){
+    const normalizedName = normalizeConfigName(name);
+    if (!normalizedName) return false;
+
+    return (getCachedActivities() || []).some((activity) => (
+      normalizeConfigName(activity?.config_name) === normalizedName
+    ));
+  }
+
+  function openCreateActivityOverlay(){
+    const currentTeacherSpace = getCurrentTeacherSpace();
+    if (!currentTeacherSpace?.access_code) return;
+
+    const currentFilter = normalizeActivityModeFilter(getCurrentActivityModeFilter());
+    let selectedMode = getInitialActivityCreationModeFromFilter(currentFilter);
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal dashboard-create-activity-modal";
+    overlay.innerHTML = `
+      <div class="modal-content modal-content-wide">
+        <div class="modal-title">Créer une activité</div>
+
+        <div class="dashboard-create-activity-section">
+          <div class="dashboard-create-activity-label">Mode de l’activité</div>
+          <div class="dashboard-mode-choice-grid" role="radiogroup" aria-label="Mode de la nouvelle activité">
+            ${ACTIVITY_MODE_VALUES.map((mode) => {
+              const isSelected = selectedMode === mode;
+              return `
+                <button
+                  class="btn dashboard-mode-choice-btn dashboard-create-activity-mode-btn${isSelected ? " is-selected" : ""}"
+                  type="button"
+                  role="radio"
+                  aria-checked="${isSelected ? "true" : "false"}"
+                  data-create-activity-mode="${escapeAttr(mode)}"
+                >
+                  ${escapeHtml(getActivityModeLabel(mode))}
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <label class="dashboard-create-activity-section" for="activityCreationNameInput">
+          <span class="dashboard-create-activity-label">Nom de l’activité</span>
+          <input
+            id="activityCreationNameInput"
+            class="modal-text-input"
+            type="text"
+            placeholder="Nom de l’activité"
+            autocomplete="off"
+          >
+        </label>
+
+        <div class="modal-actions">
+          <div id="activityCreationMessage" class="modal-message"></div>
+          <button class="btn" id="activityCreationCancel" type="button">Annuler</button>
+          <button class="btn primary" id="activityCreationConfirm" type="button" disabled>Créer</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector("#activityCreationNameInput");
+    const message = overlay.querySelector("#activityCreationMessage");
+    const confirmButton = overlay.querySelector("#activityCreationConfirm");
+    const cancelButton = overlay.querySelector("#activityCreationCancel");
+    const modeButtons = Array.from(overlay.querySelectorAll("[data-create-activity-mode]"));
+
+    function setMessageText(text = "", isError = false){
+      if (!message) return;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+    }
+
+    function updateModeButtons(){
+      modeButtons.forEach((btn) => {
+        const mode = normalizeActivityMode(btn.dataset.createActivityMode, DEFAULT_ACTIVITY_MODE);
+        const isSelected = selectedMode === mode;
+        btn.classList.toggle("is-selected", isSelected);
+        btn.setAttribute("aria-checked", isSelected ? "true" : "false");
+      });
+    }
+
+    function updateConfirmState(){
+      const name = String(input?.value || "").trim();
+      const nameExists = Boolean(name && activityNameAlreadyExists(name));
+      const canCreate = Boolean(selectedMode && name && !nameExists);
+      if (confirmButton) {
+        confirmButton.disabled = !canCreate;
+      }
+
+      if (nameExists) {
+        setMessageText("Une activité porte déjà ce nom.", true);
+      } else if (message?.textContent === "Une activité porte déjà ce nom.") {
+        setMessageText("");
+      }
+    }
+
+    function setBusy(isBusy){
+      modeButtons.forEach((btn) => {
+        btn.disabled = isBusy;
+      });
+      if (input) input.disabled = isBusy;
+      if (cancelButton) cancelButton.disabled = isBusy;
+      if (confirmButton) confirmButton.disabled = isBusy || !selectedMode || !String(input?.value || "").trim();
+    }
+
+    function close(){
+      overlay.remove();
+    }
+
+    async function submit(){
+      const name = String(input?.value || "").trim();
+
+      if (!selectedMode) {
+        setMessageText("Choisis un mode d’activité.", true);
+        return;
+      }
+
+      if (!name) {
+        setMessageText("Entre un nom d’activité.", true);
+        input?.focus();
+        return;
+      }
+
+      if (activityNameAlreadyExists(name)) {
+        setMessageText("Une activité porte déjà ce nom.", true);
+        input?.focus();
+        input?.select?.();
+        return;
+      }
+
+      setBusy(true);
+      setMessageText("Ouverture de l’éditeur…");
+
+      try {
+        const opened = await openEmbeddedConfigEditor({
+          accessCode: currentTeacherSpace.access_code,
+          configName: name,
+          activityMode: selectedMode,
+          folderId: currentOpenFolderId
+        });
+
+        if (opened === false) {
+          setMessageText("Impossible d’ouvrir l’éditeur.", true);
+          setBusy(false);
+          updateConfirmState();
+          return;
+        }
+
+        close();
+      } catch (err) {
+        setMessageText(err?.message || "Impossible de créer l’activité.", true);
+        setBusy(false);
+        updateConfirmState();
+      }
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        close();
+      }
+    });
+
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+
+    modeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedMode = normalizeActivityMode(btn.dataset.createActivityMode, DEFAULT_ACTIVITY_MODE);
+        setMessageText("");
+        updateModeButtons();
+        updateConfirmState();
+        input?.focus();
+      });
+    });
+
+    input?.addEventListener("input", () => {
+      setMessageText("");
+      updateConfirmState();
+    });
+
+    cancelButton?.addEventListener("click", close);
+    confirmButton?.addEventListener("click", () => {
+      void submit();
+    });
+
+    updateModeButtons();
+    updateConfirmState();
+    input?.focus();
+  }
+
   function sanitizeCurrentFolderSelection(treeState){
     const safeCurrentFolderId = normalizeTreeId(currentOpenFolderId);
     if (!safeCurrentFolderId) {
@@ -222,7 +467,12 @@ export function createActivitiesViewController({
   function renderConfigHeader(treeState){
     if (!configHeader) return;
 
-    const currentModeLabel = getActivityModeLabel(getCurrentActivityModeFilter());
+    const currentModeFilter = normalizeActivityModeFilter(getCurrentActivityModeFilter());
+    const creationMode = getActivityCreationModeFromFilter(currentModeFilter);
+    const currentModeLabel = getActivityModeLabel(creationMode);
+    const createButtonTitle = isAllActivityModeFilter(currentModeFilter)
+      ? "Créer une activité"
+      : `Créer une activité ${currentModeLabel.toLowerCase()}`;
     const breadcrumb = getFolderBreadcrumb(treeState);
     const breadcrumbHtml = [
       `<button class="dashboard-breadcrumb-btn${breadcrumb.length === 0 ? " is-current" : ""}" type="button" data-action="open-root">Activités</button>`,
@@ -247,9 +497,12 @@ export function createActivitiesViewController({
         <div class="dashboard-section-title">Activités</div>
 
         <div class="dashboard-mode-pill" role="tablist" aria-label="Mode d’activité courant">
-          ${ACTIVITY_MODE_VALUES.map((value) => {
-            const optionLabel = getActivityModeLabel(value);
-            const isActive = value === getCurrentActivityModeFilter();
+          ${ACTIVITY_MODE_FILTER_VALUES.map((value) => {
+            const optionLabel = getActivityModeFilterLabel(value);
+            const isActive = value === currentModeFilter;
+            const filterTitle = isAllActivityModeFilter(value)
+              ? "Afficher toutes les activités"
+              : `Afficher les activités ${optionLabel.toLowerCase()}`;
             return `
               <button
                 class="dashboard-mode-pill-btn${isActive ? " is-active" : ""}"
@@ -257,7 +510,7 @@ export function createActivitiesViewController({
                 role="tab"
                 data-activity-mode="${escapeAttr(value)}"
                 aria-selected="${isActive ? "true" : "false"}"
-                title="Afficher les activités ${escapeAttr(optionLabel.toLowerCase())}"
+                title="${escapeAttr(filterTitle)}"
               >
                 ${escapeHtml(optionLabel)}
               </button>
@@ -283,7 +536,7 @@ export function createActivitiesViewController({
           <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
         </button>
 
-        <button class="btn primary" id="btnNewConfig" type="button" title="Créer une activité ${escapeAttr(currentModeLabel.toLowerCase())}">
+        <button class="btn primary" id="btnNewConfig" type="button" title="${escapeAttr(createButtonTitle)}">
           Créer une activité
         </button>
       </div>
@@ -291,8 +544,8 @@ export function createActivitiesViewController({
 
     configHeader.querySelectorAll("[data-activity-mode]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const nextMode = normalizeActivityMode(btn.dataset.activityMode, DEFAULT_ACTIVITY_MODE);
-        if (nextMode === getCurrentActivityModeFilter()) return;
+        const nextMode = normalizeActivityModeFilter(btn.dataset.activityMode);
+        if (nextMode === normalizeActivityModeFilter(getCurrentActivityModeFilter())) return;
         setCurrentActivityModeFilter(nextMode);
         closeDashboardSharePopup?.();
         await renderRightPanel({ forceRefresh: false });
@@ -316,14 +569,7 @@ export function createActivitiesViewController({
     });
 
     document.getElementById("btnNewConfig")?.addEventListener("click", () => {
-      const currentTeacherSpace = getCurrentTeacherSpace();
-      if (!currentTeacherSpace?.access_code) return;
-
-      void openEmbeddedConfigEditor({
-        accessCode: currentTeacherSpace.access_code,
-        activityMode: getCurrentActivityModeFilter(),
-        folderId: currentOpenFolderId
-      });
+      openCreateActivityOverlay();
     });
 
     document.getElementById("btnNewFolder")?.addEventListener("click", () => {
@@ -486,7 +732,7 @@ export function createActivitiesViewController({
     const currentTeacherSpace = getCurrentTeacherSpace();
     const activityId = String(cfg.id || "");
     const activityMode = normalizeActivityMode(cfg.activity_mode, DEFAULT_ACTIVITY_MODE);
-    const canProject = isProjectionActivityMode(activityMode);
+    const canProject = isStudentFacingActivityMode(activityMode);
     const canToggleStudentVisibility = isStudentFacingActivityMode(activityMode);
     const canShare = isActivityShareable({
       accessCode: currentTeacherSpace?.access_code,
@@ -497,9 +743,7 @@ export function createActivitiesViewController({
     const highlightIcon = cfg.is_highlighted ? "rocket_launch" : "rocket";
     const highlightLabel = cfg.is_highlighted ? "Retirer la mise en avant" : "Mettre en avant dans la vue élève";
     const shareTitle = canShare
-      ? isProjectionActivityMode(activityMode)
-        ? "Partager l’activité Projection"
-        : "Partager l’activité"
+      ? "Partager l’activité"
       : ACTIVITY_SHARE_DISABLED_TITLE;
 
     return `
@@ -517,7 +761,12 @@ export function createActivitiesViewController({
         >
           <span class="dashboard-activity-tile-topline">
             <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">description</span>
-            <span class="dashboard-activity-tile-subtitle">${escapeHtml(getToolRootLabel(cfg.module_key || ""))}</span>
+            <span
+              class="dashboard-activity-tile-subtitle dashboard-mini-pill dashboard-mini-pill-mode dashboard-activity-tile-mode-badge"
+              data-activity-mode="${escapeAttr(activityMode)}"
+            >
+              ${escapeHtml(getActivityModeLabel(activityMode))}
+            </span>
           </span>
           <span class="dashboard-activity-tile-title">${escapeHtml(cfg.config_name)}</span>
         </button>
@@ -566,16 +815,19 @@ export function createActivitiesViewController({
   }
 
   function renderEmptyTilesState(){
+    const currentFilter = normalizeActivityModeFilter(getCurrentActivityModeFilter());
     const selectedFolder = buildActivityTreeState({
       activitiesSource: getActivitiesForCurrentMode(),
       foldersSource: getCachedActivityFolders()
     }).folderById.get(normalizeTreeId(currentOpenFolderId));
-    const modeLabel = getActivityModeLabel(getCurrentActivityModeFilter()).toLowerCase();
     const contextLabel = selectedFolder ? `dans « ${selectedFolder.name} »` : "à la racine";
+    const message = isAllActivityModeFilter(currentFilter)
+      ? `Aucune activité ${contextLabel}.`
+      : `Aucune activité en mode ${getActivityModeLabel(currentFilter).toLowerCase()} ${contextLabel}.`;
 
     return `
       <div class="dashboard-activity-empty-state">
-        Aucune activité en mode ${escapeHtml(modeLabel)} ${escapeHtml(contextLabel)}.
+        ${escapeHtml(message)}
       </div>
     `;
   }
@@ -644,7 +896,6 @@ export function createActivitiesViewController({
       });
 
       setCachedActivities(await getMyActivitiesForSpace(currentTeacherSpace.id));
-      setCurrentActivityModeFilter(normalizeActivityMode(sourceActivity.activity_mode, DEFAULT_ACTIVITY_MODE));
       await renderRightPanel({ forceRefresh: false });
       showDashboardShareToast(`Copie créée : ${nextName}`);
     } catch (err) {

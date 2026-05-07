@@ -28,8 +28,6 @@ import {
   getActivityModeLabel,
   getOtherActivityModes,
   getToolActivityModeSupport,
-  getToolProjectionCompatibility,
-  isProjectionActivityMode,
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
@@ -147,7 +145,7 @@ let currentStudent = null;
 let rightPanelMode = "activities"; // conservé pour la logique activités
 let currentDashboardSection = "activities"; // "activities" | "class" | "banks"
 let currentActivitiesViewMode = "list"; // "list" | "editor"
-let currentActivityModeFilter = DEFAULT_ACTIVITY_MODE;
+let currentActivityModeFilter = "all";
 let showDashboardHelpIcons = true;
 let studentViewMode = "list"; // "list" | "tiles"
 let activityListScrollTop = 0;
@@ -178,7 +176,6 @@ dashboardShareManager = createDashboardShareManager({
   normalizeAccessCode,
   normalizeActivityMode,
   DEFAULT_ACTIVITY_MODE,
-  isProjectionActivityMode,
   isActivityShareable,
   copyActivityShareLink,
   openActivityShareLink,
@@ -544,7 +541,9 @@ function buildClonedActivityConfigJson(sourceActivity, {
 
   return {
     ...safeSourceConfigJson,
-    sequence: normalizeActivitySequence(safeSourceConfigJson.sequence),
+    sequence: normalizeActivitySequence(safeSourceConfigJson.sequence, {
+      fallbackGlobals: safeSourceConfigJson.globals
+    }),
     activity_mode: safeMode,
     dashboard: {
       ...sourceDashboard,
@@ -574,7 +573,10 @@ async function evaluateActivityVersionCompatibility(activity, targetMode){
     }];
   }
 
-  const safeSequence = normalizeActivitySequence(sourceSequence, { toolsCatalog });
+  const safeSequence = normalizeActivitySequence(sourceSequence, {
+    toolsCatalog,
+    fallbackGlobals: activity?.config_json?.globals
+  });
 
   const issues = [];
 
@@ -597,23 +599,6 @@ async function evaluateActivityVersionCompatibility(activity, targetMode){
         blockingMessage: activityModeSupport.blockingMessage || `Non compatible avec le mode ${getActivityModeLabel(safeTargetMode).toLowerCase()}.`
       });
       continue;
-    }
-
-    if (isProjectionActivityMode(safeTargetMode)) {
-      const projectionCompatibility = getToolProjectionCompatibility(tool, {
-        moduleKey: activity?.module_key || "tools",
-        toolId: item.toolId,
-        instanceId: item.instanceId,
-        settings: item?.draft?.settings ?? {}
-      });
-
-      if (!projectionCompatibility.compatible) {
-        issues.push({
-          toolId: item.toolId,
-          toolTitle: toolMeta?.label || toolMeta?.title || item.toolId,
-          blockingMessage: projectionCompatibility.blockingMessage
-        });
-      }
     }
   }
 

@@ -200,16 +200,6 @@
                         </div>
 
                         <div id="activityModeBadge" class="cfg-activity-mode-badge" data-activity-mode="individual">Individuel</div>
-                        <button
-                          class="dashboard-icon-btn dashboard-material-icon-btn cfg-project-launch-btn"
-                          id="btnProjectConfig"
-                          type="button"
-                          aria-label="Projeter l’activité"
-                          title="Projeter l’activité"
-                          hidden
-                        >
-                          <span class="dashboard-material-icon" aria-hidden="true">slideshow</span>
-                        </button>
                       </div>
                     </div>
 
@@ -240,20 +230,18 @@
                               <span>Télécharger le QR code</span>
                             </button>
                           </div>
-
-                          <div id="sharePopupProjectionContent" class="cfg-share-projection-note hidden">
-                            <div class="cfg-share-projection-title">Partager une activité Projection</div>
-                            <div class="cfg-share-projection-text">
-                              Le partage Projection accueillera bientôt un <strong>Code de configuration</strong> pour l’échange entre enseignants.
-                            </div>
-
-                            <button class="btn cfg-share-action" id="btnShareProjectionCode" type="button" role="menuitem" disabled>
-                              <span class="cfg-material-icon" aria-hidden="true">key</span>
-                              <span>Code de configuration (bientôt)</span>
-                            </button>
-                          </div>
                         </div>
                       </div>
+                      <button
+                        class="btn cfg-share-btn cfg-project-launch-btn"
+                        id="btnProjectConfig"
+                        type="button"
+                        aria-label="Projeter l’activité"
+                        title="Projeter l’activité"
+                        hidden
+                      >
+                        <span class="cfg-material-icon" aria-hidden="true">slideshow</span>
+                      </button>
                     </div>
                   </div>
                 </header>
@@ -306,59 +294,71 @@
                     <div class="cfg-tools-header">
                       <div class="cfg-tools-header-main">
                         <div class="cfg-panel-title">Séquence d’outils</div>
-                        <div id="activityDurationEstimate" class="cfg-estimate-inline cfg-tools-estimate">Durée estimée : —</div>
                       </div>
                       <div class="cfg-tools-header-actions">
-                        <div class="cfg-total-time-control" id="activityTotalTimeControl">
-                          <button
-                            class="btn cfg-add-tool-btn cfg-total-time-btn"
-                            id="activityTotalTimeToggleButton"
-                            type="button"
-                            aria-label="Durée totale"
-                            aria-haspopup="dialog"
-                            aria-expanded="false"
-                            aria-pressed="false"
-                            title="Durée totale"
-                          >
-                            <span class="cfg-material-icon" aria-hidden="true">timer</span>
-                          </button>
-                          <div class="cfg-total-time-popup" id="activityTotalTimePopup" role="dialog" aria-label="Durée totale" hidden>
-                            <div class="cfg-total-time-popup-title">Durée totale</div>
-                            <div class="tv-stepper tv-stepper-no-inline-label cfg-total-time-stepper" role="group" aria-label="Durée totale en minutes">
-                              <button
-                                class="tv-stepper-btn"
-                                type="button"
-                                data-stepper-target="activityTotalTimeMinutesInput"
-                                data-stepper-direction="-1"
-                                aria-label="Diminuer la durée totale"
-                              >
-                                <span class="tv-stepper-icon" aria-hidden="true">remove</span>
-                              </button>
-                              <input
-                                id="activityTotalTimeMinutesInput"
-                                class="tv-input tv-input-stepper cfg-total-time-input"
-                                type="number"
-                                min="1"
-                                max="120"
-                                step="1"
-                                inputmode="numeric"
-                                aria-label="Durée totale en minutes"
-                              >
-                              <button
-                                class="tv-stepper-btn"
-                                type="button"
-                                data-stepper-target="activityTotalTimeMinutesInput"
-                                data-stepper-direction="1"
-                                aria-label="Augmenter la durée totale"
-                              >
-                                <span class="tv-stepper-icon" aria-hidden="true">add</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        <button class="btn cfg-add-tool-btn" id="btnAddSequenceTool" type="button" aria-label="Ajouter un outil"><span class="cfg-material-icon" aria-hidden="true">add</span></button>
+                        <button class="btn cfg-add-tool-btn cfg-add-tool-btn-label" id="btnAddSequenceTool" type="button" aria-label="Ajouter un outil">
+                          <span class="cfg-material-icon" aria-hidden="true">add</span>
+                          <span>Ajouter</span>
+                        </button>
                       </div>
                     </div>
+
+                    <div class="cfg-duration-card" id="activityTotalTimeControl">
+                      <button
+                        class="btn cfg-duration-summary"
+                        id="activityTotalTimeToggleButton"
+                        type="button"
+                        aria-label="Déplier les réglages de durée"
+                        aria-expanded="false"
+                        aria-controls="activityTotalTimePanel"
+                        title="Déplier les réglages de durée"
+                      >
+                        <span class="cfg-material-icon cfg-duration-icon" aria-hidden="true">timer</span>
+                        <span id="activityDurationEstimate" class="cfg-duration-summary-text">Durée : — (estimation)</span>
+                        <span class="cfg-material-icon cfg-duration-chevron" id="activityTotalTimeChevron" aria-hidden="true">expand_more</span>
+                      </button>
+
+                      <div class="cfg-duration-panel" id="activityTotalTimePanel" hidden>
+                        <label class="cfg-duration-fixed-toggle" for="activityTotalTimeFixedCheckbox">
+                          <input class="tv-checkbox cfg-duration-fixed-checkbox" id="activityTotalTimeFixedCheckbox" type="checkbox">
+                          <span>Durée fixe :</span>
+                        </label>
+
+                        <div class="tv-stepper tv-stepper-no-inline-label cfg-total-time-stepper" role="group" aria-label="Durée totale en minutes">
+                          <button
+                            class="tv-stepper-btn"
+                            type="button"
+                            data-stepper-target="activityTotalTimeMinutesInput"
+                            data-stepper-direction="-1"
+                            aria-label="Diminuer la durée fixe"
+                          >
+                            <span class="tv-stepper-icon" aria-hidden="true">remove</span>
+                          </button>
+
+                          <input
+                            id="activityTotalTimeMinutesInput"
+                            class="tv-input tv-input-stepper cfg-total-time-input"
+                            type="number"
+                            min="1"
+                            max="120"
+                            step="1"
+                            inputmode="numeric"
+                            aria-label="Durée fixe en minutes"
+                          >
+
+                          <button
+                            class="tv-stepper-btn"
+                            type="button"
+                            data-stepper-target="activityTotalTimeMinutesInput"
+                            data-stepper-direction="1"
+                            aria-label="Augmenter la durée fixe"
+                          >
+                            <span class="tv-stepper-icon" aria-hidden="true">add</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     <div id="sequenceWarnings" class="cfg-sequence-warnings" hidden></div>
                     <div id="configRows" class="cfg-tools-list"></div>
                   </aside>
@@ -366,19 +366,6 @@
                   <section class="cfg-settings-panel">
                     <div class="cfg-settings-header">
                       <div class="cfg-panel-title" id="toolConfigTitle">Configuration de l’outil</div>
-
-                      <div class="cfg-global-inline">
-                        <span class="cfg-global-label">Temps entre les questions</span>
-                        <input id="questionTransitionSecInput" class="cfg-input cfg-input-small" type="number">
-                      </div>
-
-                      <div class="cfg-global-inline" id="projectionResponseUiField" hidden>
-                        <span class="cfg-global-label">Réponse en projection</span>
-                        <select id="projectionResponseUiSelect" class="cfg-input cfg-input-small">
-                          <option value="free">Sans zone de réponse</option>
-                          <option value="boxed">Avec zone de réponse</option>
-                        </select>
-                      </div>
                     </div>
 
                     <div id="toolConfigHost" class="cfg-tool-config-host">

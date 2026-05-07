@@ -69,6 +69,9 @@ export function createSessionEngine({
   let activityClockStartedAt = 0;
   let activityClockElapsedBeforePauseMs = 0;
   let activityClockPaused = true;
+  let toolClockStartedAt = 0;
+  let toolClockElapsedBeforePauseMs = 0;
+  let toolClockPaused = true;
   let finalChallengeTicker = null;
 
   const GAUGE_EPSILON = 1e-6;
@@ -260,7 +263,8 @@ export function createSessionEngine({
 
   async function applyLiveConfig({ globals: nextGlobals = {}, sequence: nextSequence = [] } = {}) {
     const safeSequence = normalizeActivitySequence(nextSequence, {
-      toolsCatalog
+      toolsCatalog,
+      fallbackGlobals: nextGlobals
     });
 
     if (safeSequence.length !== session.length) {
@@ -302,6 +306,10 @@ export function createSessionEngine({
     item.questionCount = item.draftQuestionCount;
     item.timePerQ = item.draftTimePerQ;
     item.answerTime = item.draftAnswerTime;
+    item.questionTransitionSec = item.draftQuestionTransitionSec;
+    item.questionTransitionInfinite = item.draftQuestionTransitionInfinite === true;
+    item.toolMaxTimeMin = item.draftToolMaxTimeMin;
+    item.toolMaxTimeInfinite = item.draftToolMaxTimeInfinite === true;
     item.infiniteQuestionCount = item.draftInfiniteQuestionCount === true;
     item.infiniteTimePerQ = item.draftInfiniteTimePerQ === true;
     item.infiniteAnswerTime = item.draftInfiniteAnswerTime === true;
@@ -366,6 +374,7 @@ export function createSessionEngine({
       infiniteQuestionCount: item?.infiniteQuestionCount === true,
       totalQuestionCountLabel: item ? (item.infiniteQuestionCount ? "∞" : String(item.questionCount || 0)) : "—",
       finalChallenge: getFinalChallengeUiState(item),
+      toolTime: getToolTimeUiState(item),
       individualGauge: getIndividualGaugeUiState(item),
       canGoPrevTool: !paused && currentToolIndex > 0,
       canGoNextTool: !paused && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
@@ -384,6 +393,14 @@ export function createSessionEngine({
     };
   }
 
+
+  function getProjectionResponseUiForCurrentRun() {
+    if (runMode !== "projected-teacher") {
+      return normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi);
+    }
+
+    return sessionActivityMode === "individual" ? "boxed" : "free";
+  }
 
   function isProjectedBoxedValidationMode(item) {
     return runMode === "projected-teacher"
@@ -556,7 +573,8 @@ export function createSessionEngine({
     toolsCatalog = await moduleRuntime.loadToolsCatalog();
 
     const safeSequence = normalizeActivitySequence(sequence, {
-      toolsCatalog
+      toolsCatalog,
+      fallbackGlobals: globals
     });
 
     await prepareSessionFromSequence(safeSequence);
@@ -594,6 +612,7 @@ export function createSessionEngine({
     paused = false;
     pausedPhase = null;
     resetActivityClock();
+    resetToolClock();
     engineState = "IDLE";
     phase = createPhase("IDLE");
     activeTool = null;
@@ -622,6 +641,7 @@ export function createSessionEngine({
     currentQuestionIndex = -1;
     resetSessionGaugeStates();
     resetGroupScores();
+    resetToolClock();
     startActivityClock();
     isSessionRunning = true;
     paused = false;
@@ -696,6 +716,7 @@ export function createSessionEngine({
     const ctx = getToolContext(item);
 
     refreshComputedSessionValuesWithTool(item, activeTool);
+    startToolClock();
 
     if (isFinalChallengeItem(item)) {
       ensureFinalChallengeStarted(item);
@@ -739,6 +760,13 @@ export function createSessionEngine({
         await nextTool(false);
         return;
       }
+
+      if (isToolMaxTimeReached(item)) {
+        hideTimer();
+        hideManualAction();
+        await nextTool(false);
+        return;
+      }
     }
 
     currentQuestionIndex += 1;
@@ -772,6 +800,7 @@ export function createSessionEngine({
     paused = true;
     engineState = "PAUSED";
     pauseActivityClock();
+    pauseToolClock();
     stopFinalChallengeTicker();
 
     stopAllTimers();
@@ -811,6 +840,7 @@ export function createSessionEngine({
     }
 
     resumeActivityClock();
+    resumeToolClock();
     if (isFinalChallengeItem(item)) {
       if (getActivityTotalRemainingMs() <= 0) {
         finishSession({ title: "Temps écoulé — la séance est terminée." });
@@ -991,11 +1021,11 @@ export function createSessionEngine({
     }, remainingMs);
   }
 
-  function beginQuestionTransition(item, durationMs = activityGlobals.questionTransitionSec * 1000) {
+  function beginQuestionTransition(item, durationMs = getQuestionTransitionDurationMs(item)) {
     stopAllTimers();
     hideManualAction();
 
-    const infiniteQuestionTransition = activityGlobals.questionTransitionInfinite === true;
+    const infiniteQuestionTransition = item?.questionTransitionInfinite === true;
     const remainingMs = infiniteQuestionTransition
       ? Number.POSITIVE_INFINITY
       : Math.max(0, Math.floor(Number(durationMs) || 0));
@@ -1030,6 +1060,10 @@ export function createSessionEngine({
 
     transitionTimer = window.setTimeout(() => {
       transitionTimer = null;
+      if (isToolMaxTimeReached(item)) {
+        void nextTool(false);
+        return;
+      }
       beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
     }, remainingMs);
   }
@@ -1046,8 +1080,16 @@ export function createSessionEngine({
     `);
 
     document.getElementById("btnContinueQuestionTransition")?.addEventListener("click", () => {
+      if (isToolMaxTimeReached(item)) {
+        void nextTool(false);
+        return;
+      }
       beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
     });
+  }
+
+  function getQuestionTransitionDurationMs(item) {
+    return Math.max(0, Math.floor(Number(item?.questionTransitionSec) || 0) * 1000);
   }
 
   function openNextToolOverlay(item) {
@@ -1174,12 +1216,20 @@ export function createSessionEngine({
         draftTimePerQ: normalizedDraft.timePerQ,
         draftQuestionCount: normalizedDraft.questionCount,
         draftAnswerTime: normalizedDraft.answerTime,
+        draftQuestionTransitionSec: normalizedDraft.questionTransitionSec,
+        draftQuestionTransitionInfinite: normalizedDraft.questionTransitionInfinite === true,
+        draftToolMaxTimeMin: normalizedDraft.toolMaxTimeMin,
+        draftToolMaxTimeInfinite: normalizedDraft.toolMaxTimeInfinite === true,
         draftInfiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
         draftInfiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
         draftInfiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
         timePerQ: normalizedDraft.timePerQ,
         questionCount: normalizedDraft.questionCount,
         answerTime: normalizedDraft.answerTime,
+        questionTransitionSec: normalizedDraft.questionTransitionSec,
+        questionTransitionInfinite: normalizedDraft.questionTransitionInfinite === true,
+        toolMaxTimeMin: normalizedDraft.toolMaxTimeMin,
+        toolMaxTimeInfinite: normalizedDraft.toolMaxTimeInfinite === true,
         infiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
         infiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
         infiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
@@ -1192,25 +1242,27 @@ export function createSessionEngine({
         lastQuestionOutcome: "pending"
       };
 
+      const requestedProjectionResponseUi = getProjectionResponseUiForCurrentRun();
       const baseToolContext = {
         sessionItem,
         accessCode,
         moduleKey,
         activityMode: sessionActivityMode,
         sessionMode: runMode,
+        runMode,
         settings,
         globals: cloneData(activityGlobals),
-        projectionResponseUi: normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
-        student: selectedStudent,
-        students: cloneData(selectedStudents),
-        selectedStudents: cloneData(selectedStudents),
+        projectionResponseUi: requestedProjectionResponseUi,
+        student: runMode === "projected-teacher" ? null : selectedStudent,
+        students: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
+        selectedStudents: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
         services: {}
       };
 
       const runtimeCapabilities = getToolRuntimeCapabilities(tool, baseToolContext);
       const projectionResponseUiSupport = getToolProjectionResponseUiSupport(tool, baseToolContext);
-      const effectiveProjectionResponseUi = sessionActivityMode === "projection"
-        ? resolveEffectiveProjectionResponseUi(tool, baseToolContext.projectionResponseUi, baseToolContext)
+      const effectiveProjectionResponseUi = runMode === "projected-teacher"
+        ? resolveEffectiveProjectionResponseUi(tool, requestedProjectionResponseUi, baseToolContext)
         : null;
 
       sessionItem.hasAnswerPhase = runtimeCapabilities.answerPhase !== "unsupported";
@@ -1221,7 +1273,7 @@ export function createSessionEngine({
       sessionItem.requestedProjectionResponseUi = baseToolContext.projectionResponseUi;
       sessionItem.projectionResponseUi = effectiveProjectionResponseUi || baseToolContext.projectionResponseUi;
 
-      const runProfile = getToolRunProfile(tool, sessionItem);
+      const runProfile = getToolRunProfile(tool, baseToolContext);
 
       if (runProfile.requiresStudent) {
         requiresStudent = true;
@@ -1316,6 +1368,87 @@ export function createSessionEngine({
     return Math.max(0, activityClockElapsedBeforePauseMs + livePart);
   }
 
+  function resetToolClock() {
+    toolClockStartedAt = 0;
+    toolClockElapsedBeforePauseMs = 0;
+    toolClockPaused = true;
+  }
+
+  function startToolClock() {
+    toolClockStartedAt = performance.now();
+    toolClockElapsedBeforePauseMs = 0;
+    toolClockPaused = false;
+  }
+
+  function pauseToolClock() {
+    if (toolClockPaused) return;
+    toolClockElapsedBeforePauseMs += Math.max(0, performance.now() - toolClockStartedAt);
+    toolClockStartedAt = performance.now();
+    toolClockPaused = true;
+  }
+
+  function resumeToolClock() {
+    if (!toolClockPaused) return;
+    toolClockStartedAt = performance.now();
+    toolClockPaused = false;
+  }
+
+  function getToolElapsedMs() {
+    if (!toolClockStartedAt) return 0;
+    const livePart = toolClockPaused
+      ? 0
+      : Math.max(0, performance.now() - toolClockStartedAt);
+    return Math.max(0, toolClockElapsedBeforePauseMs + livePart);
+  }
+
+  function getToolMaxTimeMs(item) {
+    if (!item || item.toolMaxTimeInfinite === true) return Number.POSITIVE_INFINITY;
+
+    const limitMin = Math.floor(Number(item.toolMaxTimeMin));
+    if (!Number.isFinite(limitMin) || limitMin <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return limitMin * 60 * 1000;
+  }
+
+  function isToolMaxTimeReached(item) {
+    const maxMs = getToolMaxTimeMs(item);
+    if (!Number.isFinite(maxMs)) return false;
+    return getToolElapsedMs() >= maxMs;
+  }
+
+  function getToolTimeUiState(item) {
+    const hiddenState = {
+      visible: false,
+      remainingMs: Number.POSITIVE_INFINITY,
+      timeLabel: "",
+      expired: false
+    };
+
+    if (!isSessionRunning || !item || !toolClockStartedAt) {
+      return hiddenState;
+    }
+
+    if (phase.kind === "IDLE" || phase.kind === "BETWEEN_TOOLS" || phase.kind === "DONE") {
+      return hiddenState;
+    }
+
+    const maxMs = getToolMaxTimeMs(item);
+    if (!Number.isFinite(maxMs)) {
+      return hiddenState;
+    }
+
+    const remainingMs = Math.max(0, maxMs - getToolElapsedMs());
+
+    return {
+      visible: true,
+      remainingMs,
+      timeLabel: formatCountdown(remainingMs),
+      expired: remainingMs <= 0
+    };
+  }
+
   function getActivityTotalRemainingMs() {
     if (!isActivityTotalTimeEnabled()) return Number.POSITIVE_INFINITY;
     return Math.max(0, getActivityTotalTimeMs() - getActivityElapsedMs());
@@ -1401,6 +1534,7 @@ export function createSessionEngine({
 
   function finishSession({ title = "Bravo, la séance est terminée." } = {}) {
     stopAllTimers();
+    resetToolClock();
     stopFinalChallengeTicker();
     hideTimer();
     hideManualAction();
@@ -1623,14 +1757,14 @@ export function createSessionEngine({
         sessionMode: runMode,
         runMode,
         settings: {},
-        student: selectedStudent,
-        students: cloneData(selectedStudents),
-        selectedStudents: cloneData(selectedStudents),
-        studentIds: cloneData(selectedStudents.map((item) => item?.id).filter(Boolean)),
-        studentFirstName: selectedStudent?.first_name ?? "",
+        student: runMode === "projected-teacher" ? null : selectedStudent,
+        students: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
+        selectedStudents: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
+        studentIds: runMode === "projected-teacher" ? [] : cloneData(selectedStudents.map((item) => item?.id).filter(Boolean)),
+        studentFirstName: runMode === "projected-teacher" ? "" : selectedStudent?.first_name ?? "",
         defaultInstruction: instructionMeta.defaultInstruction,
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
-        projectionResponseUi: normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+        projectionResponseUi: getProjectionResponseUiForCurrentRun(),
         globals: cloneData(activityGlobals),
         isFinalInfiniteSequenceItem: false,
         finalInfiniteSequenceItem: false,
@@ -1654,15 +1788,15 @@ export function createSessionEngine({
       sessionMode: runMode,
       runMode,
       settings: item.settings ?? {},
-      student: selectedStudent,
-      students: cloneData(selectedStudents),
-      selectedStudents: cloneData(selectedStudents),
-      studentIds: cloneData(selectedStudents.map((entry) => entry?.id).filter(Boolean)),
-      studentFirstName: selectedStudent?.first_name ?? "",
+      student: runMode === "projected-teacher" ? null : selectedStudent,
+      students: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
+      selectedStudents: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
+      studentIds: runMode === "projected-teacher" ? [] : cloneData(selectedStudents.map((entry) => entry?.id).filter(Boolean)),
+      studentFirstName: runMode === "projected-teacher" ? "" : selectedStudent?.first_name ?? "",
       defaultInstruction: instructionMeta.defaultInstruction,
       supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
-      projectionResponseUi: item.projectionResponseUi || normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
-      requestedProjectionResponseUi: item.requestedProjectionResponseUi || normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi),
+      projectionResponseUi: item.projectionResponseUi || getProjectionResponseUiForCurrentRun(),
+      requestedProjectionResponseUi: item.requestedProjectionResponseUi || getProjectionResponseUiForCurrentRun(),
       projectionResponseUiSupport: cloneData(item.projectionResponseUiSupport || {}),
       globals: cloneData(activityGlobals),
       isFinalInfiniteSequenceItem: isFinalChallengeItem(item),

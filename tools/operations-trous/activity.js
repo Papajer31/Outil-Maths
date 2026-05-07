@@ -452,7 +452,7 @@ function shouldShowResponseBox(context = {}) {
   const activityMode = normalizeActivityMode(context?.activityMode);
   if (activityMode === "group") return false;
 
-  if (activityMode === "projection") {
+  if (String(context?.runMode || context?.sessionMode || "").trim() === "projected-teacher") {
     return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
   }
 
@@ -466,7 +466,7 @@ function normalizeProjectionResponseUi(value) {
 
 function normalizeActivityMode(value) {
   const safeValue = String(value || "individual").trim().toLowerCase();
-  if (safeValue === "group" || safeValue === "projection") return safeValue;
+  if (safeValue === "group") return safeValue;
   return "individual";
 }
 

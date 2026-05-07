@@ -24,8 +24,7 @@ export default defineTool("qcm", "QCM", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

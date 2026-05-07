@@ -23,8 +23,7 @@ export default defineTool("ordre-alphabetique", "Ordre alphabétique", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

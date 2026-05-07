@@ -1,5 +1,4 @@
 import {
-  normalizeActivityGlobals,
   normalizeToolDraft
 } from "./activity-config.js";
 
@@ -23,14 +22,12 @@ export function normalizeDurationEstimate(estimate) {
 
 export function estimateStandardToolDuration({
   draft,
-  globals,
   hasAnswerPhase = true,
   questionCount = null,
   timePerQ = null,
   answerTime = null
 } = {}) {
   const safeDraft = normalizeToolDraft(draft);
-  const safeGlobals = normalizeActivityGlobals(globals);
 
   const safeQuestionCount = clampNonNegativeInt(
     questionCount ?? safeDraft.questionCount,
@@ -44,24 +41,56 @@ export function estimateStandardToolDuration({
     ? clampNonNegativeInt(answerTime ?? safeDraft.answerTime, safeDraft.answerTime)
     : 0;
 
+  const hasToolTimeLimit = safeDraft.toolMaxTimeInfinite !== true;
+  const toolTimeLimitSec = hasToolTimeLimit
+    ? Math.max(1, clampNonNegativeInt(safeDraft.toolMaxTimeMin, 10)) * 60
+    : Number.POSITIVE_INFINITY;
+
   if (safeDraft.infiniteQuestionCount || safeDraft.infiniteTimePerQ || (hasAnswerPhase && safeDraft.infiniteAnswerTime)) {
-    return { infinite: true };
+    return hasToolTimeLimit
+      ? { minSec: toolTimeLimitSec, maxSec: toolTimeLimitSec }
+      : { infinite: true };
   }
 
   const transitionCount = Math.max(0, safeQuestionCount - 1);
 
-  if (safeGlobals.questionTransitionInfinite && transitionCount > 0) {
-    return { infinite: true };
+  if (safeDraft.questionTransitionInfinite && transitionCount > 0) {
+    return hasToolTimeLimit
+      ? { minSec: toolTimeLimitSec, maxSec: toolTimeLimitSec }
+      : { infinite: true };
   }
 
   const totalSec =
     (safeQuestionCount * safeTimePerQ)
-    + (transitionCount * clampNonNegativeInt(safeGlobals.questionTransitionSec, 0))
+    + (transitionCount * clampNonNegativeInt(safeDraft.questionTransitionSec, 0))
     + (hasAnswerPhase ? safeQuestionCount * safeAnswerTime : 0);
+  const cappedTotalSec = hasToolTimeLimit
+    ? Math.min(totalSec, toolTimeLimitSec)
+    : totalSec;
 
   return {
-    minSec: totalSec,
-    maxSec: totalSec
+    minSec: cappedTotalSec,
+    maxSec: cappedTotalSec
+  };
+}
+
+
+export function applyToolTimeLimitToDurationEstimate(estimate, draft) {
+  const safeDraft = normalizeToolDraft(draft);
+  if (safeDraft.toolMaxTimeInfinite === true) {
+    return normalizeDurationEstimate(estimate);
+  }
+
+  const limitSec = Math.max(1, clampNonNegativeInt(safeDraft.toolMaxTimeMin, 10)) * 60;
+  const safeEstimate = normalizeDurationEstimate(estimate);
+
+  if (!safeEstimate || safeEstimate.infinite) {
+    return { minSec: limitSec, maxSec: limitSec };
+  }
+
+  return {
+    minSec: Math.min(safeEstimate.minSec, limitSec),
+    maxSec: Math.min(safeEstimate.maxSec, limitSec)
   };
 }
 

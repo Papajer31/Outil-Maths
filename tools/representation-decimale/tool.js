@@ -23,8 +23,7 @@ export default defineTool("representation-decimale", "Représentation décimale"
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

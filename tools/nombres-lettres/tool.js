@@ -23,8 +23,7 @@ export default defineTool("nombres-lettres", "Nombres en lettres", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

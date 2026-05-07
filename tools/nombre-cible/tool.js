@@ -24,8 +24,7 @@ export default defineTool("nombre-cible", "Nombre cible", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

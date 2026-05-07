@@ -5,6 +5,7 @@ export const TOOL_LIMITS = Object.freeze({
   infiniteGaugeMilestones: { min: 0, max: 12, step: 1 },
   infiniteGaugeRequiredCorrect: { min: 1, max: 999, step: 1 },
   questionTransitionSec: { min: 0, max: 30, step: 1 },
+  toolMaxTimeMin: { min: 1, max: 120, step: 1 },
   activityTotalTimeSec: { min: 60, max: 7200, step: 60 }
 });
 
@@ -13,6 +14,10 @@ export const DEFAULT_TOOL_ROW = Object.freeze({
   timePerQ: 40,
   questionCount: 10,
   answerTime: 5,
+  questionTransitionSec: 5,
+  questionTransitionInfinite: false,
+  toolMaxTimeMin: 10,
+  toolMaxTimeInfinite: true,
   infiniteTimePerQ: false,
   infiniteQuestionCount: false,
   infiniteAnswerTime: false,
@@ -20,8 +25,6 @@ export const DEFAULT_TOOL_ROW = Object.freeze({
 });
 
 export const DEFAULT_ACTIVITY_GLOBALS = Object.freeze({
-  questionTransitionSec: 5,
-  questionTransitionInfinite: false,
   projectionResponseUi: "free",
   activityTotalTimeEnabled: false,
   activityTotalTimeSec: 900
@@ -47,12 +50,6 @@ export function cloneData(value) {
 
 export function normalizeActivityGlobals(globals) {
   return {
-    questionTransitionSec: clampInt(
-      globals?.questionTransitionSec,
-      TOOL_LIMITS.questionTransitionSec.min,
-      TOOL_LIMITS.questionTransitionSec.max
-    ),
-    questionTransitionInfinite: globals?.questionTransitionInfinite === true,
     projectionResponseUi: normalizeProjectionResponseUi(
       globals?.projectionResponseUi,
       DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi
@@ -80,7 +77,17 @@ export function normalizeProjectionResponseUi(value, fallback = DEFAULT_ACTIVITY
     : DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi;
 }
 
-export function normalizeToolDraft(draft) {
+export function normalizeToolDraft(draft, { fallbackGlobals = null } = {}) {
+  const fallbackTransition = normalizeQuestionTransitionSettings(fallbackGlobals, {
+    questionTransitionSec: DEFAULT_TOOL_ROW.questionTransitionSec,
+    questionTransitionInfinite: DEFAULT_TOOL_ROW.questionTransitionInfinite
+  });
+  const transition = normalizeQuestionTransitionSettings(draft, fallbackTransition);
+  const rawToolMaxTimeMin = Math.floor(Number(draft?.toolMaxTimeMin));
+  const hasValidToolMaxTimeMin = draft?.toolMaxTimeMin != null
+    && Number.isFinite(rawToolMaxTimeMin)
+    && rawToolMaxTimeMin >= TOOL_LIMITS.toolMaxTimeMin.min;
+
   return {
     enabled: !!draft?.enabled,
     timePerQ: clampInt(
@@ -98,10 +105,45 @@ export function normalizeToolDraft(draft) {
       TOOL_LIMITS.answerTime.min,
       TOOL_LIMITS.answerTime.max
     ),
+    questionTransitionSec: transition.questionTransitionSec,
+    questionTransitionInfinite: transition.questionTransitionInfinite,
+    toolMaxTimeMin: hasValidToolMaxTimeMin
+      ? clampInt(
+          rawToolMaxTimeMin,
+          TOOL_LIMITS.toolMaxTimeMin.min,
+          TOOL_LIMITS.toolMaxTimeMin.max
+        )
+      : DEFAULT_TOOL_ROW.toolMaxTimeMin,
+    toolMaxTimeInfinite: draft?.toolMaxTimeInfinite == null
+      ? DEFAULT_TOOL_ROW.toolMaxTimeInfinite
+      : draft?.toolMaxTimeInfinite === true || !hasValidToolMaxTimeMin,
     infiniteTimePerQ: !!draft?.infiniteTimePerQ,
     infiniteQuestionCount: !!draft?.infiniteQuestionCount,
     infiniteAnswerTime: !!draft?.infiniteAnswerTime,
     settings: draft?.settings == null ? null : cloneData(draft.settings)
+  };
+}
+
+export function normalizeQuestionTransitionSettings(source, fallback = DEFAULT_TOOL_ROW) {
+  const fallbackSec = fallback?.questionTransitionSec == null
+    ? DEFAULT_TOOL_ROW.questionTransitionSec
+    : clampInt(
+        fallback?.questionTransitionSec,
+        TOOL_LIMITS.questionTransitionSec.min,
+        TOOL_LIMITS.questionTransitionSec.max
+      );
+
+  return {
+    questionTransitionSec: source?.questionTransitionSec == null
+      ? fallbackSec
+      : clampInt(
+          source?.questionTransitionSec,
+          TOOL_LIMITS.questionTransitionSec.min,
+          TOOL_LIMITS.questionTransitionSec.max
+        ),
+    questionTransitionInfinite: source?.questionTransitionInfinite == null
+      ? fallback?.questionTransitionInfinite === true
+      : source?.questionTransitionInfinite === true
   };
 }
 
@@ -162,9 +204,9 @@ export function createToolInstanceId(toolId = "tool") {
   return `${safeToolId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function normalizeSequenceItem(item, { fallbackToolId = "" } = {}) {
+export function normalizeSequenceItem(item, { fallbackToolId = "", fallbackGlobals = null } = {}) {
   const safeToolId = String(item?.toolId ?? fallbackToolId ?? "").trim();
-  const safeDraft = normalizeToolDraft(item?.draft);
+  const safeDraft = normalizeToolDraft(item?.draft, { fallbackGlobals });
   safeDraft.enabled = true;
 
   return {
@@ -175,7 +217,8 @@ export function normalizeSequenceItem(item, { fallbackToolId = "" } = {}) {
 }
 
 export function normalizeActivitySequence(sequence, {
-  toolsCatalog = []
+  toolsCatalog = [],
+  fallbackGlobals = null
 } = {}) {
   const safeCatalog = Array.isArray(toolsCatalog) ? toolsCatalog : [];
   const allowedToolIds = new Set(
@@ -188,7 +231,7 @@ export function normalizeActivitySequence(sequence, {
   const usedInstanceIds = new Set();
 
   const pushItem = (rawItem) => {
-    const safeItem = normalizeSequenceItem(rawItem);
+    const safeItem = normalizeSequenceItem(rawItem, { fallbackGlobals });
     if (!safeItem.toolId) return;
     if (allowedToolIds.size && !allowedToolIds.has(safeItem.toolId)) return;
 

@@ -14,7 +14,6 @@ import {
   DEFAULT_ACTIVITY_MODE,
   getActivityModeLabel,
   getToolActivityModeSupport,
-  isProjectionActivityMode,
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
@@ -24,29 +23,22 @@ import {
   DEFAULT_ACTIVITY_GLOBALS,
   clampInt,
   cloneData,
+  getCommonInfiniteGaugeSettings,
   normalizeActivityGlobals,
   normalizeToolDraft,
   normalizeActivitySequence,
   createToolInstanceId
 } from "../../shared/activity-config.js";
 import {
-  formatDurationEstimate
+  normalizeDurationEstimate
 } from "../../shared/activity-duration.js";
 import {
   renderSelectControl,
   bindSelect,
-  renderStepperField,
   bindStepperField,
-  refreshStepper,
-  readStepper,
-  renderInlineRadioControl,
-  bindRadio,
-  readRadio
+  refreshStepper
 } from "../../shared/config-widgets.js";
 import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
-import {
-  getToolProjectionResponseUiSupport
-} from "../../shared/tool-contract.js";
 import {
   ACTIVITY_SHARE_DISABLED_TITLE,
   ACTIVITY_SHARE_MESSAGES,
@@ -71,7 +63,6 @@ function createEditorElements(){
     btnShareDownloadQr: document.getElementById("btnShareDownloadQr"),
     sharePopup: document.getElementById("sharePopup"),
     sharePopupStudentActions: document.getElementById("sharePopupStudentActions"),
-    sharePopupProjectionContent: document.getElementById("sharePopupProjectionContent"),
     btnAddSequenceTool: document.getElementById("btnAddSequenceTool"),
     btnCloseToolPicker: document.getElementById("btnCloseToolPicker"),
 
@@ -81,9 +72,6 @@ function createEditorElements(){
     btnRenameConfig: document.getElementById("btnRenameConfig"),
     btnProjectConfig: document.getElementById("btnProjectConfig"),
     editorMessage: document.getElementById("editorMessage"),
-    questionTransitionSecInput: document.getElementById("questionTransitionSecInput"),
-    projectionResponseUiField: document.getElementById("projectionResponseUiField"),
-    projectionResponseUiSelect: document.getElementById("projectionResponseUiSelect"),
     configRows: document.getElementById("configRows"),
 
     toolConfigTitle: document.getElementById("toolConfigTitle"),
@@ -91,8 +79,10 @@ function createEditorElements(){
     activityDurationEstimate: document.getElementById("activityDurationEstimate"),
     activityTotalTimeControl: document.getElementById("activityTotalTimeControl"),
     activityTotalTimeToggleButton: document.getElementById("activityTotalTimeToggleButton"),
-    activityTotalTimePopup: document.getElementById("activityTotalTimePopup"),
+    activityTotalTimePanel: document.getElementById("activityTotalTimePanel"),
+    activityTotalTimeFixedCheckbox: document.getElementById("activityTotalTimeFixedCheckbox"),
     activityTotalTimeMinutesInput: document.getElementById("activityTotalTimeMinutesInput"),
+    activityTotalTimeChevron: document.getElementById("activityTotalTimeChevron"),
     sequenceWarnings: document.getElementById("sequenceWarnings"),
 
     projectedControlPanel: document.getElementById("projectedControlPanel"),
@@ -179,17 +169,15 @@ let currentToolSettingsEditor = null;
 let currentSelectedInstanceId = null;
 let activityEstimateRefreshTimer = null;
 let activityEstimateRefreshToken = 0;
+let lastActivityDurationEstimate = null;
 let hasToolSettingsValidationError = false;
-let activityTotalTimePopupOpen = false;
-let activityTotalTimePopupHideTimer = null;
+let activityTotalTimePanelOpen = false;
 let dragState = {
   draggedInstanceId: "",
   dropIndex: null
 };
 
 const activityGlobals = {
-  questionTransitionSec: DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
-  questionTransitionInfinite: DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite,
   projectionResponseUi: DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi,
   activityTotalTimeEnabled: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled,
   activityTotalTimeSec: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec
@@ -226,16 +214,14 @@ function resetEditorState(){
   currentSelectedInstanceId = null;
   activityEstimateRefreshTimer = null;
   activityEstimateRefreshToken = 0;
+  lastActivityDurationEstimate = null;
   hasToolSettingsValidationError = false;
-  activityTotalTimePopupOpen = false;
-  activityTotalTimePopupHideTimer = null;
+  activityTotalTimePanelOpen = false;
   dragState = {
     draggedInstanceId: "",
     dropIndex: null
   };
 
-  activityGlobals.questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec;
-  activityGlobals.questionTransitionInfinite = DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite;
   activityGlobals.projectionResponseUi = DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi;
   activityGlobals.activityTotalTimeEnabled = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled;
   activityGlobals.activityTotalTimeSec = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec;
@@ -299,7 +285,6 @@ export function destroyConfigEditor(){
     clearTimeout(activityEstimateRefreshTimer);
     activityEstimateRefreshTimer = null;
   }
-  clearActivityTotalTimePopupAutoClose();
 
   closeSharePopup();
   closeRenameActivityModal();
@@ -466,12 +451,12 @@ function loadExistingConfig(existing){
   if (!Array.isArray(safeConfig?.sequence)){
     setMessage("Configuration invalide : séquence manquante ou mal formée.", true);
     applyRemoteGlobals(safeConfig?.globals);
-    applyRemoteSequence([]);
+    applyRemoteSequence([], { fallbackGlobals: safeConfig?.globals });
     return;
   }
 
   applyRemoteGlobals(safeConfig.globals);
-  applyRemoteSequence(safeConfig.sequence);
+  applyRemoteSequence(safeConfig.sequence, { fallbackGlobals: safeConfig.globals });
 }
 
 function renderMeta(){
@@ -539,7 +524,7 @@ function syncProjectionLaunchUi(){
   const button = els.btnProjectConfig;
   if (!button) return;
 
-  const canProject = isProjectionActivityMode(currentActivityMode)
+  const canProject = isStudentFacingActivityMode(currentActivityMode)
     && !isProjectedEditorMode
     && Boolean(String(currentConfigName || "").trim());
 
@@ -586,9 +571,7 @@ function syncShareUi(){
   const canShare = hasShareableActivity();
   const isStudentFacingMode = isStudentFacingActivityMode(currentActivityMode);
   const shareTitle = canShare
-    ? isProjectionActivityMode(currentActivityMode)
-      ? "Partager l’activité Projection"
-      : "Partager l’activité"
+    ? "Partager l’activité"
     : ACTIVITY_SHARE_DISABLED_TITLE;
 
   if (els.btnShareActivity) {
@@ -598,7 +581,6 @@ function syncShareUi(){
   }
 
   els.sharePopupStudentActions?.classList.toggle("hidden", !isStudentFacingMode);
-  els.sharePopupProjectionContent?.classList.toggle("hidden", isStudentFacingMode);
 
   if (!canShare) {
     closeSharePopup();
@@ -750,7 +732,7 @@ function bindEvents(){
     openRenameActivityModal();
   });
   addScopedListener(els.btnProjectConfig, "click", () => {
-    if (!isProjectionActivityMode(currentActivityMode) || isProjectedEditorMode) return;
+    if (!isStudentFacingActivityMode(currentActivityMode) || isProjectedEditorMode) return;
 
     const popup = openProjectedSessionPopup({
       accessCode: currentAccessCode,
@@ -861,57 +843,19 @@ function bindEvents(){
     }
   });
 
-  addScopedListener(els.questionTransitionSecInput, "input", () => {
-    activityGlobals.questionTransitionSec = clampInt(
-      els.questionTransitionSecInput.value,
-      TOOL_LIMITS.questionTransitionSec.min,
-      TOOL_LIMITS.questionTransitionSec.max
-    );
-    setSaveState("dirty");
-    scheduleActivityDurationEstimate();
-  });
-
-  addScopedListener(els.questionTransitionSecInput, "change", () => {
-    const value = clampInt(
-      els.questionTransitionSecInput.value,
-      TOOL_LIMITS.questionTransitionSec.min,
-      TOOL_LIMITS.questionTransitionSec.max
-    );
-    els.questionTransitionSecInput.value = value;
-    activityGlobals.questionTransitionSec = value;
-    setSaveState("dirty");
-    scheduleActivityDurationEstimate();
-  });
-
-  addScopedListener(els.projectionResponseUiSelect, "change", () => {
-    activityGlobals.projectionResponseUi = normalizeActivityGlobals({
-      projectionResponseUi: els.projectionResponseUiSelect?.value
-    }).projectionResponseUi;
-
-    if (els.projectionResponseUiSelect) {
-      els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
-    }
-
-    setSaveState("dirty");
-    scheduleActivityDurationEstimate();
-  });
-
-
   bindStepperField(els.activityTotalTimeControl || document, "activityTotalTimeMinutesInput", {
     inputMin: getActivityTotalTimeMinuteLimits().min,
     inputMax: getActivityTotalTimeMinuteLimits().max
   });
 
   addScopedListener(els.activityTotalTimeToggleButton, "click", () => {
-    if (activityGlobals.activityTotalTimeEnabled === true && !activityTotalTimePopupOpen) {
-      activityTotalTimePopupOpen = true;
-      syncActivityTotalTimeUi();
-      return;
-    }
+    activityTotalTimePanelOpen = !activityTotalTimePanelOpen;
+    syncActivityTotalTimeUi();
+  });
 
+  addScopedListener(els.activityTotalTimeFixedCheckbox, "change", () => {
     persistCurrentToolSettings();
-    activityGlobals.activityTotalTimeEnabled = activityGlobals.activityTotalTimeEnabled !== true;
-    activityTotalTimePopupOpen = activityGlobals.activityTotalTimeEnabled === true;
+    activityGlobals.activityTotalTimeEnabled = els.activityTotalTimeFixedCheckbox?.checked === true;
     syncActivityTotalTimeUi();
     renderConfigTable();
     setSaveState("dirty");
@@ -932,13 +876,6 @@ function bindEvents(){
     setSaveState("dirty");
     scheduleActivityDurationEstimate();
   });
-
-  ["pointerdown", "input", "keydown", "focusin"].forEach((eventName) => {
-    addScopedListener(els.activityTotalTimePopup, eventName, scheduleActivityTotalTimePopupAutoClose);
-  });
-
-  addScopedListener(window, "resize", positionActivityTotalTimePopup, { passive: true });
-  addScopedListener(document, "scroll", positionActivityTotalTimePopup, { passive: true, capture: true });
 
   addScopedListener(els.toolConfigHost, "input", () => {
     setSaveState("dirty");
@@ -1410,20 +1347,24 @@ async function openToolSettings(instanceId){
       ? (moduleRuntime.renderCommonToolSettings(cloneData(draft), getToolEditorContext(entry.instanceId)) || "")
       : "";
 
-  const showProjectionResponseUiRow = shouldShowProjectionResponseUiRow(tool, getToolEditorContext(entry.instanceId));
   const combinedCommonSettingsHtml = showCommonToolSettings
     ? buildCombinedCommonFlowSettingsHtml({
-        baseHtml: commonSettingsHtml,
-        questionTransitionSec: activityGlobals.questionTransitionSec,
-        questionTransitionInfinite: activityGlobals.questionTransitionInfinite,
-        showProjectionResponseUiRow,
-        projectionResponseUi: activityGlobals.projectionResponseUi
+        baseHtml: commonSettingsHtml
+      })
+    : "";
+
+  const compactCommonFlowHtml = combinedCommonSettingsHtml
+    ? buildCompactCommonFlowSettingsHtml({
+        baseHtml: combinedCommonSettingsHtml,
+        draft,
+        tool,
+        context: getToolEditorContext(entry.instanceId)
       })
     : "";
 
   host.innerHTML = `
     <div class="cfg-tool-settings-stack">
-      ${combinedCommonSettingsHtml ? `<div id="toolCommonSettingsHost">${combinedCommonSettingsHtml}</div>` : ""}
+      ${compactCommonFlowHtml ? `<div id="toolCommonSettingsHost">${compactCommonFlowHtml}</div>` : ""}
       <div id="toolSpecificSettingsHost"></div>
     </div>
   `;
@@ -1441,47 +1382,27 @@ async function openToolSettings(instanceId){
     settingsHost.innerHTML = `<div class="cfg-empty-state">Aucun réglage spécifique pour cet outil.</div>`;
   }
 
+  const refreshCommonFlowSummary = () => {
+    updateCompactCommonFlowSummary(host, {
+      instanceId: entry.instanceId,
+      tool
+    });
+  };
+
   if (showCommonToolSettings && typeof moduleRuntime?.bindCommonToolSettings === "function") {
     moduleRuntime.bindCommonToolSettings(commonSettingsHost || host, {
       forceInfiniteQuestionCount: isFinalInfiniteSequenceItem(entry),
       onDirty: () => {
         setSaveState("dirty");
         scheduleActivityDurationEstimate();
+        refreshCommonFlowSummary();
       },
       onAnswerInfiniteActivated: () => {
-        setQuestionTransitionToZero();
+        setCurrentToolQuestionTransitionToZero();
       }
     });
-  }
-
-  if (showCommonToolSettings && commonSettingsHost) {
-    bindStepperField(commonSettingsHost, "cfgCommonQuestionTransitionSec", {
-      inputMin: TOOL_LIMITS.questionTransitionSec.min,
-      inputMax: TOOL_LIMITS.questionTransitionSec.max,
-      onChange: () => {
-        setSaveState("dirty");
-        scheduleActivityDurationEstimate();
-      }
-    });
-
-    bindInfiniteToggle(commonSettingsHost, {
-      buttonId: "cfgCommonQuestionTransitionSecInfinite",
-      inputId: "cfgCommonQuestionTransitionSec",
-      onChange: (active) => {
-        activityGlobals.questionTransitionInfinite = active;
-        setSaveState("dirty");
-        scheduleActivityDurationEstimate();
-      }
-    });
-
-    if (showProjectionResponseUiRow) {
-      bindRadio(commonSettingsHost, "cfgCommonProjectionResponseUi", {
-        onChange: () => {
-          setSaveState("dirty");
-          scheduleActivityDurationEstimate();
-        }
-      });
-    }
+    bindCompactCommonFlowPanel(host);
+    refreshCommonFlowSummary();
   }
 
   host.querySelectorAll('input[type="number"]').forEach((inp) => {
@@ -1551,57 +1472,43 @@ async function saveCurrentConfig(){
 function renderGlobals(){
   injectSharedToolHeaderStyles();
 
-  if (els.questionTransitionSecInput){
-    els.questionTransitionSecInput.value = activityGlobals.questionTransitionSec;
-    const legacyTransitionRow = els.questionTransitionSecInput.closest(".cfg-global-inline");
-    if (legacyTransitionRow?.isConnected) {
-      legacyTransitionRow.remove();
-    }
-  }
-
-  if (els.projectionResponseUiSelect) {
-    els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
-  }
-
-  if (els.projectionResponseUiField?.isConnected) {
-    els.projectionResponseUiField.remove();
-  }
-
   syncActivityTotalTimeUi();
 }
 
 function syncActivityTotalTimeUi({ preserveInput = false } = {}){
   const enabled = activityGlobals.activityTotalTimeEnabled === true;
-  const popupVisible = enabled && activityTotalTimePopupOpen;
+  const panelOpen = activityTotalTimePanelOpen === true;
   const minuteLimits = getActivityTotalTimeMinuteLimits();
-  const totalMinutes = Math.max(
-    minuteLimits.min,
-    Math.round((Number(activityGlobals.activityTotalTimeSec) || DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec) / 60)
+  const totalMinutes = Math.min(
+    minuteLimits.max,
+    Math.max(
+      minuteLimits.min,
+      Math.round((Number(activityGlobals.activityTotalTimeSec) || DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec) / 60)
+    )
   );
 
   els.activityTotalTimeControl?.classList.toggle("is-active", enabled);
+  els.activityTotalTimeControl?.classList.toggle("is-expanded", panelOpen);
 
   if (els.activityTotalTimeToggleButton) {
-    const buttonLabel = enabled
-      ? (popupVisible ? "Désactiver la durée totale" : "Régler la durée totale")
-      : "Durée totale";
-    els.activityTotalTimeToggleButton.classList.toggle("is-active", enabled);
-    els.activityTotalTimeToggleButton.setAttribute("aria-expanded", popupVisible ? "true" : "false");
-    els.activityTotalTimeToggleButton.setAttribute("aria-pressed", enabled ? "true" : "false");
+    const buttonLabel = panelOpen
+      ? "Replier les réglages de durée"
+      : "Déplier les réglages de durée";
+    els.activityTotalTimeToggleButton.setAttribute("aria-expanded", panelOpen ? "true" : "false");
     els.activityTotalTimeToggleButton.title = buttonLabel;
     els.activityTotalTimeToggleButton.setAttribute("aria-label", buttonLabel);
   }
 
-  if (els.activityTotalTimePopup) {
-    els.activityTotalTimePopup.hidden = !popupVisible;
-    if (popupVisible) {
-      window.requestAnimationFrame?.(positionActivityTotalTimePopup);
-      scheduleActivityTotalTimePopupAutoClose();
-    } else {
-      clearActivityTotalTimePopupAutoClose();
-      els.activityTotalTimePopup.style.removeProperty("--cfg-total-time-popup-left");
-      els.activityTotalTimePopup.style.removeProperty("--cfg-total-time-popup-top");
-    }
+  if (els.activityTotalTimePanel) {
+    els.activityTotalTimePanel.hidden = !panelOpen;
+  }
+
+  if (els.activityTotalTimeChevron) {
+    els.activityTotalTimeChevron.textContent = panelOpen ? "expand_less" : "expand_more";
+  }
+
+  if (els.activityTotalTimeFixedCheckbox) {
+    els.activityTotalTimeFixedCheckbox.checked = enabled;
   }
 
   if (els.activityTotalTimeMinutesInput) {
@@ -1610,54 +1517,14 @@ function syncActivityTotalTimeUi({ preserveInput = false } = {}){
     }
     els.activityTotalTimeMinutesInput.disabled = !enabled;
     els.activityTotalTimeMinutesInput.setAttribute("aria-disabled", enabled ? "false" : "true");
+    els.activityTotalTimeMinutesInput.closest(".tv-stepper")?.classList.toggle("is-disabled", !enabled);
     refreshStepper(els.activityTotalTimeControl || document, "activityTotalTimeMinutesInput", {
       inputMin: minuteLimits.min,
       inputMax: minuteLimits.max
     });
   }
-}
 
-function scheduleActivityTotalTimePopupAutoClose(){
-  clearActivityTotalTimePopupAutoClose();
-  if (activityGlobals.activityTotalTimeEnabled !== true || activityTotalTimePopupOpen !== true) return;
-
-  activityTotalTimePopupHideTimer = window.setTimeout(() => {
-    activityTotalTimePopupHideTimer = null;
-    activityTotalTimePopupOpen = false;
-    syncActivityTotalTimeUi();
-  }, 5000);
-}
-
-function clearActivityTotalTimePopupAutoClose(){
-  if (activityTotalTimePopupHideTimer === null) return;
-  window.clearTimeout(activityTotalTimePopupHideTimer);
-  activityTotalTimePopupHideTimer = null;
-}
-
-function positionActivityTotalTimePopup(){
-  const popup = els.activityTotalTimePopup;
-  const button = els.activityTotalTimeToggleButton;
-  if (!popup || !button || popup.hidden) return;
-
-  const margin = 10;
-  const buttonRect = button.getBoundingClientRect();
-  const popupRect = popup.getBoundingClientRect();
-  const popupWidth = popupRect.width || 220;
-  const popupHeight = popupRect.height || 120;
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || popupWidth;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || popupHeight;
-
-  let left = buttonRect.left + (buttonRect.width / 2) - (popupWidth / 2);
-  left = Math.max(margin, Math.min(left, viewportWidth - popupWidth - margin));
-
-  let top = buttonRect.top - popupHeight - margin;
-  if (top < margin) {
-    top = buttonRect.bottom + margin;
-  }
-  top = Math.max(margin, Math.min(top, viewportHeight - popupHeight - margin));
-
-  popup.style.setProperty("--cfg-total-time-popup-left", `${Math.round(left)}px`);
-  popup.style.setProperty("--cfg-total-time-popup-top", `${Math.round(top)}px`);
+  syncActivityDurationSummary();
 }
 
 function readActivityTotalTimeSecFromInput(){
@@ -1748,9 +1615,10 @@ function setSaveState(state){
   notifyEditorStateChange();
 }
 
-function applyRemoteSequence(remoteSequence){
+function applyRemoteSequence(remoteSequence, { fallbackGlobals = null } = {}){
   const safeSequence = normalizeActivitySequence(remoteSequence, {
-    toolsCatalog
+    toolsCatalog,
+    fallbackGlobals
   });
 
   activitySequence = safeSequence.map((item) => ({
@@ -1818,8 +1686,6 @@ function persistCurrentToolSettings(){
 
   const host = els.toolConfigHost;
   if (!host) return;
-
-  readCommonFlowGlobalsFromHost(host);
 
   const { instanceId, tool } = currentToolSettingsEditor;
   const draft = getSequenceDraft(instanceId);
@@ -1932,30 +1798,18 @@ function renderSequenceWarnings(){
   els.sequenceWarnings.hidden = false;
 }
 
-function setQuestionTransitionToZero(){
-  if (activityGlobals.questionTransitionSec === 0) return;
+function setCurrentToolQuestionTransitionToZero(){
+  const currentTransitionInput = els.toolConfigHost?.querySelector("#commonToolQuestionTransitionSec");
+  if (!currentTransitionInput || Number(currentTransitionInput.value) === 0) return;
 
-  activityGlobals.questionTransitionSec = 0;
-  if (els.questionTransitionSecInput) {
-    els.questionTransitionSecInput.value = 0;
-  }
-
-  const currentTransitionInput = els.toolConfigHost?.querySelector("#cfgCommonQuestionTransitionSec");
-  if (currentTransitionInput) {
-    currentTransitionInput.value = 0;
-    currentTransitionInput.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-
+  currentTransitionInput.value = 0;
+  currentTransitionInput.dispatchEvent(new Event("change", { bubbles: true }));
   setSaveState("dirty");
   scheduleActivityDurationEstimate();
 }
 
 function buildCombinedCommonFlowSettingsHtml({
-  baseHtml = "",
-  questionTransitionSec = DEFAULT_ACTIVITY_GLOBALS.questionTransitionSec,
-  questionTransitionInfinite = DEFAULT_ACTIVITY_GLOBALS.questionTransitionInfinite,
-  showProjectionResponseUiRow = false,
-  projectionResponseUi = DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi
+  baseHtml = ""
 } = {}) {
   const template = document.createElement("template");
   template.innerHTML = String(baseHtml || "").trim();
@@ -1980,122 +1834,205 @@ function buildCombinedCommonFlowSettingsHtml({
   group.classList.add("cfg-common-flow-group");
   grid.classList.add("cfg-common-flow-grid");
 
-  const transitionTemplate = document.createElement("template");
-  transitionTemplate.innerHTML = renderStepperField({
-    id: "cfgCommonQuestionTransitionSec",
-    label: "Temps entre les questions",
-    value: questionTransitionSec,
-    inputMin: TOOL_LIMITS.questionTransitionSec.min,
-    inputMax: TOOL_LIMITS.questionTransitionSec.max,
-    step: TOOL_LIMITS.questionTransitionSec.step,
-    fieldClassName: "cfg-common-flow-transition-field",
-    actionButtonHtml: renderInfiniteToggleButton({
-      id: "cfgCommonQuestionTransitionSecInfinite",
-      label: "Temps entre les questions illimité",
-      active: questionTransitionInfinite
-    })
-  }).trim();
-  const transitionField = transitionTemplate.content.firstElementChild;
-  if (transitionField) {
-    grid.appendChild(transitionField);
+  const instructionRow = group.querySelector(".cfg-common-flow-instruction-row");
+  if (instructionRow) {
+    instructionRow.remove();
   }
 
-  if (showProjectionResponseUiRow) {
-    const projectionTemplate = document.createElement("template");
-    projectionTemplate.innerHTML = renderInlineRadioControl({
-      title: "Réponse en projection",
-      id: "cfgCommonProjectionResponseUi",
-      value: projectionResponseUi,
-      options: [
-        { value: "boxed", label: "Avec" },
-        { value: "free", label: "Sans" }
-      ],
-      rootClassName: "cfg-common-flow-projection-row"
-    }).trim();
-    const projectionRow = projectionTemplate.content.firstElementChild;
-    if (projectionRow) {
-      group.appendChild(projectionRow);
-    }
-  }
+  const createSettingsSection = ({ id, className, nodes = [] } = {}) => {
+    const section = document.createElement("div");
+    section.id = id;
+    section.hidden = true;
+    section.setAttribute("data-common-flow-settings-section", "true");
+    section.className = `tv-group cfg-common-flow-group cfg-common-flow-subwidget ${className}`;
 
-  return group.outerHTML;
-}
-
-function shouldShowProjectionResponseUiRow(tool, context = {}) {
-  if (!isProjectionActivityMode(currentActivityMode)) return false;
-
-  const support = getToolProjectionResponseUiSupport(tool, context);
-  return support.boxed === true && support.free === true;
-}
-
-function readCommonFlowGlobalsFromHost(container) {
-  if (!container) return;
-
-  const transitionInput = container.querySelector("#cfgCommonQuestionTransitionSec");
-  if (transitionInput) {
-    activityGlobals.questionTransitionSec = readStepper(container, "cfgCommonQuestionTransitionSec", {
-      inputMin: TOOL_LIMITS.questionTransitionSec.min,
-      inputMax: TOOL_LIMITS.questionTransitionSec.max
+    const sectionGrid = document.createElement("div");
+    sectionGrid.className = "tv-stepper-grid cfg-common-flow-grid";
+    nodes.forEach((node) => {
+      if (node) {
+        sectionGrid.appendChild(node);
+      }
     });
+    section.appendChild(sectionGrid);
+    return section;
+  };
+
+  const questionModeRow = grid.querySelector(".cfg-common-flow-question-mode-row");
+  const questionSection = createSettingsSection({
+    id: "commonFlowQuestionSettings",
+    className: "cfg-common-flow-question-widget",
+    nodes: questionModeRow
+      ? [questionModeRow]
+      : [
+          grid.querySelector(".cfg-common-flow-question-count-field"),
+          grid.querySelector("#commonToolInfiniteGaugeRow")
+        ]
+  });
+
+  const timingSection = createSettingsSection({
+    id: "commonFlowTimingSettings",
+    className: "cfg-common-flow-timing-widget",
+    nodes: [
+      grid.querySelector(".cfg-common-flow-time-per-question-field"),
+      grid.querySelector(".cfg-common-flow-answer-time-field"),
+      grid.querySelector(".cfg-common-flow-transition-field"),
+      grid.querySelector(".cfg-common-flow-max-time-field")
+    ]
+  });
+
+  if (instructionRow) {
+    instructionRow.id = "commonFlowInstructionSettings";
+    instructionRow.hidden = true;
+    instructionRow.setAttribute("data-common-flow-settings-section", "true");
+    instructionRow.classList.add("cfg-common-flow-subwidget", "cfg-common-flow-instruction-widget");
   }
 
-  const transitionInfiniteToggle = container.querySelector("#cfgCommonQuestionTransitionSecInfinite");
-  if (transitionInfiniteToggle) {
-    activityGlobals.questionTransitionInfinite = isInfiniteToggleActive(container, "cfgCommonQuestionTransitionSecInfinite");
-  }
-
-  const projectionRadio = container.querySelector('input[name="cfgCommonProjectionResponseUi"]:checked');
-  if (projectionRadio) {
-    activityGlobals.projectionResponseUi = normalizeActivityGlobals({
-      projectionResponseUi: readRadio(container, "cfgCommonProjectionResponseUi", activityGlobals.projectionResponseUi)
-    }).projectionResponseUi;
-
-    if (els.projectionResponseUiSelect) {
-      els.projectionResponseUiSelect.value = activityGlobals.projectionResponseUi;
-    }
-  }
+  return [
+    questionSection.outerHTML,
+    timingSection.outerHTML,
+    instructionRow?.outerHTML || ""
+  ].join("");
 }
 
-function renderInfiniteToggleButton({ id, label, active = false }) {
+function buildCompactCommonFlowSettingsHtml({ baseHtml = "", draft = {}, tool = null, context = {} } = {}) {
+  const summary = buildCommonFlowSummaryParts(draft, tool, context);
+
   return `
-    <button
-      class="tv-stepper-infinity-btn${active ? " is-active" : ""}"
-      type="button"
-      id="${id}"
-      data-infinite-toggle="true"
-      aria-label="${escapeHtml(label)}"
-      aria-pressed="${active ? "true" : "false"}"
-      title="${escapeHtml(label)}"
-    >
-      <span class="tv-stepper-icon" aria-hidden="true">all_inclusive</span>
-    </button>
+    <div class="cfg-common-flow-compact">
+      <button
+        class="cfg-common-flow-summary-card"
+        id="commonFlowSummaryButton"
+        type="button"
+        aria-controls="commonFlowQuestionSettings commonFlowTimingSettings commonFlowInstructionSettings"
+        aria-expanded="false"
+      >
+        <span class="cfg-material-icon cfg-common-flow-summary-icon" aria-hidden="true">tune</span>
+        <span class="cfg-common-flow-summary-copy">
+          <span class="cfg-common-flow-summary-main" id="commonFlowSummaryMain" title="${escapeHtml(summary.main)}">${escapeHtml(summary.main)}</span>
+          <span class="cfg-common-flow-summary-instruction" id="commonFlowSummaryInstruction" title="${escapeHtml(summary.instruction)}">${escapeHtml(summary.instruction)}</span>
+        </span>
+      </button>
+
+      ${baseHtml}
+    </div>
   `;
 }
 
-function bindInfiniteToggle(container, { buttonId, inputId, onChange } = {}) {
-  const button = container.querySelector(`#${cssEscape(buttonId)}`);
-  const input = container.querySelector(`#${cssEscape(inputId)}`);
-  if (!button || !input) return;
+function bindCompactCommonFlowPanel(container) {
+  const summaryButton = container.querySelector("#commonFlowSummaryButton");
+  const sections = Array.from(container.querySelectorAll("[data-common-flow-settings-section]"));
 
-  const applyState = (active) => {
-    button.classList.toggle("is-active", !!active);
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-    input.disabled = !!active;
-    input.closest(".tv-stepper")?.classList.toggle("is-disabled", !!active);
+  if (!summaryButton || sections.length === 0) return;
+
+  const setExpanded = (expanded) => {
+    sections.forEach((section) => {
+      section.hidden = !expanded;
+    });
+    summaryButton.setAttribute("aria-expanded", expanded ? "true" : "false");
   };
 
-  applyState(button.getAttribute("aria-pressed") === "true");
+  summaryButton.setAttribute("aria-expanded", "false");
+  summaryButton.addEventListener("click", () => {
+    setExpanded(sections.every((section) => section.hidden));
+  });
 
-  button.addEventListener("click", () => {
-    const nextActive = button.getAttribute("aria-pressed") !== "true";
-    applyState(nextActive);
-    onChange?.(nextActive);
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+  container.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setExpanded(false);
+      summaryButton.focus?.({ preventScroll: true });
+    }
   });
 }
 
-function isInfiniteToggleActive(container, buttonId) {
-  return container.querySelector(`#${cssEscape(buttonId)}`)?.getAttribute("aria-pressed") === "true";
+function updateCompactCommonFlowSummary(container, { instanceId = currentSelectedInstanceId, tool = null } = {}) {
+  const summaryMain = container.querySelector("#commonFlowSummaryMain");
+  const summaryInstruction = container.querySelector("#commonFlowSummaryInstruction");
+  if (!summaryMain || !summaryInstruction) return;
+
+  let draft = getSequenceDraft(instanceId);
+
+  if (typeof moduleRuntime?.readCommonToolSettings === "function") {
+    try {
+      draft = moduleRuntime.readCommonToolSettings(
+        container,
+        draft,
+        getToolEditorContext(instanceId)
+      ) || draft;
+    } catch {
+      draft = getSequenceDraft(instanceId);
+    }
+  }
+
+  const summary = buildCommonFlowSummaryParts(draft, tool || currentToolSettingsEditor?.tool || null, getToolEditorContext(instanceId));
+
+  summaryMain.textContent = summary.main;
+  summaryMain.title = summary.main;
+  summaryInstruction.textContent = summary.instruction;
+  summaryInstruction.title = summary.instruction;
+}
+
+function buildCommonFlowSummaryParts(draft = {}, tool = null, context = {}) {
+  const safeDraft = normalizeToolDraft(draft);
+  const forceInfiniteQuestionCount = context?.forceInfiniteQuestionCount === true
+    || context?.isFinalInfiniteSequenceItem === true
+    || context?.finalInfiniteSequenceItem === true;
+  const questionCount = forceInfiniteQuestionCount || safeDraft.infiniteQuestionCount
+    ? `Objectif ${getCommonFlowObjectiveTarget(safeDraft)}`
+    : String(clampInt(
+        safeDraft.questionCount,
+        TOOL_LIMITS.questionCount.min,
+        TOOL_LIMITS.questionCount.max
+      ));
+  const timeLimit = safeDraft.toolMaxTimeInfinite
+    ? "Limite de temps : aucune"
+    : `Limite de temps : ${clampInt(safeDraft.toolMaxTimeMin, TOOL_LIMITS.toolMaxTimeMin.min, TOOL_LIMITS.toolMaxTimeMin.max)} min`;
+  const timePerQuestion = safeDraft.infiniteTimePerQ
+    ? "Pas de chrono"
+    : `${clampInt(safeDraft.timePerQ, TOOL_LIMITS.timePerQ.min, TOOL_LIMITS.timePerQ.max)} s par question`;
+  const answerTime = safeDraft.infiniteAnswerTime
+    ? "Temps d'affichage de la réponse : ∞"
+    : `Temps d'affichage de la réponse : ${clampInt(safeDraft.answerTime, TOOL_LIMITS.answerTime.min, TOOL_LIMITS.answerTime.max)} s`;
+  const pause = safeDraft.questionTransitionInfinite
+    ? "Pause entre les questions : manuelle"
+    : clampInt(safeDraft.questionTransitionSec, TOOL_LIMITS.questionTransitionSec.min, TOOL_LIMITS.questionTransitionSec.max) <= 0
+      ? "Pause entre les questions : aucune"
+      : `Pause entre les questions : ${clampInt(safeDraft.questionTransitionSec, TOOL_LIMITS.questionTransitionSec.min, TOOL_LIMITS.questionTransitionSec.max)} s`;
+  const summaryGap = "\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0";
+
+  return {
+    main: [
+      `Nombre de questions : ${questionCount}`,
+      timeLimit,
+      timePerQuestion,
+      answerTime,
+      pause
+    ].join(summaryGap),
+    instruction: `Consigne : ${getResolvedCommonInstructionSummary(safeDraft, tool)}`
+  };
+}
+
+
+function getCommonFlowObjectiveTarget(draft = {}) {
+  return getCommonInfiniteGaugeSettings(draft?.settings).infiniteGaugeRequiredCorrect;
+}
+
+function getResolvedCommonInstructionSummary(draft = {}, tool = null) {
+  const defaultInstruction = String(tool?.defaultInstruction || "").trim();
+  const common = draft?.settings && typeof draft.settings === "object" && !Array.isArray(draft.settings)
+    && draft.settings.common && typeof draft.settings.common === "object" && !Array.isArray(draft.settings.common)
+      ? draft.settings.common
+      : null;
+  const instruction = common?.instruction && typeof common.instruction === "object" && !Array.isArray(common.instruction)
+    ? common.instruction
+    : null;
+  const customInstruction = String(instruction?.text || "").trim();
+
+  if (instruction?.enabled === true && customInstruction) {
+    return customInstruction;
+  }
+
+  return defaultInstruction || "—";
 }
 
 function ensureToolHeaderControlsSlot(){
@@ -2155,14 +2092,56 @@ async function refreshActivityDurationEstimate(){
   if (token !== activityEstimateRefreshToken) return;
 
   const text = countEnabledTools() > 0
-    ? formatDurationEstimate(estimate)
+    ? formatDurationSummaryValue(estimate)
     : "—";
 
-  if (els.activityDurationEstimate) {
-    const label = activityGlobals.activityTotalTimeEnabled === true ? "Durée fixe" : "Durée estimée";
-    els.activityDurationEstimate.textContent = `${label} : ${text}`;
-    els.activityDurationEstimate.title = text === "—" ? "Durée indisponible" : `${label} : ${text}`;
+  if (activityGlobals.activityTotalTimeEnabled !== true) {
+    lastActivityDurationEstimate = countEnabledTools() > 0 ? estimate : null;
   }
+
+  syncActivityDurationSummary(text);
+}
+
+function syncActivityDurationSummary(estimatedText = null){
+  if (!els.activityDurationEstimate) return;
+
+  const enabled = activityGlobals.activityTotalTimeEnabled === true;
+  const modeText = enabled ? "fixe" : "estimation";
+  const durationText = enabled
+    ? formatDurationSummaryValue({
+        minSec: activityGlobals.activityTotalTimeSec,
+        maxSec: activityGlobals.activityTotalTimeSec
+      })
+    : (estimatedText ?? (countEnabledTools() > 0 ? formatDurationSummaryValue(lastActivityDurationEstimate) : "—"));
+
+  const summaryText = `Durée : ${durationText} (${modeText})`;
+  els.activityDurationEstimate.textContent = summaryText;
+  els.activityDurationEstimate.title = durationText === "—"
+    ? "Durée indisponible"
+    : summaryText;
+}
+
+function formatDurationSummaryValue(estimate){
+  const safeEstimate = normalizeDurationEstimate(estimate);
+  if (!safeEstimate) return "—";
+  if (safeEstimate.infinite) return "∞";
+
+  if (safeEstimate.minSec === safeEstimate.maxSec) {
+    return formatDurationSummarySeconds(safeEstimate.minSec);
+  }
+
+  return `entre ${formatDurationSummarySeconds(safeEstimate.minSec)} et ${formatDurationSummarySeconds(safeEstimate.maxSec)}`;
+}
+
+function formatDurationSummarySeconds(totalSec){
+  const safeTotalSec = Math.max(0, Math.floor(Number(totalSec) || 0));
+
+  if (safeTotalSec < 60) {
+    return "moins d’1 minute";
+  }
+
+  const minutes = Math.floor(safeTotalSec / 60);
+  return `${minutes} minute${minutes > 1 ? "s" : ""}`;
 }
 
 async function loadToolModule(toolId){
@@ -2547,14 +2526,6 @@ function cssSafeId(value) {
   return String(value || "")
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "") || "item";
-}
-
-function cssEscape(value) {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-    return CSS.escape(value);
-  }
-
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
 }
 
 function escapeHtml(s){

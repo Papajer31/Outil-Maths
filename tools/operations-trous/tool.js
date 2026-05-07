@@ -21,8 +21,7 @@ export default defineTool("operations-trous", "Opérations à trous", {
   getActivityModeProfile() {
     return {
       individual: { supported: true },
-      group: { supported: true },
-      projection: { supported: true }
+      group: { supported: true }
     };
   },
 

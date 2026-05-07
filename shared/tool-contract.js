@@ -1,8 +1,7 @@
-const TOOL_ACTIVITY_MODES = Object.freeze(["individual", "group", "projection"]);
+const TOOL_ACTIVITY_MODES = Object.freeze(["individual", "group"]);
 const TOOL_ACTIVITY_MODE_LABELS = Object.freeze({
   individual: "Individuel",
-  group: "Groupe",
-  projection: "Projection"
+  group: "Groupe"
 });
 
 const TOOL_RUNTIME_CAPABILITY_LEVELS = new Set(["required", "supported", "unsupported"]);
@@ -401,17 +400,22 @@ export function getToolRunProfile(tool, context = {}) {
   const currentMode = normalizeModeForRunProfile(context?.activityMode ?? context?.runMode);
   const currentModeProfile = modeProfile[currentMode] ?? { supported: true, reason: "" };
 
-  const requiresStudent = typeof safeTool.requiresStudent === "function"
-    ? !!safeTool.requiresStudent(settings)
-    : safeTool.requiresStudent === true
-      ? true
-      : !!rawProfile?.requiresStudent;
+  const runsWithoutIdentifiedStudents = String(context?.runMode || context?.sessionMode || "").trim().toLowerCase() === "projected-teacher";
+  const requiresStudent = runsWithoutIdentifiedStudents
+    ? false
+    : typeof safeTool.requiresStudent === "function"
+      ? !!safeTool.requiresStudent(settings)
+      : safeTool.requiresStudent === true
+        ? true
+        : !!rawProfile?.requiresStudent;
 
-  const allowedStudentIds = Array.isArray(rawProfile?.allowedStudentIds)
-    ? rawProfile.allowedStudentIds.map((id) => String(id || "").trim()).filter(Boolean)
-    : requiresStudent
-      ? selectedStudentIds
-      : [];
+  const allowedStudentIds = runsWithoutIdentifiedStudents
+    ? []
+    : Array.isArray(rawProfile?.allowedStudentIds)
+      ? rawProfile.allowedStudentIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : requiresStudent
+        ? selectedStudentIds
+        : [];
 
   const blockingMessage = String(
     rawProfile?.blockingMessage
@@ -659,7 +663,6 @@ function normalizeModeForRunProfile(value) {
   if (TOOL_ACTIVITY_MODES.includes(safeValue)) {
     return safeValue;
   }
-  if (safeValue === "projection") return "projection";
   return "individual";
 }
 
@@ -714,32 +717,6 @@ function normalizeActivityModeEntry(value, mode, { supportedModes = [], capabili
     reason = defaultReason;
   }
 
-  if (safeMode === "projection") {
-    const projectionResponseUiSupport = getToolProjectionResponseUiSupport(tool, context);
-    if (!projectionResponseUiSupport.boxed && !projectionResponseUiSupport.free) {
-      supported = false;
-      reason = reason || defaultReason;
-    }
-  }
-
-  if (safeMode === "projection" && supported && typeof tool?.getRunProfile === "function") {
-    const projectionProfile = tool.getRunProfile({
-      ...context,
-      activityMode: "projection",
-      runMode: "projected-teacher",
-      settings: context?.settings ?? {}
-    });
-
-    if (projectionProfile && typeof projectionProfile === "object" && String(projectionProfile.blockingMessage || "").trim()) {
-      supported = false;
-      reason = String(projectionProfile.blockingMessage || "").trim();
-    }
-  }
-
-  if (safeMode === "projection" && supported && safeCapabilities?.supportsCommonFlowSettings === false) {
-    // no-op: common flow support does not affect mode compatibility
-  }
-
   return {
     supported,
     reason: reason ? String(reason).trim() : ""
@@ -779,25 +756,6 @@ function normalizeActivityModeProfile(rawProfile, {
     currentEntry.reason = String(safeProfile.blockingMessage || currentEntry.reason || "").trim();
   }
 
-  if (!safeProfile.projection && typeof safeTool.getRunProfile === "function") {
-    const projectionProfile = safeTool.getRunProfile({
-      ...context,
-      activityMode: "projection",
-      runMode: "projected-teacher",
-      settings: context?.settings ?? {}
-    });
-
-    if (projectionProfile && typeof projectionProfile === "object") {
-      const projectionReason = String(projectionProfile.blockingMessage || "").trim();
-      if (projectionReason) {
-        normalized.projection = {
-          supported: false,
-          reason: projectionReason
-        };
-      }
-    }
-  }
-
   const supportedModeList = TOOL_ACTIVITY_MODES.filter((mode) => normalized[mode].supported !== false);
   const currentEntry = normalized[currentMode] ?? normalized.individual;
   const showCommonToolSettings = safeProfile.showCommonToolSettings !== false && safeCapabilities.supportsCommonFlowSettings !== false;
@@ -807,7 +765,6 @@ function normalizeActivityModeProfile(rawProfile, {
     supportedModes: supportedModeList,
     individual: normalized.individual,
     group: normalized.group,
-    projection: normalized.projection,
     compatible: currentEntry.supported !== false,
     blockingMessage: String(currentEntry.reason || safeProfile.blockingMessage || "").trim(),
     showCommonToolSettings,

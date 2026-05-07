@@ -126,14 +126,10 @@ export function renderSessionStartView(root){
       requiresStudent = !!meta.requiresStudent;
       blockingMessage = String(meta.blockingMessage || "").trim();
 
-      if (requiresStudent) {
+      if (requiresStudent && !isProjectedTeacherMode) {
         const selectionIssue = getSelectedParticipantsValidationIssue(meta);
         if (selectionIssue) {
           blockingMessage = selectionIssue;
-        }
-
-        if (isProjectedTeacherMode) {
-          blockingMessage = "Cette activité nécessite un élève sélectionné et n’est pas encore compatible avec la projection.";
         }
       }
 

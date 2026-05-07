@@ -595,9 +595,6 @@
   color:#cdeed9;
 }
 
-.dashboard-mini-pill-mode[data-activity-mode="projection"]{
-  color:#ffd9ad;
-}
 
 /* Date de modification d'une configuration */
 .dashboard-config-date{
@@ -2139,6 +2136,17 @@ body .dashboard-share-popup.cfg-share-popup{
   font-size:14px;
 }
 
+.dashboard-activity-tile-mode-badge{
+  display:inline-flex;
+  flex:0 0 auto;
+  width:auto;
+  max-width:100%;
+  padding:4px 10px;
+  background:rgba(255,255,255,.06);
+  font-size:12px;
+  line-height:1.1;
+}
+
 .dashboard-activity-tile-actions{
   display:flex;
   flex-wrap:wrap;
@@ -2249,5 +2257,55 @@ body .dashboard-share-popup.cfg-share-popup{
 @media (max-width: 900px){
   .dashboard-activity-tiles-grid{
     --dashboard-activity-tile-width:240px;
+  }
+}
+
+/* ========================================
+   MODALE CREATION D'ACTIVITE
+======================================== */
+
+.dashboard-create-activity-modal .modal-content{
+  width:min(560px, calc(100vw - 48px));
+}
+
+.dashboard-create-activity-section{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.dashboard-create-activity-label{
+  color:var(--text);
+  font-size:14px;
+  font-weight:800;
+  letter-spacing:.01em;
+}
+
+.dashboard-create-activity-modal .dashboard-mode-choice-grid{
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  margin-top:0;
+}
+
+.dashboard-create-activity-mode-btn{
+  border:1px solid rgba(124, 152, 255, 0.24);
+  background:rgba(255,255,255,0.055);
+  color:var(--text);
+}
+
+.dashboard-create-activity-mode-btn:hover{
+  border-color:rgba(124, 152, 255, 0.48);
+  background:rgba(255,255,255,0.085);
+}
+
+.dashboard-create-activity-mode-btn.is-selected{
+  border-color:rgba(255, 198, 90, 0.85);
+  background:rgba(255, 198, 90, 0.18);
+  color:#fff5d6;
+  box-shadow:0 0 0 3px rgba(255, 198, 90, 0.12);
+}
+
+@media (max-width:720px){
+  .dashboard-create-activity-modal .dashboard-mode-choice-grid{
+    grid-template-columns:1fr;
   }
 }

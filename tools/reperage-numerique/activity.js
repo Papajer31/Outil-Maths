@@ -999,14 +999,14 @@ function applyShellAnswerDisplayMode(state, mode) {
 function shouldUseShellValidation(context = {}) {
   const mode = normalizeActivityMode(context?.activityMode);
   if (mode === "individual") return true;
-  if (mode !== "projection") return false;
+  if (String(context?.runMode || context?.sessionMode || "").trim() !== "projected-teacher") return false;
   return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
 }
 
 function shouldUsePassiveFreeMode(state) {
   if (!state) return false;
   if (state.activityMode === "group") return true;
-  return state.activityMode === "projection"
+  return String(state.latestContext?.runMode || state.latestContext?.sessionMode || "").trim() === "projected-teacher"
     && normalizeProjectionResponseUi(state.projectionResponseUi) === "free";
 }
 
@@ -1016,7 +1016,7 @@ function normalizeAnswerDisplayMode(value) {
 
 function normalizeActivityMode(value) {
   const safeValue = String(value ?? "").trim().toLowerCase();
-  if (safeValue === "group" || safeValue === "projection") return safeValue;
+  if (safeValue === "group") return safeValue;
   return "individual";
 }
 

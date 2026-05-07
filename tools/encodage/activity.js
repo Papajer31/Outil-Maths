@@ -115,7 +115,7 @@ function createPointerDrag() {
 
 function normalizeActivityMode(value) {
   const safeValue = String(value || "individual").trim().toLowerCase();
-  if (safeValue === "group" || safeValue === "projection") {
+  if (safeValue === "group") {
     return safeValue;
   }
   return "individual";

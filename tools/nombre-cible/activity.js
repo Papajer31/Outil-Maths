@@ -1522,7 +1522,7 @@ function shouldShowResponseWrappers(context = {}) {
 
 function normalizeActivityMode(value) {
   const safeValue = String(value ?? "").trim().toLowerCase();
-  if (safeValue === "group" || safeValue === "projection") return safeValue;
+  if (safeValue === "group") return safeValue;
   return "individual";
 }
 

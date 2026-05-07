@@ -14,6 +14,7 @@ import {
   renderCheckbox
 } from "./config-widgets.js";
 import {
+  applyToolTimeLimitToDurationEstimate,
   estimateStandardToolDuration,
   sumDurationEstimates
 } from "./activity-duration.js";
@@ -123,7 +124,10 @@ async function estimateActivityDuration(configJson = {}) {
   }
 
   const toolsCatalog = await loadToolsCatalog();
-  const safeSequence = normalizeActivitySequence(configJson?.sequence, { toolsCatalog });
+  const safeSequence = normalizeActivitySequence(configJson?.sequence, {
+    toolsCatalog,
+    fallbackGlobals: configJson?.globals
+  });
 
   const estimates = [];
 
@@ -145,7 +149,7 @@ async function estimateActivityDuration(configJson = {}) {
           hasAnswerPhase: tool.hasAnswerPhase !== false
         });
 
-    estimates.push(estimate);
+    estimates.push(applyToolTimeLimitToDurationEstimate(estimate, safeDraft));
   }
 
   return sumDurationEstimates(estimates);
@@ -170,19 +174,14 @@ function renderCommonToolSettings(draft, context = {}) {
   return `
     <div class="tv-group">
       <div class="tv-stepper-grid">
-        ${renderStepperField({
-          id: "commonToolQuestionCount",
-          label: "Nombre de questions",
-          value: safeDraft.questionCount,
-          inputMin: TOOL_LIMITS.questionCount.min,
-          inputMax: TOOL_LIMITS.questionCount.max,
-          step: TOOL_LIMITS.questionCount.step,
-          fieldClassName: `cfg-common-flow-question-count-field${forceInfiniteQuestionCount ? " cfg-common-flow-question-count-field--forced" : ""}`,
-          actionButtonHtml: renderInfiniteToggleButton({
-            id: "commonToolQuestionCountInfinite",
-            label: "Nombre de questions illimité",
-            active: effectiveInfiniteQuestionCount
-          }) + (forceInfiniteQuestionCount ? renderForcedInfiniteLockSticker(forcedInfiniteMessage) : "")
+        ${renderQuestionCountModeControl({
+          questionCount: safeDraft.questionCount,
+          infiniteGaugeSettings,
+          effectiveInfiniteQuestionCount,
+          canShowInfiniteGaugeSettings,
+          shouldShowInfiniteGaugeSettings,
+          forceInfiniteQuestionCount,
+          forcedInfiniteMessage
         })}
 
         ${renderStepperField({
@@ -192,6 +191,7 @@ function renderCommonToolSettings(draft, context = {}) {
           inputMin: TOOL_LIMITS.timePerQ.min,
           inputMax: TOOL_LIMITS.timePerQ.max,
           step: TOOL_LIMITS.timePerQ.step,
+          fieldClassName: "cfg-common-flow-time-per-question-field",
           actionButtonHtml: renderInfiniteToggleButton({
             id: "commonToolTimePerQInfinite",
             label: "Temps par question illimité",
@@ -206,36 +206,42 @@ function renderCommonToolSettings(draft, context = {}) {
           inputMin: TOOL_LIMITS.answerTime.min,
           inputMax: TOOL_LIMITS.answerTime.max,
           step: TOOL_LIMITS.answerTime.step,
+          fieldClassName: "cfg-common-flow-answer-time-field",
           actionButtonHtml: renderInfiniteToggleButton({
             id: "commonToolAnswerTimeInfinite",
             label: "Temps d’affichage réponse illimité",
             active: safeDraft.infiniteAnswerTime
           })
         })}
-      </div>
-      <div
-        class="cfg-common-flow-infinite-gauge-row"
-        id="commonToolInfiniteGaugeRow"
-        data-common-infinite-gauge-allowed="${canShowInfiniteGaugeSettings ? "true" : "false"}"
-        ${shouldShowInfiniteGaugeSettings ? "" : " hidden"}
-      >
+
         ${renderStepperField({
-          id: "commonToolInfiniteGaugeMilestones",
-          label: "Nombre de paliers",
-          value: infiniteGaugeSettings.infiniteGaugeMilestones,
-          inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
-          inputMax: TOOL_LIMITS.infiniteGaugeMilestones.max,
-          step: TOOL_LIMITS.infiniteGaugeMilestones.step,
-          fieldClassName: "cfg-common-flow-infinite-gauge-field"
+          id: "commonToolQuestionTransitionSec",
+          label: "Temps entre les questions",
+          value: safeDraft.questionTransitionSec,
+          inputMin: TOOL_LIMITS.questionTransitionSec.min,
+          inputMax: TOOL_LIMITS.questionTransitionSec.max,
+          step: TOOL_LIMITS.questionTransitionSec.step,
+          fieldClassName: "cfg-common-flow-transition-field",
+          actionButtonHtml: renderInfiniteToggleButton({
+            id: "commonToolQuestionTransitionSecInfinite",
+            label: "Temps entre les questions illimité",
+            active: safeDraft.questionTransitionInfinite
+          })
         })}
+
         ${renderStepperField({
-          id: "commonToolInfiniteGaugeRequiredCorrect",
-          label: "Réponses requises",
-          value: infiniteGaugeSettings.infiniteGaugeRequiredCorrect,
-          inputMin: TOOL_LIMITS.infiniteGaugeRequiredCorrect.min,
-          inputMax: TOOL_LIMITS.infiniteGaugeRequiredCorrect.max,
-          step: TOOL_LIMITS.infiniteGaugeRequiredCorrect.step,
-          fieldClassName: "cfg-common-flow-infinite-gauge-field"
+          id: "commonToolMaxTimeMin",
+          label: "Durée maximale",
+          value: safeDraft.toolMaxTimeMin,
+          inputMin: TOOL_LIMITS.toolMaxTimeMin.min,
+          inputMax: TOOL_LIMITS.toolMaxTimeMin.max,
+          step: TOOL_LIMITS.toolMaxTimeMin.step,
+          fieldClassName: "cfg-common-flow-max-time-field",
+          actionButtonHtml: renderInfiniteToggleButton({
+            id: "commonToolMaxTimeInfinite",
+            label: "Aucune limite de temps pour cet outil",
+            active: safeDraft.toolMaxTimeInfinite
+          })
         })}
       </div>
       ${showInstructionField ? `
@@ -326,9 +332,20 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     onChange: () => onDirty?.()
   });
 
-  bindInfiniteToggle(container, {
-    buttonId: "commonToolQuestionCountInfinite",
-    inputId: "commonToolQuestionCount",
+  bindStepperField(container, "commonToolQuestionTransitionSec", {
+    inputMin: TOOL_LIMITS.questionTransitionSec.min,
+    inputMax: TOOL_LIMITS.questionTransitionSec.max,
+    onChange: () => onDirty?.()
+  });
+
+  bindStepperField(container, "commonToolMaxTimeMin", {
+    inputMin: TOOL_LIMITS.toolMaxTimeMin.min,
+    inputMax: TOOL_LIMITS.toolMaxTimeMin.max,
+    onChange: () => onDirty?.()
+  });
+
+  bindQuestionCountMode(container, {
+    forceInfiniteQuestionCount,
     onChange: (active) => {
       applyInfiniteGaugeState(active);
       onDirty?.();
@@ -352,23 +369,19 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     }
   });
 
-  applyInfiniteGaugeState(isInfiniteToggleActive(container, "commonToolQuestionCountInfinite"));
+  bindInfiniteToggle(container, {
+    buttonId: "commonToolQuestionTransitionSecInfinite",
+    inputId: "commonToolQuestionTransitionSec",
+    onChange: () => onDirty?.()
+  });
 
-  if (forceInfiniteQuestionCount) {
-    const questionInput = container.querySelector("#commonToolQuestionCount");
-    const questionToggle = container.querySelector("#commonToolQuestionCountInfinite");
-    if (questionInput) {
-      questionInput.disabled = true;
-      questionInput.closest(".tv-stepper")?.classList.add("is-disabled");
-    }
-    if (questionToggle) {
-      questionToggle.classList.add("is-active");
-      questionToggle.setAttribute("aria-pressed", "true");
-      questionToggle.disabled = true;
-      questionToggle.setAttribute("aria-disabled", "true");
-    }
-    applyInfiniteGaugeState(false);
-  }
+  bindInfiniteToggle(container, {
+    buttonId: "commonToolMaxTimeInfinite",
+    inputId: "commonToolMaxTimeMin",
+    onChange: () => onDirty?.()
+  });
+
+  applyInfiniteGaugeState(isInfiniteToggleActive(container, "commonToolQuestionCountInfinite"));
 }
 
 function readCommonToolSettings(container, draft, context = {}) {
@@ -389,11 +402,23 @@ function readCommonToolSettings(container, draft, context = {}) {
     inputMax: TOOL_LIMITS.answerTime.max
   });
 
+  nextDraft.questionTransitionSec = readStepper(container, "commonToolQuestionTransitionSec", {
+    inputMin: TOOL_LIMITS.questionTransitionSec.min,
+    inputMax: TOOL_LIMITS.questionTransitionSec.max
+  });
+
+  nextDraft.toolMaxTimeMin = readStepper(container, "commonToolMaxTimeMin", {
+    inputMin: TOOL_LIMITS.toolMaxTimeMin.min,
+    inputMax: TOOL_LIMITS.toolMaxTimeMin.max
+  });
+
   nextDraft.infiniteQuestionCount = shouldForceInfiniteQuestionCount(context)
     ? normalizeToolDraft(draft).infiniteQuestionCount
     : isInfiniteToggleActive(container, "commonToolQuestionCountInfinite");
   nextDraft.infiniteTimePerQ = isInfiniteToggleActive(container, "commonToolTimePerQInfinite");
   nextDraft.infiniteAnswerTime = isInfiniteToggleActive(container, "commonToolAnswerTimeInfinite");
+  nextDraft.questionTransitionInfinite = isInfiniteToggleActive(container, "commonToolQuestionTransitionSecInfinite");
+  nextDraft.toolMaxTimeInfinite = isInfiniteToggleActive(container, "commonToolMaxTimeInfinite");
   nextDraft.settings = ensureCommonInfiniteGaugeSettings(nextDraft.settings, {
     infiniteGaugeMilestones: readStepper(container, "commonToolInfiniteGaugeMilestones", {
       inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
@@ -430,6 +455,94 @@ function getCommonInstructionState(settings) {
     enabled: instruction?.enabled === true,
     text: String(instruction?.text ?? "")
   };
+}
+
+function renderQuestionCountModeControl({
+  questionCount,
+  infiniteGaugeSettings,
+  effectiveInfiniteQuestionCount = false,
+  canShowInfiniteGaugeSettings = false,
+  shouldShowInfiniteGaugeSettings = false,
+  forceInfiniteQuestionCount = false,
+  forcedInfiniteMessage = ""
+} = {}) {
+  const fixedActive = !effectiveInfiniteQuestionCount;
+  const objectiveActive = !!effectiveInfiniteQuestionCount;
+  const disabledAttrs = forceInfiniteQuestionCount ? ` disabled aria-disabled="true"` : "";
+
+  return `
+    <div class="cfg-common-flow-question-mode-row${forceInfiniteQuestionCount ? " is-forced-infinite" : ""}">
+      <div class="cfg-common-flow-question-mode-left">
+        <span class="cfg-common-flow-question-mode-title">Nombre de questions :</span>
+        <div class="cfg-common-flow-question-fixed-row" id="commonToolQuestionFixedRow"${objectiveActive ? " hidden" : ""}>
+          ${renderStepperField({
+            id: "commonToolQuestionCount",
+            label: "Nombre de questions",
+            value: questionCount,
+            inputMin: TOOL_LIMITS.questionCount.min,
+            inputMax: TOOL_LIMITS.questionCount.max,
+            step: TOOL_LIMITS.questionCount.step,
+            fieldClassName: "cfg-common-flow-question-count-field cfg-common-flow-compact-stepper-field"
+          })}
+        </div>
+        <span class="cfg-common-flow-question-mode-toggle" role="group" aria-label="Mode du nombre de questions">
+          <button
+            class="cfg-common-flow-question-mode-btn${fixedActive ? " is-active" : ""}"
+            type="button"
+            id="commonToolQuestionCountFixedMode"
+            data-question-count-mode="fixed"
+            aria-pressed="${fixedActive ? "true" : "false"}"
+            ${disabledAttrs}
+          >Nombre fixe</button>
+          <button
+            class="cfg-common-flow-question-mode-btn${objectiveActive ? " is-active" : ""}"
+            type="button"
+            id="commonToolQuestionCountInfinite"
+            data-question-count-mode="objective"
+            aria-pressed="${objectiveActive ? "true" : "false"}"
+            ${disabledAttrs}
+          >Objectif de réussite</button>
+        </span>
+        ${forceInfiniteQuestionCount ? renderForcedInfiniteLockSticker(forcedInfiniteMessage) : ""}
+      </div>
+
+      <div class="cfg-common-flow-question-mode-right">
+        <div
+          class="cfg-common-flow-infinite-gauge-row cfg-common-flow-question-objective-row"
+          id="commonToolInfiniteGaugeRow"
+          data-common-infinite-gauge-allowed="${canShowInfiniteGaugeSettings ? "true" : "false"}"
+          ${shouldShowInfiniteGaugeSettings ? "" : " hidden"}
+        >
+          <div class="cfg-common-flow-question-inline-control">
+            <span class="cfg-common-flow-question-inline-label">Objectif :</span>
+            ${renderStepperField({
+              id: "commonToolInfiniteGaugeRequiredCorrect",
+              label: "Réponses requises",
+              value: infiniteGaugeSettings.infiniteGaugeRequiredCorrect,
+              inputMin: TOOL_LIMITS.infiniteGaugeRequiredCorrect.min,
+              inputMax: TOOL_LIMITS.infiniteGaugeRequiredCorrect.max,
+              step: TOOL_LIMITS.infiniteGaugeRequiredCorrect.step,
+              fieldClassName: "cfg-common-flow-infinite-gauge-field cfg-common-flow-infinite-gauge-required-field cfg-common-flow-compact-stepper-field"
+            })}
+            <span class="cfg-common-flow-question-inline-suffix">réponses correctes</span>
+          </div>
+
+          <div class="cfg-common-flow-question-inline-control">
+            <span class="cfg-common-flow-question-inline-label">Paliers de sécurité :</span>
+            ${renderStepperField({
+              id: "commonToolInfiniteGaugeMilestones",
+              label: "Nombre de paliers",
+              value: infiniteGaugeSettings.infiniteGaugeMilestones,
+              inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
+              inputMax: TOOL_LIMITS.infiniteGaugeMilestones.max,
+              step: TOOL_LIMITS.infiniteGaugeMilestones.step,
+              fieldClassName: "cfg-common-flow-infinite-gauge-field cfg-common-flow-infinite-gauge-milestones-field cfg-common-flow-compact-stepper-field"
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderCurrentInstructionHint(defaultInstructionText = "") {
@@ -509,6 +622,88 @@ function bindInfiniteToggle(container, { buttonId, inputId, onChange } = {}) {
     applyState(nextActive);
     onChange?.(nextActive);
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function bindQuestionCountMode(container, { forceInfiniteQuestionCount = false, onChange } = {}) {
+  const fixedButton = container.querySelector("#commonToolQuestionCountFixedMode");
+  const objectiveButton = container.querySelector("#commonToolQuestionCountInfinite");
+  const questionInput = container.querySelector("#commonToolQuestionCount");
+  const fixedRow = container.querySelector("#commonToolQuestionFixedRow");
+  const objectiveRow = container.querySelector("#commonToolInfiniteGaugeRow");
+
+  if (!fixedButton || !objectiveButton || !questionInput) return;
+
+  const canShowObjectiveSettings = objectiveRow?.dataset.commonInfiniteGaugeAllowed !== "false";
+
+  const setMode = (objectiveActive, { notify = false } = {}) => {
+    const activeObjective = forceInfiniteQuestionCount || !!objectiveActive;
+
+    fixedButton.classList.toggle("is-active", !activeObjective);
+    fixedButton.setAttribute("aria-pressed", activeObjective ? "false" : "true");
+    objectiveButton.classList.toggle("is-active", activeObjective);
+    objectiveButton.setAttribute("aria-pressed", activeObjective ? "true" : "false");
+
+    if (fixedRow) {
+      fixedRow.hidden = activeObjective;
+    }
+    if (objectiveRow) {
+      objectiveRow.hidden = !(canShowObjectiveSettings && activeObjective && !forceInfiniteQuestionCount);
+    }
+
+    setStepperDisabled(questionInput, activeObjective || forceInfiniteQuestionCount);
+
+    if (forceInfiniteQuestionCount) {
+      fixedButton.disabled = true;
+      fixedButton.setAttribute("aria-disabled", "true");
+      objectiveButton.disabled = true;
+      objectiveButton.setAttribute("aria-disabled", "true");
+    }
+
+    if (notify) {
+      onChange?.(activeObjective);
+    }
+  };
+
+  setMode(objectiveButton.getAttribute("aria-pressed") === "true");
+
+  fixedButton.addEventListener("click", () => {
+    if (fixedButton.disabled) return;
+    setMode(false, { notify: true });
+  });
+
+  objectiveButton.addEventListener("click", () => {
+    if (objectiveButton.disabled) return;
+    setMode(true, { notify: true });
+  });
+}
+
+function setStepperDisabled(input, disabled) {
+  if (!input) return;
+
+  input.disabled = !!disabled;
+  const stepper = input.closest(".tv-stepper");
+  stepper?.classList.toggle("is-disabled", !!disabled);
+  const buttons = Array.from(stepper?.querySelectorAll(".tv-stepper-btn") || []);
+
+  if (disabled) {
+    buttons.forEach((button) => {
+      button.disabled = true;
+    });
+    return;
+  }
+
+  const min = Number(input.getAttribute("min"));
+  const max = Number(input.getAttribute("max"));
+  const value = Number(input.value);
+  const safeMin = Number.isFinite(min) ? min : Number.NEGATIVE_INFINITY;
+  const safeMax = Number.isFinite(max) ? max : Number.POSITIVE_INFINITY;
+
+  buttons.forEach((button) => {
+    const direction = Number(button.dataset.stepperDirection) || 0;
+    button.disabled = direction < 0
+      ? value <= safeMin
+      : value >= safeMax;
   });
 }
 

@@ -1248,13 +1248,13 @@ function shouldShowResponseUi(context = {}) {
   const activityMode = normalizeActivityMode(context?.activityMode);
   const projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
   if (activityMode === "individual") return true;
-  if (activityMode === "projection") return projectionResponseUi === "boxed";
+  if (String(context?.runMode || context?.sessionMode || "").trim() === "projected-teacher") return projectionResponseUi === "boxed";
   return false;
 }
 
 function normalizeActivityMode(value) {
   const raw = String(value || "").trim();
-  return ["individual", "group", "projection"].includes(raw) ? raw : "individual";
+  return ["individual", "group"].includes(raw) ? raw : "individual";
 }
 
 function normalizeProjectionResponseUi(value) {

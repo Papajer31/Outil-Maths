@@ -150,7 +150,13 @@ export function renderSessionView(root){
                     </div>
                   `}
                 </div>
-                <div class="session-bottom-slot session-bottom-slot-right" aria-hidden="true"></div>
+                <div class="session-bottom-slot session-bottom-slot-right">
+                  <div
+                    class="session-tool-countdown-pill hidden"
+                    id="sessionToolCountdownPill"
+                    aria-hidden="true"
+                  ></div>
+                </div>
               </div>
 
               <div
@@ -181,6 +187,7 @@ export function renderSessionView(root){
   let projectedControlsVisible = true;
   let projectedSessionLink = null;
   let fitResizeObserver = null;
+  let toolCountdownTicker = null;
 
   const SESSION_SCENE_WIDTH = 1920;
   const SESSION_SCENE_BASE_HEIGHT = 1080;
@@ -217,6 +224,7 @@ export function renderSessionView(root){
     finalChallengePanel: root.querySelector("#sessionFinalChallengePanel"),
     finalChallengeTime: root.querySelector("#sessionFinalChallengeTime"),
     finalChallengeScore: root.querySelector("#sessionFinalChallengeScore"),
+    toolCountdownPill: root.querySelector("#sessionToolCountdownPill"),
     stageLayer: root.querySelector("#sessionStageLayer"),
     confirmLayer: root.querySelector("#sessionConfirmLayer"),
     timer: root.querySelector("#globalTimer"),
@@ -295,6 +303,7 @@ export function renderSessionView(root){
           syncProjectedControls();
           syncFinalChallengePanel();
           syncIndividualGauge();
+          syncToolCountdownPill();
           updateSessionFitLayout();
           sendProjectedStatus();
         },
@@ -310,12 +319,7 @@ export function renderSessionView(root){
 
       const meta = engine.getSessionMeta?.() ?? { requiresStudent: false, allowedStudentIds: [] };
 
-      if (meta.requiresStudent) {
-        if (isProjectedTeacherMode) {
-          showFatalError("Cette activité nécessite un élève sélectionné et n’est pas encore compatible avec la projection.");
-          return;
-        }
-
+      if (meta.requiresStudent && !isProjectedTeacherMode) {
         const selectionIssue = getSelectedParticipantsValidationIssue(meta);
         if (selectionIssue) {
           showFatalError(selectionIssue);
@@ -342,6 +346,7 @@ export function renderSessionView(root){
       syncProjectedControls();
       syncFinalChallengePanel();
       syncIndividualGauge();
+      syncToolCountdownPill();
       sendProjectedStatus();
     } catch (err) {
       if (disposed) return;
@@ -355,6 +360,7 @@ export function renderSessionView(root){
 
     closeExitConfirm();
     controller.abort();
+    stopToolCountdownTicker();
     stopFitLayoutObserver();
 
     try {
@@ -389,6 +395,7 @@ export function renderSessionView(root){
       syncProjectedControls();
       syncFinalChallengePanel();
       syncIndividualGauge();
+      syncToolCountdownPill();
     }, { signal });
 
     els.btnPrevTool?.addEventListener("click", async () => {
@@ -1112,8 +1119,66 @@ export function renderSessionView(root){
     `;
   }
 
+  function syncToolCountdownPill(){
+    const pill = els.toolCountdownPill;
+    if (!pill) return;
+
+    const ui = engine?.getUiState?.() ?? {};
+    const toolTime = ui.toolTime || {};
+    const visible = toolTime.visible === true;
+
+    pill.classList.toggle("hidden", !visible);
+    pill.setAttribute("aria-hidden", visible ? "false" : "true");
+
+    if (!visible) {
+      hideToolCountdownPill();
+      return;
+    }
+
+    const label = String(toolTime.timeLabel || "00:00");
+    if (pill.textContent !== label) {
+      pill.textContent = label;
+    }
+
+    pill.classList.toggle("is-expired", toolTime.expired === true);
+    ensureToolCountdownTicker();
+  }
+
+  function ensureToolCountdownTicker(){
+    if (toolCountdownTicker || disposed) return;
+
+    toolCountdownTicker = window.setInterval(() => {
+      if (disposed) {
+        stopToolCountdownTicker();
+        return;
+      }
+
+      syncToolCountdownPill();
+    }, 250);
+  }
+
+  function stopToolCountdownTicker(){
+    if (!toolCountdownTicker) return;
+
+    window.clearInterval(toolCountdownTicker);
+    toolCountdownTicker = null;
+  }
+
+  function hideToolCountdownPill(){
+    const pill = els.toolCountdownPill;
+    if (pill) {
+      pill.textContent = "";
+      pill.classList.add("hidden");
+      pill.classList.remove("is-expired");
+      pill.setAttribute("aria-hidden", "true");
+    }
+
+    stopToolCountdownTicker();
+  }
+
   function showFatalError(message){
     const buttonLabel = isProjectedTeacherMode ? "Fermer la projection" : "Retour aux activités";
+    hideToolCountdownPill();
 
     els.workArea.innerHTML = `
       <div class="session-stage">

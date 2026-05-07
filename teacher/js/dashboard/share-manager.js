@@ -2,7 +2,6 @@ export function createDashboardShareManager({
   normalizeAccessCode,
   normalizeActivityMode,
   DEFAULT_ACTIVITY_MODE,
-  isProjectionActivityMode,
   isActivityShareable,
   copyActivityShareLink,
   openActivityShareLink,
@@ -64,21 +63,6 @@ export function createDashboardShareManager({
   function renderDashboardSharePopupContent(){
     const popup = ensureDashboardSharePopup();
     const activityMode = normalizeActivityMode(dashboardShareContext?.activityMode, DEFAULT_ACTIVITY_MODE);
-
-    if (isProjectionActivityMode(activityMode)) {
-      popup.innerHTML = `
-        <div class="dashboard-share-popup-title">Partager une activité Projection</div>
-        <div class="dashboard-share-popup-note">
-          Le partage Projection accueillera bientôt un <strong>Code de configuration</strong> pour l’échange entre enseignants.
-        </div>
-
-        <button class="btn cfg-share-action dashboard-share-placeholder-btn" type="button" role="menuitem" disabled>
-          <span class="cfg-material-icon" aria-hidden="true">key</span>
-          <span>Code de configuration (bientôt)</span>
-        </button>
-      `;
-      return;
-    }
 
     popup.innerHTML = `
       <button class="btn cfg-share-action" type="button" data-share-action="copy-link" role="menuitem">

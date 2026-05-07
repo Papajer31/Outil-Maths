@@ -67,9 +67,6 @@
   color:#dff7e7;
 }
 
-.cfg-activity-mode-badge[data-activity-mode="projection"]{
-  color:#ffe6c4;
-}
 
 .cfg-header-left{
   display:flex;
@@ -151,14 +148,6 @@
   align-items:center;
   gap:24px;
   min-width:0;
-}
-
-.cfg-estimate-inline{
-  font-size:18px;
-  font-style:italic;
-  color:var(--muted);
-  white-space:nowrap;
-  line-height:1.1;
 }
 
 .cfg-field-label{
@@ -336,8 +325,6 @@
   align-items:center;
   justify-content:flex-start;
   gap:12px;
-  padding-top:14px;
-  border-top:1px solid rgba(255,255,255,.08);
 }
 
 .cfg-tools-header-main{
@@ -355,13 +342,8 @@
   flex:1 1 auto;
 }
 
-.cfg-tools-header-actions > .cfg-add-tool-btn:not(.cfg-total-time-btn){
+.cfg-tools-header-actions > .cfg-add-tool-btn{
   margin-left:auto;
-}
-
-.cfg-tools-estimate{
-  font-size:16px;
-  white-space:normal;
 }
 
 .cfg-panel-title{
@@ -400,8 +382,21 @@
   justify-content:center;
 }
 
+.cfg-add-tool-btn-label{
+  width:auto;
+  min-width:120px;
+  gap:6px;
+  padding:0 16px 0 12px;
+  font-size:16px;
+  font-weight:800;
+}
+
 .cfg-add-tool-btn .cfg-material-icon{
   font-size:28px;
+}
+
+.cfg-add-tool-btn-label .cfg-material-icon{
+  font-size:24px;
 }
 
 .cfg-add-tool-btn:hover{
@@ -600,6 +595,132 @@
   gap:16px;
 }
 
+.cfg-common-flow-compact{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  min-width:0;
+}
+
+.cfg-common-flow-summary-card{
+  width:100%;
+  min-height:84px;
+  display:grid;
+  grid-template-columns:54px minmax(0, 1fr);
+  align-items:center;
+  gap:14px;
+  padding:13px 18px 13px 12px;
+  border:1px solid rgba(91, 155, 255, .62);
+  border-radius:18px;
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+  background:rgba(91, 155, 255, .075);
+  box-shadow:0 10px 24px rgba(0,0,0,.10);
+  transition:background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+
+.cfg-common-flow-summary-card:hover,
+.cfg-common-flow-summary-card:focus-visible{
+  border-color:rgba(117, 178, 255, .88);
+  background:rgba(91, 155, 255, .11);
+  box-shadow:0 12px 28px rgba(0,0,0,.16);
+  transform:none;
+  outline:none;
+}
+
+.cfg-common-flow-summary-icon{
+  width:52px;
+  height:52px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:15px;
+  background:rgba(255,255,255,.075);
+  color:rgba(255,255,255,.88);
+  font-size:32px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+.cfg-common-flow-summary-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:12px;
+  line-height:1.3;
+}
+
+.cfg-common-flow-summary-main,
+.cfg-common-flow-summary-instruction{
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cfg-common-flow-summary-main{
+  font-size:14px;
+  font-weight:600;
+  color:rgba(255,255,255,.92);
+}
+
+.cfg-common-flow-summary-instruction{
+  font-size:13px;
+  font-weight:600;
+  color:rgba(255,255,255,.92);
+}
+
+.cfg-common-flow-subwidget{
+  padding:18px;
+  border:1px solid rgba(91, 155, 255, .34);
+  border-radius:16px;
+  background:rgba(255,255,255,.035);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);
+}
+
+.cfg-common-flow-subwidget[hidden]{
+  display:none !important;
+}
+
+.cfg-common-flow-question-widget,
+.cfg-common-flow-timing-widget{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.cfg-common-flow-question-widget .cfg-common-flow-grid{
+  gap:clamp(22px, 3vw, 52px) !important;
+}
+
+.cfg-common-flow-timing-widget .cfg-common-flow-grid{
+  gap:clamp(12px, 1.7vw, 24px) !important;
+}
+
+.cfg-common-flow-question-widget .cfg-common-flow-grid{
+  grid-template-columns:1fr !important;
+}
+
+@media (max-width: 980px){
+  .cfg-common-flow-question-widget .cfg-common-flow-grid,
+  .cfg-common-flow-timing-widget .cfg-common-flow-grid{
+    gap:18px !important;
+  }
+
+  .cfg-common-flow-question-mode-row{
+    grid-template-columns:1fr;
+  }
+
+  .cfg-common-flow-question-mode-right,
+  .cfg-common-flow-question-fixed-row,
+  .cfg-common-flow-question-objective-row{
+    justify-content:flex-start;
+  }
+}
+
+
 .cfg-common-flow-group{
   gap:16px;
 }
@@ -611,7 +732,7 @@
   gap:clamp(14px, 2vw, 30px) !important;
 }
 
-.cfg-common-flow-group .cfg-common-flow-grid > .tv-stepper-field{
+.cfg-common-flow-group .cfg-common-flow-grid .tv-stepper-field{
   min-width:0;
 }
 
@@ -622,6 +743,165 @@
 .cfg-common-flow-group .cfg-common-flow-grid .tv-stepper-field-control-row{
   width:100%;
   justify-content:flex-start;
+}
+
+.cfg-common-flow-question-mode-row{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:minmax(260px, max-content) minmax(0, 1fr);
+  align-items:center;
+  gap:16px clamp(20px, 3vw, 48px);
+}
+
+.cfg-common-flow-question-mode-left{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+
+.cfg-common-flow-question-mode-title{
+  color:rgba(255,255,255,.92);
+  font-weight:600;
+  line-height:1.15;
+  white-space:nowrap;
+}
+
+.cfg-common-flow-question-mode-toggle{
+  display:inline-flex;
+  align-items:center;
+  padding:3px;
+  border-radius:14px;
+  background:rgba(255,255,255,.055);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
+}
+
+.cfg-common-flow-question-mode-btn{
+  min-height:34px;
+  padding:0 12px;
+  border:none;
+  border-radius:11px;
+  background:transparent;
+  color:rgba(255,255,255,.74);
+  cursor:pointer;
+  font:inherit;
+  font-size:14px;
+  font-weight:600;
+  line-height:1.1;
+  white-space:nowrap;
+  transition:background-color .12s ease, color .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+
+.cfg-common-flow-question-mode-btn:hover{
+  color:#fff;
+  background:rgba(255,255,255,.08);
+}
+
+.cfg-common-flow-question-mode-btn.is-active{
+  color:#fff;
+  background:rgba(91, 155, 255, .28);
+  box-shadow:inset 0 0 0 1px rgba(117, 178, 255, .42);
+}
+
+.cfg-common-flow-question-mode-btn:disabled{
+  cursor:default;
+  opacity:.5;
+}
+
+.cfg-common-flow-question-mode-right{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  min-width:0;
+}
+
+.cfg-common-flow-question-fixed-row,
+.cfg-common-flow-question-objective-row{
+  min-width:0;
+}
+
+.cfg-common-flow-question-fixed-row{
+  display:flex;
+  justify-content:flex-start;
+}
+
+.cfg-common-flow-question-fixed-row[hidden],
+.cfg-common-flow-question-objective-row[hidden]{
+  display:none !important;
+}
+
+.cfg-common-flow-question-objective-row{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px clamp(18px, 3vw, 44px);
+  min-width:0;
+  flex-wrap:wrap;
+}
+
+.cfg-common-flow-question-inline-control{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  white-space:nowrap;
+}
+
+.cfg-common-flow-question-inline-label,
+.cfg-common-flow-question-inline-suffix{
+  color:rgba(255,255,255,.84);
+  font-size:15px;
+  font-weight:600;
+  line-height:1.1;
+}
+
+.cfg-common-flow-compact-stepper-field{
+  gap:0;
+}
+
+.cfg-common-flow-question-mode-row .tv-stepper-field-label{
+  display:none;
+}
+
+.cfg-common-flow-question-mode-row .tv-stepper-field-control,
+.cfg-common-flow-question-mode-row .tv-stepper-field-control-row{
+  width:auto;
+}
+
+.cfg-common-flow-question-count-field{
+  grid-column:1;
+  grid-row:1;
+}
+
+.cfg-common-flow-infinite-gauge-milestones-field{
+  grid-column:2;
+  grid-row:1;
+}
+
+.cfg-common-flow-infinite-gauge-required-field{
+  grid-column:3;
+  grid-row:1;
+}
+
+.cfg-common-flow-time-per-question-field{
+  grid-column:1;
+  grid-row:1;
+}
+
+.cfg-common-flow-answer-time-field{
+  grid-column:2;
+  grid-row:1;
+}
+
+.cfg-common-flow-transition-field{
+  grid-column:3;
+  grid-row:1;
+}
+
+.cfg-common-flow-max-time-field{
+  grid-column:4;
+  grid-row:1;
 }
 
 .cfg-common-flow-question-count-field--forced .tv-stepper-field-control-row{
@@ -662,13 +942,26 @@
   border-radius:14px;
 }
 
+.cfg-common-flow-question-mode-left .cfg-common-flow-forced-lock-sticker{
+  position:relative;
+  left:auto;
+  top:auto;
+  width:44px;
+  height:44px;
+  transform:none;
+  background:rgba(25, 25, 28, .58);
+}
+
+.cfg-common-flow-question-mode-left .cfg-common-flow-forced-lock-sticker img{
+  width:44px;
+  height:44px;
+}
+
 
 .cfg-common-flow-instruction-row{
   display:flex;
   flex-direction:column;
   gap:12px;
-  padding-top:14px;
-  border-top:1px solid rgba(255,255,255,.08);
 }
 
 .cfg-common-flow-instruction-head{
@@ -716,36 +1009,10 @@
 
 .cfg-common-flow-infinite-gauge-row{
   display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  gap:14px clamp(32px, 6vw, 256px);
-  padding-top:14px;
 }
 
 .cfg-common-flow-infinite-gauge-row[hidden]{
   display:none !important;
-}
-
-.cfg-common-flow-infinite-gauge-row .tv-stepper-field{
-  display:flex;
-  flex-direction:row;
-  align-items:center;
-  gap:12px;
-  flex:0 0 auto;
-  min-width:0;
-}
-
-.cfg-common-flow-infinite-gauge-row .tv-stepper-field-label{
-  white-space:nowrap;
-}
-
-.cfg-common-flow-infinite-gauge-row .tv-stepper-field-control{
-  width:auto;
-}
-
-.cfg-common-flow-infinite-gauge-row .tv-stepper-field-control-row{
-  width:auto;
-  justify-content:flex-start;
 }
 
 .cfg-common-flow-projection-row{
@@ -874,7 +1141,7 @@
     min-height:auto;
   }
 
-  .cfg-common-flow-group .cfg-common-flow-grid{
+  .cfg-common-flow-group:not(.cfg-common-flow-question-widget):not(.cfg-common-flow-timing-widget) .cfg-common-flow-grid{
     display:grid !important;
     grid-template-columns:repeat(2, minmax(0, 1fr)) !important;
     gap:16px !important;
@@ -1009,8 +1276,7 @@
   opacity:1;
 }
 
-.cfg-page.is-projection-mode .cfg-config-name-display,
-.cfg-page.is-projection-mode #questionTransitionSecInput{
+.cfg-page.is-projection-mode .cfg-config-name-display{
   opacity:.9;
 }
 
@@ -1065,10 +1331,6 @@
 
 .cfg-page-embedded .cfg-field-label{
   font-size:24px;
-}
-
-.cfg-page-embedded .cfg-estimate-inline{
-  font-size:16px;
 }
 
 .cfg-page-embedded .cfg-save-btn{
@@ -1138,6 +1400,17 @@
     grid-template-columns:1fr !important;
   }
 
+  .cfg-common-flow-question-count-field,
+  .cfg-common-flow-infinite-gauge-milestones-field,
+  .cfg-common-flow-infinite-gauge-required-field,
+  .cfg-common-flow-time-per-question-field,
+  .cfg-common-flow-answer-time-field,
+  .cfg-common-flow-transition-field,
+  .cfg-common-flow-max-time-field{
+    grid-column:auto;
+    grid-row:auto;
+  }
+
   .cfg-common-flow-instruction-head{
     flex-direction:column;
     align-items:flex-start;
@@ -1152,16 +1425,6 @@
     padding-left:0;
   }
 
-  .cfg-common-flow-infinite-gauge-row{
-    flex-direction:column;
-    align-items:stretch;
-  }
-
-  .cfg-common-flow-infinite-gauge-row .tv-stepper-field{
-    flex-direction:column;
-    align-items:flex-start;
-  }
-
   .cfg-common-flow-projection-row{
     flex-direction:column;
     align-items:stretch;
@@ -1174,69 +1437,110 @@
 }
 
 /* Durée totale / défi final */
-.cfg-total-time-control{
-  position:relative;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  flex:0 0 auto;
-}
-
-.cfg-total-time-btn{
-  box-sizing:border-box;
-  border:1px solid var(--border);
-  background:var(--panel);
-  color:var(--text);
-  border-radius:10px;
-  cursor:pointer;
-}
-
-.cfg-total-time-btn:hover{
-  background:var(--panel-2);
-}
-
-.cfg-total-time-btn.is-active{
-  border:2px solid #ffb020;
-  background:rgba(255, 176, 32, .10);
-  color:#ffd27a;
-  box-shadow:inset 0 0 0 1px rgba(255, 176, 32, .20), 0 0 0 1px rgba(255, 176, 32, .16);
-}
-
-.cfg-total-time-btn.is-active:hover{
-  background:rgba(255, 176, 32, .16);
-}
-
-.cfg-total-time-popup{
-  position:fixed;
-  left:var(--cfg-total-time-popup-left, 0px);
-  top:var(--cfg-total-time-popup-top, 0px);
-  z-index:1000;
-  width:220px;
-  padding:14px;
-  border:1px solid rgba(255, 176, 32, .62);
-  border-radius:18px;
-  background:#151922;
-  box-shadow:0 18px 36px rgba(0,0,0,.34), inset 0 0 0 1px rgba(255,255,255,.06);
+.cfg-duration-card{
+  width:100%;
   display:flex;
   flex-direction:column;
-  align-items:center;
-  gap:12px;
+  border:1px solid var(--border);
+  background:#151922;
+  color:var(--text);
+  box-shadow:none;
+  transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 
-.cfg-total-time-popup[hidden]{
+.cfg-duration-card.is-active{
+  border-color:rgba(255, 176, 32, .82);
+  box-shadow:none;
+}
+
+.cfg-duration-card.is-expanded{
+  border-color:rgba(255,255,255,.18);
+}
+
+.cfg-duration-card.is-active.is-expanded{
+  border-color:rgba(255, 198, 74, .95);
+}
+
+.cfg-duration-summary{
+  width:100%;
+  min-height:68px;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 44px;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  color:var(--text);
+  cursor:pointer;
+  text-align:left;
+}
+
+.cfg-duration-summary:hover{
+  transform:none;
+  filter:none;
+  background:#1a1f2a;
+}
+
+.cfg-duration-card.is-active .cfg-duration-icon,
+.cfg-duration-card.is-active .cfg-duration-summary-text{
+  color:#ffd27a;
+}
+
+.cfg-duration-summary-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:17px;
+  font-weight:700;
+  line-height:1.2;
+}
+
+.cfg-duration-icon,
+.cfg-duration-chevron{
+  font-size:24px;
+}
+
+.cfg-duration-chevron{
+  justify-self:center;
+}
+
+.cfg-duration-panel{
+  min-height:56px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 12px 12px;
+  border-top:1px solid rgba(255,255,255,.10);
+  background:#121720;
+}
+
+.cfg-duration-panel[hidden]{
   display:none !important;
 }
 
-.cfg-total-time-popup-title{
-  font-size:18px;
-  font-weight:800;
-  line-height:1;
-  color:#ffd27a;
-  text-align:center;
+.cfg-duration-fixed-toggle{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  color:var(--text);
+  font-size:16px;
+  font-weight:700;
+  line-height:1.1;
+  white-space:nowrap;
+}
+
+.cfg-duration-fixed-checkbox{
+  flex:0 0 auto;
 }
 
 .cfg-total-time-stepper{
   grid-template-columns:38px 72px 38px;
+  flex:0 0 auto;
 }
 
 .cfg-total-time-input{
@@ -1245,13 +1549,13 @@
 
 .cfg-tool-row.is-final-infinite{
   border-color:rgba(255, 176, 32, .82);
-  background:linear-gradient(90deg, rgba(255, 176, 32, .14), #151922 72%);
-  box-shadow:inset 4px 0 0 rgba(255, 176, 32, .9);
+  background:linear-gradient(0deg, rgba(255, 176, 32, .10), rgba(255, 176, 32, .10)), #151922;
+  box-shadow:none;
 }
 
 .cfg-tool-row.is-final-infinite.active{
   border-color:rgba(255, 198, 74, .95);
-  background:linear-gradient(90deg, rgba(255, 176, 32, .22), #18211b 74%);
+  background:linear-gradient(0deg, rgba(255, 176, 32, .14), rgba(255, 176, 32, .14)), #18211b;
 }
 
 .cfg-tool-final-infinite-badge{

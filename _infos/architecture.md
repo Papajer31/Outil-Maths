@@ -112,9 +112,10 @@ Ancienne racine historique.
 
 Statut actuel :
 - encore présente ;
-- encore utile comme réserve de code ;
+- utile comme **archive consultable** et réserve de code à relire ;
 - contient actuellement `maths` et `production-ecrit` ;
-- ne doit plus être la cible des nouveaux développements.
+- ne doit plus être la cible des nouveaux développements ;
+- ne doit pas être considérée comme chargeable telle quelle dans le flux actif, car l’ancienne façade `shared/module-factory.js` n’est plus présente dans le zip courant.
 
 ---
 
@@ -177,9 +178,9 @@ Le contrat outil repose sur :
 Le contrat gère notamment :
 - `defineTool(...)` ;
 - la normalisation du contrat ;
-- les modes `individual / group / projection` ;
+- les modes pédagogiques `individual / group` ;
 - les capacités runtime ;
-- le support de l’UI de réponse en projection ;
+- le support de la projection comme contexte d’exécution, avec UI déduite du mode pédagogique ;
 - la création d’activité via `createActivity(...)` ;
 - la résolution de la consigne via `resolveToolInstruction(...)` ;
 - le wrapper des runtimes modernes et legacy ;
@@ -213,12 +214,12 @@ Cette logique implique :
 - le shell appelle ensuite `validate(...)` côté outil.
 
 Modes concernés par la validation shell :
-- `individual` ;
-- `projection` en réponse `boxed`.
+- `individual` en séance normale ;
+- `individual` projeté, qui reprend une UI `boxed`.
 
 Modes non concernés :
-- `group` ;
-- `projection` en réponse `free`.
+- `group` en séance normale ;
+- `group` projeté, qui reprend une UI `free`.
 
 ### 4.4. Toggle shell “Voir ma réponse / Voir la correction”
 
@@ -255,6 +256,8 @@ Chaque item de séquence porte un draft commun normalisé avec notamment :
 - `timePerQ` ;
 - `questionCount` ;
 - `answerTime` ;
+- `questionTransitionSec` ;
+- `questionTransitionInfinite` ;
 - `infiniteTimePerQ` ;
 - `infiniteQuestionCount` ;
 - `infiniteAnswerTime` ;
@@ -266,6 +269,7 @@ Le widget commun gère :
 - `Nombre de questions` ;
 - `Temps par question` ;
 - `Temps d’affichage réponse` ;
+- `Temps entre les questions` ;
 - leurs boutons `∞` ;
 - `Consigne personnalisée` ;
 - les réglages de **jauge infinie** quand `Nombre de questions` est infini :
@@ -274,10 +278,17 @@ Le widget commun gère :
 
 ### 5.3. Réglages globaux d’activité
 
-Les globals actifs sont :
-- `questionTransitionSec` ;
-- `questionTransitionInfinite` ;
-- `projectionResponseUi`.
+Les globals actifs exposés dans l’UI sont :
+- `activityTotalTimeEnabled` ;
+- `activityTotalTimeSec`.
+
+Le temps entre deux questions n’est plus un global : `questionTransitionSec` et `questionTransitionInfinite` sont des réglages communs portés par chaque item de séquence, afin que chaque outil puisse avoir son propre rythme.
+
+La variante de réponse en projection n’est plus un réglage enseignant : elle est dérivée automatiquement du mode pédagogique (`individual` projeté → `boxed`, `group` projeté → `free`).
+
+`activityTotalTimeEnabled` et `activityTotalTimeSec` pilotent la durée totale optionnelle d’une activité. Quand la durée totale est activée, l’éditeur traite le dernier outil de la séquence comme un **défi final** : son nombre de questions est forcé à `∞`, afin que la séance puisse remplir la durée globale fixée.
+
+La projection reste un contexte d’exécution et utilise les mêmes réglages par item que la séance élève ; elle ne réintroduit pas de mode d’activité `projection`.
 
 ### 5.4. Réglages communs de jauge infinie
 
@@ -448,7 +459,7 @@ L’outil couvre :
 - outil moderne avec layout `stretch` ;
 - configuration dédiée aux trois types d’exercices ;
 - génération de questions côté modèle ;
-- projection `boxed/free` ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell ;
 - toggle shell correction / réponse élève.
 
@@ -466,7 +477,7 @@ L’outil couvre :
 - format d’affichage configurable ;
 - bornes de sommes avec widget min/max avancé ;
 - options futures affichées mais désactivées pour acheter des objets, trouver plusieurs façons et rendre la monnaie ;
-- projection `boxed/free` ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell ;
 - toggle shell correction / réponse élève.
 
@@ -483,7 +494,7 @@ L’outil couvre :
 - retenues pour additions et soustractions ;
 - règles communes ou spécifiques pour les termes ;
 - contrainte de résultat ;
-- projection `boxed/free` ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - validation shell ;
 - toggle shell correction / réponse élève.
 
@@ -538,7 +549,7 @@ L’outil gère :
 - correction colorée + réponse canonique en phase answer ;
 - validation shell ;
 - toggle shell correction / réponse élève ;
-- support projection limité selon le mode de réponse (`libre` → `free`, sinon `boxed`).
+- support de projection comme contexte d’exécution, limité selon le mode de réponse (`libre` → `free`, sinon `boxed`).
 
 ## 9.8. `tools/nombres-lettres/`
 
@@ -554,7 +565,7 @@ L’outil gère :
 État actuel :
 - plus d’assets de mots ;
 - génération dynamique du texte ;
-- réponse élève réelle en individuel / projection boxed ;
+- réponse élève réelle en individuel et en projection d’une activité individuelle (`boxed`) ;
 - toggle shell pour revoir la réponse élève.
 
 ## 9.9. `tools/reperage-numerique/`
@@ -602,7 +613,7 @@ L’outil gère :
 État actuel :
 - branché sur les banques Supabase ;
 - validation shell ;
-- projection boxed/free ;
+- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
 - pas de toggle correction/réponse déclaré dans le runtime actuel.
 
 ## 9.12. `tools/selection/`
