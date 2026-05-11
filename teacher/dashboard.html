@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="./css/config-widgets.css">
   <link rel="stylesheet" href="../shared/simple-markup.css">
   <link rel="stylesheet" href="../shared/selection-text.css">
+  <link rel="stylesheet" href="../shared/help-popover.css">
   <link rel="stylesheet" href="./css/question-banks.css">
 </head>
 
@@ -27,11 +28,23 @@
               <button id="btnDashboardHelp" class="dashboard-header-help-btn" type="button" aria-label="Aide du tableau de bord" aria-expanded="false">?</button>
             </div>
 
-            <div id="helpMenuPopup" class="dashboard-header-popup hidden" role="menu" aria-label="Aide du tableau de bord">
-              <button id="btnStartTutorial" class="dashboard-popup-action" type="button">▶️ Tutoriel</button>
+            <div id="helpMenuPopup" class="dashboard-header-popup dashboard-help-popup hidden" role="menu" aria-label="Aide du tableau de bord">
+              <div class="dashboard-help-popup-head">
+                <div class="dashboard-help-popup-kicker">Aide</div>
+                <div class="dashboard-help-popup-title">Tableau de bord</div>
+                <p class="dashboard-help-popup-text">Affiche les aides contextuelles ou lance le tutoriel quand il sera disponible.</p>
+              </div>
 
-              <div class="dashboard-popup-toggle-row">
-                <span>icônes d’aide</span>
+              <button id="btnStartTutorial" class="dashboard-popup-action dashboard-help-tutorial-btn" type="button">
+                <span class="dashboard-popup-action-icon" aria-hidden="true">▶</span>
+                <span>Tutoriel</span>
+              </button>
+
+              <div class="dashboard-popup-toggle-row dashboard-help-toggle-row">
+                <div>
+                  <span class="dashboard-help-toggle-title">Icônes d’aide</span>
+                  <span class="dashboard-help-toggle-subtitle">Afficher les petits boutons ? dans l’interface</span>
+                </div>
                 <label class="dashboard-toggle" for="toggleHelpIcons">
                   <input id="toggleHelpIcons" type="checkbox" checked>
                   <span class="dashboard-toggle-track" aria-hidden="true"></span>
@@ -99,12 +112,12 @@
 
                 <div class="dashboard-class-header-right">
                   <div class="dashboard-view-toggle" role="group" aria-label="Mode d’affichage des élèves">
-                    <button id="btnStudentListView" class="dashboard-view-toggle-btn is-active" type="button" aria-pressed="true" title="Vue liste">
+                    <button id="btnStudentListView" class="dashboard-view-toggle-btn" type="button" aria-pressed="false" title="Vue liste">
                       <span class="dashboard-material-icon" aria-hidden="true">view_list</span>
                       <span class="dashboard-view-toggle-label">Liste</span>
                     </button>
 
-                    <button id="btnStudentTileView" class="dashboard-view-toggle-btn" type="button" aria-pressed="false" title="Vue tuiles">
+                    <button id="btnStudentTileView" class="dashboard-view-toggle-btn is-active" type="button" aria-pressed="true" title="Vue tuiles">
                       <span class="dashboard-material-icon" aria-hidden="true">grid_view</span>
                       <span class="dashboard-view-toggle-label">Tuiles</span>
                     </button>
@@ -126,55 +139,115 @@
             </div>
 
             <div id="banksView" class="dashboard-content-view dashboard-banks-view hidden">
-              <div class="dashboard-content-header dashboard-banks-header">
-                <div class="dashboard-banks-header-main">
-                  <div>
-                    <div class="dashboard-section-title">Banques</div>
-                    <div class="dashboard-banks-subtitle">Crée et organise les contenus réutilisables des outils génériques.</div>
+              <div id="bankExplorerHeader" class="dashboard-config-header dashboard-banks-explorer-header">
+                <div class="dashboard-config-header-main">
+                  <div class="dashboard-section-title">Banques</div>
+
+                  <div class="dashboard-mode-pill" role="tablist" aria-label="Type de banque courant">
+                    <button
+                      class="dashboard-mode-pill-btn is-active"
+                      type="button"
+                      role="tab"
+                      data-bank-type-filter="all"
+                      aria-selected="true"
+                      title="Afficher toutes les banques"
+                    >
+                      Tous
+                    </button>
+                    <button
+                      class="dashboard-mode-pill-btn"
+                      type="button"
+                      role="tab"
+                      data-bank-type-filter="text_answer"
+                      aria-selected="false"
+                      title="Afficher les banques texte"
+                    >
+                      Texte
+                    </button>
+                    <button
+                      class="dashboard-mode-pill-btn"
+                      type="button"
+                      role="tab"
+                      data-bank-type-filter="qcm"
+                      aria-selected="false"
+                      title="Afficher les banques QCM"
+                    >
+                      QCM
+                    </button>
+                    <button
+                      class="dashboard-mode-pill-btn"
+                      type="button"
+                      role="tab"
+                      data-bank-type-filter="selection"
+                      aria-selected="false"
+                      title="Afficher les banques Sélection"
+                    >
+                      Sélection
+                    </button>
                   </div>
                 </div>
 
-                <div class="dashboard-banks-header-actions">
-                  <label class="dashboard-bank-create-type" for="bankCreateType">
-                    <span>Type</span>
-                    <select id="bankCreateType" class="dashboard-bank-create-type-select">
-                      <option value="text_answer">Réponses textuelles</option>
-                      <option value="qcm">QCM</option>
-                      <option value="selection">Sélection</option>
-                    </select>
-                  </label>
+                <div class="dashboard-config-header-center">
+                  <nav id="bankBreadcrumb" class="dashboard-breadcrumb" aria-label="Fil d’Ariane des banques">
+                    <button class="dashboard-breadcrumb-btn is-current" type="button" data-action="open-root">Banques</button>
+                  </nav>
+                </div>
+
+                <div class="dashboard-config-header-actions dashboard-banks-header-actions">
+                  <button
+                    id="btnCreateBankFolder"
+                    class="dashboard-icon-btn dashboard-material-icon-btn"
+                    type="button"
+                    title="Créer un dossier"
+                    aria-label="Créer un dossier"
+                  >
+                    <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
+                  </button>
+
                   <button id="btnCreateBank" class="btn primary" type="button">
                     <span class="dashboard-material-icon" aria-hidden="true">add</span>
-                    <span>Nouvelle banque</span>
+                    <span>Créer une banque</span>
                   </button>
-                  <button id="btnDeleteBank" class="btn dashboard-danger-btn" type="button" disabled>
-                    <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-                    <span>Supprimer</span>
-                  </button>
-                  <button id="btnSaveBank" class="btn primary" type="button" disabled>Enregistrer</button>
-                  <span
-                    id="bankSaveStatus"
-                    class="dashboard-bank-save-status dashboard-material-icon"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="Aucune banque sélectionnée"
-                    title="Aucune banque sélectionnée"
-                  >warning</span>
                 </div>
               </div>
 
-              <div class="dashboard-banks-layout">
-                <aside class="dashboard-banks-sidebar" aria-label="Liste des banques">
-                  <div class="dashboard-banks-sidebar-title">Mes banques</div>
-                  <div id="banksList" class="dashboard-banks-list">
-                    <div class="dashboard-bank-list-empty">Chargement…</div>
-                  </div>
-                </aside>
+              <div id="bankEditorHeader" class="dashboard-config-header dashboard-banks-editor-header hidden">
+                <div class="cfg-header-left dashboard-banks-editor-header-main">
+                  <button class="btn cfg-back-btn" id="btnBackBankExplorer" type="button" aria-label="Retour aux banques">↩</button>
 
-                <section id="bankEditorHost" class="dashboard-bank-editor-host" aria-live="polite">
-                  <div class="dashboard-bank-empty-state">Chargement…</div>
-                </section>
+                  <div class="cfg-header-identity">
+                    <div class="cfg-config-name-wrap">
+                      <div class="cfg-field-label">Titre de la banque :</div>
+                      <div id="bankEditorHeaderTitle" class="cfg-config-name-display is-empty">Banque sans nom</div>
+                      <button
+                        class="dashboard-icon-btn cfg-name-rename-btn"
+                        id="btnRenameBankFromHeader"
+                        type="button"
+                        aria-label="Renommer la banque"
+                        title="Renommer la banque"
+                        disabled
+                      >
+                        <span class="dashboard-material-icon cfg-name-rename-icon" aria-hidden="true">drive_file_rename_outline</span>
+                      </button>
+                      <div id="bankEditorTypePill" class="dashboard-bank-type-pill" hidden></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="bankEditorMessage" class="cfg-editor-message"></div>
+
+                <div class="cfg-header-actions dashboard-banks-header-actions">
+                  <button id="btnSaveBank" class="btn cfg-save-btn" type="button" disabled>Enregistrer</button>
+                </div>
               </div>
+
+              <div id="banksList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
+              </div>
+
+              <section id="bankEditorHost" class="dashboard-bank-editor-host hidden" aria-live="polite">
+                <div class="dashboard-bank-empty-state">Chargement…</div>
+              </section>
             </div>
 
             <div id="editorView" class="dashboard-content-view dashboard-editor-view hidden">
@@ -199,7 +272,6 @@
                             </button>
                         </div>
 
-                        <div id="activityModeBadge" class="cfg-activity-mode-badge" data-activity-mode="individual">Individuel</div>
                       </div>
                     </div>
 
@@ -295,11 +367,73 @@
                       <div class="cfg-tools-header-main">
                         <div class="cfg-panel-title">Séquence d’outils</div>
                       </div>
-                      <div class="cfg-tools-header-actions">
-                        <button class="btn cfg-add-tool-btn cfg-add-tool-btn-label" id="btnAddSequenceTool" type="button" aria-label="Ajouter un outil">
-                          <span class="cfg-material-icon" aria-hidden="true">add</span>
-                          <span>Ajouter</span>
-                        </button>
+                    </div>
+
+                    <div class="cfg-passation-card" id="passationModeControl">
+                      <button
+                        class="btn cfg-passation-summary"
+                        id="passationModeToggleButton"
+                        type="button"
+                        aria-label="Déplier les réglages du mode de passation général"
+                        aria-expanded="false"
+                        aria-controls="passationModePanel"
+                        title="Déplier les réglages du mode de passation général"
+                      >
+                        <span class="cfg-passation-summary-main">
+                          <span class="cfg-passation-summary-title">Mode de passation général</span>
+                          <span id="passationModeSummary" class="cfg-passation-summary-text">Individuel - Avec réponse - Évaluation</span>
+                        </span>
+                        <span class="cfg-material-icon cfg-passation-chevron" id="passationModeChevron" aria-hidden="true">expand_more</span>
+                      </button>
+
+                      <div class="cfg-passation-panel" id="passationModePanel" hidden>
+                        <div class="cfg-passation-help-row">
+                          <div
+                            id="activityModeBadge"
+                            class="cfg-passation-segmented"
+                            data-passation-kind="activity-mode"
+                            data-activity-mode="individual"
+                            role="group"
+                            aria-label="Mode social de l’activité"
+                          >
+                            <button class="cfg-passation-segment" type="button" data-passation-value="individual">Activité individuelle</button>
+                            <button class="cfg-passation-segment" type="button" data-passation-value="group">Activité collective</button>
+                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
+                          </div>
+                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-mode" aria-label="Aide : activité individuelle ou collective" aria-expanded="false">?</button>
+                        </div>
+
+                        <div class="cfg-passation-help-row">
+                          <div
+                            id="responseUiPreviewToggle"
+                            class="cfg-passation-segmented"
+                            data-passation-kind="response-ui"
+                            data-response-ui="boxed"
+                            role="group"
+                            aria-label="Interface de réponse"
+                          >
+                            <button class="cfg-passation-segment" type="button" data-passation-value="boxed">Réponse saisie</button>
+                            <button class="cfg-passation-segment" type="button" data-passation-value="free">Réponse non saisie</button>
+                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
+                          </div>
+                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-response-ui" aria-label="Aide : réponse saisie ou non saisie" aria-expanded="false">?</button>
+                        </div>
+
+                        <div class="cfg-passation-help-row">
+                          <div
+                            id="progressModePreviewToggle"
+                            class="cfg-passation-segmented"
+                            data-passation-kind="progress-mode"
+                            data-progress-mode="evaluated"
+                            role="group"
+                            aria-label="Progression de la situation"
+                          >
+                            <button class="cfg-passation-segment" type="button" data-passation-value="evaluated">Situation d’évaluation</button>
+                            <button class="cfg-passation-segment" type="button" data-passation-value="practice">Situation d’entrainement</button>
+                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
+                          </div>
+                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-progress-mode" aria-label="Aide : évaluation ou entrainement" aria-expanded="false">?</button>
+                        </div>
                       </div>
                     </div>
 

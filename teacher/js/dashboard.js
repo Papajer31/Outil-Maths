@@ -12,6 +12,10 @@ import {
   createActivityFolderForSpace,
   updateActivityFolder,
   deleteActivityFolder,
+  createQuestionBankFolderForSpace,
+  updateQuestionBankFolder,
+  deleteQuestionBankFolder,
+  listQuestionBankFoldersForSpace,
   deleteMyActivity,
   saveActivityConfig,
   updateActivityDashboardMeta,
@@ -22,16 +26,12 @@ import {
   deleteStudent,
   saveStudentOrderForTeacherSpace
 } from "./teacher-api.js";
-import { loadToolsRuntime } from "../../shared/tool-root-runtime.js";
 import {
   DEFAULT_ACTIVITY_MODE,
   getActivityModeLabel,
-  getOtherActivityModes,
-  getToolActivityModeSupport,
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
-import { normalizeActivitySequence } from "../../shared/activity-config.js";
 import { sanitizeActivityConfigJson } from "../../shared/api-common.js";
 import {
   ACTIVITY_SHARE_MESSAGES,
@@ -56,6 +56,12 @@ import { createEditorController } from "./dashboard/editor-controller.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
 import { createQuestionBanksViewController } from "./dashboard/question-banks-view.js";
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
+import {
+  applyContextualHelpPreference,
+  getContextualHelpEnabled,
+  initContextualHelpSystem,
+  setContextualHelpEnabled
+} from "../../shared/help-popover.js";
 
 /* =========================
    DOM
@@ -96,12 +102,17 @@ const banksView = document.getElementById("banksView");
 const editorView = document.getElementById("editorView");
 
 const btnAddStudent = document.getElementById("btnAddStudent");
+const bankExplorerHeader = document.getElementById("bankExplorerHeader");
+const bankEditorHeader = document.getElementById("bankEditorHeader");
+const bankBreadcrumb = document.getElementById("bankBreadcrumb");
 const banksList = document.getElementById("banksList");
 const bankEditorHost = document.getElementById("bankEditorHost");
+const bankEditorHeaderTitle = document.getElementById("bankEditorHeaderTitle");
 const btnCreateBank = document.getElementById("btnCreateBank");
+const btnCreateBankFolder = document.getElementById("btnCreateBankFolder");
+const btnBackBankExplorer = document.getElementById("btnBackBankExplorer");
 const btnDeleteBank = document.getElementById("btnDeleteBank");
 const btnSaveBank = document.getElementById("btnSaveBank");
-const bankSaveStatus = document.getElementById("bankSaveStatus");
 const bankImportModal = document.getElementById("bankImportModal");
 const bankImportInput = document.getElementById("bankImportInput");
 const bankImportMessage = document.getElementById("bankImportMessage");
@@ -146,12 +157,18 @@ let rightPanelMode = "activities"; // conservé pour la logique activités
 let currentDashboardSection = "activities"; // "activities" | "class" | "banks"
 let currentActivitiesViewMode = "list"; // "list" | "editor"
 let currentActivityModeFilter = "all";
-let showDashboardHelpIcons = true;
-let studentViewMode = "list"; // "list" | "tiles"
+let showDashboardHelpIcons = getContextualHelpEnabled();
+let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
 let needsActivitiesRefreshOnReturn = false;
 let currentEditorRoute = null;
 let activeConfigEditor = null;
+let hasMountedClassView = false;
+let hasMountedActivitiesView = false;
+let hasMountedBanksView = false;
+let mountedClassTeacherSpaceId = "";
+let mountedActivitiesTeacherSpaceId = "";
+let mountedBanksTeacherSpaceId = "";
 
 const studentNotesDrafts = new Map();
 let cachedActivities = null;
@@ -164,13 +181,21 @@ let editorController = null;
 let activitiesViewController = null;
 let banksViewController = null;
 let studentController = null;
+const helpPopoverController = initContextualHelpSystem({ root: document });
+
 const headerPopupController = createHeaderPopupController({
   helpMenuPopup,
   btnDashboardHelp,
   userMenuPopup,
   btnUserMenu,
-  onBeforeOpenHelp: () => dashboardShareManager?.close(),
-  onBeforeOpenUser: () => dashboardShareManager?.close()
+  onBeforeOpenHelp: () => {
+    dashboardShareManager?.close();
+    helpPopoverController.close();
+  },
+  onBeforeOpenUser: () => {
+    dashboardShareManager?.close();
+    helpPopoverController.close();
+  }
 });
 dashboardShareManager = createDashboardShareManager({
   normalizeAccessCode,
@@ -191,13 +216,10 @@ const activityOverlayManager = createActivityOverlayManager({
   escapeHtml,
   normalizeActivityMode,
   getActivityModeLabel,
-  getOtherActivityModes,
   createActivityFolderForSpace,
   updateActivityFolder,
   deleteActivityFolder,
   deleteMyActivity,
-  saveActivityConfig,
-  getMyActivitiesForSpace,
   buildActivityTreeState: (...args) => activitiesViewController?.buildActivityTreeState(...args),
   sortFoldersByDisplay: sortDashboardFoldersByDisplay,
   showDashboardShareToast,
@@ -211,12 +233,6 @@ const activityOverlayManager = createActivityOverlayManager({
   getKnownActivityFolderIds: () => knownActivityFolderIds,
   getCollapsedActivityFolderIds: () => collapsedActivityFolderIds,
   getActivityById,
-  getCurrentActivityModeFilter: () => currentActivityModeFilter,
-  setCurrentActivityModeFilter: (next) => { currentActivityModeFilter = next; },
-  getNextActivityOrderForFolder,
-  buildVersionActivityName,
-  buildClonedActivityConfigJson,
-  evaluateActivityVersionCompatibility,
   deleteActivityModal,
   deleteActivityModalTitle,
   deleteActivityText,
@@ -277,7 +293,6 @@ const activityDragController = createActivityDragController({
 const {
   closeDeleteActivityModal,
   openCreateFolderOverlay,
-  openCreateVersionOverlay,
   openDeleteActivityModal,
   openDeleteFolderOverlay,
   openRenameActivityOverlay,
@@ -307,7 +322,6 @@ activitiesViewController = createActivitiesViewController({
   openRenameActivityOverlay,
   openDeleteFolderOverlay,
   openDeleteActivityModal,
-  openCreateVersionOverlay,
   toggleDashboardSharePopup,
   openEmbeddedConfigEditor: (...args) => openEmbeddedConfigEditor(...args),
   showDashboardShareToast,
@@ -320,12 +334,21 @@ activitiesViewController = createActivitiesViewController({
 });
 banksViewController = createQuestionBanksViewController({
   banksView,
+  bankExplorerHeader,
+  bankEditorHeader,
+  bankBreadcrumb,
   banksList,
   bankEditorHost,
-  bankSaveStatus,
+  bankEditorHeaderTitle,
   btnCreateBank,
+  btnCreateBankFolder,
+  btnBackBankExplorer,
   btnDeleteBank,
   btnSaveBank,
+  createQuestionBankFolderForSpace,
+  updateQuestionBankFolder,
+  deleteQuestionBankFolder,
+  listQuestionBankFoldersForSpace,
   importModal: bankImportModal,
   importInput: bankImportInput,
   importMessage: bankImportMessage,
@@ -435,10 +458,6 @@ function renderStudentViewToggle(){
   btnStudentTileView?.setAttribute("aria-pressed", String(!isList));
 }
 
-function isEditorOpen(){
-  return currentDashboardSection === "activities" && currentActivitiesViewMode === "editor";
-}
-
 function rememberActivitiesScrollPosition(){
   if (!configsList || currentActivitiesViewMode !== "list") return;
   activityListScrollTop = configsList.scrollTop;
@@ -451,6 +470,30 @@ function restoreActivitiesScrollPosition(){
   window.requestAnimationFrame(() => {
     configsList.scrollTop = target;
   });
+}
+
+async function ensureClassViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedClassView && mountedClassTeacherSpaceId === teacherSpaceId) return;
+  await studentController?.renderStudentsColumn({ skipRefresh: !forceRefresh });
+  hasMountedClassView = true;
+  mountedClassTeacherSpaceId = teacherSpaceId;
+}
+
+async function ensureActivitiesViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedActivitiesView && mountedActivitiesTeacherSpaceId === teacherSpaceId) return;
+  await activitiesViewController?.renderRightPanel({ forceRefresh });
+  hasMountedActivitiesView = true;
+  mountedActivitiesTeacherSpaceId = teacherSpaceId;
+}
+
+async function ensureBanksViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedBanksView && mountedBanksTeacherSpaceId === teacherSpaceId) return;
+  await banksViewController?.refresh({ forceRefresh });
+  hasMountedBanksView = true;
+  mountedBanksTeacherSpaceId = teacherSpaceId;
 }
 
 function getActivityById(activityId){
@@ -494,29 +537,6 @@ function buildDuplicateActivityName(baseName, activities = cachedActivities){
   return `${safeBaseName} (copie ${Date.now()})`;
 }
 
-function buildVersionActivityName(baseName, targetMode, activities = cachedActivities){
-  const safeBaseName = String(baseName || "").trim() || "Activité";
-  const modeLabel = getActivityModeLabel(targetMode);
-  const existingNames = new Set(
-    (Array.isArray(activities) ? activities : [])
-      .map((activity) => normalizeConfigName(activity?.config_name))
-      .filter(Boolean)
-  );
-
-  let suffixIndex = 0;
-  while (suffixIndex < 999) {
-    const candidate = suffixIndex === 0
-      ? `${safeBaseName} (${modeLabel})`
-      : `${safeBaseName} (${modeLabel} ${suffixIndex + 1})`;
-    if (!existingNames.has(normalizeConfigName(candidate))) {
-      return candidate;
-    }
-    suffixIndex += 1;
-  }
-
-  return `${safeBaseName} (${modeLabel} ${Date.now()})`;
-}
-
 function buildClonedActivityConfigJson(sourceActivity, {
   targetMode = DEFAULT_ACTIVITY_MODE,
   nextDisplayOrder = 0,
@@ -557,52 +577,6 @@ function buildClonedActivityConfigJson(sourceActivity, {
         : false
     }
   };
-}
-
-async function evaluateActivityVersionCompatibility(activity, targetMode){
-  const safeTargetMode = normalizeActivityMode(targetMode, DEFAULT_ACTIVITY_MODE);
-  const runtime = await loadToolsRuntime(activity?.module_key || "tools");
-  const toolsCatalog = await runtime.loadToolsCatalog();
-  const sourceSequence = activity?.config_json?.sequence;
-
-  if (!Array.isArray(sourceSequence)) {
-    return [{
-      toolId: "__config__",
-      toolTitle: activity?.config_name || "Activité",
-      blockingMessage: "La configuration source est invalide : séquence manquante."
-    }];
-  }
-
-  const safeSequence = normalizeActivitySequence(sourceSequence, {
-    toolsCatalog,
-    fallbackGlobals: activity?.config_json?.globals
-  });
-
-  const issues = [];
-
-  for (const item of safeSequence) {
-    const toolMeta = toolsCatalog.find((tool) => String(tool?.id || "") === String(item?.toolId || ""));
-    const mod = await runtime.loadToolModule(item.toolId);
-    const tool = mod.default ?? {};
-    const activityModeSupport = getToolActivityModeSupport(tool, {
-      activityMode: safeTargetMode,
-      moduleKey: activity?.module_key || "tools",
-      toolId: item.toolId,
-      instanceId: item.instanceId,
-      settings: item?.draft?.settings ?? {}
-    });
-
-    if (!activityModeSupport.compatible) {
-      issues.push({
-        toolId: item.toolId,
-        toolTitle: toolMeta?.label || toolMeta?.title || item.toolId,
-        blockingMessage: activityModeSupport.blockingMessage || `Non compatible avec le mode ${getActivityModeLabel(safeTargetMode).toLowerCase()}.`
-      });
-      continue;
-    }
-  }
-
-  return issues;
 }
 
 function buildDashboardHistoryState(){
@@ -660,6 +634,7 @@ function renderDashboardShellState(){
   navHelpButtons.forEach((button) => {
     button.classList.toggle("is-hidden", !showDashboardHelpIcons);
   });
+  applyContextualHelpPreference(showDashboardHelpIcons, document);
 
   if (toggleHelpIcons) {
     toggleHelpIcons.checked = showDashboardHelpIcons;
@@ -686,10 +661,6 @@ async function maybeOpenInitialEditorRoute(){
 
 async function applyDashboardRouteFromUrl({ allowConfirm = true } = {}){
   return editorController?.applyDashboardRouteFromUrl({ allowConfirm });
-}
-
-async function leaveEditorToSection(nextSection){
-  return editorController?.leaveEditorToSection(nextSection);
 }
 
 async function openEmbeddedConfigEditor({
@@ -729,32 +700,25 @@ btnAddStudent?.addEventListener("click", studentController.openPrimaryModal);
 btnModalCancel?.addEventListener("click", studentController.closeAccessCodeModal);
 btnModalCreate?.addEventListener("click", studentController.submitPrimaryModal);
 btnNavActivities?.addEventListener("click", async () => {
-  currentStudent = null;
-  if (isEditorOpen()) {
-    await leaveEditorToSection("activities");
-    return;
-  }
-
   currentDashboardSection = "activities";
-  currentActivitiesViewMode = "list";
+  if (currentActivitiesViewMode === "editor" && !activeConfigEditor) {
+    currentActivitiesViewMode = "list";
+  }
   renderDashboardShellState();
-  await activitiesViewController?.renderRightPanel({ forceRefresh: false });
+  if (currentActivitiesViewMode === "list") {
+    await ensureActivitiesViewMounted();
+    restoreActivitiesScrollPosition();
+  }
 });
 btnNavClass?.addEventListener("click", async () => {
-  currentStudent = null;
-  await leaveEditorToSection("class");
+  currentDashboardSection = "class";
+  renderDashboardShellState();
+  await ensureClassViewMounted();
 });
 btnNavBanks?.addEventListener("click", async () => {
-  currentStudent = null;
-  if (isEditorOpen()) {
-    const ok = await leaveEditorToSection("banks");
-    if (!ok) return;
-  } else {
-    currentDashboardSection = "banks";
-    currentActivitiesViewMode = "list";
-    renderDashboardShellState();
-  }
-  await banksViewController?.refresh({ forceRefresh: false });
+  currentDashboardSection = "banks";
+  renderDashboardShellState();
+  await ensureBanksViewMounted();
 });
 btnStudentListView?.addEventListener("click", async () => {
   if (studentViewMode === "list") return;
@@ -777,11 +741,12 @@ btnUserMenu?.addEventListener("click", (event) => {
   toggleUserMenu();
 });
 btnStartTutorial?.addEventListener("click", () => {
+  helpPopoverController.close();
   closeHeaderPopups();
   alert("Placeholder : tutoriel à brancher plus tard.");
 });
 toggleHelpIcons?.addEventListener("change", () => {
-  showDashboardHelpIcons = toggleHelpIcons.checked;
+  showDashboardHelpIcons = setContextualHelpEnabled(toggleHelpIcons.checked, document);
   renderDashboardShellState();
 });
 btnOpenProfileOverlay?.addEventListener("click", () => {
@@ -932,8 +897,8 @@ async function boot(){
     studentController.renderAccessCodeBox();
     renderDashboardShellState();
     updateClassSectionTitle();
-    await studentController.renderStudentsColumn({ skipRefresh: true });
-    await activitiesViewController?.renderRightPanel({ forceRefresh: true });
+    await ensureClassViewMounted();
+    await ensureActivitiesViewMounted({ forceRefresh: true });
     await maybeOpenInitialEditorRoute();
     syncDashboardUrl();
   } catch (err) {

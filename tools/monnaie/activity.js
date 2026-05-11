@@ -154,8 +154,6 @@ function createRuntimeState(initialContext = {}) {
     composePanelEl: null,
     composePaletteEl: null,
     settings: normalizeSettings(initialContext?.settings),
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
-    projectionResponseUi: normalizeProjectionResponseUi(initialContext?.projectionResponseUi),
     showResponseUi: shouldShowResponseUi(initialContext),
     drag: null
   };
@@ -163,8 +161,6 @@ function createRuntimeState(initialContext = {}) {
 
 function syncRuntimeState(state, context = state.latestContext) {
   state.settings = normalizeSettings(context?.settings);
-  state.activityMode = normalizeActivityMode(context?.activityMode);
-  state.projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
   state.showResponseUi = shouldShowResponseUi(context);
 }
 
@@ -276,7 +272,7 @@ function renderReadQuestion(state) {
     requestReveal(state);
   });
   layoutScatterMoneyItems(state.stageEl);
-  attachMoneyDragHandlers(state.stageEl, { disabled: () => state.answerRevealed });
+  attachMoneyDragHandlers(state.stageEl, { disabled: () => !state.showResponseUi || state.answerRevealed });
 }
 
 function renderComposeQuestion(state) {
@@ -311,8 +307,9 @@ function renderComposeQuestion(state) {
   state.composePaletteEl = state.stageEl.querySelector("#monnaie_compose_palette");
 
   state.composePaletteEl?.querySelectorAll("[data-denomination-id]").forEach((button) => {
+    button.disabled = !state.showResponseUi;
     button.addEventListener("click", () => {
-      if (state.answerRevealed) return;
+      if (!state.showResponseUi || state.answerRevealed) return;
       addComposeMoneyItem(state, button.dataset.denominationId);
     });
   });
@@ -556,7 +553,7 @@ function renderCompareQuestion(state) {
   state.correctionEl.innerHTML = "";
   layoutScatterMoneyItems(state.stageEl);
   attachMoneyDragHandlers(state.stageEl, {
-    disabled: () => state.answerRevealed,
+    disabled: () => !state.showResponseUi || state.answerRevealed,
     constrainToParent: true,
     overflowRatio: COMPARE_DRAG_OVERFLOW_RATIO
   });
@@ -1245,22 +1242,24 @@ function clampNumber(value, min, max) {
 }
 
 function shouldShowResponseUi(context = {}) {
-  const activityMode = normalizeActivityMode(context?.activityMode);
-  const projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
-  if (activityMode === "individual") return true;
-  if (String(context?.runMode || context?.sessionMode || "").trim() === "projected-teacher") return projectionResponseUi === "boxed";
-  return false;
+  return getResponseUi(context) === "boxed";
 }
 
-function normalizeActivityMode(value) {
-  const raw = String(value || "").trim();
-  return ["individual", "group"].includes(raw) ? raw : "individual";
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
 }
 
-function normalizeProjectionResponseUi(value) {
-  const raw = String(value || "").trim();
-  return raw === "boxed" || raw === "free" ? raw : "free";
+function normalizeResponseUi(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
+
 
 function teardownState(state, container) {
   const target = container || state.container;

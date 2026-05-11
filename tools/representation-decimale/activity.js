@@ -148,8 +148,7 @@ function createRuntimeState(initialContext = {}) {
     currentQuestion: null,
     lastQuestionKey: null,
     answerRevealed: false,
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
-    projectionResponseUi: normalizeProjectionResponseUi(initialContext?.projectionResponseUi),
+    responseUi: getResponseUi(initialContext),
     showResponseBox: shouldShowResponseBox(initialContext),
     builderWorkspaceEl: null,
     builderItemsLayerEl: null,
@@ -174,8 +173,7 @@ function createRuntimeState(initialContext = {}) {
 }
 
 function syncRuntimeState(state, context = state.latestContext) {
-  state.activityMode = normalizeActivityMode(context?.activityMode);
-  state.projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
+  state.responseUi = getResponseUi(context);
   state.showResponseBox = shouldShowResponseBox(context);
 }
 
@@ -323,12 +321,7 @@ function shouldUsePassiveFreeBuildQuestion(state, question = state.currentQuesti
     return false;
   }
 
-  if (state.activityMode === "group") {
-    return true;
-  }
-
-  return String(state.latestContext?.runMode || state.latestContext?.sessionMode || "").trim() === "projected-teacher"
-    && normalizeProjectionResponseUi(state.projectionResponseUi) === "free";
+  return getResponseUi(state?.latestContext) === "free";
 }
 
 function renderPassiveFreeBuildPanel(state) {
@@ -2080,30 +2073,25 @@ function focusInput(state) {
 
 
 function shouldShowResponseBox(context = {}) {
-  const activityMode = normalizeActivityMode(context?.activityMode);
-  if (activityMode === "group") {
-    return false;
-  }
-
-  if (String(context?.runMode || context?.sessionMode || "").trim() === "projected-teacher") {
-    return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
-  }
-
-  return true;
+  return getResponseUi(context) === "boxed";
 }
 
-function normalizeProjectionResponseUi(value) {
-  const safeValue = String(value || "free").trim().toLowerCase();
-  return safeValue === "boxed" ? "boxed" : "free";
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
 }
 
-function normalizeActivityMode(value) {
-  const safeValue = String(value || "individual").trim().toLowerCase();
-  if (safeValue === "group") {
-    return safeValue;
-  }
-  return "individual";
+function normalizeResponseUi(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
+
+
 
 function normalizeAnswerDisplayMode(value) {
   return String(value || "").trim().toLowerCase() === "student" ? "student" : "correction";

@@ -38,21 +38,6 @@ export default defineTool("encodage", "Encodage", {
     };
   },
 
-  supportsProjectionResponseUi(context = {}) {
-    const settings = normalizeSettings(context?.settings);
-    if (settings.mode === "libre") {
-      return {
-        boxed: false,
-        free: true
-      };
-    }
-
-    return {
-      boxed: true,
-      free: false
-    };
-  },
-
   getRunProfile(context = {}) {
     const settings = normalizeSettings(context?.settings);
     if (!Array.isArray(settings.graphOrder) || settings.graphOrder.length === 0) {

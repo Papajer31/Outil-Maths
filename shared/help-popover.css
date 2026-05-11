@@ -1,0 +1,115 @@
+.help-popover-trigger,
+.is-contextual-help{
+  width:28px;
+  height:28px;;
+  min-width:28px;
+  min-height:28px;
+  border:1px solid rgba(255,255,255,.28);
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,.12);
+  color:#fff;
+  font-size:15px;
+  font-weight:700;
+  line-height:1;
+  cursor:pointer;
+  transition:background .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease;
+}
+
+.help-popover-trigger:hover,
+.help-popover-trigger[aria-expanded="true"],
+.is-contextual-help:hover,
+.is-contextual-help[aria-expanded="true"]{
+  background:rgba(255,255,255,.22);
+  border-color:rgba(255,255,255,.42);
+  transform:translateY(-1px);
+}
+
+.help-popover-trigger:focus-visible,
+.is-contextual-help:focus-visible{
+  outline:3px solid rgba(255,255,255,.36);
+  outline-offset:3px;
+}
+
+.help-contextual-disabled .help-popover-trigger:not([data-help-contextual="false"]),
+.help-contextual-disabled .is-contextual-help:not([data-help-contextual="false"]),
+[data-help-icon].is-hidden{
+  display:none !important;
+}
+
+.help-popover{
+  position:fixed;
+  z-index:10000;
+  width:min(340px, calc(100vw - 24px));
+  color:#173047;
+  filter:drop-shadow(0 20px 34px rgba(0,0,0,.24));
+}
+
+.help-popover.hidden{
+  display:none !important;
+}
+
+.help-popover-card{
+  position:relative;
+  border:1px solid rgba(79,109,132,.2);
+  border-radius:20px;
+  padding:16px 18px;
+  background:#fffdf7;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.85);
+}
+
+.help-popover-arrow{
+  position:absolute;
+  width:18px;
+  height:18px;
+  background:#fffdf7;
+  border:1px solid rgba(79,109,132,.2);
+  transform:translateX(-50%) rotate(45deg);
+  z-index:0;
+}
+
+.help-popover.is-above .help-popover-arrow{
+  bottom:-8px;
+  border-left:0;
+  border-top:0;
+}
+
+.help-popover.is-below .help-popover-arrow{
+  top:-8px;
+  border-right:0;
+  border-bottom:0;
+}
+
+.help-popover-title{
+  margin:0 0 8px;
+  color:#18344d;
+  font-size:16px;
+  font-weight:700;
+  line-height:1.2;
+}
+
+.help-popover-body{
+  display:grid;
+  gap:8px;
+  color:#2c465d;
+  font-size:14px;
+  font-weight:600;
+  line-height:1.38;
+}
+
+.help-popover-body p{
+  margin:0;
+}
+
+.help-popover-body ul,
+.help-popover-body ol{
+  margin:0;
+  padding-left:20px;
+}
+
+.help-popover-body strong{
+  color:#132f45;
+  font-weight:700;
+}

@@ -36,13 +36,6 @@ export default defineTool("operations", "Opérations", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createOperationsActivity({
       ...context,

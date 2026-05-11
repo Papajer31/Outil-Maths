@@ -1,11 +1,14 @@
 import {
   TOOL_LIMITS,
   cloneData,
-  getCommonInfiniteGaugeSettings,
-  ensureCommonInfiniteGaugeSettings,
+  getCommonSuccessGoalSettings,
+  ensureCommonSuccessGoalSettings,
   normalizeToolDraft,
   normalizeActivityGlobals,
-  normalizeActivitySequence
+  normalizeActivitySequence,
+  normalizePassationProfile,
+  supportsSuccessGoalQuestionFlow,
+  normalizeQuestionFlowMode
 } from "./activity-config.js";
 import {
   renderStepperField,
@@ -162,24 +165,36 @@ function renderCommonToolSettings(draft, context = {}) {
     : null;
   const showInstructionField = safeTool?.supportsCustomInstruction !== false;
   const instructionState = getCommonInstructionState(safeDraft.settings);
-  const infiniteGaugeSettings = getCommonInfiniteGaugeSettings(safeDraft.settings);
+  const successGoalSettings = getCommonSuccessGoalSettings(safeDraft);
   const defaultInstructionText = String(safeTool?.defaultInstruction || "").trim();
-  const activityMode = normalizeActivityMode(context?.activityMode ?? context?.activity_mode ?? context?.mode, DEFAULT_ACTIVITY_MODE);
+  const passationProfile = normalizePassationProfile({
+    activityMode: context?.activityMode ?? context?.activity_mode ?? context?.mode,
+    responseUi: context?.responseUi ?? context?.response_ui,
+    progressMode: context?.progressMode ?? context?.progress_mode
+  }, {
+    activityMode: DEFAULT_ACTIVITY_MODE,
+    responseUi: "boxed",
+    progressMode: "evaluated"
+  });
   const forceInfiniteQuestionCount = shouldForceInfiniteQuestionCount(context);
-  const effectiveInfiniteQuestionCount = forceInfiniteQuestionCount || safeDraft.infiniteQuestionCount;
-  const canShowInfiniteGaugeSettings = activityMode === "individual" && !forceInfiniteQuestionCount;
-  const shouldShowInfiniteGaugeSettings = canShowInfiniteGaugeSettings && effectiveInfiniteQuestionCount;
-  const forcedInfiniteMessage = "Dernier outil : nombre de questions forcé à ∞ par la durée totale.";
+  const canShowSuccessGoalQuestionFlow = supportsSuccessGoalQuestionFlow(passationProfile) && !forceInfiniteQuestionCount;
+  const questionFlowMode = getQuestionFlowModeForRender({
+    questionFlowMode: safeDraft.questionFlowMode,
+    canShowSuccessGoalQuestionFlow,
+    forceInfiniteQuestionCount
+  });
+  const shouldShowSuccessGoalSettings = canShowSuccessGoalQuestionFlow && questionFlowMode === "successGoal";
+  const forcedInfiniteMessage = "Dernier outil : questions illimitées forcées par la durée totale.";
 
   return `
     <div class="tv-group">
       <div class="tv-stepper-grid">
         ${renderQuestionCountModeControl({
           questionCount: safeDraft.questionCount,
-          infiniteGaugeSettings,
-          effectiveInfiniteQuestionCount,
-          canShowInfiniteGaugeSettings,
-          shouldShowInfiniteGaugeSettings,
+          successGoalSettings,
+          questionFlowMode,
+          canShowSuccessGoalQuestionFlow,
+          shouldShowSuccessGoalSettings,
           forceInfiniteQuestionCount,
           forcedInfiniteMessage
         })}
@@ -247,20 +262,27 @@ function renderCommonToolSettings(draft, context = {}) {
       ${showInstructionField ? `
         <div class="cfg-common-flow-instruction-row">
           <div class="cfg-common-flow-instruction-head">
-            ${renderCheckbox({
-              id: "commonToolInstructionEnabled",
-              label: "Consigne personnalisée",
-              checked: instructionState.enabled
-            })}
+            <div class="cfg-common-flow-instruction-controls">
+              ${renderCheckbox({
+                id: "commonToolInstructionEnabled",
+                label: "Consigne personnalisée",
+                checked: instructionState.enabled
+              })}
+              ${renderCheckbox({
+                id: "commonToolInstructionHidden",
+                label: "Aucune consigne",
+                checked: instructionState.hidden
+              })}
+            </div>
             ${renderCurrentInstructionHint(defaultInstructionText)}
           </div>
-          <div class="cfg-common-flow-instruction-panel" id="commonToolInstructionPanel"${instructionState.enabled ? "" : " hidden"}>
+          <div class="cfg-common-flow-instruction-panel" id="commonToolInstructionPanel"${instructionState.enabled && !instructionState.hidden ? "" : " hidden"}>
             <textarea
               class="tv-input tv-minmax-textarea cfg-common-flow-instruction-input"
               id="commonToolInstructionText"
               rows="2"
               placeholder="Saisir une consigne..."
-              ${instructionState.enabled ? "" : "disabled"}>${escapeHtml(instructionState.text)}</textarea>
+              ${instructionState.enabled && !instructionState.hidden ? "" : "disabled"}>${escapeHtml(instructionState.text)}</textarea>
           </div>
         </div>
       ` : ""}
@@ -270,11 +292,20 @@ function renderCommonToolSettings(draft, context = {}) {
 
 function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated, forceInfiniteQuestionCount = false } = {}) {
   const instructionToggle = container.querySelector("#commonToolInstructionEnabled");
+  const instructionHiddenToggle = container.querySelector("#commonToolInstructionHidden");
   const instructionPanel = container.querySelector("#commonToolInstructionPanel");
   const instructionInput = container.querySelector("#commonToolInstructionText");
-  const infiniteGaugeRow = container.querySelector("#commonToolInfiniteGaugeRow");
+  const successGoalRow = container.querySelector("#commonToolSuccessGoalRow");
 
-  const applyInstructionState = (enabled) => {
+  const applyInstructionState = () => {
+    const hidden = instructionHiddenToggle?.checked === true;
+    const enabled = instructionToggle?.checked === true && !hidden;
+
+    if (instructionToggle) {
+      instructionToggle.disabled = hidden;
+      instructionToggle.closest(".tv-checkbox-row")?.classList.toggle("is-disabled", hidden);
+    }
+
     if (instructionPanel) {
       instructionPanel.hidden = !enabled;
     }
@@ -284,33 +315,38 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     }
   };
 
-  const applyInfiniteGaugeState = (enabled) => {
-    if (infiniteGaugeRow) {
-      const canShowInfiniteGaugeSettings = infiniteGaugeRow.dataset.commonInfiniteGaugeAllowed !== "false";
-      infiniteGaugeRow.hidden = !(canShowInfiniteGaugeSettings && enabled);
+  const applySuccessGoalState = (mode) => {
+    if (successGoalRow) {
+      const canShowSuccessGoalSettings = successGoalRow.dataset.commonSuccessGoalAllowed !== "false";
+      successGoalRow.hidden = !(canShowSuccessGoalSettings && mode === "successGoal");
     }
   };
 
-  if (instructionToggle && instructionInput) {
-    applyInstructionState(instructionToggle.checked);
+  if (instructionToggle || instructionHiddenToggle || instructionInput) {
+    applyInstructionState();
 
-    instructionToggle.addEventListener("change", () => {
-      applyInstructionState(instructionToggle.checked);
+    instructionToggle?.addEventListener("change", () => {
+      applyInstructionState();
       onDirty?.();
     });
 
-    instructionInput.addEventListener("input", () => onDirty?.());
+    instructionHiddenToggle?.addEventListener("change", () => {
+      applyInstructionState();
+      onDirty?.();
+    });
+
+    instructionInput?.addEventListener("input", () => onDirty?.());
   }
 
-  bindStepperField(container, "commonToolInfiniteGaugeMilestones", {
-    inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
-    inputMax: TOOL_LIMITS.infiniteGaugeMilestones.max,
+  bindStepperField(container, "commonToolSuccessGoalSafetyMilestones", {
+    inputMin: TOOL_LIMITS.successGoalSafetyMilestones.min,
+    inputMax: TOOL_LIMITS.successGoalSafetyMilestones.max,
     onChange: () => onDirty?.()
   });
 
-  bindStepperField(container, "commonToolInfiniteGaugeRequiredCorrect", {
-    inputMin: TOOL_LIMITS.infiniteGaugeRequiredCorrect.min,
-    inputMax: TOOL_LIMITS.infiniteGaugeRequiredCorrect.max,
+  bindStepperField(container, "commonToolSuccessGoalCorrectCount", {
+    inputMin: TOOL_LIMITS.successGoalCorrectCount.min,
+    inputMax: TOOL_LIMITS.successGoalCorrectCount.max,
     onChange: () => onDirty?.()
   });
 
@@ -346,8 +382,8 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
 
   bindQuestionCountMode(container, {
     forceInfiniteQuestionCount,
-    onChange: (active) => {
-      applyInfiniteGaugeState(active);
+    onChange: (mode) => {
+      applySuccessGoalState(mode);
       onDirty?.();
     }
   });
@@ -381,7 +417,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     onChange: () => onDirty?.()
   });
 
-  applyInfiniteGaugeState(isInfiniteToggleActive(container, "commonToolQuestionCountInfinite"));
+  applySuccessGoalState(getActiveQuestionCountMode(container));
 }
 
 function readCommonToolSettings(container, draft, context = {}) {
@@ -412,30 +448,32 @@ function readCommonToolSettings(container, draft, context = {}) {
     inputMax: TOOL_LIMITS.toolMaxTimeMin.max
   });
 
-  nextDraft.infiniteQuestionCount = shouldForceInfiniteQuestionCount(context)
-    ? normalizeToolDraft(draft).infiniteQuestionCount
-    : isInfiniteToggleActive(container, "commonToolQuestionCountInfinite");
+  nextDraft.questionFlowMode = shouldForceInfiniteQuestionCount(context)
+    ? "unlimited"
+    : normalizeQuestionFlowMode(getActiveQuestionCountMode(container), "fixed");
   nextDraft.infiniteTimePerQ = isInfiniteToggleActive(container, "commonToolTimePerQInfinite");
   nextDraft.infiniteAnswerTime = isInfiniteToggleActive(container, "commonToolAnswerTimeInfinite");
   nextDraft.questionTransitionInfinite = isInfiniteToggleActive(container, "commonToolQuestionTransitionSecInfinite");
   nextDraft.toolMaxTimeInfinite = isInfiniteToggleActive(container, "commonToolMaxTimeInfinite");
-  nextDraft.settings = ensureCommonInfiniteGaugeSettings(nextDraft.settings, {
-    infiniteGaugeMilestones: readStepper(container, "commonToolInfiniteGaugeMilestones", {
-      inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
-      inputMax: TOOL_LIMITS.infiniteGaugeMilestones.max
+  nextDraft.settings = ensureCommonSuccessGoalSettings(nextDraft.settings, {
+    successGoalSafetyMilestones: readStepper(container, "commonToolSuccessGoalSafetyMilestones", {
+      inputMin: TOOL_LIMITS.successGoalSafetyMilestones.min,
+      inputMax: TOOL_LIMITS.successGoalSafetyMilestones.max
     }),
-    infiniteGaugeRequiredCorrect: readStepper(container, "commonToolInfiniteGaugeRequiredCorrect", {
-      inputMin: TOOL_LIMITS.infiniteGaugeRequiredCorrect.min,
-      inputMax: TOOL_LIMITS.infiniteGaugeRequiredCorrect.max
+    successGoalCorrectCount: readStepper(container, "commonToolSuccessGoalCorrectCount", {
+      inputMin: TOOL_LIMITS.successGoalCorrectCount.min,
+      inputMax: TOOL_LIMITS.successGoalCorrectCount.max
     })
   });
 
   const instructionToggle = container.querySelector("#commonToolInstructionEnabled");
+  const instructionHiddenToggle = container.querySelector("#commonToolInstructionHidden");
   const instructionInput = container.querySelector("#commonToolInstructionText");
   if (instructionToggle && instructionInput) {
     nextDraft.settings = ensureCommonInstructionState(nextDraft.settings, {
       enabled: instructionToggle.checked,
-      text: String(instructionInput.value ?? "")
+      text: String(instructionInput.value ?? ""),
+      hidden: instructionHiddenToggle?.checked === true
     });
   }
 
@@ -453,39 +491,44 @@ function getCommonInstructionState(settings) {
 
   return {
     enabled: instruction?.enabled === true,
-    text: String(instruction?.text ?? "")
+    text: String(instruction?.text ?? ""),
+    hidden: instruction?.hidden === true
   };
+}
+
+function getQuestionFlowModeForRender({
+  questionFlowMode = "fixed",
+  canShowSuccessGoalQuestionFlow = false,
+  forceInfiniteQuestionCount = false
+} = {}) {
+  if (forceInfiniteQuestionCount) return "unlimited";
+  const safeMode = normalizeQuestionFlowMode(questionFlowMode, "fixed");
+  if (safeMode === "successGoal" && !canShowSuccessGoalQuestionFlow) return "unlimited";
+  return safeMode;
 }
 
 function renderQuestionCountModeControl({
   questionCount,
-  infiniteGaugeSettings,
-  effectiveInfiniteQuestionCount = false,
-  canShowInfiniteGaugeSettings = false,
-  shouldShowInfiniteGaugeSettings = false,
+  successGoalSettings,
+  questionFlowMode = "fixed",
+  canShowSuccessGoalQuestionFlow = false,
+  shouldShowSuccessGoalSettings = false,
   forceInfiniteQuestionCount = false,
   forcedInfiniteMessage = ""
 } = {}) {
-  const fixedActive = !effectiveInfiniteQuestionCount;
-  const objectiveActive = !!effectiveInfiniteQuestionCount;
+  const safeQuestionFlowMode = ["fixed", "unlimited", "successGoal"].includes(questionFlowMode)
+    ? questionFlowMode
+    : "fixed";
+  const fixedActive = safeQuestionFlowMode === "fixed";
+  const unlimitedActive = safeQuestionFlowMode === "unlimited";
+  const successGoalActive = safeQuestionFlowMode === "successGoal";
   const disabledAttrs = forceInfiniteQuestionCount ? ` disabled aria-disabled="true"` : "";
 
   return `
-    <div class="cfg-common-flow-question-mode-row${forceInfiniteQuestionCount ? " is-forced-infinite" : ""}">
+    <div class="cfg-common-flow-question-mode-row${forceInfiniteQuestionCount ? " is-forced-infinite" : ""}" data-question-flow-mode="${safeQuestionFlowMode}">
       <div class="cfg-common-flow-question-mode-left">
-        <span class="cfg-common-flow-question-mode-title">Nombre de questions :</span>
-        <div class="cfg-common-flow-question-fixed-row" id="commonToolQuestionFixedRow"${objectiveActive ? " hidden" : ""}>
-          ${renderStepperField({
-            id: "commonToolQuestionCount",
-            label: "Nombre de questions",
-            value: questionCount,
-            inputMin: TOOL_LIMITS.questionCount.min,
-            inputMax: TOOL_LIMITS.questionCount.max,
-            step: TOOL_LIMITS.questionCount.step,
-            fieldClassName: "cfg-common-flow-question-count-field cfg-common-flow-compact-stepper-field"
-          })}
-        </div>
-        <span class="cfg-common-flow-question-mode-toggle" role="group" aria-label="Mode du nombre de questions">
+        <span class="cfg-common-flow-question-mode-title">Questions :</span>
+        <span class="cfg-common-flow-question-mode-toggle${canShowSuccessGoalQuestionFlow ? " has-success-goal" : ""}" role="group" aria-label="Déroulé des questions">
           <button
             class="cfg-common-flow-question-mode-btn${fixedActive ? " is-active" : ""}"
             type="button"
@@ -495,34 +538,58 @@ function renderQuestionCountModeControl({
             ${disabledAttrs}
           >Nombre fixe</button>
           <button
-            class="cfg-common-flow-question-mode-btn${objectiveActive ? " is-active" : ""}"
+            class="cfg-common-flow-question-mode-btn${unlimitedActive ? " is-active" : ""}"
             type="button"
-            id="commonToolQuestionCountInfinite"
-            data-question-count-mode="objective"
-            aria-pressed="${objectiveActive ? "true" : "false"}"
+            id="commonToolQuestionCountUnlimited"
+            data-question-count-mode="unlimited"
+            aria-pressed="${unlimitedActive ? "true" : "false"}"
             ${disabledAttrs}
-          >Objectif de réussite</button>
+          >Illimitées</button>
+          ${canShowSuccessGoalQuestionFlow ? `
+            <button
+              class="cfg-common-flow-question-mode-btn${successGoalActive ? " is-active" : ""}"
+              type="button"
+              id="commonToolQuestionCountSuccessGoal"
+              data-question-count-mode="successGoal"
+              aria-pressed="${successGoalActive ? "true" : "false"}"
+              ${disabledAttrs}
+            >Objectif de réussite</button>
+          ` : ""}
         </span>
+        <div class="cfg-common-flow-question-fixed-row" id="commonToolQuestionFixedRow"${fixedActive ? "" : " hidden"}>
+          <div class="cfg-common-flow-question-inline-control cfg-common-flow-question-fixed-inline-control">
+            ${renderStepperField({
+              id: "commonToolQuestionCount",
+              label: "Nombre de questions",
+              value: questionCount,
+              inputMin: TOOL_LIMITS.questionCount.min,
+              inputMax: TOOL_LIMITS.questionCount.max,
+              step: TOOL_LIMITS.questionCount.step,
+              fieldClassName: "cfg-common-flow-question-count-field cfg-common-flow-compact-stepper-field"
+            })}
+            <span class="cfg-common-flow-question-inline-suffix">questions posées</span>
+          </div>
+        </div>
         ${forceInfiniteQuestionCount ? renderForcedInfiniteLockSticker(forcedInfiniteMessage) : ""}
       </div>
 
       <div class="cfg-common-flow-question-mode-right">
         <div
-          class="cfg-common-flow-infinite-gauge-row cfg-common-flow-question-objective-row"
-          id="commonToolInfiniteGaugeRow"
-          data-common-infinite-gauge-allowed="${canShowInfiniteGaugeSettings ? "true" : "false"}"
-          ${shouldShowInfiniteGaugeSettings ? "" : " hidden"}
+          class="cfg-common-flow-success-goal-row cfg-common-flow-question-successGoal-row"
+          id="commonToolSuccessGoalRow"
+          data-common-success-goal-allowed="${canShowSuccessGoalQuestionFlow ? "true" : "false"}"
+          ${shouldShowSuccessGoalSettings ? "" : " hidden"}
         >
           <div class="cfg-common-flow-question-inline-control">
             <span class="cfg-common-flow-question-inline-label">Objectif :</span>
             ${renderStepperField({
-              id: "commonToolInfiniteGaugeRequiredCorrect",
-              label: "Réponses requises",
-              value: infiniteGaugeSettings.infiniteGaugeRequiredCorrect,
-              inputMin: TOOL_LIMITS.infiniteGaugeRequiredCorrect.min,
-              inputMax: TOOL_LIMITS.infiniteGaugeRequiredCorrect.max,
-              step: TOOL_LIMITS.infiniteGaugeRequiredCorrect.step,
-              fieldClassName: "cfg-common-flow-infinite-gauge-field cfg-common-flow-infinite-gauge-required-field cfg-common-flow-compact-stepper-field"
+              id: "commonToolSuccessGoalCorrectCount",
+              label: "Réponses correctes",
+              value: successGoalSettings.successGoalCorrectCount,
+              inputMin: TOOL_LIMITS.successGoalCorrectCount.min,
+              inputMax: TOOL_LIMITS.successGoalCorrectCount.max,
+              step: TOOL_LIMITS.successGoalCorrectCount.step,
+              fieldClassName: "cfg-common-flow-success-goal-field cfg-common-flow-success-goal-required-field cfg-common-flow-compact-stepper-field"
             })}
             <span class="cfg-common-flow-question-inline-suffix">réponses correctes</span>
           </div>
@@ -530,13 +597,13 @@ function renderQuestionCountModeControl({
           <div class="cfg-common-flow-question-inline-control">
             <span class="cfg-common-flow-question-inline-label">Paliers de sécurité :</span>
             ${renderStepperField({
-              id: "commonToolInfiniteGaugeMilestones",
+              id: "commonToolSuccessGoalSafetyMilestones",
               label: "Nombre de paliers",
-              value: infiniteGaugeSettings.infiniteGaugeMilestones,
-              inputMin: TOOL_LIMITS.infiniteGaugeMilestones.min,
-              inputMax: TOOL_LIMITS.infiniteGaugeMilestones.max,
-              step: TOOL_LIMITS.infiniteGaugeMilestones.step,
-              fieldClassName: "cfg-common-flow-infinite-gauge-field cfg-common-flow-infinite-gauge-milestones-field cfg-common-flow-compact-stepper-field"
+              value: successGoalSettings.successGoalSafetyMilestones,
+              inputMin: TOOL_LIMITS.successGoalSafetyMilestones.min,
+              inputMax: TOOL_LIMITS.successGoalSafetyMilestones.max,
+              step: TOOL_LIMITS.successGoalSafetyMilestones.step,
+              fieldClassName: "cfg-common-flow-success-goal-field cfg-common-flow-success-goal-safety-milestones-field cfg-common-flow-compact-stepper-field"
             })}
           </div>
         </div>
@@ -565,7 +632,8 @@ function ensureCommonInstructionState(settings, instructionState = {}) {
 
   safeCommon.instruction = {
     enabled: instructionState?.enabled === true,
-    text: String(instructionState?.text ?? "")
+    text: String(instructionState?.text ?? ""),
+    hidden: instructionState?.hidden === true
   };
 
   safeSettings.common = safeCommon;
@@ -627,54 +695,66 @@ function bindInfiniteToggle(container, { buttonId, inputId, onChange } = {}) {
 
 function bindQuestionCountMode(container, { forceInfiniteQuestionCount = false, onChange } = {}) {
   const fixedButton = container.querySelector("#commonToolQuestionCountFixedMode");
-  const objectiveButton = container.querySelector("#commonToolQuestionCountInfinite");
+  const unlimitedButton = container.querySelector("#commonToolQuestionCountUnlimited");
+  const successGoalButton = container.querySelector("#commonToolQuestionCountSuccessGoal");
   const questionInput = container.querySelector("#commonToolQuestionCount");
   const fixedRow = container.querySelector("#commonToolQuestionFixedRow");
-  const objectiveRow = container.querySelector("#commonToolInfiniteGaugeRow");
+  const successGoalRow = container.querySelector("#commonToolSuccessGoalRow");
 
-  if (!fixedButton || !objectiveButton || !questionInput) return;
+  if (!fixedButton || !unlimitedButton || !questionInput) return;
 
-  const canShowObjectiveSettings = objectiveRow?.dataset.commonInfiniteGaugeAllowed !== "false";
+  const canShowSuccessGoalSettings = successGoalRow?.dataset.commonSuccessGoalAllowed !== "false";
+  const buttons = [fixedButton, unlimitedButton, successGoalButton].filter(Boolean);
 
-  const setMode = (objectiveActive, { notify = false } = {}) => {
-    const activeObjective = forceInfiniteQuestionCount || !!objectiveActive;
+  const setMode = (mode, { notify = false } = {}) => {
+    const safeMode = ["fixed", "unlimited", "successGoal"].includes(mode) ? mode : "fixed";
+    const activeMode = forceInfiniteQuestionCount
+      ? "unlimited"
+      : safeMode === "successGoal" && !canShowSuccessGoalSettings
+        ? "unlimited"
+        : safeMode;
 
-    fixedButton.classList.toggle("is-active", !activeObjective);
-    fixedButton.setAttribute("aria-pressed", activeObjective ? "false" : "true");
-    objectiveButton.classList.toggle("is-active", activeObjective);
-    objectiveButton.setAttribute("aria-pressed", activeObjective ? "true" : "false");
+    buttons.forEach((button) => {
+      const buttonMode = String(button.dataset.questionCountMode || "fixed");
+      const selected = buttonMode === activeMode;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+      button.disabled = !!forceInfiniteQuestionCount;
+      button.setAttribute("aria-disabled", forceInfiniteQuestionCount ? "true" : "false");
+    });
+
+    const row = fixedButton.closest(".cfg-common-flow-question-mode-row");
+    row?.setAttribute("data-question-flow-mode", activeMode);
 
     if (fixedRow) {
-      fixedRow.hidden = activeObjective;
+      fixedRow.hidden = activeMode !== "fixed";
     }
-    if (objectiveRow) {
-      objectiveRow.hidden = !(canShowObjectiveSettings && activeObjective && !forceInfiniteQuestionCount);
+    if (successGoalRow) {
+      successGoalRow.hidden = !(canShowSuccessGoalSettings && activeMode === "successGoal" && !forceInfiniteQuestionCount);
     }
 
-    setStepperDisabled(questionInput, activeObjective || forceInfiniteQuestionCount);
-
-    if (forceInfiniteQuestionCount) {
-      fixedButton.disabled = true;
-      fixedButton.setAttribute("aria-disabled", "true");
-      objectiveButton.disabled = true;
-      objectiveButton.setAttribute("aria-disabled", "true");
-    }
+    setStepperDisabled(questionInput, activeMode !== "fixed" || forceInfiniteQuestionCount);
 
     if (notify) {
-      onChange?.(activeObjective);
+      onChange?.(activeMode);
     }
   };
 
-  setMode(objectiveButton.getAttribute("aria-pressed") === "true");
+  setMode(getActiveQuestionCountMode(container));
 
   fixedButton.addEventListener("click", () => {
     if (fixedButton.disabled) return;
-    setMode(false, { notify: true });
+    setMode("fixed", { notify: true });
   });
 
-  objectiveButton.addEventListener("click", () => {
-    if (objectiveButton.disabled) return;
-    setMode(true, { notify: true });
+  unlimitedButton.addEventListener("click", () => {
+    if (unlimitedButton.disabled) return;
+    setMode("unlimited", { notify: true });
+  });
+
+  successGoalButton?.addEventListener("click", () => {
+    if (successGoalButton.disabled) return;
+    setMode("successGoal", { notify: true });
   });
 }
 
@@ -705,6 +785,22 @@ function setStepperDisabled(input, disabled) {
       ? value <= safeMin
       : value >= safeMax;
   });
+}
+
+function getActiveQuestionCountMode(container) {
+  const selectedButton = container.querySelector?.(".cfg-common-flow-question-mode-btn.is-active");
+  const selectedMode = String(selectedButton?.dataset?.questionCountMode || "");
+  if (["fixed", "unlimited", "successGoal"].includes(selectedMode)) {
+    return selectedMode;
+  }
+
+  if (container.querySelector?.("#commonToolQuestionCountSuccessGoal")?.getAttribute("aria-pressed") === "true") {
+    return "successGoal";
+  }
+  if (container.querySelector?.("#commonToolQuestionCountUnlimited")?.getAttribute("aria-pressed") === "true") {
+    return "unlimited";
+  }
+  return "fixed";
 }
 
 function isInfiniteToggleActive(container, buttonId) {

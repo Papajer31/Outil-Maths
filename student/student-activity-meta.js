@@ -7,6 +7,7 @@ import {
   DEFAULT_ACTIVITY_MODE,
   normalizeActivityMode
 } from "../shared/activity-modes.js";
+import { normalizePassationProfile } from "../shared/activity-config.js";
 import { createSessionEngine } from "../shared/student-core.js";
 
 export async function ensureSelectedActivityMeta({ runMode = studentState.sessionMode || "student" } = {}) {
@@ -37,6 +38,20 @@ export async function ensureSelectedActivityMeta({ runMode = studentState.sessio
     throw new Error("Module d’activité introuvable.");
   }
 
+  const loadedActivityMode = normalizeActivityMode(
+    remote.config_json?.activity_mode ?? remote.activity_mode,
+    DEFAULT_ACTIVITY_MODE
+  );
+  const loadedPassationProfile = normalizePassationProfile({
+    activityMode: loadedActivityMode,
+    responseUi: remote.config_json?.response_ui,
+    progressMode: remote.config_json?.progress_mode
+  });
+
+  if (remote.config_json && remote.config_json.response_ui == null) {
+    remote.config_json.response_ui = loadedPassationProfile.responseUi;
+  }
+
   const tempEngine = createSessionEngine({
     els: {},
     accessCode,
@@ -44,7 +59,9 @@ export async function ensureSelectedActivityMeta({ runMode = studentState.sessio
     moduleKey,
     globals: remote.config_json.globals ?? {},
     sequence: remote.config_json.sequence,
-    activityMode: normalizeActivityMode(remote.activity_mode, DEFAULT_ACTIVITY_MODE),
+    activityMode: loadedPassationProfile.activityMode,
+    responseUi: loadedPassationProfile.responseUi,
+    progressMode: loadedPassationProfile.progressMode,
     onExitToActivities: () => {},
     onFatalError: () => {},
     runMode

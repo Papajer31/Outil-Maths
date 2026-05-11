@@ -39,13 +39,6 @@ export default defineTool("qcm", "QCM", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createQcmActivity({
       ...context,

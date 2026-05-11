@@ -39,13 +39,6 @@ export default defineTool("selection", "Sélection", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createSelectionActivity({
       ...context,

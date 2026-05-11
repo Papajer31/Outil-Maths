@@ -15,6 +15,10 @@
   color:var(--text, #f5f7fb);
 }
 
+.tool-instruction.is-reserved-space{
+  visibility:hidden;
+}
+
 .tool-instruction[hidden],
 .tool-instruction.is-empty{
   display:none !important;

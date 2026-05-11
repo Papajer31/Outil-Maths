@@ -1,6 +1,7 @@
 import { studentState } from "../student-state.js";
 import { goBackHome, selectActivitiesMode } from "../student-actions.js";
 import { requestAppFullscreen } from "../../shared/dom-helpers.js";
+import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
 
 export function renderSelectModeView(root) {
   const currentMode = String(studentState.activitiesMode || "").trim().toLowerCase() === "group"
@@ -16,7 +17,7 @@ export function renderSelectModeView(root) {
         aria-label="Retour"
         data-skip-autofs="true"
       >
-        <span class="student-icon" aria-hidden="true">arrow_back</span>
+        ${renderMaterialIcon("arrow_back")}
       </button>
 
       <div class="student-stars-content selectmode-content">

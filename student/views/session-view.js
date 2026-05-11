@@ -9,8 +9,10 @@ import {
   loadPublicActivityConfig
 } from "../student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../../shared/activity-modes.js";
+import { normalizePassationProfile } from "../../shared/activity-config.js";
 import { createSessionEngine } from "../../shared/student-core.js";
 import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
+import { renderMaterialIcon, setMaterialIcon } from "../../shared/material-icons-svg.js";
 
 const rocketOffUrl = new URL("../../shared/ui-assets/rocket-off.svg", import.meta.url).href;
 const rocketOnUrl = new URL("../../shared/ui-assets/rocket-on.svg", import.meta.url).href;
@@ -42,7 +44,7 @@ export function renderSessionView(root){
                       aria-label="Retour"
                       data-skip-autofs="true"
                     >
-                      <span class="student-icon" aria-hidden="true">arrow_back</span>
+                      ${renderMaterialIcon("arrow_back")}
                     </button>
                   `}
                 </div>
@@ -62,7 +64,7 @@ export function renderSessionView(root){
                     aria-label="Pause"
                     data-skip-autofs="true"
                   >
-                    <span class="student-icon" id="btnPauseIcon" aria-hidden="true">pause</span>
+                    ${renderMaterialIcon("pause", { className: "student-icon", id: "btnPauseIcon" })}
                   </button>
                 </div>
               </div>
@@ -82,6 +84,22 @@ export function renderSessionView(root){
                     <div class="session-final-challenge-metric">
                       <span class="session-final-challenge-label">Réussites</span>
                       <span class="session-final-challenge-value" id="sessionFinalChallengeScore">0</span>
+                    </div>
+                  </aside>
+                  <aside class="session-evaluation-counter-shell hidden" id="sessionEvaluationCounterShell" aria-label="Compteur de réussite" hidden aria-hidden="true">
+                    <div class="session-evaluation-counter-metric">
+                      <span class="session-evaluation-counter-label">Questions posées</span>
+                      <span class="session-evaluation-counter-value" id="sessionEvaluationCounterQuestions">0</span>
+                    </div>
+                    <div class="session-evaluation-counter-metric">
+                      <span class="session-evaluation-counter-label">Réponses correctes</span>
+                      <span class="session-evaluation-counter-value" id="sessionEvaluationCounterCorrect">0</span>
+                    </div>
+                  </aside>
+                  <aside class="session-fixed-question-counter-shell session-evaluation-counter-shell hidden" id="sessionFixedQuestionCounterShell" aria-label="Question courante" hidden aria-hidden="true">
+                    <div class="session-evaluation-counter-metric">
+                      <span class="session-evaluation-counter-label">Question</span>
+                      <span class="session-evaluation-counter-value session-fixed-question-counter-value" id="sessionFixedQuestionCounterValue">0 / 0</span>
                     </div>
                   </aside>
                   <aside class="session-progress-shell hidden" id="sessionProgressShell" aria-label="Progression de la séance" hidden aria-hidden="true">
@@ -104,27 +122,27 @@ export function renderSessionView(root){
                   ${isProjectedTeacherMode ? `
                     <div class="projected-session-controls" id="projectedSessionControls" data-skip-autofs="true">
                       <button class="projected-session-btn" id="btnPrevTool" type="button" title="Outil précédent" aria-label="Outil précédent" data-skip-autofs="true">
-                        <span class="student-icon projected-session-btn-icon" aria-hidden="true">skip_previous</span>
+                        ${renderMaterialIcon("skip_previous", { className: "student-icon projected-session-btn-icon" })}
                         <span class="projected-session-btn-label">Outil −</span>
                       </button>
 
                       <button class="projected-session-btn" id="btnShowAnswer" type="button" title="Afficher la réponse" aria-label="Afficher la réponse" data-skip-autofs="true">
-                        <span class="student-icon projected-session-btn-icon" aria-hidden="true">visibility</span>
+                        ${renderMaterialIcon("visibility", { className: "student-icon projected-session-btn-icon" })}
                         <span class="projected-session-btn-label">Réponse</span>
                       </button>
 
                       <button class="projected-session-btn hidden" id="btnAnswerDisplayToggle" type="button" title="Voir ma réponse" aria-label="Voir ma réponse" data-skip-autofs="true">
-                        <span class="student-icon projected-session-btn-icon" aria-hidden="true">sync_alt</span>
+                        ${renderMaterialIcon("sync_alt", { className: "student-icon projected-session-btn-icon" })}
                         <span class="projected-session-btn-label">Voir ma réponse</span>
                       </button>
 
                       <button class="projected-session-btn" id="btnNextQuestion" type="button" title="Question suivante" aria-label="Question suivante" data-skip-autofs="true">
-                        <span class="student-icon projected-session-btn-icon" aria-hidden="true">arrow_forward</span>
+                        ${renderMaterialIcon("arrow_forward", { className: "student-icon projected-session-btn-icon" })}
                         <span class="projected-session-btn-label">Question</span>
                       </button>
 
                       <button class="projected-session-btn" id="btnNextTool" type="button" title="Outil suivant" aria-label="Outil suivant" data-skip-autofs="true">
-                        <span class="student-icon projected-session-btn-icon" aria-hidden="true">skip_next</span>
+                        ${renderMaterialIcon("skip_next", { className: "student-icon projected-session-btn-icon" })}
                         <span class="projected-session-btn-label">Outil +</span>
                       </button>
                     </div>
@@ -138,7 +156,7 @@ export function renderSessionView(root){
                         aria-label="Voir ma réponse"
                         data-skip-autofs="true"
                       >
-                        <span class="student-icon session-shell-btn-icon" aria-hidden="true">sync_alt</span>
+                        ${renderMaterialIcon("sync_alt", { className: "student-icon session-shell-btn-icon" })}
                         <span class="session-shell-btn-label">Voir ma réponse</span>
                       </button>
                       <button
@@ -221,6 +239,11 @@ export function renderSessionView(root){
     progressGauge: root.querySelector("#sessionProgressGauge"),
     progressTrack: root.querySelector("#sessionProgressTrack"),
     progressRocketWrap: root.querySelector("#sessionProgressRocketWrap"),
+    evaluationCounterShell: root.querySelector("#sessionEvaluationCounterShell"),
+    evaluationCounterQuestions: root.querySelector("#sessionEvaluationCounterQuestions"),
+    evaluationCounterCorrect: root.querySelector("#sessionEvaluationCounterCorrect"),
+    fixedQuestionCounterShell: root.querySelector("#sessionFixedQuestionCounterShell"),
+    fixedQuestionCounterValue: root.querySelector("#sessionFixedQuestionCounterValue"),
     finalChallengePanel: root.querySelector("#sessionFinalChallengePanel"),
     finalChallengeTime: root.querySelector("#sessionFinalChallengeTime"),
     finalChallengeScore: root.querySelector("#sessionFinalChallengeScore"),
@@ -249,6 +272,8 @@ export function renderSessionView(root){
   updateSessionFitLayout();
   syncFinalChallengePanel();
   syncIndividualGauge();
+  syncEvaluationCounter();
+  syncFixedQuestionCounter();
   void boot();
 
   return cleanup;
@@ -279,6 +304,20 @@ export function renderSessionView(root){
         return;
       }
 
+      const loadedActivityMode = normalizeActivityMode(
+        remote.config_json?.activity_mode ?? remote.activity_mode ?? studentState.activitiesMode,
+        DEFAULT_ACTIVITY_MODE
+      );
+      const loadedPassationProfile = normalizePassationProfile({
+        activityMode: loadedActivityMode,
+        responseUi: remote.config_json?.response_ui,
+        progressMode: remote.config_json?.progress_mode
+      });
+
+      if (remote.config_json && remote.config_json.response_ui == null) {
+        remote.config_json.response_ui = loadedPassationProfile.responseUi;
+      }
+
       engine = createSessionEngine({
         els,
         accessCode,
@@ -286,7 +325,9 @@ export function renderSessionView(root){
         moduleKey,
         globals: remote.config_json.globals ?? {},
         sequence: remote.config_json.sequence,
-        activityMode: normalizeActivityMode(remote.activity_mode, DEFAULT_ACTIVITY_MODE),
+        activityMode: loadedPassationProfile.activityMode,
+        responseUi: loadedPassationProfile.responseUi,
+        progressMode: loadedPassationProfile.progressMode,
         onExitToActivities: () => {
           if (isProjectedTeacherMode) {
             closeProjectedWindow();
@@ -303,6 +344,8 @@ export function renderSessionView(root){
           syncProjectedControls();
           syncFinalChallengePanel();
           syncIndividualGauge();
+          syncEvaluationCounter();
+          syncFixedQuestionCounter();
           syncToolCountdownPill();
           updateSessionFitLayout();
           sendProjectedStatus();
@@ -328,11 +371,10 @@ export function renderSessionView(root){
       }
 
       const selectedParticipants = getSelectedParticipantsForCurrentMode();
-      const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
 
-      if (currentMode === "group" && selectedParticipants.length >= 2) {
+      if (loadedActivityMode === "group" && selectedParticipants.length >= 2) {
         engine.setSelectedStudents?.(selectedParticipants);
-      } else if (currentMode === "individual" && selectedParticipants.length >= 1) {
+      } else if (loadedActivityMode === "individual" && selectedParticipants.length >= 1) {
         engine.setSelectedStudent?.(selectedParticipants[0]);
       }
 
@@ -346,6 +388,8 @@ export function renderSessionView(root){
       syncProjectedControls();
       syncFinalChallengePanel();
       syncIndividualGauge();
+      syncEvaluationCounter();
+      syncFixedQuestionCounter();
       syncToolCountdownPill();
       sendProjectedStatus();
     } catch (err) {
@@ -395,6 +439,8 @@ export function renderSessionView(root){
       syncProjectedControls();
       syncFinalChallengePanel();
       syncIndividualGauge();
+      syncEvaluationCounter();
+      syncFixedQuestionCounter();
       syncToolCountdownPill();
     }, { signal });
 
@@ -701,7 +747,7 @@ export function renderSessionView(root){
     }
 
     if (els.btnPauseIcon) {
-      els.btnPauseIcon.textContent = paused ? "play_arrow" : "pause";
+      setMaterialIcon(els.btnPauseIcon, paused ? "play_arrow" : "pause");
     }
   }
 
@@ -726,7 +772,7 @@ export function renderSessionView(root){
       els.btnShowAnswer.setAttribute('aria-label', title);
       const iconEl = els.btnShowAnswer.querySelector('.projected-session-btn-icon');
       const labelEl = els.btnShowAnswer.querySelector('.projected-session-btn-label');
-      if (iconEl) iconEl.textContent = icon;
+      if (iconEl) setMaterialIcon(iconEl, icon);
       if (labelEl) labelEl.textContent = label;
     }
     if (els.btnNextQuestion) els.btnNextQuestion.disabled = !ui.canAdvanceQuestion;
@@ -751,7 +797,7 @@ export function renderSessionView(root){
     btn.setAttribute("aria-label", label);
     btn.setAttribute("aria-hidden", visible ? "false" : "true");
 
-    if (iconEl) iconEl.textContent = icon;
+    if (iconEl) setMaterialIcon(iconEl, icon);
     if (labelEl) labelEl.textContent = label;
   }
 
@@ -989,12 +1035,16 @@ export function renderSessionView(root){
 
   function syncRightReserveMode(finalChallengeVisible){
     const visible = finalChallengeVisible === true;
-    const gaugeVisible = !visible && shouldShowIndividualGaugeShell();
+    const gaugeVisible = !visible && shouldShowEvaluationGaugeShell();
+    const counterVisible = !visible && !gaugeVisible && shouldShowEvaluationCounterShell();
+    const fixedQuestionCounterVisible = !visible && !gaugeVisible && !counterVisible && shouldShowFixedQuestionCounterShell();
 
     els.rightReserve?.classList.toggle("is-final-challenge", visible);
     els.rightReserve?.setAttribute(
       "data-reserve-mode",
-      visible ? "final-challenge" : (gaugeVisible ? "gauge" : "empty")
+      visible
+        ? "final-challenge"
+        : (gaugeVisible ? "gauge" : (counterVisible ? "counter" : (fixedQuestionCounterVisible ? "fixed-question-counter" : "empty")))
     );
 
     els.finalChallengePanel?.classList.toggle("hidden", !visible);
@@ -1005,13 +1055,36 @@ export function renderSessionView(root){
       els.progressShell.classList.toggle("hidden", !gaugeVisible);
       els.progressShell.setAttribute("aria-hidden", gaugeVisible ? "false" : "true");
     }
+
+    if (els.evaluationCounterShell) {
+      els.evaluationCounterShell.hidden = !counterVisible;
+      els.evaluationCounterShell.classList.toggle("hidden", !counterVisible);
+      els.evaluationCounterShell.setAttribute("aria-hidden", counterVisible ? "false" : "true");
+    }
+
+    if (els.fixedQuestionCounterShell) {
+      els.fixedQuestionCounterShell.hidden = !fixedQuestionCounterVisible;
+      els.fixedQuestionCounterShell.classList.toggle("hidden", !fixedQuestionCounterVisible);
+      els.fixedQuestionCounterShell.setAttribute("aria-hidden", fixedQuestionCounterVisible ? "false" : "true");
+    }
   }
 
-  function shouldShowIndividualGaugeShell(){
-    if (!engine) return false;
+  function shouldShowEvaluationGaugeShell(){
+    if (!engine || isProjectedTeacherMode) return false;
     const ui = engine?.getUiState?.() ?? {};
-    const mode = normalizeActivityMode(ui.activityMode ?? currentMode, DEFAULT_ACTIVITY_MODE);
-    return !isProjectedTeacherMode && mode === "individual";
+    return !!ui.evaluationGauge;
+  }
+
+  function shouldShowEvaluationCounterShell(){
+    if (!engine || isProjectedTeacherMode) return false;
+    const ui = engine?.getUiState?.() ?? {};
+    return !!ui.evaluationCounter;
+  }
+
+  function shouldShowFixedQuestionCounterShell(){
+    if (!engine || isProjectedTeacherMode) return false;
+    const ui = engine?.getUiState?.() ?? {};
+    return !!ui.fixedQuestionCounter;
   }
 
   function syncIndividualGauge(){
@@ -1020,14 +1093,14 @@ export function renderSessionView(root){
       syncRightReserveMode(true);
       return;
     }
-    if (!shouldShowIndividualGaugeShell()) {
+    if (!shouldShowEvaluationGaugeShell()) {
       syncRightReserveMode(false);
       return;
     }
     syncRightReserveMode(false);
     if (!els.progressGauge || !els.progressTrack || !els.progressRocketWrap) return;
 
-    const gauge = ui.individualGauge;
+    const gauge = ui.evaluationGauge;
     const gaugeKey = String(ui.currentInstanceId || "");
 
     if ((els.progressTrack.dataset.gaugeKey || "") !== gaugeKey) {
@@ -1117,6 +1190,50 @@ export function renderSessionView(root){
         }).join("")}
       </div>
     `;
+  }
+
+
+  function syncEvaluationCounter(){
+    const ui = engine?.getUiState?.() ?? {};
+    if (ui.finalChallenge?.active === true) {
+      syncRightReserveMode(true);
+      return;
+    }
+
+    const counter = ui.evaluationCounter || null;
+    if (!counter || !shouldShowEvaluationCounterShell()) {
+      syncRightReserveMode(false);
+      return;
+    }
+
+    syncRightReserveMode(false);
+    if (els.evaluationCounterQuestions) {
+      els.evaluationCounterQuestions.textContent = String(Math.max(0, Math.floor(Number(counter.attempted) || 0)));
+    }
+    if (els.evaluationCounterCorrect) {
+      els.evaluationCounterCorrect.textContent = String(Math.max(0, Math.floor(Number(counter.correct) || 0)));
+    }
+  }
+
+  function syncFixedQuestionCounter(){
+    const ui = engine?.getUiState?.() ?? {};
+    if (ui.finalChallenge?.active === true) {
+      syncRightReserveMode(true);
+      return;
+    }
+
+    const counter = ui.fixedQuestionCounter || null;
+    if (!counter || !shouldShowFixedQuestionCounterShell()) {
+      syncRightReserveMode(false);
+      return;
+    }
+
+    syncRightReserveMode(false);
+    if (els.fixedQuestionCounterValue) {
+      const current = Math.max(1, Math.floor(Number(counter.current) || 1));
+      const total = Math.max(1, Math.floor(Number(counter.total) || 1));
+      els.fixedQuestionCounterValue.textContent = `${current} / ${total}`;
+    }
   }
 
   function syncToolCountdownPill(){

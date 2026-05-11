@@ -4,13 +4,10 @@ export function createActivityOverlayManager({
   escapeHtml,
   normalizeActivityMode,
   getActivityModeLabel,
-  getOtherActivityModes,
   createActivityFolderForSpace,
   updateActivityFolder,
   deleteActivityFolder,
   deleteMyActivity,
-  saveActivityConfig,
-  getMyActivitiesForSpace,
   buildActivityTreeState,
   sortFoldersByDisplay,
   showDashboardShareToast,
@@ -24,12 +21,6 @@ export function createActivityOverlayManager({
   getKnownActivityFolderIds,
   getCollapsedActivityFolderIds,
   getActivityById,
-  getCurrentActivityModeFilter,
-  setCurrentActivityModeFilter,
-  getNextActivityOrderForFolder,
-  buildVersionActivityName,
-  buildClonedActivityConfigJson,
-  evaluateActivityVersionCompatibility,
   deleteActivityModal,
   deleteActivityModalTitle,
   deleteActivityText,
@@ -74,128 +65,6 @@ export function createActivityOverlayManager({
       deleteActivityMessage.textContent = err?.message || "Suppression impossible.";
       deleteActivityMessage.classList.add("is-error");
     }
-  }
-
-  function openCreateVersionOverlay(activityId){
-    const sourceActivity = getActivityById?.(activityId);
-    const currentTeacherSpace = getCurrentTeacherSpace?.();
-    if (!sourceActivity || !currentTeacherSpace?.access_code || !currentTeacherSpace?.id) return Promise.resolve();
-
-    const sourceMode = normalizeActivityMode(sourceActivity.activity_mode, DEFAULT_ACTIVITY_MODE);
-    const targetModes = getOtherActivityModes(sourceMode);
-    const overlay = document.createElement("div");
-    overlay.className = "modal";
-    overlay.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-title">Créer une version…</div>
-        <div class="dashboard-message">
-          Crée une nouvelle activité à partir de <strong>${escapeHtml(sourceActivity.config_name || "")}</strong>, sans modifier l’originale.
-        </div>
-
-        <div class="dashboard-mode-choice-grid">
-          ${targetModes.map((mode) => `
-            <button
-              class="btn dashboard-mode-choice-btn"
-              type="button"
-              data-target-mode="${escapeAttr(mode)}"
-            >
-              ${escapeHtml(getActivityModeLabel(mode))}
-            </button>
-          `).join("")}
-        </div>
-
-        <div class="modal-actions">
-          <div id="activityVersionMessage" class="modal-message"></div>
-          <button class="btn" id="activityVersionCancel" type="button">Annuler</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-    const message = overlay.querySelector("#activityVersionMessage");
-    const actionButtons = Array.from(overlay.querySelectorAll("[data-target-mode]"));
-
-    function close(){
-      overlay.remove();
-    }
-
-    function setBusy(isBusy){
-      actionButtons.forEach((btn) => {
-        btn.disabled = isBusy;
-      });
-    }
-
-    async function handleCreateVersion(targetMode){
-      const safeTargetMode = normalizeActivityMode(targetMode, DEFAULT_ACTIVITY_MODE);
-      setBusy(true);
-      message.textContent = "Vérification de la compatibilité…";
-      message.classList.remove("is-error");
-
-      try {
-        const issues = await evaluateActivityVersionCompatibility?.(sourceActivity, safeTargetMode);
-        if (issues?.length) {
-          message.innerHTML = `
-            <div class="dashboard-version-error-title">Version impossible en mode ${escapeHtml(getActivityModeLabel(safeTargetMode).toLowerCase())}.</div>
-            <ul class="dashboard-version-error-list">
-              ${issues.map((issue) => `
-                <li><strong>${escapeHtml(issue.toolTitle || issue.toolId || "Outil")}</strong> : ${escapeHtml(issue.blockingMessage || "Incompatible.")}</li>
-              `).join("")}
-            </ul>
-          `;
-          message.classList.add("is-error");
-          return;
-        }
-
-        const nextName = buildVersionActivityName?.(sourceActivity.config_name, safeTargetMode, getCachedActivities?.());
-        const nextDisplayOrder = getNextActivityOrderForFolder?.(sourceActivity.folder_id);
-        const clonedConfigJson = buildClonedActivityConfigJson?.(sourceActivity, {
-          targetMode: safeTargetMode,
-          nextDisplayOrder,
-          preserveVisibilityFlag: false,
-          preserveHighlightFlag: false
-        });
-
-        await saveActivityConfig?.({
-          accessCode: currentTeacherSpace.access_code,
-          moduleKey: sourceActivity.module_key,
-          configName: nextName,
-          configJson: clonedConfigJson
-        });
-
-        setCachedActivities?.(await getMyActivitiesForSpace?.(currentTeacherSpace.id));
-        setCurrentActivityModeFilter?.(safeTargetMode);
-        close();
-        await renderRightPanel?.({ forceRefresh: false });
-        showDashboardShareToast?.(`Version ${getActivityModeLabel(safeTargetMode).toLowerCase()} créée : ${nextName}`);
-      } catch (err) {
-        message.textContent = err?.message || "Impossible de créer la version.";
-        message.classList.add("is-error");
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) {
-        close();
-      }
-    });
-
-    overlay.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    });
-
-    actionButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        void handleCreateVersion(btn.dataset.targetMode || "");
-      });
-    });
-
-    overlay.querySelector("#activityVersionCancel")?.addEventListener("click", close);
-    return Promise.resolve();
   }
 
   function openCreateFolderOverlay(parentId = null){
@@ -425,7 +294,6 @@ export function createActivityOverlayManager({
   return {
     closeDeleteActivityModal,
     openCreateFolderOverlay,
-    openCreateVersionOverlay,
     openDeleteActivityModal,
     openDeleteFolderOverlay,
     openRenameActivityOverlay,

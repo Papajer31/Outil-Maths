@@ -7,7 +7,6 @@ const TOOL_ACTIVITY_MODE_LABELS = Object.freeze({
 const TOOL_RUNTIME_CAPABILITY_LEVELS = new Set(["required", "supported", "unsupported"]);
 const TOOL_SUPPORTED_ADVANCE_MODES = new Set(["auto", "user", "tool"]);
 const TOOL_SUPPORTED_TIMING_MODES = new Set(["engine", "tool"]);
-const TOOL_PROJECTION_RESPONSE_UI_VALUES = Object.freeze(["boxed", "free"]);
 const DEFAULT_TOOL_VERSION = "1";
 
 export function defineTool(toolId, label, tool = {}) {
@@ -94,6 +93,10 @@ export function resolveToolInstruction(tool, settings = null) {
     ? common.instruction
     : null;
 
+  if (instruction?.hidden === true) {
+    return "";
+  }
+
   if (!instruction || instruction.enabled !== true) {
     return defaultInstruction;
   }
@@ -148,61 +151,6 @@ export function normalizeRuntimeCapabilities(rawCapabilities = {}, tool = null) 
   };
 }
 
-export function normalizeProjectionResponseUi(value, fallback = "free") {
-  const safeValue = String(value || "").trim().toLowerCase();
-  if (TOOL_PROJECTION_RESPONSE_UI_VALUES.includes(safeValue)) {
-    return safeValue;
-  }
-
-  const safeFallback = String(fallback || "").trim().toLowerCase();
-  return TOOL_PROJECTION_RESPONSE_UI_VALUES.includes(safeFallback) ? safeFallback : "free";
-}
-
-export function normalizeProjectionResponseUiSupport(rawSupport = null, tool = null) {
-  const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
-  const safeRaw = rawSupport && typeof rawSupport === "object" && !Array.isArray(rawSupport)
-    ? rawSupport
-    : null;
-
-  const defaultSupport = {
-    boxed: true,
-    free: false
-  };
-
-  return {
-    boxed: safeRaw?.boxed != null ? safeRaw.boxed !== false : defaultSupport.boxed,
-    free: safeRaw?.free != null ? safeRaw.free !== false : defaultSupport.free
-  };
-}
-
-export function getToolProjectionResponseUiSupport(tool, context = {}) {
-  const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
-  const rawSupport = typeof safeTool.supportsProjectionResponseUi === "function"
-    ? safeTool.supportsProjectionResponseUi(context)
-    : safeTool.projectionResponseUiSupport ?? null;
-
-  return normalizeProjectionResponseUiSupport(rawSupport, safeTool);
-}
-
-export function resolveEffectiveProjectionResponseUi(tool, requestedUi = "free", context = {}) {
-  const safeRequestedUi = normalizeProjectionResponseUi(requestedUi, "free");
-  const support = getToolProjectionResponseUiSupport(tool, context);
-
-  if (support[safeRequestedUi]) {
-    return safeRequestedUi;
-  }
-
-  if (support.boxed) {
-    return "boxed";
-  }
-
-  if (support.free) {
-    return "free";
-  }
-
-  return null;
-}
-
 export function getToolRuntimeCapabilities(tool, context = {}) {
   const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
   const rawCapabilities = typeof safeTool.getRuntimeCapabilities === "function"
@@ -210,6 +158,39 @@ export function getToolRuntimeCapabilities(tool, context = {}) {
     : safeTool.runtimeCapabilities ?? null;
 
   return normalizeRuntimeCapabilities(rawCapabilities, safeTool);
+}
+
+export function getToolPassationProfileSupport(tool, context = {}) {
+  const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
+  const profile = context?.passationProfile || {
+    activityMode: context?.activityMode,
+    responseUi: context?.responseUi,
+    progressMode: context?.progressMode
+  };
+
+  const defaultSupport = {
+    compatible: true,
+    blockingMessage: "",
+    supportsCommonFlowSettings: true,
+    showSpecificToolSettings: true,
+    profile
+  };
+
+  const rawSupport = typeof safeTool.getPassationProfileSupport === "function"
+    ? safeTool.getPassationProfileSupport({ ...context, passationProfile: profile })
+    : null;
+
+  if (!rawSupport || typeof rawSupport !== "object") {
+    return defaultSupport;
+  }
+
+  return {
+    ...defaultSupport,
+    ...rawSupport,
+    compatible: rawSupport.compatible !== false,
+    blockingMessage: String(rawSupport.blockingMessage || rawSupport.reason || "").trim(),
+    profile
+  };
 }
 
 export function getToolActivityModeProfile(tool, context = {}) {
@@ -278,7 +259,6 @@ export function normalizeToolContract(tool = {}, { toolId = "", label = "" } = {
 
   const baseCapabilities = getToolRuntimeCapabilities(safeTool);
   const baseProfile = getToolActivityModeProfile(safeTool, {});
-  const baseProjectionResponseUiSupport = getToolProjectionResponseUiSupport(safeTool, {});
 
   function getSharedRuntime(context = {}) {
     if (!sharedRuntimeCache.runtime) {
@@ -308,8 +288,6 @@ export function normalizeToolContract(tool = {}, { toolId = "", label = "" } = {
     usesCustomQuestionFlow: safeTool.usesCustomQuestionFlow === true || baseCapabilities.transitionPhase !== "required",
     supportedActivityModes: [...baseProfile.supportedModes],
     supportedModes: [...baseProfile.supportedModes],
-    projectionResponseUiSupport: { ...baseProjectionResponseUiSupport },
-    projectionResponseUiOptions: TOOL_PROJECTION_RESPONSE_UI_VALUES.filter((value) => baseProjectionResponseUiSupport[value]),
     getDefaultSettings: typeof safeTool.getDefaultSettings === "function"
       ? (...args) => safeTool.getDefaultSettings(...args)
       : () => ({}),
@@ -341,8 +319,8 @@ export function normalizeToolContract(tool = {}, { toolId = "", label = "" } = {
     getSupportedActivityModes(context = {}) {
       return getToolSupportedActivityModes(safeTool, context);
     },
-    supportsProjectionResponseUi(context = {}) {
-      return getToolProjectionResponseUiSupport(safeTool, context);
+    getPassationProfileSupport(context = {}) {
+      return getToolPassationProfileSupport(safeTool, context);
     },
     getRunProfile(context = {}) {
       return getToolRunProfile(safeTool, context);

@@ -951,10 +951,22 @@ const QUESTION_BANK_TYPE_TEXT_ANSWER = "text_answer";
 const QUESTION_BANK_TYPE_QCM = "qcm";
 const QUESTION_BANK_TYPE_SELECTION = "selection";
 
+const QUESTION_BANK_FOLDER_FIELDS = `
+  id,
+  teacher_space_id,
+  parent_id,
+  name,
+  display_order,
+  created_at,
+  updated_at
+`;
+
 const QUESTION_BANK_FIELDS = `
   id,
   teacher_space_id,
   source_bank_id,
+  folder_id,
+  display_order,
   bank_type,
   title,
   title_normalized,
@@ -1006,10 +1018,15 @@ function normalizeQuestionBankTags(tags) {
     .slice(0, 24);
 }
 
-function normalizeQuestionBankRecord(record) {
+function normalizeQuestionBankRecord(record, fallbackOrder = 0) {
   if (!record) return null;
+  const displayOrderValue = Number(record.display_order);
   return {
     ...record,
+    folder_id: String(record.folder_id ?? "").trim() || null,
+    display_order: Number.isFinite(displayOrderValue)
+      ? Math.max(0, Math.trunc(displayOrderValue))
+      : Math.max(0, Math.trunc(Number(fallbackOrder) || 0)),
     bank_type: normalizeQuestionBankType(record.bank_type),
     title: cleanDisplayName(record.title) || "Banque sans titre",
     description: String(record.description || ""),
@@ -1018,6 +1035,25 @@ function normalizeQuestionBankRecord(record) {
     tags: normalizeQuestionBankTags(record.tags),
     is_system: record.is_system === true
   };
+}
+
+function sortQuestionBanksByMeta(banks = []) {
+  return [...banks].sort((a, b) => {
+    if (a?.is_system !== b?.is_system) {
+      return a?.is_system ? 1 : -1;
+    }
+
+    const orderA = Number(a?.display_order);
+    const orderB = Number(b?.display_order);
+    if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    const titleCompare = String(a?.title || "").localeCompare(String(b?.title || ""), "fr", { sensitivity: "base" });
+    if (titleCompare !== 0) return titleCompare;
+
+    return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
+  });
 }
 
 function normalizeQuestionBankItem(item, index = 0) {
@@ -1218,6 +1254,106 @@ function isMissingQuestionBankReplaceRpcError(error) {
     || message.includes("could not find the function");
 }
 
+export async function listQuestionBankFoldersForSpace(teacherSpaceId) {
+  const spaceId = Number(teacherSpaceId);
+  if (!Number.isFinite(spaceId) || spaceId <= 0) return [];
+
+  const { data, error } = await supabase
+    .from("question_bank_folders")
+    .select(QUESTION_BANK_FOLDER_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .order("display_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  const normalizedFolders = (Array.isArray(data) ? data : []).map((folder, index) => normalizeFolderRecord(folder, index));
+  return sortFoldersByMeta(normalizedFolders);
+}
+
+export async function createQuestionBankFolderForSpace(teacherSpaceId, { name, parent_id = null } = {}) {
+  const spaceId = Number(teacherSpaceId);
+  if (!Number.isFinite(spaceId) || spaceId <= 0) {
+    throw new Error("Espace enseignant invalide.");
+  }
+
+  const displayName = cleanDisplayName(name);
+  if (!displayName) {
+    throw new Error("Nom de dossier vide.");
+  }
+
+  const folders = await listQuestionBankFoldersForSpace(spaceId);
+  const safeParentId = folders.some((folder) => String(folder.id) === String(parent_id ?? ""))
+    ? String(parent_id)
+    : null;
+  const banks = await listQuestionBanksForSpace(spaceId, { includeSystem: false });
+  const siblingFolders = folders.filter((folder) => String(folder.parent_id ?? "") === String(safeParentId ?? ""));
+  const siblingBanks = banks.filter((bank) => String(bank.folder_id ?? "") === String(safeParentId ?? ""));
+  const nextOrder = [...siblingFolders, ...siblingBanks]
+    .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
+
+  const { data, error } = await supabase
+    .from("question_bank_folders")
+    .insert({
+      teacher_space_id: spaceId,
+      parent_id: safeParentId,
+      name: displayName,
+      display_order: nextOrder,
+      updated_at: new Date().toISOString()
+    })
+    .select(QUESTION_BANK_FOLDER_FIELDS)
+    .single();
+
+  if (error) throw error;
+  return normalizeFolderRecord(data, nextOrder);
+}
+
+export async function updateQuestionBankFolder(folderId, updates = {}) {
+  const id = String(folderId || "").trim();
+  if (!id) throw new Error("Dossier introuvable.");
+
+  const payload = {
+    updated_at: new Date().toISOString()
+  };
+
+  if ("name" in updates) {
+    const displayName = cleanDisplayName(updates.name);
+    if (!displayName) throw new Error("Nom de dossier vide.");
+    payload.name = displayName;
+  }
+
+  if ("parent_id" in updates) {
+    payload.parent_id = String(updates.parent_id ?? "").trim() || null;
+  }
+
+  if ("display_order" in updates) {
+    const displayOrder = Number(updates.display_order);
+    if (!Number.isFinite(displayOrder)) throw new Error("Ordre de dossier invalide.");
+    payload.display_order = Math.max(0, Math.trunc(displayOrder));
+  }
+
+  const { data, error } = await supabase
+    .from("question_bank_folders")
+    .update(payload)
+    .eq("id", id)
+    .select(QUESTION_BANK_FOLDER_FIELDS)
+    .single();
+
+  if (error) throw error;
+  return normalizeFolderRecord(data);
+}
+
+export async function deleteQuestionBankFolder(folderId) {
+  const id = String(folderId || "").trim();
+  if (!id) throw new Error("Dossier introuvable.");
+
+  const { error } = await supabase
+    .from("question_bank_folders")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function listQuestionBanksForSpace(teacherSpaceId, { includeSystem = true } = {}) {
   const spaceId = Number(teacherSpaceId);
   if (!Number.isFinite(spaceId) || spaceId <= 0) return [];
@@ -1226,6 +1362,7 @@ export async function listQuestionBanksForSpace(teacherSpaceId, { includeSystem 
     .from("question_banks")
     .select(QUESTION_BANK_FIELDS)
     .order("is_system", { ascending: true })
+    .order("display_order", { ascending: true })
     .order("title", { ascending: true });
 
   if (includeSystem) {
@@ -1236,7 +1373,7 @@ export async function listQuestionBanksForSpace(teacherSpaceId, { includeSystem 
 
   const { data, error } = await query;
   if (error) throw error;
-  return (Array.isArray(data) ? data : []).map(normalizeQuestionBankRecord).filter(Boolean);
+  return sortQuestionBanksByMeta((Array.isArray(data) ? data : []).map(normalizeQuestionBankRecord).filter(Boolean));
 }
 
 export async function createQuestionBankForSpace(teacherSpaceId, bank = {}) {
@@ -1251,9 +1388,24 @@ export async function createQuestionBankForSpace(teacherSpaceId, bank = {}) {
     throw new Error("Titre de banque invalide.");
   }
 
+  const folders = await listQuestionBankFoldersForSpace(spaceId);
+  const safeFolderId = folders.some((folder) => String(folder.id) === String(bank.folder_id ?? ""))
+    ? String(bank.folder_id)
+    : null;
+  const siblingFolders = folders.filter((folder) => String(folder.parent_id ?? "") === String(safeFolderId ?? ""));
+  const siblingBanks = await listQuestionBanksForSpace(spaceId, { includeSystem: false });
+  const displayOrderValue = Number(bank.display_order);
+  const nextOrder = Number.isFinite(displayOrderValue)
+    ? Math.max(0, Math.trunc(displayOrderValue))
+    : [...siblingFolders, ...siblingBanks.filter((item) => String(item.folder_id ?? "") === String(safeFolderId ?? ""))]
+      .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
+
   const now = new Date().toISOString();
   const payload = {
     teacher_space_id: spaceId,
+    source_bank_id: String(bank.source_bank_id || "").trim() || null,
+    folder_id: safeFolderId,
+    display_order: nextOrder,
     bank_type: normalizeQuestionBankType(bank.bank_type),
     title,
     title_normalized: titleNormalized,
@@ -1273,7 +1425,7 @@ export async function createQuestionBankForSpace(teacherSpaceId, bank = {}) {
     .single();
 
   if (error) throw error;
-  return normalizeQuestionBankRecord(data);
+  return normalizeQuestionBankRecord(data, nextOrder);
 }
 
 export async function updateQuestionBank(bankId, updates = {}) {
@@ -1297,6 +1449,12 @@ export async function updateQuestionBank(bankId, updates = {}) {
   if ("tags" in updates) payload.tags = normalizeQuestionBankTags(updates.tags);
   if ("bank_type" in updates) payload.bank_type = normalizeQuestionBankType(updates.bank_type);
   if ("source_bank_id" in updates) payload.source_bank_id = String(updates.source_bank_id || "").trim() || null;
+  if ("folder_id" in updates) payload.folder_id = String(updates.folder_id ?? "").trim() || null;
+  if ("display_order" in updates) {
+    const displayOrder = Number(updates.display_order);
+    if (!Number.isFinite(displayOrder)) throw new Error("Ordre de banque invalide.");
+    payload.display_order = Math.max(0, Math.trunc(displayOrder));
+  }
   if ("share_code" in updates) payload.share_code = String(updates.share_code || "").trim().toUpperCase() || null;
 
   const { data, error } = await supabase
@@ -1386,7 +1544,7 @@ export async function replaceQuestionBankItems(bankId, items = []) {
   return await listQuestionBankItems(id);
 }
 
-export async function copyQuestionBankToSpace(sourceBankId, teacherSpaceId, { title = "" } = {}) {
+export async function copyQuestionBankToSpace(sourceBankId, teacherSpaceId, { title = "", folder_id = null, display_order = null } = {}) {
   const sourceId = String(sourceBankId || "").trim();
   const spaceId = Number(teacherSpaceId);
   if (!sourceId) throw new Error("Banque source introuvable.");
@@ -1406,10 +1564,14 @@ export async function copyQuestionBankToSpace(sourceBankId, teacherSpaceId, { ti
     description: sourceBank?.description || "",
     subject: sourceBank?.subject || "",
     grade_level: sourceBank?.grade_level || "",
-    tags: sourceBank?.tags || []
+    tags: sourceBank?.tags || [],
+    folder_id,
+    display_order
   });
 
-  const updatedBank = await updateQuestionBank(createdBank.id, { source_bank_id: sourceId }).catch(() => createdBank);
+  const updatedBank = createdBank?.source_bank_id
+    ? createdBank
+    : await updateQuestionBank(createdBank.id, { source_bank_id: sourceId }).catch(() => createdBank);
 
   const sourceItems = await listQuestionBankItems(sourceId);
   const copiedItems = sourceItems.map((item) => ({

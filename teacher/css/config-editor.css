@@ -44,9 +44,11 @@
 }
 
 .cfg-activity-mode-badge{
+  appearance:none;
   display:inline-flex;
   align-items:center;
   justify-content:center;
+  gap:8px;
   min-height:42px;
   padding:0 16px;
   border-radius:999px;
@@ -57,6 +59,34 @@
   font-weight:700;
   letter-spacing:.02em;
   white-space:nowrap;
+  cursor:pointer;
+  transition:background .16s ease, border-color .16s ease, transform .16s ease, opacity .16s ease;
+}
+
+.cfg-activity-mode-badge:hover:not(:disabled){
+  background:rgba(255,255,255,.1);
+  border-color:rgba(255,255,255,.18);
+  transform:translateY(-1px);
+}
+
+.cfg-activity-mode-badge:focus-visible{
+  outline:3px solid rgba(255,255,255,.32);
+  outline-offset:3px;
+}
+
+.cfg-activity-mode-badge:disabled{
+  cursor:not-allowed;
+  opacity:.62;
+  transform:none;
+}
+
+.cfg-activity-mode-toggle-label{
+  pointer-events:none;
+}
+
+.cfg-activity-mode-toggle-icon{
+  font-size:20px;
+  opacity:.82;
 }
 
 .cfg-activity-mode-badge[data-activity-mode="individual"]{
@@ -602,6 +632,40 @@
   min-width:0;
 }
 
+.cfg-common-flow-help-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 28px;
+  align-items:center;
+  gap:10px;
+}
+
+.cfg-common-flow-help-row[hidden]{
+  display:none !important;
+}
+
+.help-contextual-disabled .cfg-common-flow-help-row{
+  grid-template-columns:minmax(0, 1fr);
+  gap:0;
+}
+
+.cfg-common-flow-help-row--summary{
+  align-items:center;
+}
+
+.cfg-common-flow-help-row > .cfg-common-flow-summary-card,
+.cfg-common-flow-help-row > .cfg-common-flow-subwidget{
+  min-width:0;
+}
+
+.cfg-common-flow-help-btn{
+  justify-self:end;
+}
+
+.cfg-common-flow-help-row--subwidget .cfg-common-flow-help-btn{
+  align-self:center;
+}
+
 .cfg-common-flow-summary-card{
   width:100%;
   min-height:84px;
@@ -715,7 +779,7 @@
 
   .cfg-common-flow-question-mode-right,
   .cfg-common-flow-question-fixed-row,
-  .cfg-common-flow-question-objective-row{
+  .cfg-common-flow-success-goal-row{
     justify-content:flex-start;
   }
 }
@@ -817,7 +881,7 @@
 }
 
 .cfg-common-flow-question-fixed-row,
-.cfg-common-flow-question-objective-row{
+.cfg-common-flow-success-goal-row{
   min-width:0;
 }
 
@@ -827,11 +891,11 @@
 }
 
 .cfg-common-flow-question-fixed-row[hidden],
-.cfg-common-flow-question-objective-row[hidden]{
+.cfg-common-flow-success-goal-row[hidden]{
   display:none !important;
 }
 
-.cfg-common-flow-question-objective-row{
+.cfg-common-flow-success-goal-row{
   display:flex;
   align-items:center;
   justify-content:flex-end;
@@ -971,9 +1035,21 @@
   gap:16px;
 }
 
+.cfg-common-flow-instruction-controls{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+}
+
 .cfg-common-flow-instruction-row .tv-checkbox-row{
   margin:0;
   flex:0 0 auto;
+}
+
+.cfg-common-flow-instruction-row .tv-checkbox-row.is-disabled{
+  opacity:.52;
 }
 
 .cfg-common-flow-instruction-current{
@@ -1254,12 +1330,14 @@
 }
 
 .cfg-page.is-projection-mode .cfg-add-tool-btn,
+.cfg-page.is-projection-mode .cfg-add-tool-tile,
 .cfg-page.is-projection-mode .cfg-tool-delete,
 .cfg-page.is-projection-mode .cfg-tool-grip{
   opacity:.45;
 }
 
 .cfg-page.is-projection-mode .cfg-add-tool-btn,
+.cfg-page.is-projection-mode .cfg-add-tool-tile,
 .cfg-page.is-projection-mode .cfg-tool-delete{
   pointer-events:none;
 }
@@ -1288,7 +1366,7 @@
   display:flex;
   flex-direction:column;
   gap:0;
-  padding:18px 22px 22px;
+  padding:0;
 }
 
 .cfg-page-embedded .panel{
@@ -1297,7 +1375,14 @@
 }
 
 .cfg-page-embedded .cfg-header{
+  min-height:72px;
+  justify-content:center;
   margin:0;
+  padding:0 16px;
+  border:0;
+  border-bottom:1px solid rgba(0,0,0,.12);
+  background:rgb(15, 17, 21);
+  color:#f0f0f0;
 }
 
 .cfg-page-embedded .cfg-header-row-top,
@@ -1348,7 +1433,7 @@
   display:grid;
   grid-template-columns:minmax(320px, 28%) minmax(0, 72%);
   gap:0;
-  margin-top:-2px;
+  margin:10px 22px 22px;
   padding:0;
   overflow:hidden;
 }
@@ -1376,7 +1461,7 @@
 }
 
 .cfg-page-embedded .cfg-projection-panel{
-  margin-top:-2px;
+  margin:10px 22px 0;
 }
 
 .cfg-page-embedded .cfg-empty-state{
@@ -1434,6 +1519,239 @@
   .cfg-common-flow-projection-row .tv-radio-options{
     justify-content:flex-start;
   }
+}
+
+
+/* Mode de passation général */
+.cfg-passation-card{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--border);
+  background:#151922;
+  color:var(--text);
+  box-shadow:none;
+  transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+
+.cfg-passation-card.is-expanded{
+  border-color:rgba(255,255,255,.18);
+}
+
+.cfg-passation-summary{
+  width:100%;
+  min-height:68px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 44px;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  color:var(--text);
+  cursor:pointer;
+  text-align:left;
+}
+
+.cfg-passation-summary:hover{
+  transform:none;
+  filter:none;
+  background:#1a1f2a;
+}
+
+.cfg-passation-summary-main{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.cfg-passation-summary-title{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:17px;
+  font-weight:600;
+  line-height:1.3;
+}
+
+.cfg-passation-summary-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:14px;
+  font-weight:700;
+  line-height:1.2;
+}
+
+.cfg-passation-chevron{
+  justify-self:center;
+  font-size:24px;
+}
+
+.cfg-passation-panel{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:10px 12px 12px;
+  border-top:1px solid rgba(255,255,255,.10);
+  background:#121720;
+}
+
+.cfg-passation-panel[hidden]{
+  display:none !important;
+}
+
+.cfg-passation-help-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 24px;
+  align-items:center;
+  gap:8px;
+}
+
+.help-contextual-disabled .cfg-passation-help-row{
+  grid-template-columns:minmax(0, 1fr);
+  gap:0;
+}
+
+.cfg-passation-segmented{
+  position:relative;
+  width:100%;
+  min-height:44px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  align-items:center;
+  padding:4px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.055);
+  overflow:hidden;
+}
+
+.cfg-passation-segment-marker{
+  position:absolute;
+  z-index:0;
+  top:4px;
+  bottom:4px;
+  left:4px;
+  width:calc(50% - 4px);
+  border-radius:999px;
+  background:rgb(23, 119, 65);
+  box-shadow:0 8px 18px rgba(0,0,0,.18);
+  transition:transform .18s ease;
+  pointer-events:none;
+}
+
+.cfg-passation-segmented[data-activity-mode="group"] .cfg-passation-segment-marker,
+.cfg-passation-segmented[data-response-ui="free"] .cfg-passation-segment-marker,
+.cfg-passation-segmented[data-progress-mode="practice"] .cfg-passation-segment-marker{
+  transform:translateX(100%);
+}
+
+.cfg-passation-segment{
+  position:relative;
+  z-index:1;
+  min-width:0;
+  min-height:36px;
+  padding:0 8px;
+  border:none;
+  border-radius:999px;
+  background:transparent;
+  color:rgba(255,255,255,.72);
+  font:inherit;
+  font-size:16px;
+  font-weight:600;
+  line-height:1.05;
+  text-align:center;
+  cursor:pointer;
+  transition:color .16s ease, opacity .16s ease;
+}
+
+.cfg-passation-segment.is-selected{
+  color:#fff;
+}
+
+.cfg-passation-segment:hover{
+  color:#fff;
+}
+
+.cfg-passation-segment:focus-visible{
+  outline:2px solid rgba(255,255,255,.42);
+  outline-offset:2px;
+}
+
+.cfg-passation-segmented.is-disabled{
+  opacity:.62;
+}
+
+.cfg-passation-segment:disabled{
+  cursor:not-allowed;
+}
+
+.cfg-passation-help-row .cfg-passation-segment{
+  padding:0 5px;
+  font-size:14px;
+}
+
+.cfg-passation-help-btn{
+  justify-self:end;
+}
+
+/* Tuile d’ajout d’outil */
+.cfg-add-tool-tile{
+  width:100%;
+  min-height:68px;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 44px;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  margin-top:-1px;
+  border-radius:0;
+  border:1px dashed rgba(23, 119, 65, .72);
+  background:rgba(23, 119, 65, .10);
+  color:#dff7e7;
+  text-align:left;
+  cursor:pointer;
+  transition:background .12s ease, border-color .12s ease, opacity .12s ease;
+}
+
+.cfg-add-tool-tile:hover:not(:disabled){
+  background:rgba(23, 119, 65, .16);
+  border-color:rgba(23, 119, 65, .95);
+}
+
+.cfg-add-tool-tile:focus-visible{
+  outline:3px solid rgba(23, 119, 65, .36);
+  outline-offset:-3px;
+}
+
+.cfg-add-tool-tile:disabled{
+  cursor:not-allowed;
+  opacity:.45;
+}
+
+.cfg-add-tool-tile-icon{
+  width:30px;
+  height:30px;
+  border-radius:999px;
+  background:rgb(23, 119, 65);
+  color:#fff;
+  font-size:24px;
+}
+
+.cfg-add-tool-tile-label{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:17px;
+  font-weight:800;
 }
 
 /* Durée totale / défi final */

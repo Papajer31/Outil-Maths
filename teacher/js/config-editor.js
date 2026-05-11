@@ -13,7 +13,7 @@ import {
 import {
   DEFAULT_ACTIVITY_MODE,
   getActivityModeLabel,
-  getToolActivityModeSupport,
+  getToolPassationProfileSupport,
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
@@ -23,8 +23,13 @@ import {
   DEFAULT_ACTIVITY_GLOBALS,
   clampInt,
   cloneData,
-  getCommonInfiniteGaugeSettings,
+  getCommonSuccessGoalSettings,
+  getDefaultResponseUiForActivityMode,
+  isForbiddenPassationProfile,
   normalizeActivityGlobals,
+  normalizePassationProfile,
+  normalizeProgressMode,
+  normalizeResponseUi,
   normalizeToolDraft,
   normalizeActivitySequence,
   createToolInstanceId
@@ -66,8 +71,14 @@ function createEditorElements(){
     btnAddSequenceTool: document.getElementById("btnAddSequenceTool"),
     btnCloseToolPicker: document.getElementById("btnCloseToolPicker"),
 
-    classCodeInput: document.getElementById("classCodeInput"),
     activityModeBadge: document.getElementById("activityModeBadge"),
+    passationModeControl: document.getElementById("passationModeControl"),
+    passationModeToggleButton: document.getElementById("passationModeToggleButton"),
+    passationModePanel: document.getElementById("passationModePanel"),
+    passationModeSummary: document.getElementById("passationModeSummary"),
+    passationModeChevron: document.getElementById("passationModeChevron"),
+    responseUiPreviewToggle: document.getElementById("responseUiPreviewToggle"),
+    progressModePreviewToggle: document.getElementById("progressModePreviewToggle"),
     configNameDisplay: document.getElementById("configNameDisplay"),
     btnRenameConfig: document.getElementById("btnRenameConfig"),
     btnProjectConfig: document.getElementById("btnProjectConfig"),
@@ -172,13 +183,16 @@ let activityEstimateRefreshToken = 0;
 let lastActivityDurationEstimate = null;
 let hasToolSettingsValidationError = false;
 let activityTotalTimePanelOpen = false;
+let passationModePanelOpen = false;
+let currentResponseUi = "boxed";
+let currentProgressMode = "evaluated";
+let commonFlowPanelExpandedByInstance = new Map();
 let dragState = {
   draggedInstanceId: "",
   dropIndex: null
 };
 
 const activityGlobals = {
-  projectionResponseUi: DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi,
   activityTotalTimeEnabled: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled,
   activityTotalTimeSec: DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec
 };
@@ -217,12 +231,15 @@ function resetEditorState(){
   lastActivityDurationEstimate = null;
   hasToolSettingsValidationError = false;
   activityTotalTimePanelOpen = false;
+  passationModePanelOpen = false;
+  currentResponseUi = "boxed";
+  currentProgressMode = "evaluated";
+  commonFlowPanelExpandedByInstance = new Map();
   dragState = {
     draggedInstanceId: "",
     dropIndex: null
   };
 
-  activityGlobals.projectionResponseUi = DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi;
   activityGlobals.activityTotalTimeEnabled = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeEnabled;
   activityGlobals.activityTotalTimeSec = DEFAULT_ACTIVITY_GLOBALS.activityTotalTimeSec;
 }
@@ -254,6 +271,9 @@ function getEditorPublicState(){
     accessCode: currentAccessCode,
     configName: currentConfigName,
     activityMode: currentActivityMode,
+    responseUi: currentResponseUi,
+    progressMode: currentProgressMode,
+    passationProfile: getCurrentPassationProfile(),
     moduleKey: currentModuleKey,
     projected: isProjectedEditorMode,
     saveState,
@@ -290,8 +310,6 @@ export function destroyConfigEditor(){
   closeRenameActivityModal();
   closeToolPicker();
   teardownProjectedSessionLink();
-  clearToolHeaderControls();
-
   try {
     editorAbortController?.abort();
   } catch {}
@@ -390,10 +408,20 @@ async function boot(){
     }
 
     if (existingConfig?.config_json) {
-      currentActivityMode = normalizeActivityMode(
-        existingConfig.config_json.activity_mode,
-        currentActivityMode
-      );
+      const profile = normalizePassationProfile({
+        activity_mode: existingConfig.config_json.activity_mode,
+        response_ui: existingConfig.config_json.response_ui,
+        progress_mode: existingConfig.config_json.progress_mode
+      }, {
+        activityMode: currentActivityMode,
+        responseUi: getDefaultResponseUiForActivityMode(currentActivityMode),
+        progressMode: "evaluated"
+      });
+      currentActivityMode = profile.activityMode;
+      currentResponseUi = profile.responseUi;
+      currentProgressMode = profile.progressMode;
+    } else {
+      resetPassationPreviewDefaults();
     }
 
     isEditingExistingConfig = !!existingConfig;
@@ -443,10 +471,18 @@ function loadExistingConfig(existing){
     savedConfigName = safeConfigName;
   }
 
-  currentActivityMode = normalizeActivityMode(
-    existing?.activity_mode ?? safeConfig?.activity_mode,
-    currentActivityMode
-  );
+  const profile = normalizePassationProfile({
+    activity_mode: existing?.activity_mode ?? safeConfig?.activity_mode,
+    response_ui: safeConfig?.response_ui,
+    progress_mode: safeConfig?.progress_mode
+  }, {
+    activityMode: currentActivityMode,
+    responseUi: getDefaultResponseUiForActivityMode(currentActivityMode),
+    progressMode: "evaluated"
+  });
+  currentActivityMode = profile.activityMode;
+  currentResponseUi = profile.responseUi;
+  currentProgressMode = profile.progressMode;
 
   if (!Array.isArray(safeConfig?.sequence)){
     setMessage("Configuration invalide : séquence manquante ou mal formée.", true);
@@ -478,8 +514,313 @@ function renderActivityModeBadge(){
   if (!els.activityModeBadge) return;
 
   const safeMode = normalizeActivityMode(currentActivityMode, DEFAULT_ACTIVITY_MODE);
-  els.activityModeBadge.textContent = getActivityModeLabel(safeMode);
+  const targetMode = getNextActivityMode(safeMode);
+  const currentLabel = getActivityModeLabel(safeMode);
+  const targetLabel = getActivityModeLabel(targetMode);
+  const disabled = isProjectedEditorMode || saveState === "saving";
+
   els.activityModeBadge.dataset.activityMode = safeMode;
+  els.activityModeBadge.dataset.targetActivityMode = targetMode;
+  els.activityModeBadge.classList.toggle("is-disabled", disabled);
+
+  els.activityModeBadge.querySelectorAll("[data-passation-value]").forEach((btn) => {
+    const value = normalizeActivityMode(btn.dataset.passationValue, DEFAULT_ACTIVITY_MODE);
+    const selected = value === safeMode;
+    btn.classList.toggle("is-selected", selected);
+    btn.setAttribute("aria-pressed", selected ? "true" : "false");
+
+    // Ne pas utiliser l’attribut HTML disabled ici : sur certains navigateurs,
+    // un bouton disabled peut empêcher le clic de remonter au contrôle segmenté,
+    // ce qui rend la bascule asymétrique après un premier changement de mode.
+    // Le blocage réel reste géré par changeActivityModeFromToggle().
+    btn.disabled = false;
+    if (disabled) {
+      btn.setAttribute("aria-disabled", "true");
+    } else {
+      btn.removeAttribute("aria-disabled");
+    }
+  });
+
+  const title = isProjectedEditorMode
+    ? "Mode figé pendant la projection"
+    : saveState === "saving"
+      ? "Enregistrement en cours"
+      : `Passer en mode ${targetLabel}`;
+
+  els.activityModeBadge.title = title;
+  els.activityModeBadge.setAttribute(
+    "aria-label",
+    `Mode de l’activité : ${currentLabel}. ${disabled ? title : `Passer en mode ${targetLabel}`}`
+  );
+
+  renderPassationModeCard();
+}
+
+function getNextActivityMode(mode = currentActivityMode){
+  const safeMode = normalizeActivityMode(mode, DEFAULT_ACTIVITY_MODE);
+  return safeMode === "individual" ? "group" : "individual";
+}
+
+function getPassationActivitySummaryLabel(mode = currentActivityMode){
+  return normalizeActivityMode(mode, DEFAULT_ACTIVITY_MODE) === "group" ? "Collectif" : "Individuel";
+}
+
+function getPassationResponseUiSummaryLabel(value = currentResponseUi){
+  return value === "free" ? "Sans réponse" : "Avec réponse";
+}
+
+function getPassationProgressModeSummaryLabel(value = currentProgressMode){
+  return value === "practice" ? "Entrainement" : "Évaluation";
+}
+
+function resetPassationPreviewDefaults(){
+  currentResponseUi = getDefaultResponseUiForActivityMode(currentActivityMode);
+  currentProgressMode = "evaluated";
+}
+
+function renderPassationModeCard(){
+  const safeMode = normalizeActivityMode(currentActivityMode, DEFAULT_ACTIVITY_MODE);
+
+  if (els.passationModeSummary) {
+    els.passationModeSummary.textContent = [
+      getPassationActivitySummaryLabel(safeMode),
+      getPassationResponseUiSummaryLabel(),
+      getPassationProgressModeSummaryLabel()
+    ].join(" - ");
+  }
+
+  if (els.passationModeControl) {
+    els.passationModeControl.classList.toggle("is-expanded", passationModePanelOpen);
+  }
+
+  if (els.passationModeToggleButton) {
+    els.passationModeToggleButton.setAttribute("aria-expanded", passationModePanelOpen ? "true" : "false");
+    els.passationModeToggleButton.title = passationModePanelOpen
+      ? "Replier les réglages du mode de passation général"
+      : "Déplier les réglages du mode de passation général";
+    els.passationModeToggleButton.setAttribute(
+      "aria-label",
+      passationModePanelOpen
+        ? "Replier les réglages du mode de passation général"
+        : "Déplier les réglages du mode de passation général"
+    );
+  }
+
+  if (els.passationModePanel) {
+    els.passationModePanel.hidden = !passationModePanelOpen;
+  }
+
+  if (els.passationModeChevron) {
+    els.passationModeChevron.textContent = passationModePanelOpen ? "expand_less" : "expand_more";
+  }
+
+  renderPreviewSegmentedToggle(els.responseUiPreviewToggle, currentResponseUi, "responseUi");
+  renderPreviewSegmentedToggle(els.progressModePreviewToggle, currentProgressMode, "progressMode");
+}
+
+function renderPreviewSegmentedToggle(toggle, selectedValue, attrName){
+  if (!toggle) return;
+
+  const attr = attrName === "progressMode" ? "progressMode" : "responseUi";
+  toggle.dataset[attr] = selectedValue;
+
+  toggle.querySelectorAll("[data-passation-value]").forEach((btn) => {
+    const value = String(btn.dataset.passationValue || "");
+    const selected = value === selectedValue;
+    let disabled = false;
+    let title = "";
+
+    if (attr === "responseUi" && value === "free" && currentActivityMode === "individual" && currentProgressMode === "evaluated") {
+      disabled = true;
+      title = "Impossible d’évaluer individuellement un élève sans réponse saisie.";
+    }
+
+    if (attr === "progressMode" && value === "evaluated" && currentActivityMode === "individual" && currentResponseUi === "free") {
+      disabled = true;
+      title = "Impossible d’évaluer individuellement un élève sans réponse saisie.";
+    }
+
+    btn.classList.toggle("is-selected", selected);
+    btn.disabled = disabled;
+    btn.title = title;
+    btn.setAttribute("aria-pressed", selected ? "true" : "false");
+    if (disabled) {
+      btn.setAttribute("aria-disabled", "true");
+    } else {
+      btn.removeAttribute("aria-disabled");
+    }
+  });
+}
+
+function togglePassationModePanel(){
+  passationModePanelOpen = !passationModePanelOpen;
+  renderPassationModeCard();
+}
+
+function setPassationPreviewValue(kind, value){
+  const safeKind = String(kind || "");
+  const nextProfile = getCurrentPassationProfile();
+
+  if (safeKind === "response-ui") {
+    nextProfile.responseUi = normalizeResponseUi(value, currentResponseUi);
+  } else if (safeKind === "progress-mode") {
+    nextProfile.progressMode = normalizeProgressMode(value, currentProgressMode);
+  } else {
+    return;
+  }
+
+  changePassationProfile(nextProfile).catch((err) => {
+    setMessage(err?.message || "Impossible de modifier le mode de passation.", true);
+    renderPassationModeCard();
+  });
+}
+
+function getCurrentPassationProfile(){
+  return normalizePassationProfile({
+    activityMode: currentActivityMode,
+    responseUi: currentResponseUi,
+    progressMode: currentProgressMode
+  });
+}
+
+async function changePassationProfile(nextProfile){
+  if (isProjectedEditorMode || saveState === "saving") return;
+
+  const safeProfile = normalizePassationProfile(nextProfile, getCurrentPassationProfile());
+  if (isForbiddenPassationProfile(safeProfile)) {
+    setMessage("Impossible d’évaluer individuellement un élève sans réponse saisie.", true);
+    renderPassationModeCard();
+    return;
+  }
+
+  const currentProfile = getCurrentPassationProfile();
+  if (
+    safeProfile.activityMode === currentProfile.activityMode
+    && safeProfile.responseUi === currentProfile.responseUi
+    && safeProfile.progressMode === currentProfile.progressMode
+  ) {
+    return;
+  }
+
+  persistCurrentToolSettings();
+  const blockers = await getPassationProfileChangeBlockers(safeProfile);
+  if (blockers.length) {
+    setMessage(formatPassationProfileBlockedMessage(safeProfile, blockers), true);
+    renderPassationModeCard();
+    return;
+  }
+
+  const selectedInstanceId = String(currentSelectedInstanceId || "").trim();
+  currentActivityMode = safeProfile.activityMode;
+  currentResponseUi = safeProfile.responseUi;
+  currentProgressMode = safeProfile.progressMode;
+  currentToolSettingsEditor = null;
+
+  await refreshToolsCatalogActivityModeSupport();
+  normalizeSequenceQuestionFlowsForPassation();
+  renderMeta();
+  renderConfigTable();
+
+  if (isToolPickerOpen()) {
+    renderToolPickerTiles();
+  }
+
+  if (selectedInstanceId && getSequenceEntry(selectedInstanceId)) {
+    await openToolSettings(selectedInstanceId);
+  } else if (activitySequence[0]?.instanceId) {
+    await openToolSettings(activitySequence[0].instanceId);
+  } else {
+    renderEmptyToolPanel();
+  }
+
+  setSaveState("dirty");
+  scheduleActivityDurationEstimate();
+  setMessage(`Mode de passation : ${getPassationActivitySummaryLabel()} - ${getPassationResponseUiSummaryLabel()} - ${getPassationProgressModeSummaryLabel()}. Enregistre pour appliquer ce changement.`);
+}
+
+async function changeActivityModeFromToggle(targetMode = null){
+  if (isProjectedEditorMode || saveState === "saving") return;
+
+  const fallbackTarget = getNextActivityMode(currentActivityMode);
+  const nextMode = normalizeActivityMode(
+    targetMode || els.activityModeBadge?.dataset?.targetActivityMode || fallbackTarget,
+    fallbackTarget
+  );
+
+  const nextProfile = {
+    ...getCurrentPassationProfile(),
+    activityMode: nextMode
+  };
+
+  // Si le changement de mode fabrique l’unique profil global interdit
+  // (individuel + sans réponse + évaluation), on conserve l’intention
+  // de bascule et on revient automatiquement à “Réponse saisie”.
+  // Cela évite une bascule bloquée alors que le mode individuel est bien possible.
+  if (isForbiddenPassationProfile(nextProfile)) {
+    nextProfile.responseUi = "boxed";
+  }
+
+  await changePassationProfile(nextProfile);
+}
+
+async function changeActivityMode(targetMode){
+  await changePassationProfile({ ...getCurrentPassationProfile(), activityMode: targetMode });
+}
+
+async function getPassationProfileChangeBlockers(targetProfile){
+  const safeProfile = normalizePassationProfile(targetProfile, getCurrentPassationProfile());
+  const blockers = [];
+  const labels = buildSequenceLabels();
+
+  for (const item of activitySequence) {
+    const mod = await loadToolModule(item.toolId);
+    const tool = mod.default ?? {};
+    const draft = getSequenceDraft(item.instanceId);
+    const support = getToolPassationProfileSupport(tool, {
+      ...safeProfile,
+      passationProfile: safeProfile,
+      activityMode: safeProfile.activityMode,
+      responseUi: safeProfile.responseUi,
+      progressMode: safeProfile.progressMode,
+      accessCode: currentAccessCode,
+      teacherSpace: cloneData(currentTeacherSpace),
+      moduleKey: currentModuleKey,
+      configName: currentConfigName,
+      globals: serializeGlobals(),
+      toolId: item.toolId,
+      toolInstanceId: item.instanceId,
+      settings: cloneData(draft.settings)
+    });
+
+    if (support.compatible === false) {
+      const label = labels.get(item.instanceId) || buildDefaultSequenceLabel(item.toolId);
+      blockers.push({
+        title: label.title || item.toolId,
+        reason: support.blockingMessage || "Non compatible avec ce mode de passation."
+      });
+    }
+  }
+
+  return blockers;
+}
+
+function formatPassationProfileBlockedMessage(targetProfile, blockers){
+  const safeProfile = normalizePassationProfile(targetProfile, getCurrentPassationProfile());
+  const profileLabel = [
+    getPassationActivitySummaryLabel(safeProfile.activityMode),
+    getPassationResponseUiSummaryLabel(safeProfile.responseUi),
+    getPassationProgressModeSummaryLabel(safeProfile.progressMode)
+  ].join(" - ");
+  const visibleBlockers = blockers.slice(0, 3);
+  const details = visibleBlockers
+    .map((blocker) => `${blocker.title} : ${blocker.reason}`)
+    .join(" — ");
+  const extraCount = blockers.length - visibleBlockers.length;
+  const suffix = extraCount > 0
+    ? ` — +${extraCount} autre${extraCount > 1 ? "s" : ""}`
+    : "";
+
+  return `Impossible d’utiliser le profil ${profileLabel}. ${details}${suffix}`;
 }
 
 function openProjectedSessionPopup({ accessCode, configName }){
@@ -731,6 +1072,28 @@ function bindEvents(){
   addScopedListener(els.btnRenameConfig, "click", () => {
     openRenameActivityModal();
   });
+  addScopedListener(els.passationModeToggleButton, "click", () => {
+    togglePassationModePanel();
+  });
+  addScopedListener(els.activityModeBadge, "click", (event) => {
+    const option = event.target?.closest?.("[data-passation-value]");
+    if (!option) return;
+
+    changeActivityModeFromToggle(option.dataset.passationValue).catch((err) => {
+      setMessage(err?.message || "Impossible de changer le mode de l’activité.", true);
+      renderActivityModeBadge();
+    });
+  });
+  addScopedListener(els.responseUiPreviewToggle, "click", (event) => {
+    const option = event.target?.closest?.("[data-passation-value]");
+    if (!option) return;
+    setPassationPreviewValue("response-ui", option.dataset.passationValue);
+  });
+  addScopedListener(els.progressModePreviewToggle, "click", (event) => {
+    const option = event.target?.closest?.("[data-passation-value]");
+    if (!option) return;
+    setPassationPreviewValue("progress-mode", option.dataset.passationValue);
+  });
   addScopedListener(els.btnProjectConfig, "click", () => {
     if (!isStudentFacingActivityMode(currentActivityMode) || isProjectedEditorMode) return;
 
@@ -765,8 +1128,13 @@ function bindEvents(){
   addScopedListener(els.btnShareDownloadQr, "click", () => {
     void downloadSharedActivityQrCode();
   });
-  addScopedListener(els.btnAddSequenceTool, "click", () => {
-    if (isProjectedEditorMode) return;
+  addScopedListener(els.configRows, "click", (event) => {
+    const btn = event.target?.closest?.("[data-action='add-sequence-tool']");
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (isProjectedEditorMode || btn.disabled) return;
     openToolPicker();
   });
   addScopedListener(els.btnCloseToolPicker, "click", closeToolPicker);
@@ -918,11 +1286,20 @@ async function reloadCurrentModule(){
     return;
   }
 
+  await refreshToolsCatalogActivityModeSupport();
+}
+
+async function refreshToolsCatalogActivityModeSupport(){
+  if (!Array.isArray(toolsCatalog)) {
+    toolsCatalog = [];
+    return;
+  }
+
   toolsCatalog = await Promise.all(toolsCatalog.map(async (toolMeta) => {
     const mod = await loadToolModule(toolMeta.id);
     const tool = mod.default ?? {};
-    const modeSupport = getToolActivityModeSupport(tool, {
-      activityMode: currentActivityMode,
+    const modeSupport = getToolPassationProfileSupport(tool, {
+      ...getCurrentPassationProfile(),
       accessCode: currentAccessCode,
       moduleKey: currentModuleKey,
       toolId: toolMeta.id,
@@ -940,24 +1317,13 @@ async function reloadCurrentModule(){
 function renderConfigTable(){
   if (!els.configRows) return;
 
-  if (!activitySequence.length) {
-    els.configRows.innerHTML = `
-      <div class="cfg-empty-state cfg-sequence-empty">
-        Aucun outil dans la séquence.<br>Clique sur + pour ajouter une étape.
-      </div>
-    `;
-
-    renderSequenceWarnings();
-    renderEmptyToolPanel();
-    return;
-  }
-
   const labels = buildSequenceLabels();
-
-  els.configRows.innerHTML = activitySequence.map((item) => {
+  const rowsHtml = activitySequence.map((item) => {
     const label = labels.get(item.instanceId) || buildDefaultSequenceLabel(item.toolId);
     return configRowHTML(item, label);
   }).join("");
+
+  els.configRows.innerHTML = `${rowsHtml}${addSequenceToolTileHTML()}`;
 
   activitySequence.forEach((item) => {
     const row = document.getElementById(`row_${cssSafeId(item.instanceId)}`);
@@ -990,6 +1356,26 @@ function renderConfigTable(){
   renderConfigTableSelectionState();
   renderSequenceWarnings();
   syncProjectedEditorUi();
+}
+
+function addSequenceToolTileHTML(){
+  const disabled = isProjectedEditorMode ? ' disabled aria-disabled="true"' : "";
+  const title = isProjectedEditorMode ? "Séquence figée pendant la projection" : "Ajouter un outil";
+
+  return `
+    <button
+      class="cfg-add-tool-tile"
+      id="btnAddSequenceTool"
+      type="button"
+      data-action="add-sequence-tool"
+      aria-label="Ajouter un outil"
+      title="${escapeHtml(title)}"
+      ${disabled}
+    >
+      <span class="cfg-add-tool-tile-icon cfg-material-icon" aria-hidden="true">add</span>
+      <span class="cfg-add-tool-tile-label">Ajouter un outil</span>
+    </button>
+  `;
 }
 
 function configRowHTML(item, label){
@@ -1069,7 +1455,7 @@ async function addToolToSequence(toolId){
   }
 
   if (toolMeta.compatibleWithCurrentMode === false) {
-    throw new Error(`Cet outil n’est pas disponible en mode ${getActivityModeLabel(currentActivityMode).toLowerCase()}.`);
+    throw new Error(`Cet outil n’est pas disponible avec ce mode de passation.`);
   }
 
   persistCurrentToolSettings();
@@ -1280,6 +1666,7 @@ async function openToolSettings(instanceId){
   const entry = getSequenceEntry(instanceId);
   if (!entry) return;
 
+  rememberCurrentCommonFlowPanelState();
   persistCurrentToolSettings();
 
   currentSelectedInstanceId = entry.instanceId;
@@ -1292,14 +1679,13 @@ async function openToolSettings(instanceId){
     draft.settings = getToolDefaultSettings(tool);
   }
 
-  const modeSupport = getToolActivityModeSupport(tool, {
-    activityMode: currentActivityMode,
+  const modeSupport = getToolPassationProfileSupport(tool, {
+    ...getCurrentPassationProfile(),
     accessCode: currentAccessCode,
     teacherSpace: cloneData(currentTeacherSpace),
     moduleKey: currentModuleKey,
     configName: currentConfigName,
     globals: serializeGlobals(),
-    projectionResponseUi: activityGlobals.projectionResponseUi,
     toolId: entry.toolId,
     toolInstanceId: entry.instanceId,
     settings: cloneData(draft.settings)
@@ -1312,13 +1698,6 @@ async function openToolSettings(instanceId){
     modeSupport
   };
   renderConfigTableSelectionState();
-  injectSharedToolHeaderStyles();
-
-  const headerSlot = ensureToolHeaderControlsSlot();
-  if (headerSlot) {
-    headerSlot.innerHTML = "";
-  }
-
   if (els.toolConfigTitle) {
     const label = buildSequenceLabels().get(entry.instanceId) || buildDefaultSequenceLabel(entry.toolId);
     els.toolConfigTitle.textContent = label.subtitle
@@ -1332,7 +1711,7 @@ async function openToolSettings(instanceId){
   if (!modeSupport.compatible) {
     host.innerHTML = `
       <div class="cfg-empty-state">
-        ${escapeHtml(modeSupport.blockingMessage || `Cet outil n’est pas disponible en mode ${getActivityModeLabel(currentActivityMode).toLowerCase()}.`)}
+        ${escapeHtml(modeSupport.blockingMessage || `Cet outil n’est pas disponible avec ce mode de passation.`)}
       </div>
     `;
     scheduleActivityDurationEstimate();
@@ -1401,7 +1780,7 @@ async function openToolSettings(instanceId){
         setCurrentToolQuestionTransitionToZero();
       }
     });
-    bindCompactCommonFlowPanel(host);
+    bindCompactCommonFlowPanel(host, { instanceId: entry.instanceId });
     refreshCommonFlowSummary();
   }
 
@@ -1444,8 +1823,10 @@ async function saveCurrentConfig(){
       configName: name,
       desiredFolderId: currentTargetFolderId || null,
       configJson: {
-        version: 4,
+        version: 5,
         activity_mode: currentActivityMode,
+        response_ui: currentResponseUi,
+        progress_mode: currentProgressMode,
         globals: serializeGlobals(),
         sequence: serializeSequence()
       }
@@ -1470,8 +1851,6 @@ async function saveCurrentConfig(){
 }
 
 function renderGlobals(){
-  injectSharedToolHeaderStyles();
-
   syncActivityTotalTimeUi();
 }
 
@@ -1564,6 +1943,7 @@ function applyRemoteGlobals(remoteGlobals){
 
 function setSaveState(state){
   saveState = state;
+  renderActivityModeBadge();
   syncShareUi();
   syncRenameUi();
 
@@ -1635,6 +2015,19 @@ function applyRemoteSequence(remoteSequence, { fallbackGlobals = null } = {}){
       draft: normalizeToolDraft(item.draft)
     });
   });
+
+  normalizeSequenceQuestionFlowsForPassation();
+}
+
+function normalizeSequenceQuestionFlowsForPassation(){
+  const supportsGoal = currentResponseUi === "boxed" && currentProgressMode === "evaluated";
+  activitySequence.forEach((item) => {
+    const draft = getSequenceDraft(item.instanceId);
+    if (!draft) return;
+    if (draft.questionFlowMode === "successGoal" && !supportsGoal) {
+      draft.questionFlowMode = "unlimited";
+    }
+  });
 }
 
 function getSequenceEntry(instanceId){
@@ -1668,21 +2061,28 @@ function getSequenceDraft(instanceId){
 function serializeSequence(){
   persistCurrentToolSettings();
 
-  return activitySequence.map((item) => ({
-    instanceId: item.instanceId,
-    toolId: item.toolId,
-    draft: normalizeToolDraft({
+  const forceLastToolUnlimited = activityGlobals.activityTotalTimeEnabled === true;
+  return activitySequence.map((item, index) => {
+    const draft = normalizeToolDraft({
       ...getSequenceDraft(item.instanceId),
       enabled: true
-    })
-  }));
+    });
+
+    if (forceLastToolUnlimited && index === activitySequence.length - 1) {
+      draft.questionFlowMode = "unlimited";
+    }
+
+    return {
+      instanceId: item.instanceId,
+      toolId: item.toolId,
+      draft
+    };
+  });
 }
 
 function persistCurrentToolSettings(){
   if (!currentToolSettingsEditor) return;
   if (currentToolSettingsEditor.modeSupport?.compatible === false) return;
-
-  persistCurrentToolHeaderControls();
 
   const host = els.toolConfigHost;
   if (!host) return;
@@ -1770,20 +2170,14 @@ function renderConfigTableSelectionState(){
 
 function renderSequenceWarnings(){
   if (!els.sequenceWarnings) return;
-  const shouldWarnAboutBlockingInfiniteTool = normalizeActivityMode(currentActivityMode, DEFAULT_ACTIVITY_MODE) === "group";
 
-  if (!shouldWarnAboutBlockingInfiniteTool) {
-    els.sequenceWarnings.innerHTML = "";
-    els.sequenceWarnings.hidden = true;
-    return;
-  }
-
-  const hasBlockingInfiniteTool = activitySequence.some((item, index) => {
+  const hasBlockingUnlimitedTool = activitySequence.some((item, index) => {
     if (index >= activitySequence.length - 1) return false;
-    return getSequenceDraft(item.instanceId)?.infiniteQuestionCount === true;
+    const draft = getSequenceDraft(item.instanceId);
+    return draft?.questionFlowMode === "unlimited" && draft?.toolMaxTimeInfinite !== false;
   });
 
-  if (!hasBlockingInfiniteTool) {
+  if (!hasBlockingUnlimitedTool) {
     els.sequenceWarnings.innerHTML = "";
     els.sequenceWarnings.hidden = true;
     return;
@@ -1791,8 +2185,8 @@ function renderSequenceWarnings(){
 
   els.sequenceWarnings.innerHTML = `
     <div class="cfg-sequence-warning">
-      Attention : un outil placé avant la fin de la séquence utilise <strong>Nombre de questions = ∞</strong>.
-      Les outils suivants ne seront donc jamais atteints automatiquement.
+      Attention : un outil placé avant la fin de la séquence utilise <strong>Questions illimitées</strong> sans durée maximale.
+      Les outils suivants ne seront pas atteints automatiquement sans action manuelle.
     </div>
   `;
   els.sequenceWarnings.hidden = false;
@@ -1806,6 +2200,42 @@ function setCurrentToolQuestionTransitionToZero(){
   currentTransitionInput.dispatchEvent(new Event("change", { bubbles: true }));
   setSaveState("dirty");
   scheduleActivityDurationEstimate();
+}
+
+function renderCommonFlowHelpButtonHtml(helpId, label){
+  return `
+    <button
+      class="help-popover-trigger cfg-common-flow-help-btn"
+      type="button"
+      data-help-icon
+      data-help-id="${escapeHtml(helpId)}"
+      aria-label="${escapeHtml(label)}"
+      aria-expanded="false"
+    >?</button>
+  `;
+}
+
+function createCommonFlowHelpButton(helpId, label){
+  const template = document.createElement("template");
+  template.innerHTML = renderCommonFlowHelpButtonHtml(helpId, label).trim();
+  return template.content.firstElementChild;
+}
+
+function wrapCommonFlowWidgetWithHelp({
+  id = "",
+  className = "",
+  node = null,
+  helpId = "",
+  helpLabel = "",
+  hidden = false
+} = {}) {
+  const wrapper = document.createElement("div");
+  wrapper.className = `cfg-common-flow-help-row ${className}`.trim();
+  if (id) wrapper.id = id;
+  if (hidden) wrapper.hidden = true;
+  wrapper.appendChild(node);
+  wrapper.appendChild(createCommonFlowHelpButton(helpId, helpLabel));
+  return wrapper;
 }
 
 function buildCombinedCommonFlowSettingsHtml({
@@ -1841,9 +2271,6 @@ function buildCombinedCommonFlowSettingsHtml({
 
   const createSettingsSection = ({ id, className, nodes = [] } = {}) => {
     const section = document.createElement("div");
-    section.id = id;
-    section.hidden = true;
-    section.setAttribute("data-common-flow-settings-section", "true");
     section.className = `tv-group cfg-common-flow-group cfg-common-flow-subwidget ${className}`;
 
     const sectionGrid = document.createElement("div");
@@ -1854,7 +2281,28 @@ function buildCombinedCommonFlowSettingsHtml({
       }
     });
     section.appendChild(sectionGrid);
-    return section;
+
+    const helpBySection = {
+      commonFlowQuestionSettings: {
+        id: "common-flow-questions",
+        label: "Aide : déroulé des questions"
+      },
+      commonFlowTimingSettings: {
+        id: "common-flow-timing",
+        label: "Aide : réglages de temps"
+      }
+    };
+    const help = helpBySection[id] || {};
+    const wrapper = wrapCommonFlowWidgetWithHelp({
+      id,
+      className: "cfg-common-flow-help-row--subwidget",
+      node: section,
+      helpId: help.id,
+      helpLabel: help.label,
+      hidden: true
+    });
+    wrapper.setAttribute("data-common-flow-settings-section", "true");
+    return wrapper;
   };
 
   const questionModeRow = grid.querySelector(".cfg-common-flow-question-mode-row");
@@ -1881,16 +2329,28 @@ function buildCombinedCommonFlowSettingsHtml({
   });
 
   if (instructionRow) {
-    instructionRow.id = "commonFlowInstructionSettings";
-    instructionRow.hidden = true;
-    instructionRow.setAttribute("data-common-flow-settings-section", "true");
+    instructionRow.removeAttribute("id");
+    instructionRow.hidden = false;
+    instructionRow.removeAttribute("data-common-flow-settings-section");
     instructionRow.classList.add("cfg-common-flow-subwidget", "cfg-common-flow-instruction-widget");
   }
+
+  const instructionSection = instructionRow
+    ? wrapCommonFlowWidgetWithHelp({
+        id: "commonFlowInstructionSettings",
+        className: "cfg-common-flow-help-row--subwidget",
+        node: instructionRow,
+        helpId: "common-flow-instruction",
+        helpLabel: "Aide : consigne",
+        hidden: true
+      })
+    : null;
+  instructionSection?.setAttribute("data-common-flow-settings-section", "true");
 
   return [
     questionSection.outerHTML,
     timingSection.outerHTML,
-    instructionRow?.outerHTML || ""
+    instructionSection?.outerHTML || ""
   ].join("");
 }
 
@@ -1899,39 +2359,64 @@ function buildCompactCommonFlowSettingsHtml({ baseHtml = "", draft = {}, tool = 
 
   return `
     <div class="cfg-common-flow-compact">
-      <button
-        class="cfg-common-flow-summary-card"
-        id="commonFlowSummaryButton"
-        type="button"
-        aria-controls="commonFlowQuestionSettings commonFlowTimingSettings commonFlowInstructionSettings"
-        aria-expanded="false"
-      >
-        <span class="cfg-material-icon cfg-common-flow-summary-icon" aria-hidden="true">tune</span>
-        <span class="cfg-common-flow-summary-copy">
-          <span class="cfg-common-flow-summary-main" id="commonFlowSummaryMain" title="${escapeHtml(summary.main)}">${escapeHtml(summary.main)}</span>
-          <span class="cfg-common-flow-summary-instruction" id="commonFlowSummaryInstruction" title="${escapeHtml(summary.instruction)}">${escapeHtml(summary.instruction)}</span>
-        </span>
-      </button>
+      <div class="cfg-common-flow-help-row cfg-common-flow-help-row--summary">
+        <button
+          class="cfg-common-flow-summary-card"
+          id="commonFlowSummaryButton"
+          type="button"
+          aria-controls="commonFlowQuestionSettings commonFlowTimingSettings commonFlowInstructionSettings"
+          aria-expanded="false"
+        >
+          <span class="cfg-material-icon cfg-common-flow-summary-icon" aria-hidden="true">tune</span>
+          <span class="cfg-common-flow-summary-copy">
+            <span class="cfg-common-flow-summary-main" id="commonFlowSummaryMain" title="${escapeHtml(summary.main)}">${escapeHtml(summary.main)}</span>
+            <span class="cfg-common-flow-summary-instruction" id="commonFlowSummaryInstruction" title="${escapeHtml(summary.instruction)}">${escapeHtml(summary.instruction)}</span>
+          </span>
+        </button>
+        ${renderCommonFlowHelpButtonHtml("common-flow-overview", "Aide : déroulé de l’outil")}
+      </div>
 
       ${baseHtml}
     </div>
   `;
 }
 
-function bindCompactCommonFlowPanel(container) {
+function rememberCurrentCommonFlowPanelState(){
+  rememberCommonFlowPanelStateForInstance(currentSelectedInstanceId, els.toolConfigHost);
+}
+
+function rememberCommonFlowPanelStateForInstance(instanceId, container = els.toolConfigHost){
+  const safeInstanceId = String(instanceId || "").trim();
+  if (!safeInstanceId || !container) return;
+
+  const summaryButton = container.querySelector("#commonFlowSummaryButton");
+  if (!summaryButton) return;
+
+  commonFlowPanelExpandedByInstance.set(
+    safeInstanceId,
+    summaryButton.getAttribute("aria-expanded") === "true"
+  );
+}
+
+function bindCompactCommonFlowPanel(container, { instanceId = currentSelectedInstanceId } = {}) {
   const summaryButton = container.querySelector("#commonFlowSummaryButton");
   const sections = Array.from(container.querySelectorAll("[data-common-flow-settings-section]"));
+  const safeInstanceId = String(instanceId || "").trim();
 
   if (!summaryButton || sections.length === 0) return;
 
   const setExpanded = (expanded) => {
+    const safeExpanded = expanded === true;
     sections.forEach((section) => {
-      section.hidden = !expanded;
+      section.hidden = !safeExpanded;
     });
-    summaryButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+    summaryButton.setAttribute("aria-expanded", safeExpanded ? "true" : "false");
+    if (safeInstanceId) {
+      commonFlowPanelExpandedByInstance.set(safeInstanceId, safeExpanded);
+    }
   };
 
-  summaryButton.setAttribute("aria-expanded", "false");
+  setExpanded(commonFlowPanelExpandedByInstance.get(safeInstanceId) === true);
   summaryButton.addEventListener("click", () => {
     setExpanded(sections.every((section) => section.hidden));
   });
@@ -1964,7 +2449,14 @@ function updateCompactCommonFlowSummary(container, { instanceId = currentSelecte
     }
   }
 
-  const summary = buildCommonFlowSummaryParts(draft, tool || currentToolSettingsEditor?.tool || null, getToolEditorContext(instanceId));
+  const summary = buildCommonFlowSummaryParts(
+    draft,
+    tool || currentToolSettingsEditor?.tool || null,
+    {
+      ...getToolEditorContext(instanceId),
+      questionFlowMode: getActiveCommonQuestionFlowMode(container)
+    }
+  );
 
   summaryMain.textContent = summary.main;
   summaryMain.title = summary.main;
@@ -1977,13 +2469,12 @@ function buildCommonFlowSummaryParts(draft = {}, tool = null, context = {}) {
   const forceInfiniteQuestionCount = context?.forceInfiniteQuestionCount === true
     || context?.isFinalInfiniteSequenceItem === true
     || context?.finalInfiniteSequenceItem === true;
-  const questionCount = forceInfiniteQuestionCount || safeDraft.infiniteQuestionCount
-    ? `Objectif ${getCommonFlowObjectiveTarget(safeDraft)}`
-    : String(clampInt(
-        safeDraft.questionCount,
-        TOOL_LIMITS.questionCount.min,
-        TOOL_LIMITS.questionCount.max
-      ));
+  const questionFlowMode = getCommonFlowQuestionSummaryMode(safeDraft, context, forceInfiniteQuestionCount);
+  const questionSummary = questionFlowMode === "fixed"
+    ? `${clampInt(safeDraft.questionCount, TOOL_LIMITS.questionCount.min, TOOL_LIMITS.questionCount.max)} questions posées`
+    : questionFlowMode === "successGoal"
+      ? `Objectif ${getCommonFlowObjectiveTarget(safeDraft)} réponses correctes`
+      : "Illimitées";
   const timeLimit = safeDraft.toolMaxTimeInfinite
     ? "Limite de temps : aucune"
     : `Limite de temps : ${clampInt(safeDraft.toolMaxTimeMin, TOOL_LIMITS.toolMaxTimeMin.min, TOOL_LIMITS.toolMaxTimeMin.max)} min`;
@@ -2002,7 +2493,7 @@ function buildCommonFlowSummaryParts(draft = {}, tool = null, context = {}) {
 
   return {
     main: [
-      `Nombre de questions : ${questionCount}`,
+      `Questions : ${questionSummary}`,
       timeLimit,
       timePerQuestion,
       answerTime,
@@ -2012,9 +2503,26 @@ function buildCommonFlowSummaryParts(draft = {}, tool = null, context = {}) {
   };
 }
 
+function getCommonFlowQuestionSummaryMode(draft = {}, context = {}, forceInfiniteQuestionCount = false) {
+  if (forceInfiniteQuestionCount) return "unlimited";
+  const explicitMode = String(context?.questionFlowMode || "");
+  if (["fixed", "unlimited", "successGoal"].includes(explicitMode)) {
+    return explicitMode;
+  }
+  const safeMode = String(draft?.questionFlowMode || "fixed");
+  return ["fixed", "unlimited", "successGoal"].includes(safeMode) ? safeMode : "fixed";
+}
+
+function getActiveCommonQuestionFlowMode(container) {
+  const selected = container?.querySelector?.(".cfg-common-flow-question-mode-btn.is-active")?.dataset?.questionCountMode;
+  return ["fixed", "unlimited", "successGoal"].includes(String(selected || ""))
+    ? String(selected)
+    : null;
+}
+
 
 function getCommonFlowObjectiveTarget(draft = {}) {
-  return getCommonInfiniteGaugeSettings(draft?.settings).infiniteGaugeRequiredCorrect;
+  return getCommonSuccessGoalSettings(draft?.settings).successGoalCorrectCount;
 }
 
 function getResolvedCommonInstructionSummary(draft = {}, tool = null) {
@@ -2028,6 +2536,10 @@ function getResolvedCommonInstructionSummary(draft = {}, tool = null) {
     : null;
   const customInstruction = String(instruction?.text || "").trim();
 
+  if (instruction?.hidden === true) {
+    return "aucune";
+  }
+
   if (instruction?.enabled === true && customInstruction) {
     return customInstruction;
   }
@@ -2035,22 +2547,8 @@ function getResolvedCommonInstructionSummary(draft = {}, tool = null) {
   return defaultInstruction || "—";
 }
 
-function ensureToolHeaderControlsSlot(){
-  return null;
-}
-
-function clearToolHeaderControls(){
-  const slot = document.getElementById("toolHeaderControls");
-  slot?.remove();
-}
-
-function persistCurrentToolHeaderControls(){
-  return;
-}
 
 function renderEmptyToolPanel(){
-  clearToolHeaderControls();
-
   if (els.toolConfigTitle) {
     els.toolConfigTitle.textContent = "Configuration de l’outil";
   }
@@ -2163,9 +2661,6 @@ function getToolDefaultSettings(tool){
   return {};
 }
 
-function injectSharedToolHeaderStyles(){
-  return;
-}
 
 function isPlainObject(value){
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -2197,10 +2692,12 @@ function getToolEditorContext(instanceId = currentSelectedInstanceId){
     teacherSpace: cloneData(currentTeacherSpace),
     students: cloneData(availableStudents),
     activityMode: currentActivityMode,
+    responseUi: currentResponseUi,
+    progressMode: currentProgressMode,
+    passationProfile: getCurrentPassationProfile(),
     moduleKey: currentModuleKey,
     configName: currentConfigName,
     globals: serializeGlobals(),
-    projectionResponseUi: activityGlobals.projectionResponseUi,
     isFinalInfiniteSequenceItem: isFinalInfiniteSequenceItem(safeInstanceId),
     forceInfiniteQuestionCount: isFinalInfiniteSequenceItem(safeInstanceId),
     tool: currentToolSettingsEditor?.tool || null,
@@ -2373,14 +2870,15 @@ function normalizeProjectedPrimaryActionKind(value){
 function syncProjectedEditorUi(){
   els.page?.classList.toggle("is-projection-mode", isProjectedEditorMode);
   els.projectedControlPanel?.classList.toggle("hidden", !isProjectedEditorMode);
+  renderActivityModeBadge();
   syncProjectionLaunchUi();
 
-  if (els.btnAddSequenceTool) {
-    els.btnAddSequenceTool.disabled = isProjectedEditorMode;
-    els.btnAddSequenceTool.title = isProjectedEditorMode
+  els.configRows?.querySelectorAll("[data-action='add-sequence-tool']").forEach((btn) => {
+    btn.disabled = isProjectedEditorMode;
+    btn.title = isProjectedEditorMode
       ? "Séquence figée pendant la projection"
       : "Ajouter un outil";
-  }
+  });
 
   if (els.btnSaveConfig) {
     els.btnSaveConfig.disabled = saveState === "saving";
@@ -2506,9 +3004,9 @@ function setFatalState(message){
     els.btnSaveConfig.disabled = true;
   }
 
-  if (els.btnAddSequenceTool) {
-    els.btnAddSequenceTool.disabled = true;
-  }
+  els.configRows?.querySelectorAll("[data-action='add-sequence-tool']").forEach((btn) => {
+    btn.disabled = true;
+  });
 
   syncRenameUi();
   renderEmptyToolPanel();

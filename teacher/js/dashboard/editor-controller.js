@@ -34,8 +34,8 @@ export function createEditorController({
   let leaveEditorModalPromise = null;
 
   function isEditorOpen(){
-    return getCurrentDashboardSection?.() === "activities"
-      && getCurrentActivitiesViewMode?.() === "editor";
+    return getCurrentActivitiesViewMode?.() === "editor"
+      && !!getActiveConfigEditor?.();
   }
 
   function getInitialDashboardEditorRoute(){

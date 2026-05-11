@@ -58,7 +58,9 @@ export function renderActivitiesView(root){
   `;
 
   document.getElementById("btnBackToSelectStudents")
-    ?.addEventListener("click", goBackToSelectStudents);
+    ?.addEventListener("click", () => {
+      handleActivitiesBack(treeState);
+    });
 
   document.getElementById("activitiesShell")
     ?.addEventListener("click", (event) => {
@@ -83,6 +85,18 @@ export function renderActivitiesView(root){
       openActivityFolder(button.dataset.breadcrumbFolderId || "");
     });
   });
+}
+
+function handleActivitiesBack(treeState = buildActivityTreeState()){
+  const currentFolderId = normalizeFolderId(studentState.currentActivityFolderId);
+  const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
+
+  if (!currentFolder) {
+    goBackToSelectStudents();
+    return;
+  }
+
+  openActivityFolder(currentFolder.parent_id || "");
 }
 
 function renderActivitiesContent(treeState = buildActivityTreeState()){
@@ -117,7 +131,7 @@ function renderActivitiesContent(treeState = buildActivityTreeState()){
     `;
   }
 
-  const rows = chunkItems(items, 5);
+  const rows = chunkItems(items, getActivityRowSize());
   const featuredRow = featuredActivity
     ? `
       <div class="activities-featured-row">
@@ -437,6 +451,15 @@ function ensureBucket(map, key){
 function normalizeFolderId(value){
   const folderId = String(value ?? "").trim();
   return folderId || null;
+}
+
+function getActivityRowSize(){
+  const width = Number(window.innerWidth) || 0;
+  const height = Number(window.innerHeight) || 0;
+  const isCompactLandscape = width <= 940 && height <= 520;
+  if (isCompactLandscape) return 8;
+  if (width <= 1359) return 6;
+  return 5;
 }
 
 function chunkItems(items, size){

@@ -36,13 +36,6 @@ export default defineTool("operations-trous", "Opérations à trous", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createOperationsTrousActivity({
       ...context,

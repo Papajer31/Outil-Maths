@@ -41,6 +41,8 @@ export function normalizeQcmItems(items = []) {
   if (!Array.isArray(items)) return [];
   return items
     .map(normalizeQcmItem)
+    .filter((item) => item.is_active !== false)
+    .filter((item) => item.item_type === DEFAULT_BANK_TYPE)
     .filter((item) => item.prompt && item.correctAnswer && item.distractors.length >= 1);
 }
 

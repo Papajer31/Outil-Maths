@@ -39,13 +39,6 @@ export default defineTool("monnaie", "Monnaie", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createMonnaieActivity({
       ...context,

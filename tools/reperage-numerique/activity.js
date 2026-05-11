@@ -109,15 +109,13 @@ function createRuntimeState(initialContext = {}) {
     onWindowResize: null,
     latestEvaluation: null,
     settings: normalizeSettings(initialContext?.settings),
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
-    projectionResponseUi: normalizeProjectionResponseUi(initialContext?.projectionResponseUi)
+    responseUi: getResponseUi(initialContext),
   };
 }
 
 function syncRuntimeState(state, context = state.latestContext) {
   state.settings = normalizeSettings(context?.settings);
-  state.activityMode = normalizeActivityMode(context?.activityMode);
-  state.projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
+  state.responseUi = getResponseUi(context);
 }
 
 function renderShell(state) {
@@ -997,31 +995,31 @@ function applyShellAnswerDisplayMode(state, mode) {
 }
 
 function shouldUseShellValidation(context = {}) {
-  const mode = normalizeActivityMode(context?.activityMode);
-  if (mode === "individual") return true;
-  if (String(context?.runMode || context?.sessionMode || "").trim() !== "projected-teacher") return false;
-  return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
+  return getResponseUi(context) === "boxed";
 }
 
 function shouldUsePassiveFreeMode(state) {
   if (!state) return false;
-  if (state.activityMode === "group") return true;
-  return String(state.latestContext?.runMode || state.latestContext?.sessionMode || "").trim() === "projected-teacher"
-    && normalizeProjectionResponseUi(state.projectionResponseUi) === "free";
+  return getResponseUi(state.latestContext) === "free";
+}
+
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
+}
+
+function normalizeResponseUi(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
 
 function normalizeAnswerDisplayMode(value) {
   return String(value ?? "").trim().toLowerCase() === "student" ? "student" : "correction";
-}
-
-function normalizeActivityMode(value) {
-  const safeValue = String(value ?? "").trim().toLowerCase();
-  if (safeValue === "group") return safeValue;
-  return "individual";
-}
-
-function normalizeProjectionResponseUi(value) {
-  return String(value ?? "").trim().toLowerCase() === "boxed" ? "boxed" : "free";
 }
 
 function syncValidateState(state) {

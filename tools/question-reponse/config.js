@@ -125,7 +125,7 @@ async function setupBankSelect(container, cfg, context = {}) {
       count: 0
     });
     if (snapshotEl) snapshotEl.value = "[]";
-    setEditorStatus(context, "Crée d’abord une banque de type “Réponses textuelles” dans l’onglet Banques.", true);
+    setEditorStatus(context, "Crée d’abord une banque de type “Texte” dans l’onglet Banques.", true);
     return;
   }
 

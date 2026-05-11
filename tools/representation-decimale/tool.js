@@ -38,13 +38,6 @@ export default defineTool("representation-decimale", "Représentation décimale"
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createRepresentationDecimaleActivity({
       ...context,

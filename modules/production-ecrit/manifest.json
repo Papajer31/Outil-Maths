@@ -1,7 +1,0 @@
-{
-  "module": "production-ecrit",
-  "version": 1,
-  "tools": [
-    "PhrasesEnMorceaux"
-  ]
-}

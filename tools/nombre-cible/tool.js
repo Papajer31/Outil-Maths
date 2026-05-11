@@ -39,13 +39,6 @@ export default defineTool("nombre-cible", "Nombre cible", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createNombreCibleActivity({
       ...context,

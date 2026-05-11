@@ -1,13 +1,22 @@
 import {
   copyQuestionBankToSpace,
+  createQuestionBankFolderForSpace,
   createQuestionBankForSpace,
   deleteQuestionBank,
+  deleteQuestionBankFolder,
+  listQuestionBankFoldersForSpace,
   listQuestionBankItems,
   listQuestionBanksForSpace,
   normalizeQuestionBankTitle,
   replaceQuestionBankItems,
-  updateQuestionBank
+  updateQuestionBank,
+  updateQuestionBankFolder
 } from "../teacher-api.js";
+import {
+  buildActivityTreeState as buildDashboardActivityTreeState,
+  buildVisibleActivityTree as buildDashboardVisibleActivityTree,
+  normalizeTreeId
+} from "./activity-tree.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { renderSimpleMarkupToHtml } from "../../../shared/simple-markup.js";
 import {
@@ -21,10 +30,16 @@ import {
 const DEFAULT_BANK_TYPE = "text_answer";
 const QCM_BANK_TYPE = "qcm";
 const SELECTION_BANK_TYPE = "selection";
+const BANK_CREATION_TYPE_VALUES = [DEFAULT_BANK_TYPE, QCM_BANK_TYPE, SELECTION_BANK_TYPE];
+const BANK_TYPE_FILTER_ALL = "all";
+const BANK_TYPE_FILTER_VALUES = Object.freeze([
+  BANK_TYPE_FILTER_ALL,
+  ...BANK_CREATION_TYPE_VALUES
+]);
 const QCM_MAX_DISTRACTORS = 5;
 const EDITABLE_BANK_TYPES = new Set([DEFAULT_BANK_TYPE, QCM_BANK_TYPE, SELECTION_BANK_TYPE]);
 const BANK_TYPE_LABELS = {
-  text_answer: "Réponses textuelles",
+  text_answer: "Texte",
   qcm: "QCM",
   selection: "Sélection",
   cloze_text: "Texte à trous",
@@ -33,17 +48,7 @@ const BANK_TYPE_LABELS = {
   matching: "Appariement",
   sorting: "Tri"
 };
-const SAVE_STATUS_ICONS = {
-  idle: "warning",
-  loading: "hourglass_empty",
-  dirty: "warning",
-  saving: "hourglass_empty",
-  saved: "check",
-  error: "error",
-  readonly: "warning"
-};
 const META_INPUT_IDS = new Set([
-  "bankTitleInput",
   "bankSubjectInput",
   "bankGradeInput",
   "bankTagsInput",
@@ -87,6 +92,29 @@ function getBankTypeLabel(type) {
 
 function normalizeBankType(type) {
   return String(type || DEFAULT_BANK_TYPE).trim().toLowerCase() || DEFAULT_BANK_TYPE;
+}
+
+function normalizeBankTypeFilter(value) {
+  const safeValue = String(value || "").trim().toLowerCase();
+  return BANK_TYPE_FILTER_VALUES.includes(safeValue)
+    ? safeValue
+    : BANK_TYPE_FILTER_ALL;
+}
+
+function isAllBankTypeFilter(value) {
+  return normalizeBankTypeFilter(value) === BANK_TYPE_FILTER_ALL;
+}
+
+function getBankTypeFilterLabel(value) {
+  return isAllBankTypeFilter(value)
+    ? "Tous"
+    : getBankTypeLabel(value);
+}
+
+function getInitialBankCreationTypeFromFilter(value) {
+  return isAllBankTypeFilter(value)
+    ? ""
+    : normalizeBankType(value);
 }
 
 function isTextAnswerType(type) {
@@ -215,29 +243,16 @@ function acceptedAnswersFromText(value) {
     .slice(0, 24);
 }
 
-function distractorsFromFields(payload = {}) {
-  const source = payload.distractors
-    ?? payload.distractorAnswers
-    ?? payload.distractor_answers
-    ?? [
-      payload.distractor1,
-      payload.distractor2,
-      payload.distractor3,
-      payload.distractor4,
-      payload.distractor5
-    ];
-
-  return normalizeQcmDistractors(source);
-}
-
 function getQcmDistractorColumnCount(items = []) {
-  const maxFilled = items.reduce((max, item) => {
+  const maxColumns = items.reduce((max, item) => {
     const payload = item?.payload_json || {};
-    return Math.max(max, distractorsFromFields(payload).length);
+    const drafts = distractorsFromFields(payload, { keepEmpty: true });
+    const lastFilledIndex = drafts.reduce((lastIndex, value, index) => (
+      String(value || "").trim() ? index : lastIndex
+    ), -1);
+    return Math.max(max, lastFilledIndex >= 0 ? Math.min(QCM_MAX_DISTRACTORS, lastFilledIndex + 2) : 0);
   }, 0);
-  return maxFilled >= QCM_MAX_DISTRACTORS
-    ? QCM_MAX_DISTRACTORS
-    : Math.max(1, maxFilled + 1);
+  return Math.max(1, maxColumns);
 }
 
 function distractorsToText(value) {
@@ -263,27 +278,55 @@ function removeSelectionInstructionFields(payload = {}) {
   return payload;
 }
 
-function normalizeQcmDistractors(value) {
+function normalizeQcmDistractorDrafts(value) {
   const source = Array.isArray(value)
     ? value
     : String(value || "").split(/[;\n]/g);
 
-  return source
+  const drafts = source
     .map((item) => String(item || "").trim())
+    .slice(0, QCM_MAX_DISTRACTORS);
+
+  let lastMeaningfulIndex = drafts.length - 1;
+  while (lastMeaningfulIndex >= 0 && !drafts[lastMeaningfulIndex]) {
+    lastMeaningfulIndex -= 1;
+  }
+
+  return drafts.slice(0, lastMeaningfulIndex + 1);
+}
+
+function normalizeQcmDistractors(value) {
+  return normalizeQcmDistractorDrafts(value)
     .filter(Boolean)
     .slice(0, QCM_MAX_DISTRACTORS);
+}
+
+function distractorsFromFields(payload = {}, { keepEmpty = false } = {}) {
+  const source = payload.distractors
+    ?? payload.distractorAnswers
+    ?? payload.distractor_answers
+    ?? [
+      payload.distractor1,
+      payload.distractor2,
+      payload.distractor3,
+      payload.distractor4,
+      payload.distractor5
+    ];
+
+  const drafts = normalizeQcmDistractorDrafts(source);
+  return keepEmpty ? drafts : drafts.filter(Boolean);
 }
 
 function setQcmDistractorAt(payload = {}, fieldName, value) {
   const match = String(fieldName || "").match(/^distractor([1-5])$/);
   if (!match) return;
   const index = Number(match[1]) - 1;
-  const distractors = distractorsFromFields(payload);
+  const distractors = distractorsFromFields(payload, { keepEmpty: true });
   while (distractors.length <= index) {
     distractors.push("");
   }
   distractors[index] = String(value || "");
-  payload.distractors = normalizeQcmDistractors(distractors);
+  payload.distractors = normalizeQcmDistractorDrafts(distractors);
   removeLegacyDistractorFields(payload);
 }
 
@@ -378,6 +421,15 @@ function buildUniqueBankTitle(existingBanks = [], baseTitle = "Nouvelle banque")
     index += 1;
   }
   return `${baseTitle} ${Date.now()}`;
+}
+
+function bankTitleAlreadyExists(existingBanks = [], title = "", ignoredBankId = null) {
+  const normalizedTitle = normalizeQuestionBankTitle(title);
+  if (!normalizedTitle) return false;
+  const ignoredId = String(ignoredBankId ?? "").trim();
+  return (Array.isArray(existingBanks) ? existingBanks : []).some((bank) => (
+    String(bank?.id ?? "") !== ignoredId && normalizeQuestionBankTitle(bank?.title) === normalizedTitle
+  ));
 }
 
 function stripImportCellQuotes(value) {
@@ -508,10 +560,15 @@ function parseBankImportText(rawText, bankType = DEFAULT_BANK_TYPE) {
 }
 export function createQuestionBanksViewController({
   banksView,
+  bankExplorerHeader,
+  bankEditorHeader,
+  bankBreadcrumb,
   banksList,
   bankEditorHost,
-  bankSaveStatus,
+  bankEditorHeaderTitle,
   btnCreateBank,
+  btnCreateBankFolder,
+  btnBackBankExplorer,
   btnDeleteBank,
   btnSaveBank,
   importModal,
@@ -524,6 +581,13 @@ export function createQuestionBanksViewController({
   showToast
 } = {}) {
   let banks = [];
+  let bankFolders = [];
+  let currentOpenFolderId = null;
+  let currentBankTypeFilter = BANK_TYPE_FILTER_ALL;
+  let bankViewMode = "explorer";
+  let treePaneWidthPercent = 14;
+  const collapsedBankFolderIds = new Set();
+  const knownBankFolderIds = new Set();
   let selectedBankId = null;
   let selectedBank = null;
   let itemDrafts = [];
@@ -543,6 +607,857 @@ export function createQuestionBanksViewController({
   let renderedWindowStart = -1;
   let renderedWindowEnd = -1;
   let renderedVirtualMode = false;
+  let draggedBankId = null;
+  let bankDropTarget = null;
+  let isMovingBank = false;
+
+  function getExplorerBanks() {
+    return (banks || []).map((bank, index) => ({
+      ...bank,
+      config_name: bank?.title || "Banque sans titre",
+      folder_id: bank?.is_system === true ? null : (String(bank?.folder_id ?? "").trim() || null),
+      display_order: Number.isFinite(Number(bank?.display_order)) ? Number(bank.display_order) : index
+    }));
+  }
+
+  function getBanksForCurrentType(
+    banksSource = getExplorerBanks(),
+    typeFilter = currentBankTypeFilter
+  ) {
+    const safeFilter = normalizeBankTypeFilter(typeFilter);
+    const source = Array.isArray(banksSource) ? banksSource : [];
+    if (safeFilter === BANK_TYPE_FILTER_ALL) {
+      return [...source];
+    }
+
+    return source.filter((bank) => normalizeBankType(bank?.bank_type) === safeFilter);
+  }
+
+  function buildBankTreeState({
+    banksSource = getExplorerBanks(),
+    foldersSource = bankFolders
+  } = {}) {
+    return buildDashboardActivityTreeState({
+      activitiesSource: banksSource,
+      foldersSource
+    });
+  }
+
+  function buildVisibleBankTree() {
+    return buildDashboardVisibleActivityTree({
+      activitiesSource: getBanksForCurrentType(),
+      foldersSource: bankFolders,
+      collapsedFolderIds: collapsedBankFolderIds,
+      currentActivityMode: currentBankTypeFilter
+    });
+  }
+
+  function syncCollapsedBankFolders() {
+    const ids = new Set((bankFolders || []).map((folder) => String(folder.id)));
+
+    for (const folderId of Array.from(collapsedBankFolderIds)) {
+      if (!ids.has(folderId)) collapsedBankFolderIds.delete(folderId);
+    }
+
+    for (const folderId of Array.from(knownBankFolderIds)) {
+      if (!ids.has(folderId)) knownBankFolderIds.delete(folderId);
+    }
+
+    ids.forEach((folderId) => {
+      if (!knownBankFolderIds.has(folderId)) {
+        knownBankFolderIds.add(folderId);
+        collapsedBankFolderIds.add(folderId);
+      }
+    });
+  }
+
+  function sanitizeCurrentFolderSelection(treeState = buildBankTreeState()) {
+    const safeCurrentFolderId = normalizeTreeId(currentOpenFolderId);
+    if (!safeCurrentFolderId || !treeState?.folderById?.has(safeCurrentFolderId)) {
+      currentOpenFolderId = null;
+    }
+  }
+
+  function getSelectedFolder(treeState = buildBankTreeState()) {
+    const safeCurrentFolderId = normalizeTreeId(currentOpenFolderId);
+    if (!safeCurrentFolderId) return null;
+    return treeState?.folderById?.get(safeCurrentFolderId) || null;
+  }
+
+  function getFolderBreadcrumb(treeState = buildBankTreeState(), folderId = currentOpenFolderId) {
+    const safeFolderId = normalizeTreeId(folderId);
+    if (!safeFolderId || !treeState?.folderById?.has(safeFolderId)) return [];
+
+    const path = [];
+    let cursor = treeState.folderById.get(safeFolderId) || null;
+    while (cursor) {
+      path.unshift(cursor);
+      const parentId = normalizeTreeId(cursor.parent_id);
+      cursor = parentId ? (treeState.folderById.get(parentId) || null) : null;
+    }
+    return path;
+  }
+
+  function expandFolderPath(folderId) {
+    const treeState = buildBankTreeState();
+    const safeFolderId = normalizeTreeId(folderId);
+    if (!safeFolderId || !treeState.folderById.has(safeFolderId)) return;
+
+    let cursor = treeState.folderById.get(safeFolderId) || null;
+    while (cursor) {
+      collapsedBankFolderIds.delete(String(cursor.id));
+      const parentId = normalizeTreeId(cursor.parent_id);
+      cursor = parentId ? (treeState.folderById.get(parentId) || null) : null;
+    }
+  }
+
+  function setBankViewMode(mode = "explorer") {
+    bankViewMode = mode === "editor" ? "editor" : "explorer";
+    const isEditor = bankViewMode === "editor";
+    bankExplorerHeader?.classList.toggle("hidden", isEditor);
+    banksList?.classList.toggle("hidden", isEditor);
+    bankEditorHeader?.classList.toggle("hidden", !isEditor);
+    bankEditorHost?.classList.toggle("hidden", !isEditor);
+    banksView?.classList.toggle("is-bank-editor-open", isEditor);
+  }
+
+  function updateBankTypeFilterButtons() {
+    const currentFilter = normalizeBankTypeFilter(currentBankTypeFilter);
+    bankExplorerHeader?.querySelectorAll("[data-bank-type-filter]").forEach((btn) => {
+      const buttonFilter = normalizeBankTypeFilter(btn.dataset.bankTypeFilter);
+      const isActive = buttonFilter === currentFilter;
+      const filterTitle = isAllBankTypeFilter(buttonFilter)
+        ? "Afficher toutes les banques"
+        : `Afficher les banques ${getBankTypeFilterLabel(buttonFilter).toLowerCase()}`;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+      btn.setAttribute("title", filterTitle);
+    });
+
+    const createButtonTitle = isAllBankTypeFilter(currentFilter)
+      ? "Créer une banque"
+      : `Créer une banque ${getBankTypeLabel(currentFilter).toLowerCase()}`;
+    btnCreateBank?.setAttribute("title", createButtonTitle);
+  }
+
+  function setCurrentBankTypeFilter(typeFilter = BANK_TYPE_FILTER_ALL) {
+    const nextFilter = normalizeBankTypeFilter(typeFilter);
+    if (nextFilter === normalizeBankTypeFilter(currentBankTypeFilter)) return;
+    currentBankTypeFilter = nextFilter;
+    renderExplorer();
+  }
+
+  function setCurrentFolder(folderId = null, { expandPath = true } = {}) {
+    const safeFolderId = normalizeTreeId(folderId);
+    currentOpenFolderId = safeFolderId;
+    if (safeFolderId && expandPath) expandFolderPath(safeFolderId);
+    renderExplorer();
+  }
+
+  function getCurrentFolderContents(treeState = buildBankTreeState()) {
+    const selectedFolder = getSelectedFolder(treeState);
+    const parentId = selectedFolder ? String(selectedFolder.id) : null;
+    return {
+      selectedFolder,
+      childFolders: treeState.folderChildren.get(parentId) || [],
+      childBanks: treeState.activityChildren.get(parentId) || []
+    };
+  }
+
+  function getBankById(bankId) {
+    const safeBankId = String(bankId || "").trim();
+    if (!safeBankId) return null;
+    return (banks || []).find((bank) => String(bank?.id) === safeBankId) || null;
+  }
+
+  function getNextBankOrderForFolder(folderId = currentOpenFolderId) {
+    const treeState = buildBankTreeState();
+    const parentId = normalizeTreeId(folderId);
+    const childFolders = treeState.folderChildren.get(parentId) || [];
+    const childBanks = treeState.activityChildren.get(parentId) || [];
+    return [...childFolders, ...childBanks]
+      .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
+  }
+
+  function getNextBankOrderForFolderAfterMove(folderId, sourceBankId) {
+    const safeSourceBankId = String(sourceBankId || "");
+    const treeState = buildBankTreeState({
+      banksSource: getExplorerBanks().filter((bank) => String(bank.id) !== safeSourceBankId),
+      foldersSource: bankFolders
+    });
+    const parentId = normalizeTreeId(folderId);
+    const childFolders = treeState.folderChildren.get(parentId) || [];
+    const childBanks = treeState.activityChildren.get(parentId) || [];
+    return [...childFolders, ...childBanks]
+      .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
+  }
+
+  function renderBankBreadcrumb(treeState = buildBankTreeState()) {
+    if (!bankBreadcrumb) return;
+    const breadcrumb = getFolderBreadcrumb(treeState);
+    bankBreadcrumb.innerHTML = [
+      `<button class="dashboard-breadcrumb-btn${breadcrumb.length === 0 ? " is-current" : ""}" type="button" data-action="open-root">Banques</button>`,
+      ...breadcrumb.map((folder, index) => {
+        const isCurrent = index === breadcrumb.length - 1;
+        return `
+          <span class="dashboard-breadcrumb-separator" aria-hidden="true">/</span>
+          <button
+            class="dashboard-breadcrumb-btn${isCurrent ? " is-current" : ""}"
+            type="button"
+            data-action="open-folder"
+            data-folder-id="${escapeAttr(folder.id)}"
+          >
+            ${escapeHtml(folder.name || "")}
+          </button>
+        `;
+      })
+    ].join("");
+  }
+
+  function renderTreeFolderNode(node) {
+    const folder = node.item;
+    const folderId = String(folder.id);
+    const chevronIcon = node.isCollapsed ? "chevron_right" : "expand_more";
+    const isSelected = normalizeTreeId(currentOpenFolderId) === folderId;
+
+    return `
+      <div
+        class="dashboard-activity-tree-row dashboard-tree-node ${isSelected ? "is-selected" : ""}"
+        data-node-type="folder"
+        data-node-id="${escapeAttr(folderId)}"
+        data-parent-id="${escapeAttr(node.parentId || "")}"
+        data-tree-path="${escapeAttr(node.treePath)}"
+        style="--dashboard-tree-depth:${Math.max(0, Number(node.depth) || 0)};"
+      >
+        <div class="dashboard-tree-indent" aria-hidden="true"></div>
+
+        <button
+          class="dashboard-folder-toggle-btn dashboard-material-icon-btn"
+          type="button"
+          data-action="toggle-folder"
+          data-folder-id="${escapeAttr(folderId)}"
+          title="${node.isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
+          aria-label="${node.isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
+        >
+          <span class="dashboard-material-icon" aria-hidden="true">${chevronIcon}</span>
+        </button>
+
+        <button
+          class="dashboard-activity-tree-main"
+          type="button"
+          data-action="open-folder"
+          data-folder-id="${escapeAttr(folderId)}"
+        >
+          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">folder</span>
+          <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name || "")}</span>
+        </button>
+      </div>
+    `;
+  }
+
+  function renderExplorerFolderTile(folder) {
+    return `
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}">
+        <button
+          class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder"
+          type="button"
+          data-action="open-folder"
+          data-folder-id="${escapeAttr(folder.id)}"
+        >
+          <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
+          <span class="dashboard-activity-tile-title">${escapeHtml(folder.name || "")}</span>
+        </button>
+
+        <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-folder" data-folder-id="${escapeAttr(folder.id)}" title="Renommer le dossier" aria-label="Renommer le dossier">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-folder" data-folder-id="${escapeAttr(folder.id)}" title="Supprimer le dossier" aria-label="Supprimer le dossier">
+            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderExplorerParentTile(selectedFolder) {
+    if (!selectedFolder) return "";
+    const parentId = normalizeTreeId(selectedFolder.parent_id);
+    return `
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--parent">
+        <button
+          class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder"
+          type="button"
+          data-action="${parentId ? "open-folder" : "open-root"}"
+          ${parentId ? `data-folder-id="${escapeAttr(parentId)}"` : ""}
+        >
+          <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">arrow_upward</span>
+          <span class="dashboard-activity-tile-title">Dossier parent</span>
+        </button>
+      </article>
+    `;
+  }
+
+  function renderExplorerBankTile(bank) {
+    const bankId = String(bank.id || "");
+    const typeLabel = getBankTypeLabel(bank.bank_type);
+    const canDrag = bank.is_system !== true;
+    const actionButtons = bank.is_system === true
+      ? ""
+      : `
+        <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-bank" data-bank-id="${escapeAttr(bankId)}" title="Renommer la banque" aria-label="Renommer la banque">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
+
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-bank" data-bank-id="${escapeAttr(bankId)}" title="Supprimer la banque" aria-label="Supprimer la banque">
+            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+          </button>
+        </div>
+      `;
+    return `
+      <article
+        class="dashboard-activity-tile dashboard-activity-tile--activity"
+        data-node-type="bank"
+        data-node-id="${escapeAttr(bankId)}"
+        draggable="${canDrag ? "true" : "false"}"
+      >
+        <button
+          class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity"
+          type="button"
+          data-action="open-bank"
+          data-bank-id="${escapeAttr(bankId)}"
+          draggable="false"
+        >
+          <span class="dashboard-activity-tile-topline">
+            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">database</span>
+            <span class="dashboard-activity-tile-subtitle dashboard-mini-pill dashboard-activity-tile-mode-badge">
+              ${escapeHtml(typeLabel)}
+            </span>
+          </span>
+          <span class="dashboard-activity-tile-title">${escapeHtml(bank.title || "Banque sans titre")}</span>
+        </button>
+        ${actionButtons}
+      </article>
+    `;
+  }
+
+  function renderEmptyExplorerState(treeState = buildBankTreeState()) {
+    const currentFilter = normalizeBankTypeFilter(currentBankTypeFilter);
+    const selectedFolder = getSelectedFolder(treeState);
+    const contextLabel = selectedFolder ? `dans « ${selectedFolder.name} »` : "à la racine";
+    const message = isAllBankTypeFilter(currentFilter)
+      ? `Aucune banque ${contextLabel}.`
+      : `Aucune banque de type ${getBankTypeLabel(currentFilter).toLowerCase()} ${contextLabel}.`;
+    return `<div class="dashboard-activity-empty-state">${escapeHtml(message)}</div>`;
+  }
+
+  function renderExplorerShell(treeState, visibleNodes) {
+    const { selectedFolder, childFolders, childBanks } = getCurrentFolderContents(treeState);
+    const treeHtml = visibleNodes
+      .filter((node) => node.type === "folder")
+      .map(renderTreeFolderNode)
+      .join("");
+    const tilesHtml = [
+      renderExplorerParentTile(selectedFolder),
+      ...childFolders.map(renderExplorerFolderTile),
+      ...childBanks.map(renderExplorerBankTile)
+    ].filter(Boolean).join("");
+
+    return `
+      <div class="dashboard-activities-explorer" style="--dashboard-tree-pane-width:${treePaneWidthPercent}%;">
+        <aside class="dashboard-activity-tree-pane panel">
+          <div class="dashboard-activity-tree-list">
+            <div class="dashboard-activity-tree-row dashboard-activity-tree-root ${normalizeTreeId(currentOpenFolderId) ? "" : "is-selected"}">
+              <button class="dashboard-activity-tree-main dashboard-activity-tree-main--root" type="button" data-action="open-root">
+                <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">home</span>
+                <span class="dashboard-activity-tree-node-label">Banques</span>
+              </button>
+            </div>
+            ${treeHtml || '<div class="dashboard-activity-tree-empty">Aucun dossier pour le moment.</div>'}
+          </div>
+        </aside>
+
+        <div class="dashboard-activity-splitter" role="separator" aria-orientation="vertical" aria-label="Séparateur entre les panneaux"></div>
+
+        <section class="dashboard-activity-tiles-pane panel">
+          <div class="dashboard-activity-tiles-grid-wrap">
+            <div class="dashboard-activity-tiles-grid">
+              ${tilesHtml || renderEmptyExplorerState(treeState)}
+            </div>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderExplorer() {
+    if (!banksList) return;
+    const { state: treeState, visibleNodes } = buildVisibleBankTree();
+    sanitizeCurrentFolderSelection(treeState);
+    renderBankBreadcrumb(treeState);
+    updateBankTypeFilterButtons();
+    banksList.classList.add("dashboard-explorer-host");
+    banksList.innerHTML = renderExplorerShell(treeState, visibleNodes);
+    bindExplorerEvents();
+  }
+
+  function getFolderById(folderId) {
+    const safeFolderId = normalizeTreeId(folderId);
+    return safeFolderId ? (bankFolders || []).find((folder) => String(folder.id) === safeFolderId) || null : null;
+  }
+
+  function openNameInputOverlay({ title, confirmLabel, initialName = "", placeholder = "", onConfirm } = {}) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    overlay.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-title">${escapeHtml(title || "Dossier")}</div>
+        <input id="bankFolderNameInput" class="modal-text-input" type="text" placeholder="${escapeAttr(placeholder || "")}" value="${escapeAttr(initialName || "")}">
+        <div class="modal-actions">
+          <div id="bankFolderModalMessage" class="modal-message"></div>
+          <button class="btn" id="bankFolderModalCancel" type="button">Annuler</button>
+          <button class="btn primary" id="bankFolderModalConfirm" type="button">${escapeHtml(confirmLabel || "Enregistrer")}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector("#bankFolderNameInput");
+    const message = overlay.querySelector("#bankFolderModalMessage");
+
+    function close() { overlay.remove(); }
+
+    async function submit() {
+      const name = String(input?.value || "").trim();
+      if (!name) {
+        message.textContent = "Entre un nom de dossier.";
+        message.classList.add("is-error");
+        input?.focus();
+        return;
+      }
+
+      message.textContent = "";
+      message.classList.remove("is-error");
+      try {
+        await onConfirm?.(name);
+        close();
+      } catch (err) {
+        message.textContent = err?.message || "Enregistrement impossible.";
+        message.classList.add("is-error");
+      }
+    }
+
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+    overlay.querySelector("#bankFolderModalCancel")?.addEventListener("click", close);
+    overlay.querySelector("#bankFolderModalConfirm")?.addEventListener("click", () => { void submit(); });
+    input?.focus();
+    input?.select();
+  }
+
+  async function openCreateFolderOverlay(parentId = currentOpenFolderId) {
+    const teacherSpace = getCurrentTeacherSpace?.();
+    if (!teacherSpace?.id) return;
+    openNameInputOverlay({
+      title: "Créer un dossier",
+      confirmLabel: "Créer",
+      initialName: "",
+      placeholder: "Nom du dossier",
+      onConfirm: async (name) => {
+        const created = await createQuestionBankFolderForSpace(teacherSpace.id, { name, parent_id: parentId });
+        bankFolders = [...bankFolders, created];
+        knownBankFolderIds.add(String(created.id));
+        collapsedBankFolderIds.add(String(created.id));
+        renderExplorer();
+      }
+    });
+  }
+
+  function openRenameFolderOverlay(folderId) {
+    const folder = getFolderById(folderId);
+    if (!folder) return;
+    openNameInputOverlay({
+      title: "Renommer le dossier",
+      confirmLabel: "Enregistrer",
+      initialName: folder.name || "",
+      placeholder: "Nom du dossier",
+      onConfirm: async (name) => {
+        const updated = await updateQuestionBankFolder(folder.id, { name });
+        bankFolders = bankFolders.map((item) => String(item.id) === String(folder.id) ? { ...item, ...updated } : item);
+        renderExplorer();
+      }
+    });
+  }
+
+  function openRenameBankOverlay(bankId) {
+    const bank = getBankById(bankId);
+    if (!bank || bank.is_system === true) return;
+
+    openNameInputOverlay({
+      title: "Renommer la banque",
+      confirmLabel: "Enregistrer",
+      initialName: bank.title || "",
+      placeholder: "Nom de la banque",
+      onConfirm: async (name) => {
+        if (bankTitleAlreadyExists(banks, name, bank.id)) {
+          throw new Error("Une banque porte déjà ce nom.");
+        }
+
+        const updated = await updateQuestionBank(bank.id, { title: name });
+        banks = banks.map((item) => String(item.id) === String(updated.id) ? { ...item, ...updated } : item);
+        if (String(selectedBankId || "") === String(updated.id)) {
+          selectedBank = { ...(selectedBank || {}), ...updated };
+          metaDraft = metaDraft ? { ...metaDraft, title: updated.title || "" } : metaDraft;
+        }
+        renderExplorer();
+        updateActionState();
+      }
+    });
+  }
+
+  async function deleteBankFromExplorer(bankId) {
+    const bank = getBankById(bankId);
+    if (!bank || bank.is_system === true) return;
+
+    const ok = window.confirm(`Supprimer la banque « ${bank.title} » ?`);
+    if (!ok) return;
+
+    try {
+      await deleteQuestionBank(bank.id);
+      banks = banks.filter((item) => String(item.id) !== String(bank.id));
+      if (String(selectedBankId || "") === String(bank.id)) {
+        selectedBankId = null;
+        selectedBank = null;
+        itemDrafts = [];
+        metaDraft = null;
+        expandedItemIndex = -1;
+        setPendingChanges(false);
+        setSaveStatus("idle", "Aucune banque sélectionnée");
+        renderEditor();
+      }
+      renderExplorer();
+      updateActionState();
+    } catch (err) {
+      showToast?.(err?.message || "Impossible de supprimer la banque.", { isError: true });
+    }
+  }
+
+  function openDeleteFolderOverlay(folderId) {
+    const folder = getFolderById(folderId);
+    if (!folder) return;
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    overlay.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-title">Supprimer le dossier</div>
+        <div class="dashboard-message">Supprimer le dossier "${escapeHtml(folder.name || "")}" ?</div>
+        <div class="modal-actions">
+          <div id="deleteBankFolderMessage" class="modal-message"></div>
+          <button class="btn" id="deleteBankFolderCancel" type="button">Annuler</button>
+          <button class="btn dashboard-danger-btn" id="deleteBankFolderConfirm" type="button">Supprimer</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const message = overlay.querySelector("#deleteBankFolderMessage");
+
+    function close() { overlay.remove(); }
+
+    async function submit() {
+      const treeState = buildBankTreeState();
+      const hasChildFolders = (treeState.folderChildren.get(String(folder.id)) || []).length > 0;
+      const hasChildBanks = (treeState.activityChildren.get(String(folder.id)) || []).length > 0;
+      if (hasChildFolders || hasChildBanks) {
+        message.textContent = "Ce dossier doit être vide avant suppression.";
+        message.classList.add("is-error");
+        return;
+      }
+
+      message.textContent = "Suppression…";
+      message.classList.remove("is-error");
+      try {
+        await deleteQuestionBankFolder(folder.id);
+        bankFolders = bankFolders.filter((item) => String(item.id) !== String(folder.id));
+        collapsedBankFolderIds.delete(String(folder.id));
+        knownBankFolderIds.delete(String(folder.id));
+        if (normalizeTreeId(currentOpenFolderId) === String(folder.id)) currentOpenFolderId = null;
+        close();
+        renderExplorer();
+      } catch (err) {
+        message.textContent = err?.message || "Suppression impossible.";
+        message.classList.add("is-error");
+      }
+    }
+
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+    overlay.querySelector("#deleteBankFolderCancel")?.addEventListener("click", close);
+    overlay.querySelector("#deleteBankFolderConfirm")?.addEventListener("click", () => { void submit(); });
+  }
+
+  function clearHighlightedBankDropTargets() {
+    banksList?.querySelectorAll(".dashboard-activity-tile.is-dragging, .dashboard-activity-tile.is-drop-inside, .dashboard-tree-node.is-drop-inside, .dashboard-activity-tree-root.is-drop-inside").forEach((el) => {
+      el.classList.remove("is-dragging", "is-drop-inside");
+    });
+  }
+
+  function clearBankDropMarkers() {
+    bankDropTarget = null;
+    clearHighlightedBankDropTargets();
+  }
+
+  function getBankDropTargetFromEvent(event) {
+    const targetEl = event.target instanceof Element ? event.target : null;
+    if (!targetEl || !banksList?.contains(targetEl)) return null;
+
+    if (targetEl.closest(".dashboard-activity-tree-root")) {
+      return { mode: "append-root" };
+    }
+
+    const folderTile = targetEl.closest(".dashboard-activity-tile[data-node-type='folder'][data-node-id]");
+    if (folderTile) {
+      return {
+        mode: "inside",
+        targetId: String(folderTile.dataset.nodeId || ""),
+        targetSurface: "tile"
+      };
+    }
+
+    const folderRow = targetEl.closest(".dashboard-tree-node[data-node-type='folder'][data-node-id]");
+    if (folderRow) {
+      return {
+        mode: "inside",
+        targetId: String(folderRow.dataset.nodeId || ""),
+        targetSurface: "tree"
+      };
+    }
+
+    return null;
+  }
+
+  function renderBankDropTarget(dropTarget) {
+    clearHighlightedBankDropTargets();
+    if (!dropTarget) return;
+
+    if (dropTarget.mode === "append-root") {
+      banksList?.querySelector(".dashboard-activity-tree-root")?.classList.add("is-drop-inside");
+      return;
+    }
+
+    if (dropTarget.mode !== "inside") return;
+    const targetId = CSS.escape(String(dropTarget.targetId || ""));
+    if (dropTarget.targetSurface === "tile") {
+      banksList?.querySelector(`.dashboard-activity-tile[data-node-type="folder"][data-node-id="${targetId}"]`)?.classList.add("is-drop-inside");
+      return;
+    }
+
+    banksList?.querySelector(`.dashboard-tree-node[data-node-type="folder"][data-node-id="${targetId}"]`)?.classList.add("is-drop-inside");
+  }
+
+  async function moveBankToDropTarget(bankId, dropTarget) {
+    const teacherSpace = getCurrentTeacherSpace?.();
+    if (!teacherSpace?.id || !dropTarget) return;
+
+    const sourceBank = getBankById(bankId);
+    if (!sourceBank || sourceBank.is_system === true) {
+      clearBankDropMarkers();
+      return;
+    }
+
+    const targetFolderId = dropTarget.mode === "append-root" ? null : normalizeTreeId(dropTarget.targetId);
+    if (dropTarget.mode === "inside" && !getFolderById(targetFolderId)) {
+      clearBankDropMarkers();
+      return;
+    }
+
+    const previousBanks = [...banks];
+    const nextDisplayOrder = getNextBankOrderForFolderAfterMove(targetFolderId, sourceBank.id);
+    banks = banks.map((bank) => String(bank?.id) === String(sourceBank.id)
+      ? {
+          ...bank,
+          folder_id: targetFolderId,
+          display_order: nextDisplayOrder
+        }
+      : bank);
+
+    isMovingBank = true;
+    renderExplorer();
+
+    try {
+      const updated = await updateQuestionBank(sourceBank.id, {
+        folder_id: targetFolderId,
+        display_order: nextDisplayOrder
+      });
+      banks = banks.map((bank) => String(bank?.id) === String(sourceBank.id)
+        ? { ...bank, ...updated }
+        : bank);
+    } catch (err) {
+      banks = previousBanks;
+      showToast?.(err?.message || "Impossible de déplacer la banque.", { isError: true });
+    } finally {
+      isMovingBank = false;
+      draggedBankId = null;
+      clearBankDropMarkers();
+      renderExplorer();
+    }
+  }
+
+  function handleBankDragStart(event) {
+    const card = event.currentTarget;
+    const bankId = String(card?.dataset?.nodeId || "");
+    const bank = getBankById(bankId);
+    if (!bankId || !bank || bank.is_system === true || isMovingBank) {
+      event.preventDefault();
+      return;
+    }
+
+    draggedBankId = bankId;
+    card.classList.add("is-dragging");
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", `bank:${bankId}`);
+    }
+  }
+
+  function handleBankDragOver(event) {
+    if (!draggedBankId || isMovingBank) return;
+    const dropTarget = getBankDropTargetFromEvent(event);
+    if (!dropTarget) return;
+
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    bankDropTarget = dropTarget;
+    renderBankDropTarget(dropTarget);
+    banksList?.querySelector(`.dashboard-activity-tile[data-node-type="bank"][data-node-id="${CSS.escape(draggedBankId)}"]`)?.classList.add("is-dragging");
+  }
+
+  function handleBankDragLeave(event) {
+    if (!banksList) return;
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && banksList.contains(relatedTarget)) return;
+    clearBankDropMarkers();
+  }
+
+  async function handleBankDrop(event) {
+    if (!draggedBankId || isMovingBank) return;
+    const dropTarget = bankDropTarget || getBankDropTargetFromEvent(event);
+    if (!dropTarget) return;
+
+    event.preventDefault();
+    await moveBankToDropTarget(draggedBankId, dropTarget);
+  }
+
+  function handleBankDragEnd() {
+    draggedBankId = null;
+    clearBankDropMarkers();
+  }
+
+  function bindExplorerEvents() {
+    banksList?.querySelectorAll("[data-action='toggle-folder']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleFolderExpanded(btn.dataset.folderId);
+      });
+    });
+
+    banksList?.querySelectorAll("[data-action='open-root']").forEach((btn) => {
+      btn.addEventListener("click", () => setCurrentFolder(null));
+    });
+
+    banksList?.querySelectorAll("[data-action='open-folder']").forEach((btn) => {
+      btn.addEventListener("click", () => setCurrentFolder(btn.dataset.folderId));
+    });
+
+    banksList?.querySelectorAll("[data-action='rename-folder']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openRenameFolderOverlay(btn.dataset.folderId);
+      });
+    });
+
+    banksList?.querySelectorAll("[data-action='delete-folder']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openDeleteFolderOverlay(btn.dataset.folderId);
+      });
+    });
+
+    banksList?.querySelectorAll("[data-action='rename-bank']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openRenameBankOverlay(btn.dataset.bankId);
+      });
+    });
+
+    banksList?.querySelectorAll("[data-action='delete-bank']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void deleteBankFromExplorer(btn.dataset.bankId);
+      });
+    });
+
+    banksList?.querySelectorAll("[data-action='open-bank']").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void selectBank(btn.dataset.bankId);
+      });
+    });
+
+    banksList?.querySelectorAll(".dashboard-activity-tile[data-node-type='bank'][data-node-id][draggable='true']").forEach((card) => {
+      card.addEventListener("dragstart", handleBankDragStart);
+      card.addEventListener("dragend", handleBankDragEnd);
+    });
+  }
+
+  function toggleFolderExpanded(folderId) {
+    const safeFolderId = normalizeTreeId(folderId);
+    if (!safeFolderId) return;
+    if (collapsedBankFolderIds.has(safeFolderId)) {
+      collapsedBankFolderIds.delete(safeFolderId);
+    } else {
+      collapsedBankFolderIds.add(safeFolderId);
+    }
+    renderExplorer();
+  }
+
+  async function closeBankEditor({ force = false } = {}) {
+    if (hasPendingChanges && !force && !window.confirm("Des modifications non enregistrées existent. Revenir aux banques ?")) {
+      return false;
+    }
+    selectedBankId = null;
+    selectedBank = null;
+    itemDrafts = [];
+    metaDraft = null;
+    expandedItemIndex = -1;
+    setTableBusy(false);
+    setPendingChanges(false);
+    setSaveStatus("idle", "Aucune banque sélectionnée");
+    renderEditor();
+    setBankViewMode("explorer");
+    renderExplorer();
+    return true;
+  }
 
   function getSelectedBank() {
     return selectedBank || banks.find((bank) => String(bank?.id) === String(selectedBankId)) || null;
@@ -611,14 +1526,43 @@ export function createQuestionBanksViewController({
     }
   }
 
-  function renderSaveStatus() {
-    if (!bankSaveStatus) return;
+  function renderBankEditorMessage() {
+    const messageEl = document.getElementById("bankEditorMessage");
+    if (!messageEl) return;
+
     const safeStatus = saveStatus || "idle";
     const label = saveStatusMessage || "";
-    bankSaveStatus.textContent = SAVE_STATUS_ICONS[safeStatus] || "warning";
-    bankSaveStatus.dataset.state = safeStatus;
-    bankSaveStatus.title = label;
-    bankSaveStatus.setAttribute("aria-label", label);
+    const shouldShowMessage = Boolean(label) && safeStatus !== "idle";
+    messageEl.textContent = shouldShowMessage ? label : "";
+    messageEl.style.color = safeStatus === "error" ? "var(--bad)" : "var(--muted)";
+  }
+
+  function renderSaveStatus() {
+    const bank = getSelectedBank();
+    const canEditBank = canEditSelectedBank();
+    const safeStatus = saveStatus || "idle";
+
+    if (btnSaveBank) {
+      btnSaveBank.classList.remove("dirty", "saving", "saved", "readonly");
+
+      if (safeStatus === "saving" || safeStatus === "loading") {
+        btnSaveBank.classList.add("saving");
+        btnSaveBank.textContent = safeStatus === "loading" ? "Chargement…" : "Enregistrement…";
+      } else if (safeStatus === "saved" && !hasPendingChanges) {
+        btnSaveBank.classList.add("saved");
+        btnSaveBank.textContent = "Enregistré";
+      } else {
+        if (hasPendingChanges || safeStatus === "dirty" || safeStatus === "error") {
+          btnSaveBank.classList.add("dirty");
+        }
+        btnSaveBank.textContent = "Enregistrer";
+      }
+
+      btnSaveBank.disabled = !canEditBank || safeStatus === "saving" || safeStatus === "loading";
+      btnSaveBank.classList.toggle("readonly", bank?.is_system === true);
+    }
+
+    renderBankEditorMessage();
   }
 
   function setSaveStatus(status = "idle", message = "") {
@@ -630,6 +1574,27 @@ export function createQuestionBanksViewController({
   function updateActionState() {
     const bank = getSelectedBank();
     const canEditBank = canEditSelectedBank();
+
+    if (bankEditorHeaderTitle) {
+      bankEditorHeaderTitle.textContent = bank?.title || "Banque sans nom";
+      bankEditorHeaderTitle.classList.toggle("is-empty", !bank?.title);
+      bankEditorHeaderTitle.title = bank?.title || "";
+    }
+
+    const btnRenameBankFromHeader = document.getElementById("btnRenameBankFromHeader");
+    if (btnRenameBankFromHeader) {
+      btnRenameBankFromHeader.disabled = !bank || bank.is_system === true || isSaving;
+      btnRenameBankFromHeader.title = bank?.is_system === true
+        ? "Cette banque proposée ne peut pas être renommée"
+        : "Renommer la banque";
+    }
+
+    const bankEditorTypePill = document.getElementById("bankEditorTypePill");
+    if (bankEditorTypePill) {
+      bankEditorTypePill.hidden = !bank;
+      bankEditorTypePill.textContent = bank ? getBankTypeLabel(bank.bank_type) : "";
+      bankEditorTypePill.title = bank ? `Type technique : ${bank.bank_type || DEFAULT_BANK_TYPE}` : "";
+    }
 
     const importButton = document.getElementById("btnImportBank");
     if (importButton) {
@@ -645,13 +1610,6 @@ export function createQuestionBanksViewController({
         ? "Les banques proposées ne peuvent pas être supprimées."
         : "";
     }
-
-    if (btnSaveBank) {
-      btnSaveBank.disabled = !hasPendingChanges || !canEditBank || isSaving;
-      btnSaveBank.textContent = isSaving ? "Enregistrement…" : "Enregistrer";
-    }
-
-    banksView?.classList.toggle("has-pending-bank-changes", hasPendingChanges);
 
     if (!bank) {
       setSaveStatus("idle", "Aucune banque sélectionnée");
@@ -692,32 +1650,7 @@ export function createQuestionBanksViewController({
   }
 
   function renderBanksList() {
-    if (!banksList) return;
-
-    if (!banks.length) {
-      banksList.innerHTML = `
-        <div class="dashboard-bank-list-empty">
-          <span class="dashboard-material-icon" aria-hidden="true">inventory_2</span>
-          <span>Aucune banque pour le moment.</span>
-        </div>
-      `;
-      return;
-    }
-
-    banksList.innerHTML = banks.map((bank) => {
-      const isSelected = String(bank.id) === String(selectedBankId);
-      const typeLabel = getBankTypeLabel(bank.bank_type);
-      const badge = bank.is_system ? "Proposée" : "Personnelle";
-      const itemCount = Number(bank.items_count ?? bank.item_count);
-      return `
-        <button class="dashboard-bank-list-card ${isSelected ? "is-selected" : ""}" type="button" data-bank-id="${escapeAttr(bank.id)}">
-          <span class="dashboard-bank-list-title">${escapeHtml(bank.title)}</span>
-          <span class="dashboard-bank-list-meta">
-            ${escapeHtml(typeLabel)} · ${escapeHtml(badge)}${Number.isFinite(itemCount) ? ` · ${itemCount} item${itemCount > 1 ? "s" : ""}` : ""}
-          </span>
-        </button>
-      `;
-    }).join("");
+    renderExplorer();
   }
 
   function buildEditorMarkup() {
@@ -727,7 +1660,6 @@ export function createQuestionBanksViewController({
     const bankType = normalizeBankType(bank.bank_type);
     const isEditableItemsBank = isEditableBankType(bankType);
     const canEditItems = canEditSelectedBankItems();
-    const typeLabel = getBankTypeLabel(bank.bank_type);
     const tagsText = Array.isArray(metaDraft.tags) ? metaDraft.tags.join("; ") : "";
     const qcmDistractorColumnCount = isQcmType(bankType) ? getCurrentQcmDistractorColumnCount() : 1;
 
@@ -735,9 +1667,6 @@ export function createQuestionBanksViewController({
       <div class="dashboard-bank-editor">
         <div class="dashboard-bank-editor-top">
           <div class="dashboard-bank-title-fields">
-            <label class="dashboard-bank-title-label" for="bankTitleInput">Titre de la banque :</label>
-            <input id="bankTitleInput" class="dashboard-bank-input dashboard-bank-title-input" type="text" value="${escapeAttr(metaDraft.title)}" ${isSystem ? "disabled" : ""}>
-            <div class="dashboard-bank-type-pill" title="Type technique : ${escapeAttr(bank.bank_type || DEFAULT_BANK_TYPE)}">${escapeHtml(typeLabel)}</div>
             <button
               id="btnToggleBankMeta"
               class="dashboard-bank-meta-toggle dashboard-material-icon-btn"
@@ -862,7 +1791,7 @@ export function createQuestionBanksViewController({
         <div>
           <div class="dashboard-bank-unsupported-title">Type de banque conservé, pas encore éditable ici</div>
           <div class="dashboard-bank-unsupported-text">
-            Cette interface sait modifier les banques de réponses textuelles, les banques QCM et les banques Sélection. Les ${itemDrafts.length} item${itemDrafts.length > 1 ? "s" : ""} de type ${escapeHtml(getBankTypeLabel(bank?.bank_type))} sont chargés et préservés.
+            Cette interface sait modifier les banques Texte, les banques QCM et les banques Sélection. Les ${itemDrafts.length} item${itemDrafts.length > 1 ? "s" : ""} de type ${escapeHtml(getBankTypeLabel(bank?.bank_type))} sont chargés et préservés.
           </div>
         </div>
       </div>
@@ -890,7 +1819,7 @@ export function createQuestionBanksViewController({
     if (fieldName === "distractors") return distractorsToText(distractorsFromFields(payload));
     {
       const match = String(fieldName || "").match(/^distractor([1-5])$/);
-      if (match) return String(distractorsFromFields(payload)[Number(match[1]) - 1] || "");
+      if (match) return String(distractorsFromFields(payload, { keepEmpty: true })[Number(match[1]) - 1] || "");
     }
     if (fieldName === "explanation") return String(payload.explanation || "");
     return "";
@@ -1123,8 +2052,12 @@ export function createQuestionBanksViewController({
     }
 
     bankEditorHost.innerHTML = buildEditorMarkup();
-    bindRowsHostEvents();
-    refreshItemsTable({ preserveScroll: false, force: true });
+    if (selectedBankIsEditableType()) {
+      bindRowsHostEvents();
+      refreshItemsTable({ preserveScroll: false, force: true });
+    } else {
+      unbindRowsHostEvents();
+    }
     updateActionState();
     updateItemsSummaryUi();
     renderTableBusy();
@@ -1174,7 +2107,7 @@ export function createQuestionBanksViewController({
   function refreshItemsTable({ preserveScroll = true, force = false } = {}) {
     const rowsHost = getItemsRowsHost();
     if (!rowsHost) {
-      renderEditor();
+      unbindRowsHostEvents();
       return;
     }
 
@@ -1282,7 +2215,6 @@ export function createQuestionBanksViewController({
 
   function syncMetaDraftFromInputs() {
     if (!metaDraft) return;
-    metaDraft.title = document.getElementById("bankTitleInput")?.value ?? metaDraft.title;
     metaDraft.subject = document.getElementById("bankSubjectInput")?.value ?? metaDraft.subject;
     metaDraft.grade_level = document.getElementById("bankGradeInput")?.value ?? metaDraft.grade_level;
     metaDraft.tags = normalizeTagsInput(document.getElementById("bankTagsInput")?.value ?? metaDraft.tags);
@@ -1750,7 +2682,9 @@ export function createQuestionBanksViewController({
     try {
       const newTitle = buildUniqueBankTitle(banks, bank.title);
       const { bank: copiedBank } = await copyQuestionBankToSpace(bank.id, teacherSpace.id, {
-        title: newTitle
+        title: newTitle,
+        folder_id: currentOpenFolderId,
+        display_order: getNextBankOrderForFolder(currentOpenFolderId)
       });
       await refresh({ forceRefresh: true, preferredBankId: copiedBank.id });
       showToast?.("Copie personnelle créée.");
@@ -1893,10 +2827,10 @@ export function createQuestionBanksViewController({
     expandedItemIndex = -1;
     itemDrafts = [];
     hasPendingChanges = false;
+    setBankViewMode("editor");
     setTableBusy(Boolean(selectedBank), "Chargement des questions…");
     setSaveStatus(selectedBank ? "loading" : "idle", selectedBank ? "Chargement de la banque…" : "Aucune banque sélectionnée");
     updateActionState();
-    renderBanksList();
     renderEditor();
 
     if (!selectedBank) return false;
@@ -1927,32 +2861,41 @@ export function createQuestionBanksViewController({
       itemDrafts = [];
       metaDraft = null;
       expandedItemIndex = -1;
+      bankFolders = [];
       setTableBusy(false);
       setPendingChanges(false);
+      setBankViewMode("explorer");
+      if (banksList) {
+        renderBankBreadcrumb(buildBankTreeState());
+        banksList.innerHTML = `<div class="dashboard-activity-empty-state">Crée d’abord ton espace enseignant.</div>`;
+      }
       renderEmptyState("Crée d’abord ton espace enseignant.");
       return;
     }
 
-    if (hasPendingChanges && !forceRefresh && selectedBankId) {
-      renderBanksList();
+    if (hasPendingChanges && !forceRefresh && selectedBankId && bankViewMode === "editor") {
       renderEditor();
       return;
     }
 
     isRendering = true;
     try {
-      banks = await listQuestionBanksForSpace(teacherSpace.id, { includeSystem: true });
+      const [nextBanks, nextFolders] = await Promise.all([
+        listQuestionBanksForSpace(teacherSpace.id, { includeSystem: true }),
+        listQuestionBankFoldersForSpace(teacherSpace.id)
+      ]);
+      banks = Array.isArray(nextBanks) ? nextBanks : [];
+      bankFolders = Array.isArray(nextFolders) ? nextFolders : [];
+      syncCollapsedBankFolders();
+      sanitizeCurrentFolderSelection(buildBankTreeState());
+
       if (preferredBankId) {
-        selectedBankId = preferredBankId;
-      } else if (!selectedBankId && banks.length) {
-        selectedBankId = banks[0].id;
-      } else if (selectedBankId && !banks.some((bank) => String(bank.id) === String(selectedBankId))) {
-        selectedBankId = banks[0]?.id || null;
-      }
-      renderBanksList();
-      if (selectedBankId) {
+        renderExplorer();
+        await selectBank(preferredBankId, { forceReload: true });
+      } else if (bankViewMode === "editor" && selectedBankId && banks.some((bank) => String(bank.id) === String(selectedBankId))) {
         await selectBank(selectedBankId, { forceReload: true });
       } else {
+        selectedBankId = null;
         selectedBank = null;
         itemDrafts = [];
         metaDraft = null;
@@ -1960,11 +2903,16 @@ export function createQuestionBanksViewController({
         setTableBusy(false);
         setPendingChanges(false);
         setSaveStatus("idle", "Aucune banque sélectionnée");
+        setBankViewMode("explorer");
+        renderExplorer();
         renderEditor();
       }
     } catch (err) {
       setTableBusy(false);
-      banksList.innerHTML = `<div class="dashboard-bank-list-empty is-error">${escapeHtml(err?.message || "Impossible de charger les banques.")}</div>`;
+      setBankViewMode("explorer");
+      if (banksList) {
+        banksList.innerHTML = `<div class="dashboard-activity-empty-state is-error">${escapeHtml(err?.message || "Impossible de charger les banques.")}</div>`;
+      }
       setSaveStatus("error", "Erreur de chargement");
       renderEmptyState("Impossible de charger les banques. Vérifie que le SQL des banques a été exécuté dans Supabase.");
     } finally {
@@ -1972,30 +2920,209 @@ export function createQuestionBanksViewController({
     }
   }
 
-  async function createBank() {
+  async function createBank({ title, bankType } = {}) {
     const teacherSpace = getCurrentTeacherSpace?.();
     if (!teacherSpace?.id) return;
-    if (hasPendingChanges && !window.confirm("Des modifications non enregistrées existent. Créer une nouvelle banque ?")) return;
 
-    try {
-      const requestedType = normalizeBankType(document.getElementById("bankCreateType")?.value || DEFAULT_BANK_TYPE);
-      const bankType = isEditableBankType(requestedType) ? requestedType : DEFAULT_BANK_TYPE;
-      const title = buildUniqueBankTitle(banks, isSelectionType(bankType) ? "Nouvelle banque Sélection" : isQcmType(bankType) ? "Nouvelle banque QCM" : "Nouvelle banque");
-      const bank = await createQuestionBankForSpace(teacherSpace.id, {
-        title,
-        bank_type: bankType
-      });
-      await refresh({ forceRefresh: true, preferredBankId: bank.id });
-      if (String(selectedBankId) === String(bank.id) && !itemDrafts.length && selectedBankIsEditableType()) {
-        itemDrafts = [createEmptyItem(bank.bank_type || DEFAULT_BANK_TYPE)];
-        setSaveStatus("saved", "Nouvelle banque créée");
-        updateActionState();
-        renderEditor();
-        focusBankCell(0, "prompt");
-      }
-    } catch (err) {
-      showToast?.(err?.message || "Impossible de créer la banque.", { isError: true });
+    const safeType = isEditableBankType(bankType) ? normalizeBankType(bankType) : DEFAULT_BANK_TYPE;
+    const safeTitle = String(title || "").trim();
+    if (!safeTitle) {
+      throw new Error("Nom de banque vide.");
     }
+
+    const bank = await createQuestionBankForSpace(teacherSpace.id, {
+      title: safeTitle,
+      bank_type: safeType,
+      folder_id: currentOpenFolderId,
+      display_order: getNextBankOrderForFolder(currentOpenFolderId)
+    });
+    await refresh({ forceRefresh: true, preferredBankId: bank.id });
+    if (String(selectedBankId) === String(bank.id) && !itemDrafts.length && selectedBankIsEditableType()) {
+      itemDrafts = [createEmptyItem(bank.bank_type || DEFAULT_BANK_TYPE)];
+      setSaveStatus("saved", "Nouvelle banque créée");
+      updateActionState();
+      renderEditor();
+      focusBankCell(0, "prompt");
+    }
+  }
+
+  function openCreateBankOverlay() {
+    const teacherSpace = getCurrentTeacherSpace?.();
+    if (!teacherSpace?.id) return;
+
+    const currentFilter = normalizeBankTypeFilter(currentBankTypeFilter);
+    let selectedType = getInitialBankCreationTypeFromFilter(currentFilter);
+    const overlay = document.createElement("div");
+    overlay.className = "modal dashboard-create-activity-modal";
+    overlay.innerHTML = `
+      <div class="modal-content modal-content-wide">
+        <div class="modal-title">Créer une banque</div>
+
+        <div class="dashboard-create-activity-section">
+          <div class="dashboard-create-activity-label">Type de banque</div>
+          <div class="dashboard-mode-choice-grid" role="radiogroup" aria-label="Type de la nouvelle banque">
+            ${BANK_CREATION_TYPE_VALUES.map((type) => {
+              const isSelected = selectedType === type;
+              return `
+                <button
+                  class="btn dashboard-mode-choice-btn dashboard-create-activity-mode-btn${isSelected ? " is-selected" : ""}"
+                  type="button"
+                  role="radio"
+                  aria-checked="${isSelected ? "true" : "false"}"
+                  data-create-bank-type="${escapeAttr(type)}"
+                >
+                  ${escapeHtml(getBankTypeLabel(type))}
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <label class="dashboard-create-activity-section" for="bankCreationNameInput">
+          <span class="dashboard-create-activity-label">Nom de la banque</span>
+          <input
+            id="bankCreationNameInput"
+            class="modal-text-input"
+            type="text"
+            placeholder="Nom de la banque"
+            autocomplete="off"
+          >
+        </label>
+
+        <div class="modal-actions">
+          <div id="bankCreationMessage" class="modal-message"></div>
+          <button class="btn" id="bankCreationCancel" type="button">Annuler</button>
+          <button class="btn primary" id="bankCreationConfirm" type="button" disabled>Créer</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector("#bankCreationNameInput");
+    const message = overlay.querySelector("#bankCreationMessage");
+    const confirmButton = overlay.querySelector("#bankCreationConfirm");
+    const cancelButton = overlay.querySelector("#bankCreationCancel");
+    const typeButtons = Array.from(overlay.querySelectorAll("[data-create-bank-type]"));
+
+    function setMessageText(text = "", isError = false) {
+      if (!message) return;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+    }
+
+    function updateTypeButtons() {
+      typeButtons.forEach((btn) => {
+        const type = normalizeBankType(btn.dataset.createBankType || DEFAULT_BANK_TYPE);
+        const isSelected = selectedType === type;
+        btn.classList.toggle("is-selected", isSelected);
+        btn.setAttribute("aria-checked", isSelected ? "true" : "false");
+      });
+    }
+
+    function updateConfirmState() {
+      const name = String(input?.value || "").trim();
+      const nameExists = Boolean(name && bankTitleAlreadyExists(banks, name));
+      const canCreate = Boolean(selectedType && name && !nameExists);
+      if (confirmButton) {
+        confirmButton.disabled = !canCreate;
+      }
+
+      if (nameExists) {
+        setMessageText("Une banque porte déjà ce nom.", true);
+      } else if (message?.textContent === "Une banque porte déjà ce nom.") {
+        setMessageText("");
+      }
+    }
+
+    function setBusy(isBusy) {
+      typeButtons.forEach((btn) => {
+        btn.disabled = isBusy;
+      });
+      if (input) input.disabled = isBusy;
+      if (cancelButton) cancelButton.disabled = isBusy;
+      if (confirmButton) confirmButton.disabled = isBusy || !selectedType || !String(input?.value || "").trim();
+    }
+
+    function close() {
+      overlay.remove();
+    }
+
+    async function submit() {
+      const name = String(input?.value || "").trim();
+
+      if (!selectedType) {
+        setMessageText("Choisis un type de banque.", true);
+        return;
+      }
+
+      if (!name) {
+        setMessageText("Entre un nom de banque.", true);
+        input?.focus();
+        return;
+      }
+
+      if (bankTitleAlreadyExists(banks, name)) {
+        setMessageText("Une banque porte déjà ce nom.", true);
+        input?.focus();
+        input?.select?.();
+        return;
+      }
+
+      setBusy(true);
+      setMessageText("Création de la banque…");
+
+      try {
+        await createBank({ title: name, bankType: selectedType });
+        close();
+      } catch (err) {
+        setMessageText(err?.message || "Impossible de créer la banque.", true);
+        setBusy(false);
+        updateConfirmState();
+      }
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    });
+
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+
+    typeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const nextType = normalizeBankType(btn.dataset.createBankType || DEFAULT_BANK_TYPE);
+        selectedType = isEditableBankType(nextType) ? nextType : DEFAULT_BANK_TYPE;
+        setMessageText("");
+        updateTypeButtons();
+        updateConfirmState();
+        input?.focus();
+      });
+    });
+
+    input?.addEventListener("input", () => {
+      setMessageText("");
+      updateConfirmState();
+    });
+
+    cancelButton?.addEventListener("click", close);
+    confirmButton?.addEventListener("click", () => {
+      void submit();
+    });
+
+    updateTypeButtons();
+    updateConfirmState();
+    input?.focus();
   }
 
   async function saveBank() {
@@ -2007,7 +3134,7 @@ export function createQuestionBanksViewController({
     if (!title) {
       showToast?.("Le titre de la banque est obligatoire.", { isError: true });
       setSaveStatus("error", "Titre obligatoire");
-      document.getElementById("bankTitleInput")?.focus();
+      document.getElementById("btnRenameBankFromHeader")?.focus();
       return;
     }
 
@@ -2163,7 +3290,23 @@ export function createQuestionBanksViewController({
   }
 
   function bindEvents() {
-    btnCreateBank?.addEventListener("click", createBank);
+    btnCreateBank?.addEventListener("click", openCreateBankOverlay);
+    btnCreateBankFolder?.addEventListener("click", () => { void openCreateFolderOverlay(currentOpenFolderId); });
+    bankExplorerHeader?.querySelectorAll("[data-bank-type-filter]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setCurrentBankTypeFilter(btn.dataset.bankTypeFilter);
+      });
+    });
+    updateBankTypeFilterButtons();
+    document.getElementById("btnRenameBankFromHeader")?.addEventListener("click", () => {
+      const bank = getSelectedBank();
+      if (!bank) return;
+      openRenameBankOverlay(bank.id);
+    });
+    banksList?.addEventListener("dragover", handleBankDragOver);
+    banksList?.addEventListener("drop", (event) => { void handleBankDrop(event); });
+    banksList?.addEventListener("dragleave", handleBankDragLeave);
+    btnBackBankExplorer?.addEventListener("click", () => { void closeBankEditor(); });
     btnSaveBank?.addEventListener("click", saveBank);
     btnDeleteBank?.addEventListener("click", deleteSelectedBank);
     bankEditorHost?.addEventListener("input", handleEditorInput);
@@ -2171,10 +3314,14 @@ export function createQuestionBanksViewController({
     bankEditorHost?.addEventListener("keydown", handleEditorKeydown);
     bankEditorHost?.addEventListener("paste", handleEditorPaste);
 
-    banksList?.addEventListener("click", (event) => {
-      const card = event.target.closest("[data-bank-id]");
-      if (!card) return;
-      void selectBank(card.dataset.bankId);
+    bankBreadcrumb?.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-action]") : null;
+      if (!target) return;
+      if (target.dataset.action === "open-root") {
+        setCurrentFolder(null);
+      } else if (target.dataset.action === "open-folder") {
+        setCurrentFolder(target.dataset.folderId);
+      }
     });
 
     btnImportCancel?.addEventListener("click", closeImportModal);
@@ -2215,6 +3362,8 @@ export function createQuestionBanksViewController({
 
   return {
     refresh,
+    isEditorOpen: () => bankViewMode === "editor",
+    closeEditor: closeBankEditor,
     hasPendingChanges: () => hasPendingChanges,
     getLeaveWarningMessage: () => "Des modifications non enregistrées existent dans une banque."
   };

@@ -33,52 +33,34 @@
   min-height:42px;
 }
 
-.dashboard-bank-save-status{
+.dashboard-banks-editor-header .cfg-config-name-wrap{
+  min-width:0;
+}
+
+.dashboard-banks-editor-header .cfg-field-label{
+  font-size:24px;
+}
+
+.dashboard-banks-editor-header .cfg-config-name-display{
+  max-width:min(420px, 32vw);
+  font-size:24px;
+}
+
+.dashboard-banks-editor-header .cfg-name-rename-btn{
   width:34px;
-  min-width:34px;
   height:34px;
+  min-width:34px;
   min-height:34px;
+}
+
+.dashboard-banks-editor-header .cfg-save-btn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  padding:0;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(255,255,255,.035);
-  color:#aeb7c8;
-  font-size:22px;
-  line-height:1;
-  border-radius:10px;
-  box-sizing:border-box;
-  cursor:help;
-  user-select:none;
-}
-
-.dashboard-bank-save-status[data-state="dirty"]{
-  color:#ffe2a4;
-  border-color:rgba(255,187,80,.24);
-  background:rgba(255,187,80,.10);
-}
-
-.dashboard-bank-save-status[data-state="saving"]{
-  color:#cfe0ff;
-  border-color:rgba(124,152,255,.24);
-  background:rgba(84,117,255,.10);
-}
-
-.dashboard-bank-save-status[data-state="saved"]{
-  color:#cdeed9;
-  border-color:rgba(23,119,65,.24);
-  background:rgba(23,119,65,.12);
-}
-
-.dashboard-bank-save-status[data-state="error"]{
-  color:#ffd2d2;
-  border-color:rgba(255,110,110,.28);
-  background:rgba(120,26,26,.18);
-}
-
-.dashboard-bank-save-status[data-state="readonly"]{
-  color:#d8ddea;
+  min-width:170px;
+  min-height:56px;
+  font-size:24px;
+  text-align:center;
 }
 
 .dashboard-banks-layout{
@@ -260,14 +242,16 @@
 .dashboard-bank-type-pill{
   flex:0 0 auto;
   min-height:42px;
-  display:flex;
+  display:inline-flex;
   align-items:center;
+  justify-content:center;
   padding:0 14px;
   border:1px solid rgba(255,255,255,.11);
+  border-radius:999px;
   background:rgba(255,255,255,.045);
   color:#c9d2e4;
   font-size:14px;
-  font-weight:800;
+  font-weight:600;
 }
 
 .dashboard-bank-meta-toggle{
@@ -946,18 +930,9 @@ input.dashboard-bank-cell{
   color:#ffd2d2;
 }
 
-.has-pending-bank-changes #btnSaveBank{
-  box-shadow:0 0 0 3px rgba(23,119,65,.22);
-}
-
 @media (max-width:980px){
   .dashboard-banks-header-actions{
     align-items:stretch;
-  }
-
-  .dashboard-bank-save-status{
-    width:34px;
-    justify-content:center;
   }
 
   .dashboard-bank-title-fields{
@@ -992,37 +967,6 @@ input.dashboard-bank-cell{
   }
 }
 
-/* QCM / types de banques */
-.dashboard-bank-create-type {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.035);
-  color: #aeb7c8;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.dashboard-bank-create-type-select {
-  height: 30px;
-  min-width: 150px;
-  border: 1px solid rgba(124,152,255,.20);
-  background: rgba(255,255,255,.055);
-  color: #f0f0f0;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  outline: none;
-}
-
-.dashboard-bank-create-type-select:focus {
-  border-color: rgba(124,152,255,.62);
-  box-shadow: 0 0 0 3px rgba(84,117,255,.16);
-}
-
 .dashboard-bank-table--qcm .dashboard-bank-table-head,
 .dashboard-bank-row--qcm {
   grid-template-columns:
@@ -1052,16 +996,6 @@ input.dashboard-bank-cell{
 }
 
 @media (max-width: 980px) {
-  .dashboard-bank-create-type {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .dashboard-bank-create-type-select {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
   .dashboard-bank-table--qcm .dashboard-bank-table-head,
   .dashboard-bank-row--qcm {
     min-width:0;
@@ -1213,4 +1147,39 @@ input.dashboard-bank-cell{
   .dashboard-selection-picker-actions {
     justify-content: stretch;
   }
+}
+
+/* Explorateur Banques — réutilise volontairement les classes/styles de l’explorateur Activités. */
+.dashboard-banks-view{
+  padding:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.dashboard-banks-explorer-header,
+.dashboard-banks-editor-header{
+  flex:0 0 auto;
+}
+
+.dashboard-banks-explorer-host{
+  flex:1 1 auto;
+  min-height:0;
+}
+
+.dashboard-banks-editor-header-main{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+
+.dashboard-bank-editor-host{
+  flex:1 1 auto;
+  min-height:0;
+  margin:10px 30px 30px;
+}
+
+.dashboard-banks-view .hidden{
+  display:none !important;
 }

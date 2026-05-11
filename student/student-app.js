@@ -2,6 +2,8 @@ import { studentState } from "./student-state.js";
 import { startStudentRouter } from "./student-router.js";
 import { hydrateActivitiesRoute, submitAccessCode } from "./student-actions.js";
 import { mountPersistentStudentStarfield } from "./student-stars.js";
+import { bindStudentFullscreenRetry } from "./student-fullscreen.js";
+import { mountStudentOrientationGuard } from "./student-orientation-guard.js";
 
 boot();
 
@@ -10,6 +12,8 @@ function boot(){
   hydrateSessionFromUrl();
   bindStaticHomeForm();
   mountPersistentStudentStarfield();
+  bindStudentFullscreenRetry();
+  mountStudentOrientationGuard();
 
   const appRoot = document.getElementById("studentApp");
   if (!appRoot) return;

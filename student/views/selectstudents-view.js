@@ -7,6 +7,7 @@ import {
   toggleSelectedStudentSelection
 } from "../student-actions.js";
 import { requestAppFullscreen, escapeHtml } from "../../shared/dom-helpers.js";
+import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
 import { renderStudentSelectionCards, sortSelectableStudents } from "./student-selection-grid.js";
 
 export function renderSelectStudentsView(root) {
@@ -26,7 +27,7 @@ export function renderSelectStudentsView(root) {
         aria-label="Retour"
         data-skip-autofs="true"
       >
-        <span class="student-icon" aria-hidden="true">arrow_back</span>
+        ${renderMaterialIcon("arrow_back")}
       </button>
 
       <div class="student-stars-content selectstudents-content">

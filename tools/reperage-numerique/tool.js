@@ -38,13 +38,6 @@ export default defineTool("reperage-numerique", "Repérage numérique", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createReperageNumeriqueActivity({
       ...context,

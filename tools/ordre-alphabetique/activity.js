@@ -110,8 +110,6 @@ function createRuntimeState(initialContext = {}) {
     currentAnswerScale: 1,
     currentCorrectionScale: 1,
     showAnswerBox: shouldShowAnswerBox(initialContext),
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
-    projectionResponseUi: normalizeProjectionResponseUi(initialContext?.projectionResponseUi),
     phaseMonitorId: null,
     lastObservedPhaseKind: null
   };
@@ -119,8 +117,6 @@ function createRuntimeState(initialContext = {}) {
 
 function syncRuntimeState(state, context = state.latestContext) {
   state.showAnswerBox = shouldShowAnswerBox(context);
-  state.activityMode = normalizeActivityMode(context?.activityMode);
-  state.projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
 }
 
 function getFreeWorkspace(state) {
@@ -795,7 +791,7 @@ function handlePhaseKindChange(state, phaseKind) {
 function applyAnswerFeedback(state, isCorrect) {
   if (!state.answerZone) return;
 
-  if (state.activityMode === "group") {
+  if (!state.showAnswerBox) {
     clearAnswerFeedback(state);
     return;
   }
@@ -1148,30 +1144,25 @@ function applyTrackScale(track, zone, {
 }
 
 function shouldShowAnswerBox(context = {}) {
-  const activityMode = normalizeActivityMode(context?.activityMode);
-  if (activityMode === "group") {
-    return false;
-  }
-
-  if (String(context?.runMode || context?.sessionMode || "").trim() === "projected-teacher") {
-    return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
-  }
-
-  return true;
+  return getResponseUi(context) === "boxed";
 }
 
-function normalizeProjectionResponseUi(value) {
-  const safeValue = String(value || "free").trim().toLowerCase();
-  return safeValue === "boxed" ? "boxed" : "free";
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
 }
 
-function normalizeActivityMode(value) {
-  const safeValue = String(value || "individual").trim().toLowerCase();
-  if (safeValue === "group") {
-    return safeValue;
-  }
-  return "individual";
+function normalizeResponseUi(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
+
+
 
 function isValueInAnswer(state, value) {
   return state.answerOrder.includes(value);

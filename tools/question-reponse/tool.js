@@ -39,13 +39,6 @@ export default defineTool("question-reponse", "Question/Réponse", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createQuestionReponseActivity({
       ...context,

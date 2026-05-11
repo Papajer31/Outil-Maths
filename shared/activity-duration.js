@@ -46,7 +46,7 @@ export function estimateStandardToolDuration({
     ? Math.max(1, clampNonNegativeInt(safeDraft.toolMaxTimeMin, 10)) * 60
     : Number.POSITIVE_INFINITY;
 
-  if (safeDraft.infiniteQuestionCount || safeDraft.infiniteTimePerQ || (hasAnswerPhase && safeDraft.infiniteAnswerTime)) {
+  if (safeDraft.questionFlowMode !== "fixed" || safeDraft.infiniteTimePerQ || (hasAnswerPhase && safeDraft.infiniteAnswerTime)) {
     return hasToolTimeLimit
       ? { minSec: toolTimeLimitSec, maxSec: toolTimeLimitSec }
       : { infinite: true };

@@ -24,11 +24,11 @@ export function normalizeSettings(settings = {}) {
   return {
     ...base,
     ...settings,
-    bankId: String(settings?.bankId || "").trim(),
-    bankTitle: String(settings?.bankTitle || "").trim(),
+    bankId: String(settings?.bankId || settings?.bank_id || "").trim(),
+    bankTitle: String(settings?.bankTitle || settings?.bank_title || "").trim(),
     drawMode: normalizeDrawMode(settings?.drawMode),
     selectionMode: normalizeSelectionMode(settings?.selectionMode || DEFAULT_SELECTION_MODE),
-    bankItemsSnapshot: normalizeSelectionItems(settings?.bankItemsSnapshot || [])
+    bankItemsSnapshot: normalizeSelectionItems(settings?.bankItemsSnapshot || settings?.bank_items_snapshot || [])
   };
 }
 

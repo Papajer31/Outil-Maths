@@ -7,6 +7,7 @@ import {
 import { ensureSelectedActivityMeta } from "../student-activity-meta.js";
 import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
 import { requestAppFullscreen } from "../../shared/dom-helpers.js";
+import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
 import { closeProjectedWindow } from "../projected-session.js";
 
 const rocketOffUrl = new URL("../../shared/ui-assets/rocket-off.svg", import.meta.url).href;
@@ -26,7 +27,7 @@ export function renderSessionStartView(root){
             aria-label="Retour"
             data-skip-autofs="true"
           >
-            <span class="student-icon" aria-hidden="true">arrow_back</span>
+            ${renderMaterialIcon("arrow_back")}
           </button>
         `}
 

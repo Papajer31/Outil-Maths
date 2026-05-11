@@ -38,13 +38,6 @@ export default defineTool("ordre-alphabetique", "Ordre alphabétique", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createOrdreAlphabetiqueActivity({
       ...context,

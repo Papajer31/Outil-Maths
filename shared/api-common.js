@@ -3,6 +3,11 @@ import {
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "./activity-modes.js";
+import {
+  getDefaultResponseUiForActivityMode,
+  normalizeProgressMode,
+  normalizeResponseUi
+} from "./activity-config.js";
 
 export function normalizeAccessCode(value) {
   return String(value || "")
@@ -58,10 +63,23 @@ function normalizeActivityStoredMode(configJson = {}) {
   return normalizeActivityMode(safeConfig.activity_mode, DEFAULT_ACTIVITY_MODE);
 }
 
+function normalizeActivityStoredResponseUi(configJson = {}) {
+  const safeConfig = configJson && typeof configJson === "object" ? configJson : {};
+  const activityMode = normalizeActivityStoredMode(safeConfig);
+  return normalizeResponseUi(safeConfig.response_ui, getDefaultResponseUiForActivityMode(activityMode));
+}
+
+function normalizeActivityStoredProgressMode(configJson = {}) {
+  const safeConfig = configJson && typeof configJson === "object" ? configJson : {};
+  return normalizeProgressMode(safeConfig.progress_mode, "evaluated");
+}
+
 export function normalizeActivityConfigMeta(configJson = {}, fallbackOrder = 0) {
   return {
     dashboard: normalizeActivityDashboardMeta(configJson, fallbackOrder),
-    activity_mode: normalizeActivityStoredMode(configJson)
+    activity_mode: normalizeActivityStoredMode(configJson),
+    response_ui: normalizeActivityStoredResponseUi(configJson),
+    progress_mode: normalizeActivityStoredProgressMode(configJson)
   };
 }
 
@@ -76,7 +94,9 @@ export function withActivityDashboardMeta(activity, fallbackOrder = 0) {
     folder_id: dashboard.folder_id,
     is_visible: dashboard.is_visible,
     is_highlighted: canStayHighlighted && dashboard.is_highlighted,
-    activity_mode: meta.activity_mode
+    activity_mode: meta.activity_mode,
+    response_ui: meta.response_ui,
+    progress_mode: meta.progress_mode
   };
 }
 
@@ -93,6 +113,15 @@ export function sanitizeActivityConfigJson(configJson = {}) {
 
   if (Object.prototype.hasOwnProperty.call(configJson, "activity_mode")) {
     next.activity_mode = normalizeActivityMode(configJson.activity_mode, DEFAULT_ACTIVITY_MODE);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(configJson, "response_ui")) {
+    const safeMode = normalizeActivityMode(next.activity_mode ?? configJson.activity_mode, DEFAULT_ACTIVITY_MODE);
+    next.response_ui = normalizeResponseUi(configJson.response_ui, getDefaultResponseUiForActivityMode(safeMode));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(configJson, "progress_mode")) {
+    next.progress_mode = normalizeProgressMode(configJson.progress_mode, "evaluated");
   }
 
   if (Object.prototype.hasOwnProperty.call(configJson, "globals")) {
@@ -208,10 +237,18 @@ export function mergePreservedActivityMeta(configJson = {}, preservedMeta = null
   const nextActivityMode = "activity_mode" in safeConfig
     ? normalizeActivityMode(safeConfig.activity_mode, DEFAULT_ACTIVITY_MODE)
     : normalizeActivityMode(safePreserved.activity_mode, DEFAULT_ACTIVITY_MODE);
+  const nextResponseUi = "response_ui" in safeConfig
+    ? normalizeResponseUi(safeConfig.response_ui, getDefaultResponseUiForActivityMode(nextActivityMode))
+    : normalizeResponseUi(safePreserved.response_ui, getDefaultResponseUiForActivityMode(nextActivityMode));
+  const nextProgressMode = "progress_mode" in safeConfig
+    ? normalizeProgressMode(safeConfig.progress_mode, "evaluated")
+    : normalizeProgressMode(safePreserved.progress_mode, "evaluated");
 
   return {
     ...safeConfig,
     activity_mode: nextActivityMode,
+    response_ui: nextResponseUi,
+    progress_mode: nextProgressMode,
     dashboard: {
       ...(safePreserved.dashboard && typeof safePreserved.dashboard === "object" ? safePreserved.dashboard : {}),
       ...incomingDashboard

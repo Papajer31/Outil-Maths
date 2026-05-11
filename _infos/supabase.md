@@ -9,7 +9,7 @@ Supabase sert de backend principal pour :
 - le stockage des activités, de leur configuration et de leur organisation en dossiers ;
 - la gestion des banques de mots de vocabulaire ;
 - la gestion des presets de phonologie enseignant ;
-- la gestion des banques de contenus / questions ;
+- la gestion des banques de contenus / questions et de leur arborescence dédiée ;
 - la diffusion publique de certaines données aux élèves via RPC ou tables publiques en lecture ;
 - la résolution des images et des mots de l’outil Encodage.
 
@@ -298,7 +298,34 @@ Table publique de mots pour Encodage.
 
 ---
 
-## 3.11. `question_banks`
+## 3.11. `question_bank_folders`
+
+### Rôle
+
+Organisation dédiée des banques de questions en dossiers / sous-dossiers dans l’onglet enseignant `Banques`.
+Cette arborescence est **strictement séparée** de `activity_folders` : elle utilise les mêmes styles et le même modèle UX côté dashboard, mais ne partage pas les données des activités.
+
+### Colonnes attendues par le front
+
+- `id` ;
+- `teacher_space_id` ;
+- `parent_id` ;
+- `name` ;
+- `display_order` ;
+- `created_at` ;
+- `updated_at`.
+
+### Usage visible dans le code
+
+- lecture privée enseignant ;
+- création de dossier à l’emplacement courant ;
+- renommage ;
+- suppression si le dossier est vide ;
+- construction du fil d’Ariane et de l’explorateur `Banques`.
+
+---
+
+## 3.12. `question_banks`
 
 ### Rôle
 
@@ -316,6 +343,8 @@ La table reste volontairement générique afin de pouvoir accueillir plus tard d
 - `id` ;
 - `teacher_space_id` ;
 - `source_bank_id` ;
+- `folder_id` ;
+- `display_order` ;
 - `bank_type` ;
 - `title` ;
 - `title_normalized` ;
@@ -334,11 +363,18 @@ La table reste volontairement générique afin de pouvoir accueillir plus tard d
 - banque système : `is_system = true`, sans `teacher_space_id`, lisible par tous les enseignants connectés ;
 - banque copiée/importée : banque personnelle pouvant référencer une banque source via `source_bank_id`.
 
+Organisation :
+- `folder_id = null` place la banque à la racine de l’explorateur Banques ;
+- `folder_id` pointe vers `question_bank_folders.id` pour ranger la banque dans un dossier ;
+- `display_order` ordonne les banques parmi les dossiers et banques du même niveau.
+
+Les banques système restent hors arborescence enseignant (`folder_id = null`) et sont affichées à la racine.
+
 Le partage par code est préparé par la colonne `share_code`, mais l’UX complète d’import par code peut être ajoutée plus tard.
 
 ---
 
-## 3.12. `question_bank_items`
+## 3.13. `question_bank_items`
 
 ### Rôle
 
@@ -441,6 +477,30 @@ Le front attend :
 
 Le front possède aussi un fallback : si la RPC est absente, il tente suppression puis insertion directe côté client. Une RPC opérationnelle rend normalement ce fallback inutile.
 
+### Migration ajoutée pour l’explorateur Banques
+
+Le dépôt contient maintenant le fichier SQL suivant :
+
+```txt
+_infos/sql/2026-05-10_question_bank_folders.sql
+```
+
+Il ajoute :
+- la table `question_bank_folders` ;
+- `folder_id` et `display_order` sur `question_banks` ;
+- les index utiles ;
+- les policies RLS des dossiers de banques ;
+- un trigger de validation pour empêcher qu’une banque personnelle pointe vers un dossier d’un autre espace enseignant.
+
+Hotfix associé :
+
+```txt
+_infos/sql/2026-05-10_question_bank_folders_rls_hotfix.sql
+```
+
+Ce correctif retire des policies INSERT/UPDATE la vérification directe du parent dans `question_bank_folders`, qui pouvait provoquer `infinite recursion detected in policy for relation "question_bank_folders"`.
+La cohérence du parent, de l’espace enseignant et l’interdiction de déplacer un dossier dans ses descendants sont prises en charge par un trigger `SECURITY DEFINER`.
+
 ---
 
 ## 6) Lecture fonctionnelle de `activity_configs.config_json`
@@ -448,14 +508,38 @@ Le front possède aussi un fallback : si la RPC est absente, il tente suppressio
 Une activité active contient notamment :
 - `sequence` → séquence ordonnée d’outils ;
 - `globals` → réglages globaux d’activité ;
-- `activity_mode` → mode de passation ;
+- `activity_mode` → mode social de passation ;
+- `response_ui` → réponse saisie (`boxed`) ou non saisie (`free`) ;
+- `progress_mode` → situation d’évaluation (`evaluated`) ou d’entrainement (`practice`) ;
 - `dashboard` → métadonnées d’affichage / visibilité / dossier / ordre.
+
+`activity_mode` est le mode social réellement sauvegardé de l’activité. Dans l’éditeur, il peut être basculé entre `individual` et `group` depuis la tuile déployable `Mode de passation général`, après vérification de compatibilité de tous les outils de la séquence. Cette bascule n’est pas un mode temporaire de lancement : une fois enregistrée, elle modifie la configuration stockée dans `activity_configs.config_json`.
+
+Cadrage produit retenu : le mode de passation général d’une activité repose sur trois critères globaux persistés : `activity_mode` (`individual/group`), `response_ui` (`boxed/free`) et `progress_mode` (`evaluated/practice`). Le profil `individual + free + evaluated` est interdit par l’éditeur car il reviendrait à évaluer individuellement un élève sans réponse saisie.
+
+Chaque item de `sequence` contient un `draft` normalisé qui peut porter notamment :
+- `questionCount` ;
+- `questionFlowMode` (`fixed`, `unlimited`, `successGoal`) ;
+- `timePerQ` ;
+- `answerTime` ;
+- `questionTransitionSec` ;
+- `questionTransitionInfinite` ;
+- `toolMaxTimeMin` ;
+- `toolMaxTimeInfinite` ;
+- `successGoalCorrectCount` ;
+- `successGoalSafetyMilestones` ;
+- les variantes infinies des réglages temporels concernés ;
+- `settings`, qui contient les réglages propres à l’outil.
+
+Dans l’UI actuelle, le widget `Questions` distingue `Nombre fixe`, `Illimitées` et `Objectif de réussite` via le champ explicite `questionFlowMode`. `Objectif de réussite` est disponible quand `response_ui = boxed` et `progress_mode = evaluated`, et utilise `successGoalCorrectCount` et `successGoalSafetyMilestones`.
 
 Conséquence produit :
 - la table `activity_configs` ne stocke plus seulement une configuration d’ancien module ;
 - elle stocke désormais un **conteneur d’activité** capable d’héberger une séquence d’outils.
 
-Les outils actifs, y compris `nombre-cible`, `monnaie` et `operations-trous`, sont stockés comme items de `sequence` avec leurs réglages propres dans `draft.settings`.
+Les outils actifs, y compris `nombre-cible`, `monnaie` et `operations-trous`, sont stockés comme items de `sequence`. Leurs réglages métier vivent dans `draft.settings`, tandis que les réglages communs de flux, de rythme et de durée maximale vivent directement dans le `draft` de l’item.
+
+La projection n’est pas un mode de passation stocké : elle est un contexte d’exécution qui respecte `activity_mode`, `response_ui` et `progress_mode`.
 
 ---
 
@@ -471,6 +555,7 @@ Attendu en accès propriétaire authentifié :
 - `activity_folders` ;
 - `teacher_vocabulary_words` ;
 - `teacher_phonology_presets` ;
+- `question_bank_folders` ;
 - `question_banks` personnelles ;
 - `question_bank_items` des banques personnelles.
 
@@ -525,7 +610,7 @@ Dans l’état visible du dépôt :
 - il n’y a pas de table dédiée à `operations-trous` ;
 - il n’y a pas encore de table spécifique au coeur `tools/` lui-même ;
 - les outils vivent principalement dans `activity_configs.config_json` ;
-- les contenus réutilisables génériques passent maintenant par `question_banks` et `question_bank_items` ;
+- les contenus réutilisables génériques passent maintenant par `question_bank_folders`, `question_banks` et `question_bank_items` ;
 - les assets de l’outil `monnaie` sont locaux au dépôt, pas dans Supabase Storage dans l’état courant.
 
 Autrement dit :

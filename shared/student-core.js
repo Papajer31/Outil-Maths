@@ -3,9 +3,10 @@ import {
   DEFAULT_ACTIVITY_GLOBALS,
   clampInt,
   cloneData,
-  getCommonInfiniteGaugeSettings,
+  getCommonSuccessGoalSettings,
   normalizeActivityGlobals,
-  normalizeProjectionResponseUi,
+  normalizeProgressMode,
+  normalizeResponseUi,
   normalizeToolDraft,
   normalizeActivitySequence
 } from "./activity-config.js";
@@ -16,9 +17,7 @@ import {
 import {
   createToolActivityRuntime,
   getToolRunProfile as getContractToolRunProfile,
-  getToolRuntimeCapabilities,
-  getToolProjectionResponseUiSupport,
-  resolveEffectiveProjectionResponseUi
+  getToolRuntimeCapabilities
 } from "./tool-contract.js";
 
 export function createSessionEngine({
@@ -33,7 +32,9 @@ export function createSessionEngine({
   onStateChange,
   manualControlsEnabled = true,
   runMode = "student",
-  activityMode = DEFAULT_ACTIVITY_MODE
+  activityMode = DEFAULT_ACTIVITY_MODE,
+  responseUi = null,
+  progressMode = null
 }) {
   let toolsCatalog = [];
   let session = [];
@@ -73,6 +74,8 @@ export function createSessionEngine({
   let toolClockElapsedBeforePauseMs = 0;
   let toolClockPaused = true;
   let finalChallengeTicker = null;
+  let toolMaxTimeTicker = null;
+  let toolMaxTimeAdvancePending = false;
 
   const GAUGE_EPSILON = 1e-6;
   const GAUGE_PROGRESS_PRECISION = 1000;
@@ -82,6 +85,13 @@ export function createSessionEngine({
     ...normalizeActivityGlobals(globals)
   };
   const sessionActivityMode = normalizeActivityMode(activityMode, DEFAULT_ACTIVITY_MODE);
+  const sessionResponseUi = normalizeResponseUi(responseUi, "boxed");
+  const sessionProgressMode = normalizeProgressMode(progressMode, "evaluated");
+  const sessionPassationProfile = {
+    activityMode: sessionActivityMode,
+    responseUi: sessionResponseUi,
+    progressMode: sessionProgressMode
+  };
 
   function emitStateChange() {
     onStateChange?.(getUiState());
@@ -126,12 +136,25 @@ export function createSessionEngine({
   };
 
   async function goToPreviousTool() {
-    if (paused) return false;
+    if (paused || toolMaxTimeAdvancePending) return false;
+
+    const item = session[currentToolIndex];
+    if (item && phase.kind !== "BETWEEN_TOOLS" && isToolMaxTimeReached(item)) {
+      void enforceCurrentToolMaxTime();
+      return false;
+    }
+
     return jumpToTool(currentToolIndex - 1);
   }
 
   async function goToNextTool() {
-    if (paused) return false;
+    if (paused || toolMaxTimeAdvancePending) return false;
+
+    const currentItem = session[currentToolIndex];
+    if (currentItem && phase.kind !== "BETWEEN_TOOLS" && isToolMaxTimeReached(currentItem)) {
+      void enforceCurrentToolMaxTime();
+      return false;
+    }
 
     if (phase.kind === "BETWEEN_TOOLS") {
       const item = session[currentToolIndex];
@@ -158,6 +181,11 @@ export function createSessionEngine({
       return false;
     }
 
+    if (isToolMaxTimeExpiredOrAdvancing(item)) {
+      void enforceCurrentToolMaxTime();
+      return false;
+    }
+
     beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
     emitStateChange();
     return true;
@@ -168,6 +196,11 @@ export function createSessionEngine({
 
     const item = session[currentToolIndex];
     if (!item || phase.kind !== "QUESTION") {
+      return false;
+    }
+
+    if (isToolMaxTimeExpiredOrAdvancing(item)) {
+      void enforceCurrentToolMaxTime();
       return false;
     }
 
@@ -188,6 +221,11 @@ export function createSessionEngine({
 
     const item = session[currentToolIndex];
     if (!item) return false;
+
+    if (isToolMaxTimeExpiredOrAdvancing(item)) {
+      await enforceCurrentToolMaxTime();
+      return false;
+    }
 
     try {
       if (phase.kind === "TRANSITION") {
@@ -310,7 +348,7 @@ export function createSessionEngine({
     item.questionTransitionInfinite = item.draftQuestionTransitionInfinite === true;
     item.toolMaxTimeMin = item.draftToolMaxTimeMin;
     item.toolMaxTimeInfinite = item.draftToolMaxTimeInfinite === true;
-    item.infiniteQuestionCount = item.draftInfiniteQuestionCount === true;
+    item.questionFlowMode = item.draftQuestionFlowMode || "fixed";
     item.infiniteTimePerQ = item.draftInfiniteTimePerQ === true;
     item.infiniteAnswerTime = item.draftInfiniteAnswerTime === true;
     item.defaultInstruction = instructionMeta.defaultInstruction;
@@ -318,11 +356,11 @@ export function createSessionEngine({
 
     const ctx = getToolContext(item);
 
-    if (!item.infiniteQuestionCount && typeof tool.getQuestionCount === "function") {
+    if (item.questionFlowMode === "fixed" && typeof tool.getQuestionCount === "function") {
       const nextQuestionCount = tool.getQuestionCount(ctx);
 
       if (nextQuestionCount === Number.POSITIVE_INFINITY) {
-        item.infiniteQuestionCount = true;
+        item.questionFlowMode = "unlimited";
       } else {
         item.questionCount = clampInt(
           nextQuestionCount,
@@ -349,14 +387,15 @@ export function createSessionEngine({
     }
 
     if (isFinalChallengeItem(item)) {
-      item.infiniteQuestionCount = true;
-      item.individualGauge = null;
+      item.questionFlowMode = "unlimited";
+      item.evaluationGauge = null;
     }
   }
 
   function getUiState() {
     const item = session[currentToolIndex] ?? null;
     const betweenTools = phase.kind === "BETWEEN_TOOLS";
+    const toolMaxTimeExpired = isToolMaxTimeExpiredOrAdvancing(item);
     const shellValidation = getShellValidationState(item);
     const shellAnswerToggle = getShellAnswerToggleState(item);
     const projectedPrimaryAction = getProjectedPrimaryActionState(item, shellValidation);
@@ -366,20 +405,24 @@ export function createSessionEngine({
       paused,
       phase: phase.kind,
       activityMode: sessionActivityMode,
+      responseUi: sessionResponseUi,
+      progressMode: sessionProgressMode,
       currentToolIndex,
       totalTools: session.length,
       currentInstanceId: String(item?.instanceId || ""),
       currentQuestionNumber: currentQuestionIndex >= 0 ? currentQuestionIndex + 1 : 0,
       questionCount: item?.questionCount ?? 0,
-      infiniteQuestionCount: item?.infiniteQuestionCount === true,
-      totalQuestionCountLabel: item ? (item.infiniteQuestionCount ? "∞" : String(item.questionCount || 0)) : "—",
+      questionFlowMode: item?.questionFlowMode || "fixed",
+      totalQuestionCountLabel: item ? (item.questionFlowMode === "fixed" ? String(item.questionCount || 0) : "∞") : "—",
       finalChallenge: getFinalChallengeUiState(item),
       toolTime: getToolTimeUiState(item),
-      individualGauge: getIndividualGaugeUiState(item),
-      canGoPrevTool: !paused && currentToolIndex > 0,
-      canGoNextTool: !paused && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
-      canRevealAnswer: !paused && !!item && phase.kind === "QUESTION" && item.hasAnswerPhase !== false && shellValidation.visible !== true,
-      canAdvanceQuestion: !paused && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
+      evaluationGauge: getEvaluationGaugeUiState(item),
+      evaluationCounter: getEvaluationCounterUiState(item),
+      fixedQuestionCounter: getFixedQuestionCounterUiState(item),
+      canGoPrevTool: !paused && !toolMaxTimeAdvancePending && currentToolIndex > 0,
+      canGoNextTool: !paused && !toolMaxTimeAdvancePending && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
+      canRevealAnswer: !paused && !toolMaxTimeExpired && !!item && phase.kind === "QUESTION" && item.hasAnswerPhase !== false && shellValidation.visible !== true,
+      canAdvanceQuestion: !paused && !toolMaxTimeExpired && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
       shellValidateVisible: shellValidation.visible === true,
       shellValidateEnabled: shellValidation.enabled === true,
       shellAnswerToggleVisible: shellAnswerToggle.visible === true,
@@ -394,18 +437,16 @@ export function createSessionEngine({
   }
 
 
-  function getProjectionResponseUiForCurrentRun() {
-    if (runMode !== "projected-teacher") {
-      return normalizeProjectionResponseUi(activityGlobals?.projectionResponseUi, DEFAULT_ACTIVITY_GLOBALS.projectionResponseUi);
-    }
-
-    return sessionActivityMode === "individual" ? "boxed" : "free";
+  function isBoxedResponseProfile() {
+    return sessionResponseUi === "boxed";
   }
 
-  function isProjectedBoxedValidationMode(item) {
-    return runMode === "projected-teacher"
-      && !!item
-      && String(item.projectionResponseUi || "").trim().toLowerCase() === "boxed";
+  function isEvaluatedProfile() {
+    return sessionProgressMode === "evaluated";
+  }
+
+  function isBoxedEvaluatedProfile() {
+    return isBoxedResponseProfile() && isEvaluatedProfile();
   }
 
   function runtimeSupportsShellValidation(item) {
@@ -420,19 +461,17 @@ export function createSessionEngine({
   }
 
   function shouldUseShellValidation(item) {
-    if (!item) return false;
-    if (sessionActivityMode === "individual" && runMode !== "projected-teacher") {
-      return runtimeSupportsShellValidation(item);
-    }
-    if (isProjectedBoxedValidationMode(item)) {
-      return runtimeSupportsShellValidation(item);
-    }
-    return false;
+    if (!item || !isBoxedResponseProfile()) return false;
+    return runtimeSupportsShellValidation(item);
   }
 
   function getShellValidationState(item) {
     if (!item || paused || phase.kind !== "QUESTION") {
       return { visible: false, enabled: false };
+    }
+
+    if (isToolMaxTimeExpiredOrAdvancing(item)) {
+      return { visible: shouldUseShellValidation(item), enabled: false };
     }
 
     if (!shouldUseShellValidation(item)) {
@@ -465,7 +504,7 @@ export function createSessionEngine({
       icon: "sync"
     };
 
-    if (!item || !activeRuntime || session[currentToolIndex] !== item || phase.kind !== "ANSWER") {
+    if (!item || !isBoxedResponseProfile() || !activeRuntime || session[currentToolIndex] !== item || phase.kind !== "ANSWER") {
       return hiddenState;
     }
 
@@ -551,6 +590,10 @@ export function createSessionEngine({
       return { kind: "answer", label: "Réponse", icon: "visibility", enabled: false };
     }
 
+    if (isToolMaxTimeExpiredOrAdvancing(item)) {
+      return { kind: "answer", label: "Réponse", icon: "visibility", enabled: false };
+    }
+
     if (shellValidation.visible === true) {
       return {
         kind: "validate",
@@ -601,6 +644,7 @@ export function createSessionEngine({
   function stop() {
     stopAllTimers();
     stopFinalChallengeTicker();
+    stopToolMaxTimeTicker();
 
     if (activeRuntime?.unmount) {
       try {
@@ -659,6 +703,7 @@ export function createSessionEngine({
 
   async function nextTool(isFirst) {
     stopAllTimers();
+    stopToolMaxTimeTicker();
 
     if (activeRuntime?.unmount) {
       try {
@@ -710,6 +755,8 @@ export function createSessionEngine({
 
   async function beginTool(item) {
     stopAllTimers();
+    stopToolMaxTimeTicker();
+    toolMaxTimeAdvancePending = false;
 
     const mod = await loadToolModule(item.id);
     activeTool = mod.default ?? {};
@@ -738,6 +785,7 @@ export function createSessionEngine({
     applyWorkAreaLayout(activeTool);
 
     await activeRuntime.mount(els.workArea, ctx);
+    startToolMaxTimeTicker();
 
     await nextQuestion(item, true);
   }
@@ -771,7 +819,7 @@ export function createSessionEngine({
 
     currentQuestionIndex += 1;
 
-    if (!item.infiniteQuestionCount && currentQuestionIndex >= item.questionCount) {
+    if (item.questionFlowMode === "fixed" && currentQuestionIndex >= item.questionCount) {
       hideTimer();
       hideManualAction();
       await nextTool(false);
@@ -802,6 +850,7 @@ export function createSessionEngine({
     pauseActivityClock();
     pauseToolClock();
     stopFinalChallengeTicker();
+    stopToolMaxTimeTicker();
 
     stopAllTimers();
 
@@ -841,6 +890,7 @@ export function createSessionEngine({
 
     resumeActivityClock();
     resumeToolClock();
+    startToolMaxTimeTicker();
     if (isFinalChallengeItem(item)) {
       if (getActivityTotalRemainingMs() <= 0) {
         finishSession({ title: "Temps écoulé — la séance est terminée." });
@@ -902,7 +952,8 @@ export function createSessionEngine({
         return;
       }
 
-      const maybePromise = activeRuntime?.next?.(els.workArea, ctx);
+      const runtimeForQuestion = activeRuntime;
+      const maybePromise = runtimeForQuestion?.next?.(els.workArea, ctx);
 
       if (maybePromise && typeof maybePromise.then === "function") {
         engineState = "LOADING_QUESTION";
@@ -915,6 +966,11 @@ export function createSessionEngine({
         Promise.resolve(maybePromise)
           .then(() => {
             if (!isSessionRunning || paused) return;
+            if (session[currentToolIndex] !== item || activeRuntime !== runtimeForQuestion) return;
+            if (isToolMaxTimeExpiredOrAdvancing(item)) {
+              void enforceCurrentToolMaxTime();
+              return;
+            }
             beginQuestionPhase(item, remainingMs, {
               generateQuestion: false,
               initialGaugeScale
@@ -932,7 +988,7 @@ export function createSessionEngine({
     item.currentQuestionResolvedCorrectly = false;
     item.currentQuestionOutcomeCommitted = false;
     item.lastQuestionOutcome = "pending";
-    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.infiniteQuestionCount ? "∞" : item.questionCount}`);
+    setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionFlowMode === "fixed" ? item.questionCount : "∞"}`);
 
     if (item.infiniteTimePerQ) {
       hideTimer();
@@ -1060,8 +1116,8 @@ export function createSessionEngine({
 
     transitionTimer = window.setTimeout(() => {
       transitionTimer = null;
-      if (isToolMaxTimeReached(item)) {
-        void nextTool(false);
+      if (isToolMaxTimeExpiredOrAdvancing(item)) {
+        void enforceCurrentToolMaxTime();
         return;
       }
       beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
@@ -1080,8 +1136,8 @@ export function createSessionEngine({
     `);
 
     document.getElementById("btnContinueQuestionTransition")?.addEventListener("click", () => {
-      if (isToolMaxTimeReached(item)) {
-        void nextTool(false);
+      if (isToolMaxTimeExpiredOrAdvancing(item)) {
+        void enforceCurrentToolMaxTime();
         return;
       }
       beginQuestionPhase(item, item.timePerQ * 1000, { generateQuestion: true });
@@ -1221,7 +1277,7 @@ export function createSessionEngine({
         draftToolMaxTimeMin: normalizedDraft.toolMaxTimeMin,
         draftToolMaxTimeInfinite: normalizedDraft.toolMaxTimeInfinite === true,
         draftInfiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
-        draftInfiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
+        draftQuestionFlowMode: normalizedDraft.questionFlowMode,
         draftInfiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
         timePerQ: normalizedDraft.timePerQ,
         questionCount: normalizedDraft.questionCount,
@@ -1231,28 +1287,32 @@ export function createSessionEngine({
         toolMaxTimeMin: normalizedDraft.toolMaxTimeMin,
         toolMaxTimeInfinite: normalizedDraft.toolMaxTimeInfinite === true,
         infiniteTimePerQ: normalizedDraft.infiniteTimePerQ === true,
-        infiniteQuestionCount: normalizedDraft.infiniteQuestionCount === true,
+        questionFlowMode: normalizedDraft.questionFlowMode,
+        successGoalCorrectCount: normalizedDraft.successGoalCorrectCount,
+        successGoalSafetyMilestones: normalizedDraft.successGoalSafetyMilestones,
         infiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
+        evaluationGauge: null,
+        evaluationCounter: { attempted: 0, correct: 0 },
         defaultInstruction: instructionMeta.defaultInstruction,
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
         settings,
-        individualGauge: null,
         currentQuestionResolvedCorrectly: false,
         currentQuestionOutcomeCommitted: false,
         lastQuestionOutcome: "pending"
       };
 
-      const requestedProjectionResponseUi = getProjectionResponseUiForCurrentRun();
       const baseToolContext = {
         sessionItem,
         accessCode,
         moduleKey,
         activityMode: sessionActivityMode,
+        responseUi: sessionResponseUi,
+        progressMode: sessionProgressMode,
+        passationProfile: sessionPassationProfile,
         sessionMode: runMode,
         runMode,
         settings,
         globals: cloneData(activityGlobals),
-        projectionResponseUi: requestedProjectionResponseUi,
         student: runMode === "projected-teacher" ? null : selectedStudent,
         students: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
         selectedStudents: runMode === "projected-teacher" ? [] : cloneData(selectedStudents),
@@ -1260,19 +1320,11 @@ export function createSessionEngine({
       };
 
       const runtimeCapabilities = getToolRuntimeCapabilities(tool, baseToolContext);
-      const projectionResponseUiSupport = getToolProjectionResponseUiSupport(tool, baseToolContext);
-      const effectiveProjectionResponseUi = runMode === "projected-teacher"
-        ? resolveEffectiveProjectionResponseUi(tool, requestedProjectionResponseUi, baseToolContext)
-        : null;
 
       sessionItem.hasAnswerPhase = runtimeCapabilities.answerPhase !== "unsupported";
       sessionItem.usesCustomQuestionFlow = runtimeCapabilities.transitionPhase !== "required";
       sessionItem.supportsCommonFlowSettings = runtimeCapabilities.supportsCommonFlowSettings !== false;
       sessionItem.runtimeCapabilities = runtimeCapabilities;
-      sessionItem.projectionResponseUiSupport = projectionResponseUiSupport;
-      sessionItem.requestedProjectionResponseUi = baseToolContext.projectionResponseUi;
-      sessionItem.projectionResponseUi = effectiveProjectionResponseUi || baseToolContext.projectionResponseUi;
-
       const runProfile = getToolRunProfile(tool, baseToolContext);
 
       if (runProfile.requiresStudent) {
@@ -1418,6 +1470,73 @@ export function createSessionEngine({
     return getToolElapsedMs() >= maxMs;
   }
 
+  function isToolMaxTimeExpiredOrAdvancing(item) {
+    return toolMaxTimeAdvancePending === true || isToolMaxTimeReached(item);
+  }
+
+  function shouldEnforceToolMaxTime(item) {
+    if (!isSessionRunning || paused || !item || session[currentToolIndex] !== item) return false;
+    if (!Number.isFinite(getToolMaxTimeMs(item))) return false;
+    if (!isToolMaxTimeReached(item)) return false;
+    if (phase.kind === "BETWEEN_TOOLS" || phase.kind === "DONE") return false;
+    if (phase.kind === "IDLE" && engineState !== "LOADING_QUESTION") return false;
+    return true;
+  }
+
+  async function enforceCurrentToolMaxTime() {
+    const item = session[currentToolIndex];
+    if (!shouldEnforceToolMaxTime(item) || toolMaxTimeAdvancePending) {
+      return false;
+    }
+
+    toolMaxTimeAdvancePending = true;
+    stopAllTimers();
+    hideTimer();
+    hideManualAction();
+    emitStateChange();
+
+    try {
+      await nextTool(false);
+      return true;
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant le changement d’outil.");
+      return false;
+    } finally {
+      toolMaxTimeAdvancePending = false;
+    }
+  }
+
+  function startToolMaxTimeTicker() {
+    stopToolMaxTimeTicker();
+    const item = session[currentToolIndex];
+    if (!item || !Number.isFinite(getToolMaxTimeMs(item)) || paused || !isSessionRunning) return;
+
+    toolMaxTimeTicker = window.setInterval(() => {
+      const currentItem = session[currentToolIndex];
+      if (!currentItem || !isSessionRunning || phase.kind === "DONE" || phase.kind === "BETWEEN_TOOLS") {
+        stopToolMaxTimeTicker();
+        return;
+      }
+
+      if (paused) {
+        return;
+      }
+
+      if (shouldEnforceToolMaxTime(currentItem)) {
+        void enforceCurrentToolMaxTime();
+        return;
+      }
+
+      emitStateChange();
+    }, 250);
+  }
+
+  function stopToolMaxTimeTicker() {
+    if (!toolMaxTimeTicker) return;
+    window.clearInterval(toolMaxTimeTicker);
+    toolMaxTimeTicker = null;
+  }
+
   function getToolTimeUiState(item) {
     const hiddenState = {
       visible: false,
@@ -1462,8 +1581,8 @@ export function createSessionEngine({
       item.finalChallengeCorrectCount = 0;
       item.finalChallengeStarted = false;
       if (item.isFinalInfiniteSequenceItem) {
-        item.infiniteQuestionCount = true;
-        item.individualGauge = null;
+        item.questionFlowMode = "unlimited";
+        item.evaluationGauge = null;
       }
     });
   }
@@ -1480,12 +1599,18 @@ export function createSessionEngine({
   }
 
   function incrementFinalChallengeCorrectCount(item) {
-    if (!isFinalChallengeItem(item)) return;
+    if (!isFinalChallengeItem(item) || sessionProgressMode !== "evaluated") return;
     item.finalChallengeCorrectCount = Math.max(0, Math.floor(Number(item.finalChallengeCorrectCount) || 0)) + 1;
   }
 
   function getFinalChallengeUiState(item) {
-    if (!isSessionRunning || phase.kind === "DONE" || !isFinalChallengeItem(item) || item.finalChallengeStarted !== true) {
+    if (
+      sessionProgressMode !== "evaluated"
+      || !isSessionRunning
+      || phase.kind === "DONE"
+      || !isFinalChallengeItem(item)
+      || item.finalChallengeStarted !== true
+    ) {
       return { active: false };
     }
 
@@ -1532,10 +1657,12 @@ export function createSessionEngine({
     }
   }
 
-  function finishSession({ title = "Bravo, la séance est terminée." } = {}) {
+  function finishSession({ title = null } = {}) {
+    const finalTitle = title || (sessionProgressMode === "practice" ? "Entrainement terminé." : "Bravo, la séance est terminée.");
     stopAllTimers();
     resetToolClock();
     stopFinalChallengeTicker();
+    stopToolMaxTimeTicker();
     hideTimer();
     hideManualAction();
     engineState = "DONE";
@@ -1544,26 +1671,26 @@ export function createSessionEngine({
     setStatus("Séance terminée", "good");
     emitStateChange();
     showSessionMessage({
-      title,
-      bodyHtml: renderGroupSessionSummaryHtml(),
-      cardClass: getGroupScoreRows().length ? "session-message-card-group-summary" : "",
+      title: finalTitle,
+      bodyHtml: sessionProgressMode === "practice" ? "" : renderGroupSessionSummaryHtml(),
+      cardClass: sessionProgressMode === "practice" ? "" : (getGroupScoreRows().length ? "session-message-card-group-summary" : ""),
       buttonLabel: "Retour aux activités",
       onClick: onExitToActivities
     });
   }
 
 
-  function createIndividualGaugeState(item) {
-    if (sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+  function createEvaluationGaugeState(item) {
+    if (runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
       return null;
     }
 
     if (!item || isFinalChallengeItem(item)) return null;
 
-    if (item.infiniteQuestionCount) {
-      const infiniteGaugeSettings = getCommonInfiniteGaugeSettings(item.settings);
+    if (item.questionFlowMode === "successGoal") {
+      const successGoalSettings = getCommonSuccessGoalSettings(item);
       const milestones = [];
-      const milestoneCount = Math.max(0, Number(infiniteGaugeSettings.infiniteGaugeMilestones) || 0);
+      const milestoneCount = Math.max(0, Number(successGoalSettings.successGoalSafetyMilestones) || 0);
       for (let index = 1; index <= milestoneCount; index += 1) {
         milestones.push(index / (milestoneCount + 1));
       }
@@ -1573,12 +1700,14 @@ export function createSessionEngine({
         progress: normalizeGaugeProgress(0),
         lockedFloor: normalizeGaugeProgress(0),
         milestones,
-        step: Math.max(0, Math.min(1, 1 / Math.max(1, Number(infiniteGaugeSettings.infiniteGaugeRequiredCorrect) || 1))),
+        step: Math.max(0, Math.min(1, 1 / Math.max(1, Number(successGoalSettings.successGoalCorrectCount) || 1))),
         completed: false,
         launching: false,
         rocketState: "off"
       };
     }
+
+    if (item.questionFlowMode !== "fixed") return null;
 
     const segmentCount = Math.max(1, clampInt(item.questionCount, 1, 999, 1));
     return {
@@ -1592,7 +1721,8 @@ export function createSessionEngine({
 
   function resetSessionGaugeStates() {
     session.forEach((item) => {
-      item.individualGauge = createIndividualGaugeState(item);
+      item.evaluationGauge = createEvaluationGaugeState(item);
+      item.evaluationCounter = { attempted: 0, correct: 0 };
       if (isFinalChallengeItem(item)) {
         item.finalChallengeStarted = false;
         item.finalChallengeCorrectCount = 0;
@@ -1603,8 +1733,8 @@ export function createSessionEngine({
     });
   }
 
-  function hasCompletedInfiniteGauge(item) {
-    const gauge = item?.individualGauge;
+  function hasCompletedSuccessGoalGauge(item) {
+    const gauge = item?.evaluationGauge;
     return gauge?.mode === "infinite" && gauge.completed === true;
   }
 
@@ -1612,7 +1742,7 @@ export function createSessionEngine({
     if (!item) return false;
 
     if (item.currentQuestionOutcomeCommitted === true) {
-      return hasCompletedInfiniteGauge(item);
+      return hasCompletedSuccessGoalGauge(item);
     }
 
     const completedByGauge = commitCurrentQuestionOutcome(item);
@@ -1620,14 +1750,14 @@ export function createSessionEngine({
     return completedByGauge;
   }
 
-  function getIndividualGaugeUiState(item) {
-    if (sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+  function getEvaluationGaugeUiState(item) {
+    if (runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
       return null;
     }
 
-    if (!item?.individualGauge || isFinalChallengeItem(item)) return null;
+    if (!item?.evaluationGauge || isFinalChallengeItem(item)) return null;
 
-    const gauge = item.individualGauge;
+    const gauge = item.evaluationGauge;
     if (gauge.mode === "infinite") {
       return {
         mode: "infinite",
@@ -1659,12 +1789,24 @@ export function createSessionEngine({
       incrementFinalChallengeCorrectCount(item);
     }
 
-    if (!item || sessionActivityMode !== "individual" || runMode === "projected-teacher") {
+    if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
       if (item) item.currentQuestionResolvedCorrectly = false;
       return false;
     }
 
-    const gauge = item.individualGauge;
+    if (item.questionFlowMode === "unlimited") {
+      const counter = item.evaluationCounter || { attempted: 0, correct: 0 };
+      counter.attempted = Math.max(0, Math.floor(Number(counter.attempted) || 0)) + 1;
+      if (isCorrect) {
+        counter.correct = Math.max(0, Math.floor(Number(counter.correct) || 0)) + 1;
+      }
+      item.evaluationCounter = counter;
+      item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
+      item.currentQuestionResolvedCorrectly = false;
+      return false;
+    }
+
+    const gauge = item.evaluationGauge;
     if (!gauge) {
       item.currentQuestionResolvedCorrectly = false;
       return false;
@@ -1714,6 +1856,32 @@ export function createSessionEngine({
     return false;
   }
 
+
+  function getEvaluationCounterUiState(item) {
+    if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) return null;
+    if (item.questionFlowMode !== "unlimited") return null;
+    const counter = item.evaluationCounter || { attempted: 0, correct: 0 };
+    return {
+      visible: true,
+      attempted: Math.max(0, Math.floor(Number(counter.attempted) || 0)),
+      correct: Math.max(0, Math.floor(Number(counter.correct) || 0))
+    };
+  }
+
+  function getFixedQuestionCounterUiState(item) {
+    if (!isSessionRunning || !item || runMode === "projected-teacher" || isFinalChallengeItem(item)) return null;
+    if (phase.kind === "IDLE" || phase.kind === "BETWEEN_TOOLS" || phase.kind === "DONE") return null;
+    if (item.questionFlowMode !== "fixed") return null;
+    if (item.evaluationGauge?.mode === "finite") return null;
+    if (currentQuestionIndex < 0) return null;
+
+    return {
+      visible: true,
+      current: Math.max(1, currentQuestionIndex + 1),
+      total: Math.max(1, Math.floor(Number(item.questionCount) || 0))
+    };
+  }
+
   function getToolRunProfile(tool, item) {
     return getContractToolRunProfile(tool, getToolContext(item));
   }
@@ -1754,6 +1922,9 @@ export function createSessionEngine({
         accessCode,
         moduleKey,
         activityMode: sessionActivityMode,
+        responseUi: sessionResponseUi,
+        progressMode: sessionProgressMode,
+        passationProfile: sessionPassationProfile,
         sessionMode: runMode,
         runMode,
         settings: {},
@@ -1764,8 +1935,8 @@ export function createSessionEngine({
         studentFirstName: runMode === "projected-teacher" ? "" : selectedStudent?.first_name ?? "",
         defaultInstruction: instructionMeta.defaultInstruction,
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
-        projectionResponseUi: getProjectionResponseUiForCurrentRun(),
         globals: cloneData(activityGlobals),
+        questionFlowMode: "fixed",
         isFinalInfiniteSequenceItem: false,
         finalInfiniteSequenceItem: false,
         services: {
@@ -1785,6 +1956,9 @@ export function createSessionEngine({
       accessCode,
       moduleKey,
       activityMode: sessionActivityMode,
+      responseUi: sessionResponseUi,
+      progressMode: sessionProgressMode,
+      passationProfile: sessionPassationProfile,
       sessionMode: runMode,
       runMode,
       settings: item.settings ?? {},
@@ -1795,10 +1969,8 @@ export function createSessionEngine({
       studentFirstName: runMode === "projected-teacher" ? "" : selectedStudent?.first_name ?? "",
       defaultInstruction: instructionMeta.defaultInstruction,
       supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
-      projectionResponseUi: item.projectionResponseUi || getProjectionResponseUiForCurrentRun(),
-      requestedProjectionResponseUi: item.requestedProjectionResponseUi || getProjectionResponseUiForCurrentRun(),
-      projectionResponseUiSupport: cloneData(item.projectionResponseUiSupport || {}),
       globals: cloneData(activityGlobals),
+      questionFlowMode: item.questionFlowMode || "fixed",
       isFinalInfiniteSequenceItem: isFinalChallengeItem(item),
       finalInfiniteSequenceItem: isFinalChallengeItem(item),
       services: {
@@ -1886,7 +2058,7 @@ export function createSessionEngine({
   }
 
   function getGroupScoreRows() {
-    if (sessionActivityMode !== "group" || runMode === "projected-teacher") {
+    if (sessionActivityMode !== "group" || sessionProgressMode !== "evaluated" || sessionResponseUi !== "free" || runMode === "projected-teacher") {
       return [];
     }
 
@@ -1911,7 +2083,7 @@ export function createSessionEngine({
 
   function resetGroupScores() {
     groupScores = new Map();
-    if (sessionActivityMode !== "group" || runMode === "projected-teacher") return;
+    if (sessionActivityMode !== "group" || sessionProgressMode !== "evaluated" || sessionResponseUi !== "free" || runMode === "projected-teacher") return;
 
     selectedStudents.forEach((student) => {
       const id = getStudentId(student);
@@ -1932,7 +2104,7 @@ export function createSessionEngine({
   }
 
   function commitGroupAnswerAttribution(correctStudentIds = []) {
-    if (sessionActivityMode !== "group" || runMode === "projected-teacher") return;
+    if (sessionActivityMode !== "group" || sessionProgressMode !== "evaluated" || sessionResponseUi !== "free" || runMode === "projected-teacher") return;
 
     const correctIds = new Set(
       (Array.isArray(correctStudentIds) ? correctStudentIds : [])
@@ -1958,6 +2130,8 @@ export function createSessionEngine({
 
   function shouldUseGroupAnswerAttribution(item) {
     return sessionActivityMode === "group"
+      && sessionResponseUi === "free"
+      && sessionProgressMode === "evaluated"
       && runMode !== "projected-teacher"
       && !!item
       && phase.kind === "ANSWER"
@@ -2019,6 +2193,10 @@ export function createSessionEngine({
 
     submitButton?.addEventListener("click", async () => {
       if (submitted) return;
+      if (isToolMaxTimeExpiredOrAdvancing(item)) {
+        void enforceCurrentToolMaxTime();
+        return;
+      }
       submitted = true;
       submitButton.disabled = true;
 
@@ -2201,6 +2379,12 @@ export function createSessionEngine({
   }
 
   function handleManualAction() {
+    const item = session[currentToolIndex];
+    if (item && isToolMaxTimeExpiredOrAdvancing(item)) {
+      void enforceCurrentToolMaxTime();
+      return;
+    }
+
     manualActionHandler?.();
   }
 
@@ -2218,7 +2402,7 @@ export function createSessionEngine({
       return;
     }
 
-    if (!item || !isSessionRunning || paused) {
+    if (!item || !isSessionRunning || paused || isToolMaxTimeExpiredOrAdvancing(item)) {
       hideManualAction();
       return;
     }

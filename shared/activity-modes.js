@@ -1,7 +1,12 @@
 import {
   getToolActivityModeProfile as getContractToolActivityModeProfile,
-  getToolSupportedActivityModes as getContractToolSupportedActivityModes
+  getToolSupportedActivityModes as getContractToolSupportedActivityModes,
+  getToolPassationProfileSupport as getContractToolPassationProfileSupport
 } from "./tool-contract.js";
+import {
+  normalizePassationProfile,
+  isForbiddenPassationProfile
+} from "./activity-config.js";
 
 export const ACTIVITY_MODE_VALUES = Object.freeze([
   "individual",
@@ -62,6 +67,24 @@ export function getToolActivityModeSupport(tool, context = {}) {
   return getContractToolActivityModeProfile(tool, {
     ...context,
     activityMode: normalizeActivityMode(context.activityMode)
+  });
+}
+
+
+export function getToolPassationProfileSupport(tool, context = {}) {
+  const profile = normalizePassationProfile(context);
+  if (isForbiddenPassationProfile(profile)) {
+    return {
+      compatible: false,
+      blockingMessage: "Impossible d’évaluer individuellement un élève sans réponse saisie.",
+      profile
+    };
+  }
+
+  return getContractToolPassationProfileSupport(tool, {
+    ...context,
+    ...profile,
+    passationProfile: profile
   });
 }
 

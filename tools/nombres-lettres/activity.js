@@ -99,15 +99,11 @@ function createRuntimeState(initialContext = {}) {
     answerRevealed: false,
     submittedAnswer: "",
     answerDisplayMode: "correction",
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
-    projectionResponseUi: normalizeProjectionResponseUi(initialContext?.projectionResponseUi),
     showResponseBox: shouldShowResponseBox(initialContext)
   };
 }
 
 function syncRuntimeState(state, context = state.latestContext) {
-  state.activityMode = normalizeActivityMode(context?.activityMode);
-  state.projectionResponseUi = normalizeProjectionResponseUi(context?.projectionResponseUi);
   state.showResponseBox = shouldShowResponseBox(context);
 }
 
@@ -547,23 +543,24 @@ function updateLayoutVisibility(state) {
 }
 
 function shouldShowResponseBox(context = {}) {
-  const mode = normalizeActivityMode(context?.activityMode);
-  if (mode === "individual") return true;
-  if (mode === "group") return false;
-  return normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
+  return getResponseUi(context) === "boxed";
 }
 
-function normalizeActivityMode(value) {
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
+}
+
+function normalizeResponseUi(value) {
   const safeValue = String(value ?? "").trim().toLowerCase();
-  if (safeValue === "group") {
-    return safeValue;
-  }
-  return "individual";
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
 
-function normalizeProjectionResponseUi(value) {
-  return String(value ?? "").trim().toLowerCase() === "boxed" ? "boxed" : "free";
-}
 
 function teardownState(state, container) {
   if (container) {

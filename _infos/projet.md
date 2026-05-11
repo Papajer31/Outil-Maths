@@ -11,7 +11,7 @@ Construire une plateforme pédagogique web pensée pour un usage réel en classe
 Le cap actuel est clairement **tools-first** :
 - le coeur actif du projet vit autour d’un registre d’outils ;
 - chaque nouvel outil doit être autonome ;
-- l’ancien monde `modules/` reste présent comme héritage / archive de code consultable, mais il n’est plus l’entrée active des outils modernes et ne doit pas être considéré comme chargeable tel quel.
+- l’ancien monde `modules/` n’est plus présent dans le dépôt courant : le flux actif passe par `tools/`, `tools/registry.js` et `shared/tool-root-runtime.js`.
 
 ---
 
@@ -30,7 +30,7 @@ Le dashboard enseignant fonctionne avec :
 - lancement et suivi de projection.
 
 L’onglet **Banques** est une partie active du produit. Il permet de gérer des contenus réutilisables pour les outils de questions :
-- réponses textuelles ;
+- texte ;
 - QCM ;
 - sélection de mots dans un énoncé.
 
@@ -63,11 +63,30 @@ Les modes pédagogiques actifs sont désormais :
 - `group`.
 
 `projection` n’est plus un mode d’activité stocké dans `activity_mode`.
-La projection est une **action de lancement** / un contexte d’exécution :
-- une activité `individual` projetée garde une UI de réponse `boxed` ;
-- une activité `group` projetée garde une UI libre `free`.
+La projection est une **action de lancement** / un contexte d’exécution. Elle ne modifie pas le mode de passation : elle respecte `activity_mode`, `response_ui` et `progress_mode`.
 
 Le contexte technique de projection est porté par le runtime, notamment via `runMode = "projected-teacher"`.
+
+Le cadrage retenu pour une activité est désormais : **une activité = un mode de passation général**.
+Ce mode de passation repose sur trois critères conceptuels :
+- mode social : `individual` / `group` ;
+- interface de réponse : `boxed` / `free` ;
+- progression : `evaluated` / `practice`.
+
+État actuel du dépôt :
+- les trois critères sont persistés dans `config_json` via `activity_mode`, `response_ui` et `progress_mode` ;
+- l’éditeur affiche une tuile déployable **Mode de passation général** dans le panneau gauche ;
+- cette tuile remplace l’ancienne pill de mode située dans l’en-tête ;
+- le contrôle segmenté `Activité individuelle` / `Activité collective` modifie le vrai `activity_mode` de l’activité ;
+- les contrôles `Réponse saisie` / `Réponse non saisie` et `Situation d’évaluation` / `Situation d’entrainement` modifient les vrais champs `response_ui` et `progress_mode` ;
+- le runtime élève / projection reçoit ce profil de passation et utilise `response_ui` comme source unique de vérité pour choisir entre réponse encadrée et réponse libre ;
+- le profil interdit `individual + free + evaluated` est bloqué par l’éditeur ;
+- la bascule du profil reste bloquée pendant une projection ou un enregistrement ;
+- avant changement, l’éditeur vérifie la compatibilité de tous les outils de la séquence avec le profil cible ;
+- si un outil est incompatible, le changement est refusé et un message explicite est affiché ;
+- si le changement est accepté, l’éditeur se réadapte immédiatement au profil cible et l’activité doit être enregistrée pour conserver ces changements.
+
+Les réglages propres aux outils ne sont pas détruits par une bascule de mode : ils peuvent être masqués ou ignorés par l’UI/runtime selon le mode, mais restent conservés autant que possible dans la configuration.
 
 ---
 
@@ -86,12 +105,11 @@ Le contexte technique de projection est porté par le runtime, notamment via `ru
 - le champ Supabase `activity_configs.module_key` existe toujours ;
 - plusieurs variables du front gardent encore des noms historiques comme `moduleKey` ou `moduleRuntime` ;
 - la valeur logique active attendue reste généralement `tools` ;
-- le dossier `modules/` existe encore avec deux anciens modules : `maths` et `production-ecrit` ;
-- ces anciens modules sont à considérer comme une archive de code, pas comme une cible chargeable telle quelle, car l’ancienne façade `shared/module-factory.js` n’est plus présente dans le zip courant.
+- les anciens fichiers de façade `shared/module-registry.js`, `shared/module-factory.js` et la racine historique `modules/` ne sont pas présents dans le dépôt courant.
 
 Conclusion :
 - le projet est **réellement tools-first dans le flux actif** ;
-- la transition historique survit surtout dans le vocabulaire de certaines variables, dans le champ `module_key` en base et dans le dossier legacy `modules/`, qui sert désormais de réserve consultable plutôt que de runtime actif.
+- la transition historique survit surtout dans quelques noms de variables et dans le champ `module_key` en base, pas dans une racine runtime encore active.
 
 ---
 
@@ -143,27 +161,33 @@ Hooks runtime importants aujourd’hui :
 - le rendu, le binding et la lecture des réglages communs ;
 - l’estimation de durée d’activité ;
 - l’exposition de la consigne personnalisée commune ;
-- l’exposition des réglages de jauge infinie.
+- l’exposition des réglages de questions (`fixed`, `unlimited`, `successGoal`) ;
+- l’exposition de la durée maximale optionnelle propre à chaque outil.
 
 ### 4.4. Couche commune réellement exposée aujourd’hui
 
 Dans le flux actif actuel, la couche commune gère :
 - `questionCount` ;
+- `questionFlowMode`, affiché dans l’UI comme un contrôle segmenté `Questions` : `Nombre fixe`, `Illimitées`, et `Objectif de réussite` quand `response_ui = boxed` et `progress_mode = evaluated` ;
 - `timePerQ` ;
 - `answerTime` ;
 - leurs variantes infinies ;
 - `questionTransitionSec` ;
 - `questionTransitionInfinite` ;
+- `toolMaxTimeMin` ;
+- `toolMaxTimeInfinite` ;
 - la **consigne personnalisée** ;
-- les réglages de **jauge infinie** :
-  - `Nombre de paliers` ;
-  - `Réponses requises`.
+- les réglages d’**objectif de réussite** quand `questionFlowMode = successGoal` :
+  - `successGoalCorrectCount` (`Objectif`, en réponses correctes) ;
+  - `successGoalSafetyMilestones` (`Paliers de sécurité`).
 
 `questionTransitionSec` et `questionTransitionInfinite` sont portés par le draft de chaque item de séquence : chaque outil peut donc définir son propre temps entre deux questions.
 
-La durée totale d’activité reste un réglage global via `activityTotalTimeEnabled` et `activityTotalTimeSec`. Quand elle est activée, l’éditeur traite le dernier outil de la séquence comme un **défi final** : son nombre de questions est forcé à `∞`, afin que la séance puisse occuper la durée globale demandée.
+`toolMaxTimeMin` et `toolMaxTimeInfinite` sont eux aussi portés par le draft de chaque item de séquence : chaque outil peut donc avoir sa propre durée maximale. Dans l’éditeur, ce réglage apparait dans le widget commun comme quatrième champ temporel, après `Temps entre les questions`. Dans le runtime élève, une pill de compte à rebours peut s’afficher en bas à droite pour l’outil courant.
 
-La variante de réponse en projection n’est plus un réglage enseignant global : elle est automatiquement déduite du mode pédagogique de l’activité (`individual` → `boxed`, `group` → `free`).
+La durée totale d’activité reste un réglage global via `activityTotalTimeEnabled` et `activityTotalTimeSec`. Quand elle est activée, le dernier outil de la séquence est forcé en `questionFlowMode = unlimited`, afin que la séance puisse occuper la durée globale demandée. Cette règle ne force jamais l’objectif de réussite.
+
+La variante de réponse en projection n’est plus un réglage enseignant global : la projection respecte le profil de passation sauvegardé (`activity_mode`, `response_ui`, `progress_mode`) et reste un contexte d’exécution.
 
 La projection reste un contexte d’exécution, pas un mode d’activité.
 
@@ -200,7 +224,7 @@ L’outil couvre trois familles d’exercices :
 État réel :
 - outil moderne sous `tools/nombre-cible/` ;
 - modes pédagogiques `individual` et `group` supportés ;
-- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
+- projection possible comme contexte d’exécution, en respectant `response_ui` ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté ;
 - layout outil en mode `stretch`.
@@ -226,7 +250,7 @@ Options prévues mais désactivées dans l’UI actuelle :
 - outil moderne sous `tools/monnaie/` ;
 - assets locaux pour les pièces et billets dans `tools/monnaie/assets/` ;
 - modes pédagogiques `individual` et `group` supportés ;
-- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
+- projection possible comme contexte d’exécution, en respectant `response_ui` ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté ;
 - layout outil en mode `stretch`.
@@ -248,7 +272,7 @@ L’outil couvre :
 État réel :
 - outil moderne sous `tools/operations-trous/` ;
 - modes pédagogiques `individual` et `group` supportés ;
-- projection possible comme contexte d’exécution (`individual` → `boxed`, `group` → `free`) ;
+- projection possible comme contexte d’exécution, en respectant `response_ui` ;
 - validation shell supportée ;
 - toggle correction / réponse élève supporté.
 
@@ -431,18 +455,23 @@ En bas :
 - commandes globales de séance ;
 - commandes de projection ;
 - bouton `Valider` quand le shell pilote la validation ;
-- toggle `Voir ma réponse / Voir la correction` quand l’outil le supporte.
+- toggle `Voir ma réponse / Voir la correction` quand l’outil le supporte ;
+- pill de compte à rebours de l’outil courant quand sa durée maximale est finie.
+
+La pill de durée maximale est placée en bas à droite. Elle affiche seulement le temps restant au format `MM:SS`, reste masquée quand l’outil n’a pas de limite de temps et pulse à `00:00`.
 
 ### Overlays
 
 Les overlays de pause / transition / messages sont dans la scène shrinkée et recouvrent visuellement la scène.
 
-### Jauge individuelle
+### Jauge / compteur d’évaluation
 
-La réserve droite accueille la jauge individuelle :
-- seulement en mode individuel ;
-- mode infini : progression continue + paliers + fusée ;
-- mode fini : segments colorés de bas en haut.
+La réserve droite accueille l’affichage d’évaluation quand `response_ui = boxed` et `progress_mode = evaluated` :
+- `Nombre fixe` → jauge segmentée ;
+- `Illimitées` → compteur `Questions posées` / `Réponses correctes` ;
+- `Objectif de réussite` → jauge continue avec paliers.
+
+En `individual`, le joueur est l’élève. En `group + boxed + evaluated`, le joueur est le groupe / collectif.
 
 ---
 
@@ -478,7 +507,7 @@ La ligne directrice reste :
 - faire évoluer le coeur métier par étapes.
 
 En pratique, cela signifie aujourd’hui :
-- consolider les outils actifs plutôt que rouvrir l’ancien monde `modules/` ;
+- consolider les outils actifs plutôt que rouvrir une ancienne architecture runtime ;
 - stabiliser le shell `#/session` avant de multiplier les raffinements visuels ;
 - homogénéiser la validation shell et le toggle correction/réponse ;
 - fiabiliser les outils de banques (`question-reponse`, `qcm`, `selection`) au même niveau que les outils déjà stabilisés ;
@@ -494,4 +523,15 @@ La priorité concrète est maintenant :
 3. consolider les nouveaux outils mathématiques (`nombre-cible`, `monnaie`, `operations-trous`) ;
 4. fiabiliser l’onglet **Banques** et les trois outils qui en dépendent ;
 5. faire les réglages fins d’UI des outils actifs ;
-6. seulement ensuite poursuivre l’assainissement global de la transition depuis `modules/`.
+6. seulement ensuite poursuivre l’assainissement global du vocabulaire hérité.
+---
+
+## Aide contextuelle
+
+Une aide contextuelle commune est prévue pour accompagner les réglages de l’interface enseignant.
+
+Le bouton `?` principal du tableau de bord reste toujours visible et ouvre une popup dédiée. Cette popup contient :
+- un bouton `Tutoriel`, conservé comme entrée future ;
+- un master switch **Icônes d’aide** permettant d’afficher ou masquer les petits boutons `?` contextuels.
+
+Les contenus d’aide généraux sont centralisés dans `shared/help-content.js`. Les aides propres aux outils pourront être ajoutées dans des fichiers `tools/<tool-id>/help.js`.

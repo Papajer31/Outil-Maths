@@ -1,6 +1,7 @@
 const TOOL_INSTRUCTION_STYLE_DATASET = "toolInstructionStyle";
 
 export const TOOL_INSTRUCTION_CLASS = "tool-instruction";
+const TOOL_INSTRUCTION_RESERVED_SPACE_PREFIX = "\uE000tool-instruction-reserved-space:";
 
 export function ensureToolInstructionStyles() {
   if (typeof document === "undefined") return;
@@ -28,7 +29,20 @@ export function renderToolInstruction({ id = "", className = "" } = {}) {
 export function setToolInstructionText(element, text = "") {
   if (!element) return "";
 
-  const normalizedText = String(text ?? "").trim();
+  const rawText = String(text ?? "");
+  if (rawText.startsWith(TOOL_INSTRUCTION_RESERVED_SPACE_PREFIX)) {
+    const reservedText = rawText.slice(TOOL_INSTRUCTION_RESERVED_SPACE_PREFIX.length).trim();
+    element.textContent = reservedText || "\u00A0";
+    element.hidden = false;
+    element.classList.remove("is-empty");
+    element.classList.add("is-reserved-space");
+    element.setAttribute("aria-hidden", "true");
+    return "";
+  }
+
+  const normalizedText = rawText.trim();
+  element.classList.remove("is-reserved-space");
+  element.removeAttribute("aria-hidden");
   element.textContent = normalizedText;
   element.hidden = !normalizedText;
   element.classList.toggle("is-empty", !normalizedText);
@@ -36,12 +50,30 @@ export function setToolInstructionText(element, text = "") {
 }
 
 export function resolveToolInstructionText(context = {}, fallbackText = "") {
+  const resolvedText = resolveToolInstructionDisplayText(context, fallbackText);
+  if (shouldReserveInstructionSpace(context)) {
+    return reserveInstructionSpace(resolvedText);
+  }
+
+  return resolvedText;
+}
+
+export function resolveQuestionInstructionText(context = {}, questionText = "", fallbackText = "") {
+  const resolvedText = resolveQuestionInstructionDisplayText(context, questionText, fallbackText);
+  if (shouldReserveInstructionSpace(context)) {
+    return reserveInstructionSpace(resolvedText);
+  }
+
+  return resolvedText;
+}
+
+function resolveToolInstructionDisplayText(context = {}, fallbackText = "") {
   const defaultInstruction = String(context?.defaultInstruction ?? fallbackText ?? "").trim();
   const custom = getCustomInstructionState(context);
   return custom.enabled && custom.text ? custom.text : defaultInstruction;
 }
 
-export function resolveQuestionInstructionText(context = {}, questionText = "", fallbackText = "") {
+function resolveQuestionInstructionDisplayText(context = {}, questionText = "", fallbackText = "") {
   const custom = getCustomInstructionState(context);
   if (custom.enabled && custom.text) {
     return custom.text;
@@ -64,6 +96,20 @@ export function getCustomInstructionState(context = {}) {
     enabled: supportsCustomInstruction && instruction?.enabled === true && !!text,
     text
   };
+}
+
+export function shouldReserveInstructionSpace(context = {}) {
+  const supportsCustomInstruction = context?.supportsCustomInstruction !== false;
+  const common = getCommonSettings(context?.settings);
+  const instruction = common && typeof common.instruction === "object" && !Array.isArray(common.instruction)
+    ? common.instruction
+    : null;
+
+  return supportsCustomInstruction && instruction?.hidden === true;
+}
+
+function reserveInstructionSpace(text = "") {
+  return `${TOOL_INSTRUCTION_RESERVED_SPACE_PREFIX}${String(text ?? "").trim()}`;
 }
 
 function getCommonSettings(settings) {

@@ -113,26 +113,25 @@ function createPointerDrag() {
 }
 
 
-function normalizeActivityMode(value) {
-  const safeValue = String(value || "individual").trim().toLowerCase();
-  if (safeValue === "group") {
-    return safeValue;
-  }
-  return "individual";
-}
 
-function normalizeProjectionResponseUi(value) {
-  return String(value || "free").trim().toLowerCase() === "boxed" ? "boxed" : "free";
-}
 
 function usesShellValidationMode(context = {}) {
-  const activityMode = normalizeActivityMode(context?.activityMode);
-  if (activityMode === "individual") {
-    return true;
-  }
-  const runMode = String(context?.runMode || context?.sessionMode || "").trim().toLowerCase();
-  return runMode === "projected-teacher"
-    && normalizeProjectionResponseUi(context?.projectionResponseUi) === "boxed";
+  return getResponseUi(context) === "boxed";
+}
+
+function getResponseUi(context = {}) {
+  return normalizeResponseUi(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+  ) || "boxed";
+}
+
+function normalizeResponseUi(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === "boxed" || safeValue === "free") return safeValue;
+  return "";
 }
 
 function normalizeAnswerDisplayMode(value) {
@@ -157,7 +156,7 @@ function createRuntimeState(initialContext = {}) {
   return {
     container: null,
     latestContext: initialContext,
-    activityMode: normalizeActivityMode(initialContext?.activityMode),
+    responseUi: getResponseUi(initialContext),
     settings: normalizeSettings(initialContext?.settings),
     currentQuestion: null,
     lastQuestionId: "",
@@ -190,7 +189,7 @@ function syncRuntimeState(state, context = state.latestContext) {
   const nextContext = context ?? state.latestContext ?? {};
 
   state.latestContext = nextContext;
-  state.activityMode = normalizeActivityMode(nextContext?.activityMode);
+  state.responseUi = getResponseUi(nextContext);
   state.settings = normalizeSettings(nextContext?.settings);
   state.sessionItem = nextContext?.sessionItem ?? state.sessionItem ?? null;
   state.sessionControls = nextContext?.sessionControls ?? nextContext?.services?.sessionControls ?? state.sessionControls ?? null;
@@ -807,7 +806,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function shouldShowFinalCorrectionForVerdict(verdict) {
-    if (state.activityMode !== "individual") {
+    if (state.responseUi !== "boxed") {
       return false;
     }
 
@@ -863,7 +862,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function canExposeFinalCorrectionToggle() {
-    return state.activityMode === "individual"
+    return state.responseUi === "boxed"
       && !!state.currentQuestion
       && isFinalCorrectionToggleValidationMode(state.settings.individualValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED);
   }
@@ -892,7 +891,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function canToggleStudentAnswerDisplay() {
-    return state.activityMode === "individual"
+    return state.responseUi === "boxed"
       && isAnswerDisplayPhase()
       && state.shellToggleAvailable === true
       && !!state.currentQuestion
@@ -1396,7 +1395,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function isEditingAnswer() {
-    return state.phaseMode === "question-active";
+    return state.responseUi === "boxed" && state.phaseMode === "question-active";
   }
 
   function updatePromptDisplay() {

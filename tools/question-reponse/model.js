@@ -35,6 +35,8 @@ export function normalizeQuestionItems(items = []) {
 
   return items
     .map(normalizeQuestionItem)
+    .filter((item) => item.is_active !== false)
+    .filter((item) => item.item_type === DEFAULT_BANK_TYPE)
     .filter((item) => item.prompt && item.mainAnswer);
 }
 
@@ -102,7 +104,9 @@ export function evaluateAnswer(question, rawAnswer = "") {
 }
 
 export function normalizeSubmittedAnswer(value = "") {
-  return String(value ?? "").trim();
+  return String(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 export function getAcceptedAnswerList(question) {

@@ -8,6 +8,7 @@ import {
 } from "./student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../shared/activity-modes.js";
 import { clearSelectedActivityMeta } from "./student-activity-meta.js";
+import { markStudentFullscreenWanted } from "./student-fullscreen.js";
 
 let classDataLoadPromise = null;
 let classDataLoadAccessCode = "";
@@ -32,7 +33,7 @@ export async function submitAccessCode(rawValue){
   studentState.isLoadingActivities = false;
   emitRefresh();
 
-  enterFullscreenIfPossible();
+  markStudentFullscreenWanted();
 
   try {
     const exists = await accessCodeExists(code);
@@ -441,13 +442,3 @@ function emitRefresh(){
   window.dispatchEvent(new Event("student:refresh"));
 }
 
-function enterFullscreenIfPossible(){
-  try {
-    if (!document.fullscreenElement){
-      const result = document.documentElement.requestFullscreen?.();
-      if (result?.catch){
-        result.catch(() => {});
-      }
-    }
-  } catch {}
-}

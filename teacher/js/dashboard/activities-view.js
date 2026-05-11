@@ -82,7 +82,6 @@ export function createActivitiesViewController({
   openRenameActivityOverlay,
   openDeleteFolderOverlay,
   openDeleteActivityModal,
-  openCreateVersionOverlay,
   toggleDashboardSharePopup,
   openEmbeddedConfigEditor,
   showDashboardShareToast,
@@ -537,7 +536,8 @@ export function createActivitiesViewController({
         </button>
 
         <button class="btn primary" id="btnNewConfig" type="button" title="${escapeAttr(createButtonTitle)}">
-          Créer une activité
+          <span class="dashboard-material-icon" aria-hidden="true">add</span>
+          <span>Créer une activité</span>
         </button>
       </div>
     `;
@@ -784,10 +784,6 @@ export function createActivitiesViewController({
             <span class="dashboard-material-icon" aria-hidden="true">content_copy</span>
           </button>
 
-          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="create-version" data-activity-id="${escapeAttr(activityId)}" title="Créer une version dans un autre mode" aria-label="Créer une version dans un autre mode">
-            <span class="dashboard-material-icon" aria-hidden="true">difference</span>
-          </button>
-
           <button class="dashboard-icon-btn dashboard-material-icon-btn dashboard-share-btn" type="button" data-action="share" data-config-name="${escapeAttr(cfg.config_name)}" title="${escapeAttr(shareTitle)}" aria-label="${escapeAttr(shareTitle)}" aria-haspopup="menu" aria-expanded="false"${canShare ? "" : " disabled"}>
             <span class="dashboard-material-icon" aria-hidden="true">share</span>
           </button>
@@ -1005,15 +1001,6 @@ export function createActivitiesViewController({
         const activityId = String(btn.dataset.activityId || "");
         if (!activityId) return;
         void duplicateActivityFromTile(activityId);
-      });
-    });
-
-    configsList?.querySelectorAll("[data-action='create-version']").forEach((btn) => {
-      btn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const activityId = String(btn.dataset.activityId || "");
-        if (!activityId) return;
-        void openCreateVersionOverlay(activityId);
       });
     });
 

@@ -38,13 +38,6 @@ export default defineTool("nombres-lettres", "Nombres en lettres", {
     };
   },
 
-  supportsProjectionResponseUi() {
-    return {
-      boxed: true,
-      free: true
-    };
-  },
-
   createActivity(context = {}) {
     return createNombresLettresActivity({
       ...context,
