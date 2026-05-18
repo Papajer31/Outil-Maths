@@ -139,7 +139,7 @@ Hooks runtime importants aujourd’hui :
 
 ### 4.2. Registre actif des outils
 
-`tools/registry.js` déclare aujourd’hui une racine logique `tools / Outils` contenant **douze outils actifs** :
+`tools/registry.js` déclare aujourd’hui une racine logique `tools / Outils` contenant **treize outils actifs** :
 - `operations` ;
 - `nombre-cible` ;
 - `monnaie` ;
@@ -149,6 +149,7 @@ Hooks runtime importants aujourd’hui :
 - `encodage` ;
 - `nombres-lettres` ;
 - `reperage-numerique` ;
+- `conjugaison` ;
 - `question-reponse` ;
 - `qcm` ;
 - `selection`.
@@ -375,7 +376,23 @@ L’outil couvre :
 - validation shell ;
 - toggle correction / réponse élève.
 
-## 5.10. `Question/Réponse`
+## 5.10. `Conjugaison`
+
+L’outil couvre :
+- génération de questions à partir d’un verbe, d’un temps et d’une personne ;
+- affichage `verbe + temps + pronom` ou personne grammaticale ;
+- réponse attendue sous forme verbale seule ou `pronom + forme verbale` ;
+- listes prédéfinies ou liste personnalisée d’infinitifs validée contre la base interne.
+
+État réel :
+- outil moderne sous `tools/conjugaison/` ;
+- base interne de formes verbales prévalidées ;
+- temps simples : présent, imparfait, futur simple, passé simple ;
+- passé composé inclus avec auxiliaire avoir pour toutes les personnes et auxiliaire être limité aux personnes non ambigües (`il`, `elle`, `ils`, `elles`) dans ce MVP ;
+- validation shell ;
+- UI runtime alignée sur `Question/Réponse`.
+
+## 5.11. `Question/Réponse`
 
 L’outil couvre :
 - questions à réponse textuelle courte issues d’une banque `text_answer` ;
@@ -389,7 +406,7 @@ L’outil couvre :
 - validation shell ;
 - toggle correction / réponse élève.
 
-## 5.11. `QCM`
+## 5.12. `QCM`
 
 L’outil couvre :
 - questions à choix unique issues d’une banque `qcm` ;
@@ -407,7 +424,7 @@ L’outil couvre :
 Remarque :
 - dans le dépôt courant, le QCM ne déclare pas les hooks de toggle correction / réponse élève, contrairement à plusieurs autres outils.
 
-## 5.12. `Sélection`
+## 5.13. `Sélection`
 
 L’outil couvre :
 - sélection de mots dans un énoncé issu d’une banque `selection` ;

@@ -9,6 +9,7 @@ Supabase sert de backend principal pour :
 - le stockage des activités, de leur configuration et de leur organisation en dossiers ;
 - la gestion des banques de mots de vocabulaire ;
 - la gestion des presets de phonologie enseignant ;
+- la gestion des listes personnelles de verbes pour l’outil Conjugaison ;
 - la gestion des banques de contenus / questions et de leur arborescence dédiée ;
 - la diffusion publique de certaines données aux élèves via RPC ou tables publiques en lecture ;
 - la résolution des images et des mots de l’outil Encodage.
@@ -254,6 +255,38 @@ Remarque :
 - leurs réglages vivent dans `activity_configs.config_json`.
 
 ---
+
+
+## 3.8 bis. `teacher_conjugation_lists`
+
+### Rôle
+
+Listes personnelles de verbes enregistrées par l’enseignant pour l’outil Conjugaison.
+
+Ces listes vivent dans Supabase comme ressources de l’espace enseignant. Une activité peut référencer une liste personnelle : si la liste est corrigée ou complétée, les activités qui la référencent utilisent la version mise à jour.
+
+### Colonnes attendues par le front
+
+- `id` ;
+- `teacher_space_id` ;
+- `name` ;
+- `normalized_name` ;
+- `verbs_json` avec la forme `{ "infinitives": [...] }` ;
+- `created_at` ;
+- `updated_at`.
+
+### Usage visible dans le code
+
+- lecture des listes personnelles de l’espace enseignant ;
+- création ;
+- renommage ;
+- mise à jour du contenu ;
+- suppression sécurisée côté UI après recherche des activités qui référencent la liste ;
+- résolution publique contrôlée via RPC `get_conjugation_personal_list` lors du chargement runtime élève.
+
+Remarque :
+- les listes personnelles sont privées par RLS ;
+- l’accès élève ne lit pas directement la table, il passe par la RPC publique contrôlée par `access_code`.
 
 ## 3.9. `image_assets`
 
@@ -555,6 +588,7 @@ Attendu en accès propriétaire authentifié :
 - `activity_folders` ;
 - `teacher_vocabulary_words` ;
 - `teacher_phonology_presets` ;
+- `teacher_conjugation_lists` ;
 - `question_bank_folders` ;
 - `question_banks` personnelles ;
 - `question_bank_items` des banques personnelles.

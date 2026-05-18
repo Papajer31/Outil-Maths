@@ -215,6 +215,19 @@
                 <div class="cfg-header-left dashboard-banks-editor-header-main">
                   <button class="btn cfg-back-btn" id="btnBackBankExplorer" type="button" aria-label="Retour aux banques">↩</button>
 
+                  <button
+                    id="btnToggleBankMeta"
+                    class="dashboard-bank-meta-toggle dashboard-material-icon-btn"
+                    type="button"
+                    aria-label="Afficher les informations facultatives"
+                    aria-expanded="false"
+                    aria-controls="bankEditorMetaPanel"
+                    title="Afficher matière, niveau, tags et description"
+                    disabled
+                  >
+                    <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
+                  </button>
+
                   <div class="cfg-header-identity">
                     <div class="cfg-config-name-wrap">
                       <div class="cfg-field-label">Titre de la banque :</div>
@@ -239,6 +252,8 @@
                 <div class="cfg-header-actions dashboard-banks-header-actions">
                   <button id="btnSaveBank" class="btn cfg-save-btn" type="button" disabled>Enregistrer</button>
                 </div>
+
+                <div id="bankEditorMetaPanel" class="dashboard-bank-header-meta-panel" hidden></div>
               </div>
 
               <div id="banksList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">

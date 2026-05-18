@@ -102,6 +102,7 @@ Contenu actif :
 - `tools/encodage/` ;
 - `tools/nombres-lettres/` ;
 - `tools/reperage-numerique/` ;
+- `tools/conjugaison/` ;
 - `tools/question-reponse/` ;
 - `tools/qcm/` ;
 - `tools/selection/`.
@@ -138,6 +139,7 @@ Il expose :
 - `encodage` ;
 - `nombres-lettres` ;
 - `reperage-numerique` ;
+- `conjugaison` ;
 - `question-reponse` ;
 - `qcm` ;
 - `selection`.
@@ -620,7 +622,23 @@ L’outil gère :
 - validation shell ;
 - toggle correction / réponse élève.
 
-## 9.10. `tools/question-reponse/`
+## 9.10. `tools/conjugaison/`
+
+L’outil gère :
+- génération de questions de conjugaison à partir de la base interne de formes verbales ;
+- listes prédéfinies ou liste personnalisée d’infinitifs ;
+- choix des temps et des personnes ;
+- affichage par pronom ou par personne grammaticale ;
+- réponse attendue avec ou sans pronom.
+
+État actuel :
+- outil moderne `tools/` ;
+- UI runtime alignée sur `Question/Réponse` ;
+- validation shell ;
+- toggle correction / réponse élève ;
+- passé composé inclus avec auxiliaire avoir pour toutes les personnes et auxiliaire être limité aux personnes non ambigües dans ce MVP.
+
+## 9.11. `tools/question-reponse/`
 
 L’outil gère :
 - questions à réponse textuelle courte ;
@@ -635,7 +653,7 @@ L’outil gère :
 - validation shell ;
 - toggle correction / réponse élève.
 
-## 9.11. `tools/qcm/`
+## 9.12. `tools/qcm/`
 
 L’outil gère :
 - banque `qcm` ;
@@ -652,7 +670,7 @@ L’outil gère :
 - projection possible comme contexte d’exécution, en respectant `response_ui` ;
 - pas de toggle correction/réponse déclaré dans le runtime actuel.
 
-## 9.12. `tools/selection/`
+## 9.13. `tools/selection/`
 
 L’outil gère :
 - banque `selection` ;

@@ -224,7 +224,7 @@ export async function loadPublicActivityConfig(accessCode, configName) {
   if (!row) return null;
 
   const configJson = row.config_json && typeof row.config_json === "object"
-    ? sanitizeActivityConfigJson(row.config_json)
+    ? await hydratePublicConjugationPersonalLists(code, sanitizeActivityConfigJson(row.config_json))
     : row.config_json ?? null;
 
   return {
@@ -357,4 +357,75 @@ export async function listPublicQuestionBankItemsForSpace(accessCode, bankId) {
   return (Array.isArray(data) ? data : [])
     .map(normalizePublicQuestionBankItem)
     .filter((item) => item.is_active !== false);
+}
+
+
+async function hydratePublicConjugationPersonalLists(accessCode, configJson = {}) {
+  const safeConfig = configJson && typeof configJson === "object" && !Array.isArray(configJson)
+    ? { ...configJson }
+    : configJson;
+  if (!safeConfig || typeof safeConfig !== "object" || !Array.isArray(safeConfig.sequence)) return safeConfig;
+
+  const code = normalizeAccessCode(accessCode);
+  if (!code) return safeConfig;
+
+  const cache = new Map();
+  const nextSequence = await Promise.all(safeConfig.sequence.map(async (item) => {
+    const toolId = String(item?.toolId || item?.tool_id || "").trim();
+    const settings = item?.draft?.settings && typeof item.draft.settings === "object" && !Array.isArray(item.draft.settings)
+      ? item.draft.settings
+      : null;
+    const listId = String(settings?.personalListId || settings?.personal_list_id || "").trim();
+
+    if (toolId !== "conjugaison" || !settings || String(settings.sourceMode || settings.source_mode || "") !== "personal" || !listId) {
+      return item;
+    }
+
+    const list = await getPublicConjugationPersonalList(code, listId, cache);
+    if (!list) return item;
+
+    const infinitives = Array.isArray(list.infinitives) ? list.infinitives : [];
+    return {
+      ...item,
+      draft: {
+        ...(item.draft || {}),
+        settings: {
+          ...settings,
+          personalListId: list.id,
+          personalListName: list.name,
+          personalListVerbsText: infinitives.join("\n")
+        }
+      }
+    };
+  }));
+
+  return {
+    ...safeConfig,
+    sequence: nextSequence
+  };
+}
+
+async function getPublicConjugationPersonalList(accessCode, listId, cache) {
+  const safeId = String(listId || "").trim();
+  if (!safeId) return null;
+  if (cache.has(safeId)) return cache.get(safeId);
+
+  const { data, error } = await supabase.rpc("get_conjugation_personal_list", {
+    p_access_code: accessCode,
+    p_list_id: safeId
+  });
+
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  const verbsJson = row?.verbs_json && typeof row.verbs_json === "object" ? row.verbs_json : {};
+  const infinitives = Array.isArray(verbsJson.infinitives) ? verbsJson.infinitives : [];
+  const list = row
+    ? {
+      id: String(row.id || safeId),
+      name: cleanDisplayName(row.name || "Liste personnelle"),
+      infinitives: infinitives.map((item) => String(item || "").trim()).filter(Boolean)
+    }
+    : null;
+  cache.set(safeId, list);
+  return list;
 }

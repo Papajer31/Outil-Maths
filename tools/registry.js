@@ -68,6 +68,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["maths", "nombres", "droite-graduee", "picbille", "projection"]
   },
   {
+    id: "conjugaison",
+    label: "Conjugaison",
+    entry: "../tools/conjugaison/tool.js",
+    description: "Générer des questions de conjugaison à partir d’une base interne de formes verbales.",
+    tags: ["français", "conjugaison", "verbe", "texte", "projection"]
+  },
+  {
     id: "question-reponse",
     label: "Question/Réponse",
     entry: "../tools/question-reponse/tool.js",

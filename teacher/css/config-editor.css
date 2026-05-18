@@ -602,9 +602,12 @@
   display:flex;
   flex-direction:column;
   flex:1 1 auto;
-  gap:14px;
+  min-width:0;
   min-height:420px;
   overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
 }
 
 .cfg-empty-state{
@@ -623,6 +626,8 @@
   display:flex;
   flex-direction:column;
   gap:16px;
+  min-width:0;
+  padding-inline-end:10px;
 }
 
 .cfg-common-flow-compact{
@@ -1377,7 +1382,7 @@
 .cfg-page-embedded .cfg-header{
   min-height:72px;
   justify-content:center;
-  margin:0;
+  margin:var(--dashboard-editor-top-gap, 0) 0 0;
   padding:0 16px;
   border:0;
   border-bottom:1px solid rgba(0,0,0,.12);

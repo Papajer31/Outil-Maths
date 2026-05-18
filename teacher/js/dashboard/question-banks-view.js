@@ -440,9 +440,41 @@ function stripImportCellQuotes(value) {
   return text;
 }
 
+function splitDelimitedImportLine(line, delimiter = "|") {
+  const columns = [];
+  const safeDelimiter = String(delimiter || "|").charAt(0) || "|";
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      current += char;
+      if (inQuotes && line[index + 1] === '"') {
+        current += line[index + 1];
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === safeDelimiter && !inQuotes) {
+      columns.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  columns.push(current);
+  return columns;
+}
+
 function splitImportLine(line, { maxColumns = 4, mergeOverflowIntoLast = true } = {}) {
   const delimiter = line.includes("\t") ? "\t" : "|";
-  const columns = line.split(delimiter).map(stripImportCellQuotes);
+  const columns = splitDelimitedImportLine(line, delimiter).map(stripImportCellQuotes);
 
   if (mergeOverflowIntoLast && columns.length > maxColumns) {
     return [
@@ -557,6 +589,73 @@ function parseBankImportText(rawText, bankType = DEFAULT_BANK_TYPE) {
   });
 
   return { imported, errors };
+}
+
+function normalizeExportCellValue(value) {
+  return String(value || "")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .split("\n")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" § ");
+}
+
+function formatExportCell(value) {
+  const text = normalizeExportCellValue(value);
+  if (!text) return "";
+  if (/[|"\t]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function serializeBankItemForExport(item, bankType = DEFAULT_BANK_TYPE) {
+  const safeType = normalizeBankType(bankType);
+  const normalizedItem = normalizeItemDraft({
+    ...item,
+    item_type: item?.item_type || safeType
+  });
+  const payload = normalizedItem.payload_json || {};
+
+  if (isSelectionType(safeType)) {
+    return [
+      normalizedItem.prompt,
+      getItemSelectionDisplayValue(normalizedItem),
+      payload.explanation || ""
+    ].map(formatExportCell).join(" | ");
+  }
+
+  if (isQcmType(safeType)) {
+    return [
+      normalizedItem.prompt,
+      payload.correctAnswer || "",
+      distractorsToText(distractorsFromFields(payload)),
+      payload.explanation || ""
+    ].map(formatExportCell).join(" | ");
+  }
+
+  return [
+    normalizedItem.prompt,
+    payload.mainAnswer || "",
+    acceptedAnswersToText(payload.acceptedAnswers),
+    payload.explanation || ""
+  ].map(formatExportCell).join(" | ");
+}
+
+function getItemSelectionDisplayValue(item) {
+  const payload = item?.payload_json || {};
+  const indexes = normalizeTokenIndexes(
+    payload.expectedTokenIndexes,
+    tokenizeSelectionText(item?.prompt || "").filter((token) => token.kind === "word").length
+  );
+  return formatSelectionIndexes(item?.prompt || "", indexes) || String(payload.expectedSelectionText || "");
+}
+
+function serializeBankItemsForExport(items = [], bankType = DEFAULT_BANK_TYPE) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => serializeBankItemForExport(item, bankType))
+    .join("\n");
 }
 export function createQuestionBanksViewController({
   banksView,
@@ -1596,11 +1695,21 @@ export function createQuestionBanksViewController({
       bankEditorTypePill.title = bank ? `Type technique : ${bank.bank_type || DEFAULT_BANK_TYPE}` : "";
     }
 
+    syncBankMetaExpansionUi();
+
     const importButton = document.getElementById("btnImportBank");
     if (importButton) {
       importButton.disabled = !canEditSelectedBankItems() || isSaving;
       importButton.title = bank && !selectedBankIsEditableType()
         ? "L’import rapide n’est pas encore disponible pour ce type de banque."
+        : "";
+    }
+
+    const exportEditButton = document.getElementById("btnExportEditBank");
+    if (exportEditButton) {
+      exportEditButton.disabled = !bank || !selectedBankIsEditableType() || isSaving;
+      exportEditButton.title = bank && !selectedBankIsEditableType()
+        ? "L’édition brute n’est pas encore disponible pour ce type de banque."
         : "";
     }
 
@@ -1641,6 +1750,7 @@ export function createQuestionBanksViewController({
   function renderEmptyState(message = "Sélectionne une banque ou crée-en une nouvelle.") {
     if (!bankEditorHost) return;
     unbindRowsHostEvents();
+    renderBankHeaderMetaPanel();
     bankEditorHost.innerHTML = `
       <div class="dashboard-bank-empty-state">
         <span class="dashboard-material-icon" aria-hidden="true">database</span>
@@ -1653,6 +1763,52 @@ export function createQuestionBanksViewController({
     renderExplorer();
   }
 
+  function buildBankMetaFieldsMarkup({ isSystem = false } = {}) {
+    if (!metaDraft) return "";
+    const tagsText = Array.isArray(metaDraft.tags) ? metaDraft.tags.join("; ") : "";
+
+    return `
+      <div class="dashboard-bank-meta-grid dashboard-bank-header-meta-grid">
+        <label class="dashboard-bank-field">
+          <span>Matière</span>
+          <input id="bankSubjectInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.subject)}" ${isSystem ? "disabled" : ""}>
+        </label>
+        <label class="dashboard-bank-field">
+          <span>Niveau</span>
+          <input id="bankGradeInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.grade_level)}" ${isSystem ? "disabled" : ""}>
+        </label>
+        <label class="dashboard-bank-field dashboard-bank-field-wide">
+          <span>Tags <small>séparés par ;</small></span>
+          <input id="bankTagsInput" class="dashboard-bank-input" type="text" value="${escapeAttr(tagsText)}" ${isSystem ? "disabled" : ""}>
+        </label>
+        <label class="dashboard-bank-field dashboard-bank-field-wide">
+          <span>Description</span>
+          <textarea id="bankDescriptionInput" class="dashboard-bank-textarea" ${isSystem ? "disabled" : ""}>${escapeHtml(metaDraft.description)}</textarea>
+        </label>
+      </div>
+    `;
+  }
+
+  function renderBankHeaderMetaPanel() {
+    const bank = getSelectedBank();
+    const panel = document.getElementById("bankEditorMetaPanel");
+    const toggleButton = document.getElementById("btnToggleBankMeta");
+    if (!panel) return;
+
+    if (!bank || !metaDraft) {
+      panel.innerHTML = "";
+      panel.hidden = true;
+      if (toggleButton) {
+        toggleButton.disabled = true;
+        toggleButton.setAttribute("aria-expanded", "false");
+      }
+      return;
+    }
+
+    panel.innerHTML = buildBankMetaFieldsMarkup({ isSystem: bank.is_system === true });
+    syncBankMetaExpansionUi();
+  }
+
   function buildEditorMarkup() {
     const bank = getSelectedBank();
     if (!bank || !metaDraft) return "";
@@ -1660,26 +1816,10 @@ export function createQuestionBanksViewController({
     const bankType = normalizeBankType(bank.bank_type);
     const isEditableItemsBank = isEditableBankType(bankType);
     const canEditItems = canEditSelectedBankItems();
-    const tagsText = Array.isArray(metaDraft.tags) ? metaDraft.tags.join("; ") : "";
     const qcmDistractorColumnCount = isQcmType(bankType) ? getCurrentQcmDistractorColumnCount() : 1;
 
     return `
       <div class="dashboard-bank-editor">
-        <div class="dashboard-bank-editor-top">
-          <div class="dashboard-bank-title-fields">
-            <button
-              id="btnToggleBankMeta"
-              class="dashboard-bank-meta-toggle dashboard-material-icon-btn"
-              type="button"
-              aria-label="${isMetaExpanded ? "Masquer les informations facultatives" : "Afficher les informations facultatives"}"
-              aria-expanded="${isMetaExpanded ? "true" : "false"}"
-              title="${isMetaExpanded ? "Masquer matière, niveau, tags et description" : "Afficher matière, niveau, tags et description"}"
-            >
-              <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
-            </button>
-          </div>
-        </div>
-
         ${isSystem ? `
           <div class="dashboard-bank-readonly-note">
             <span class="dashboard-material-icon" aria-hidden="true">lock</span>
@@ -1690,27 +1830,7 @@ export function createQuestionBanksViewController({
           </div>
         ` : ""}
 
-        <div class="dashboard-bank-meta-grid" ${isMetaExpanded ? "" : "hidden"}>
-          <label class="dashboard-bank-field">
-            <span>Matière</span>
-            <input id="bankSubjectInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.subject)}" ${isSystem ? "disabled" : ""}>
-          </label>
-          <label class="dashboard-bank-field">
-            <span>Niveau</span>
-            <input id="bankGradeInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.grade_level)}" ${isSystem ? "disabled" : ""}>
-          </label>
-          <label class="dashboard-bank-field dashboard-bank-field-wide">
-            <span>Tags <small>séparés par ;</small></span>
-            <input id="bankTagsInput" class="dashboard-bank-input" type="text" value="${escapeAttr(tagsText)}" ${isSystem ? "disabled" : ""}>
-          </label>
-          <label class="dashboard-bank-field dashboard-bank-field-wide">
-            <span>Description</span>
-            <textarea id="bankDescriptionInput" class="dashboard-bank-textarea" ${isSystem ? "disabled" : ""}>${escapeHtml(metaDraft.description)}</textarea>
-          </label>
-        </div>
-
         ${isEditableItemsBank ? `
-          <div class="dashboard-bank-table-wrap">
           <div class="dashboard-bank-table-toolbar">
             <div>
               <div class="dashboard-bank-table-title-row">
@@ -1767,6 +1887,10 @@ export function createQuestionBanksViewController({
                 <span class="dashboard-material-icon" aria-hidden="true">content_paste</span>
                 <span>Importer / coller</span>
               </button>
+              <button id="btnExportEditBank" class="btn" type="button" ${isEditableItemsBank ? "" : "disabled"}>
+                <span class="dashboard-material-icon" aria-hidden="true">edit_note</span>
+                <span>Exporter / éditer</span>
+              </button>
             </div>
           </div>
 
@@ -1777,7 +1901,6 @@ export function createQuestionBanksViewController({
               <span class="dashboard-material-icon" aria-hidden="true">progress_activity</span>
               <span class="dashboard-bank-table-loading-label">${escapeHtml(tableBusyLabel)}</span>
             </div>
-          </div>
           </div>
         ` : buildUnsupportedBankTypeMarkup(bank)}
       </div>
@@ -2046,12 +2169,14 @@ export function createQuestionBanksViewController({
     const bank = getSelectedBank();
 
     if (!bank) {
+      renderBankHeaderMetaPanel();
       updateActionState();
       renderEmptyState();
       return;
     }
 
     bankEditorHost.innerHTML = buildEditorMarkup();
+    renderBankHeaderMetaPanel();
     if (selectedBankIsEditableType()) {
       bindRowsHostEvents();
       refreshItemsTable({ preserveScroll: false, force: true });
@@ -2631,7 +2756,9 @@ export function createQuestionBanksViewController({
   }
 
   function syncBankMetaExpansionUi() {
-    const metaGrid = bankEditorHost?.querySelector(".dashboard-bank-meta-grid");
+    const bank = getSelectedBank();
+    const canShowMeta = Boolean(bank && metaDraft);
+    const metaPanel = document.getElementById("bankEditorMetaPanel");
     const button = document.getElementById("btnToggleBankMeta");
     const label = isMetaExpanded
       ? "Masquer les informations facultatives"
@@ -2640,8 +2767,9 @@ export function createQuestionBanksViewController({
       ? "Masquer matière, niveau, tags et description"
       : "Afficher matière, niveau, tags et description";
 
-    if (metaGrid) metaGrid.hidden = !isMetaExpanded;
+    if (metaPanel) metaPanel.hidden = !canShowMeta || !isMetaExpanded;
     if (button) {
+      button.disabled = !canShowMeta;
       button.setAttribute("aria-label", label);
       button.setAttribute("aria-expanded", String(isMetaExpanded));
       button.title = title;
@@ -2763,6 +2891,11 @@ export function createQuestionBanksViewController({
 
     if (target.closest("#btnImportBank")) {
       openImportModal();
+      return;
+    }
+
+    if (target.closest("#btnExportEditBank")) {
+      openExportEditOverlay();
       return;
     }
 
@@ -3181,6 +3314,7 @@ export function createQuestionBanksViewController({
       itemDrafts = updatedItems.map(normalizeItemDraft);
       hasPendingChanges = false;
       setSaveStatus("saved", "Banque enregistrée");
+      renderBankHeaderMetaPanel();
       updateActionState();
       renderBanksList();
       if (shouldSaveItems) {
@@ -3289,6 +3423,319 @@ export function createQuestionBanksViewController({
     showToast?.(`${imported.length} question${imported.length > 1 ? "s" : ""} ajoutée${imported.length > 1 ? "s" : ""}.${errors.length ? ` ${errors.length} ligne(s) ignorée(s).` : ""}`);
   }
 
+  function escapeRegExp(value) {
+    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function buildExportFilename() {
+    const bank = getSelectedBank();
+    const title = String(bank?.title || "banque")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "banque";
+    return `${title}.txt`;
+  }
+
+  function insertTextAtSelection(textarea, text) {
+    if (!textarea) return;
+    const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = `${before}${text}${after}`;
+    const nextPosition = start + String(text || "").length;
+    textarea.focus();
+    textarea.setSelectionRange(nextPosition, nextPosition);
+  }
+
+  function openExportEditOverlay() {
+    const bank = getSelectedBank();
+    if (!bank || !selectedBankIsEditableType()) return;
+
+    const canApplyChanges = canEditSelectedBankItems();
+    const overlay = document.createElement("div");
+    overlay.className = "modal dashboard-bank-export-modal";
+    overlay.setAttribute("aria-hidden", "false");
+    overlay.innerHTML = `
+      <div class="modal-content modal-content-wide dashboard-bank-export-modal-card" role="dialog" aria-modal="true" aria-labelledby="bankExportEditorTitle">
+        <div class="dashboard-bank-export-header">
+          <div>
+            <div id="bankExportEditorTitle" class="modal-title">Exporter / éditer</div>
+            <div class="dashboard-bank-export-subtitle">Une question par ligne, colonnes séparées par <code>|</code>. Ce texte peut être recollé dans l’import.</div>
+          </div>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn dashboard-bank-export-close" type="button" aria-label="Fermer">
+            <span class="dashboard-material-icon" aria-hidden="true">close</span>
+          </button>
+        </div>
+
+        <div class="dashboard-bank-export-toolbar" role="toolbar" aria-label="Actions de texte">
+          <button id="btnBankRawCopy" class="btn" type="button">
+            <span class="dashboard-material-icon" aria-hidden="true">content_copy</span>
+            <span>Copier</span>
+          </button>
+          <button id="btnBankRawPaste" class="btn" type="button">
+            <span class="dashboard-material-icon" aria-hidden="true">content_paste</span>
+            <span>Coller</span>
+          </button>
+          <button id="btnBankRawDownload" class="btn" type="button">
+            <span class="dashboard-material-icon" aria-hidden="true">download</span>
+            <span>Fichier .txt</span>
+          </button>
+        </div>
+
+        <div class="dashboard-bank-export-search">
+          <input id="bankRawSearchInput" class="dashboard-bank-input" type="search" placeholder="Rechercher" autocomplete="off">
+          <input id="bankRawReplaceInput" class="dashboard-bank-input" type="text" placeholder="Remplacer par" autocomplete="off">
+          <button id="btnBankRawFindPrev" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Occurrence précédente" aria-label="Occurrence précédente">
+            <span class="dashboard-material-icon" aria-hidden="true">keyboard_arrow_up</span>
+          </button>
+          <button id="btnBankRawFindNext" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Occurrence suivante" aria-label="Occurrence suivante">
+            <span class="dashboard-material-icon" aria-hidden="true">keyboard_arrow_down</span>
+          </button>
+          <button id="btnBankRawReplaceOne" class="btn" type="button">Remplacer</button>
+          <button id="btnBankRawReplaceAll" class="btn" type="button">Tout remplacer</button>
+        </div>
+
+        <textarea id="bankRawEditorInput" class="dashboard-bank-export-input" spellcheck="true"></textarea>
+
+        <div class="modal-actions dashboard-bank-export-actions">
+          <div id="bankRawEditorMessage" class="modal-message"></div>
+          <button id="btnBankRawCancel" class="btn" type="button">Fermer</button>
+          <button id="btnBankRawApply" class="btn primary" type="button" ${canApplyChanges ? "" : "disabled"}>Appliquer à la banque</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const textarea = overlay.querySelector("#bankRawEditorInput");
+    const message = overlay.querySelector("#bankRawEditorMessage");
+    const searchInput = overlay.querySelector("#bankRawSearchInput");
+    const replaceInput = overlay.querySelector("#bankRawReplaceInput");
+    const applyButton = overlay.querySelector("#btnBankRawApply");
+
+    if (textarea) {
+      textarea.value = serializeBankItemsForExport(itemDrafts, getSelectedBankType());
+    }
+
+    function setRawMessage(text = "", isError = false) {
+      if (!message) return;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+    }
+
+    function close() {
+      overlay.remove();
+    }
+
+    function findRawText(direction = 1) {
+      const query = String(searchInput?.value || "");
+      if (!textarea || !query) {
+        setRawMessage("Entre un texte à rechercher.", true);
+        searchInput?.focus();
+        return false;
+      }
+
+      const source = textarea.value.toLocaleLowerCase("fr");
+      const needle = query.toLocaleLowerCase("fr");
+      const selectionStart = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : 0;
+      const selectionEnd = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : selectionStart;
+      let index = -1;
+
+      if (direction < 0) {
+        index = source.lastIndexOf(needle, Math.max(0, selectionStart - 1));
+        if (index < 0) index = source.lastIndexOf(needle);
+      } else {
+        index = source.indexOf(needle, selectionEnd);
+        if (index < 0) index = source.indexOf(needle);
+      }
+
+      if (index < 0) {
+        setRawMessage("Aucune occurrence trouvée.", true);
+        return false;
+      }
+
+      textarea.focus();
+      textarea.setSelectionRange(index, index + query.length);
+      setRawMessage(`Occurrence ${index + 1}.`);
+      return true;
+    }
+
+    function replaceCurrentRawMatch() {
+      if (!textarea) return;
+      const query = String(searchInput?.value || "");
+      if (!query) {
+        setRawMessage("Entre un texte à rechercher.", true);
+        searchInput?.focus();
+        return;
+      }
+
+      const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+      if (selected.toLocaleLowerCase("fr") !== query.toLocaleLowerCase("fr") && !findRawText(1)) {
+        return;
+      }
+
+      const replacement = String(replaceInput?.value || "");
+      insertTextAtSelection(textarea, replacement);
+      setRawMessage("Occurrence remplacée.");
+      findRawText(1);
+    }
+
+    function replaceAllRawMatches() {
+      if (!textarea) return;
+      const query = String(searchInput?.value || "");
+      if (!query) {
+        setRawMessage("Entre un texte à rechercher.", true);
+        searchInput?.focus();
+        return;
+      }
+
+      const regex = new RegExp(escapeRegExp(query), "gi");
+      const matches = textarea.value.match(regex) || [];
+      if (!matches.length) {
+        setRawMessage("Aucune occurrence trouvée.", true);
+        return;
+      }
+
+      textarea.value = textarea.value.replace(regex, String(replaceInput?.value || ""));
+      setRawMessage(`${matches.length} occurrence${matches.length > 1 ? "s" : ""} remplacée${matches.length > 1 ? "s" : ""}.`);
+      textarea.focus();
+    }
+
+    async function copyRawText() {
+      if (!textarea) return;
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard indisponible");
+        await navigator.clipboard.writeText(textarea.value);
+        setRawMessage("Texte copié.");
+      } catch {
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand?.("copy");
+        setRawMessage(ok ? "Texte copié." : "Impossible de copier automatiquement.", !ok);
+      }
+    }
+
+    async function pasteRawText() {
+      if (!textarea) return;
+      try {
+        if (!navigator.clipboard?.readText) throw new Error("Clipboard indisponible");
+        const text = await navigator.clipboard.readText();
+        insertTextAtSelection(textarea, text || "");
+        setRawMessage("Texte collé.");
+      } catch {
+        textarea.focus();
+        setRawMessage("Le navigateur bloque le collage automatique. Utilise Ctrl+V dans la zone de texte.", true);
+      }
+    }
+
+    function downloadRawText() {
+      if (!textarea) return;
+      const blob = new Blob([textarea.value], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildExportFilename();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setRawMessage("Fichier préparé.");
+    }
+
+    function applyRawTextToBank() {
+      if (!canApplyChanges || !textarea) return;
+      const { imported, errors } = parseBankImportText(textarea.value, getSelectedBankType());
+      if (!imported.length) {
+        setRawMessage("Aucune question valide détectée.", true);
+        return;
+      }
+
+      if (errors.length && !window.confirm(`${errors.length} ligne${errors.length > 1 ? "s" : ""} seront ignorée${errors.length > 1 ? "s" : ""}. Appliquer quand même ?`)) {
+        return;
+      }
+
+      itemDrafts = imported.map(normalizeItemDraft);
+      expandedItemIndex = -1;
+      previewItemIndex = clampPreviewIndex(previewItemIndex);
+      setPendingChanges(true);
+      refreshItemsTable({ preserveScroll: false, force: true });
+      close();
+      showToast?.(`${itemDrafts.length} question${itemDrafts.length > 1 ? "s" : ""} chargée${itemDrafts.length > 1 ? "s" : ""} depuis le texte brut.`);
+    }
+
+    overlay.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target === overlay || target.closest(".dashboard-bank-export-close") || target.closest("#btnBankRawCancel")) {
+        close();
+        return;
+      }
+      if (target.closest("#btnBankRawCopy")) {
+        void copyRawText();
+        return;
+      }
+      if (target.closest("#btnBankRawPaste")) {
+        void pasteRawText();
+        return;
+      }
+      if (target.closest("#btnBankRawDownload")) {
+        downloadRawText();
+        return;
+      }
+      if (target.closest("#btnBankRawFindPrev")) {
+        findRawText(-1);
+        return;
+      }
+      if (target.closest("#btnBankRawFindNext")) {
+        findRawText(1);
+        return;
+      }
+      if (target.closest("#btnBankRawReplaceOne")) {
+        replaceCurrentRawMatch();
+        return;
+      }
+      if (target.closest("#btnBankRawReplaceAll")) {
+        replaceAllRawMatches();
+        return;
+      }
+      if (target.closest("#btnBankRawApply")) {
+        applyRawTextToBank();
+      }
+    });
+
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchInput?.focus();
+        searchInput?.select?.();
+        return;
+      }
+      if (event.key === "Enter" && event.target === searchInput) {
+        event.preventDefault();
+        findRawText(event.shiftKey ? -1 : 1);
+      }
+    });
+
+    if (!canApplyChanges && applyButton) {
+      applyButton.title = "Cette banque est en lecture seule.";
+      setRawMessage("Banque en lecture seule : copie ou télécharge le texte, puis crée une banque personnelle pour l’éditer.");
+    } else {
+      setRawMessage(`${itemDrafts.length} question${itemDrafts.length > 1 ? "s" : ""} exportée${itemDrafts.length > 1 ? "s" : ""}.`);
+    }
+
+    textarea?.focus();
+    textarea?.setSelectionRange(0, 0);
+  }
+
   function bindEvents() {
     btnCreateBank?.addEventListener("click", openCreateBankOverlay);
     btnCreateBankFolder?.addEventListener("click", () => { void openCreateFolderOverlay(currentOpenFolderId); });
@@ -3309,6 +3756,8 @@ export function createQuestionBanksViewController({
     btnBackBankExplorer?.addEventListener("click", () => { void closeBankEditor(); });
     btnSaveBank?.addEventListener("click", saveBank);
     btnDeleteBank?.addEventListener("click", deleteSelectedBank);
+    bankEditorHeader?.addEventListener("input", handleEditorInput);
+    bankEditorHeader?.addEventListener("click", handleEditorClick);
     bankEditorHost?.addEventListener("input", handleEditorInput);
     bankEditorHost?.addEventListener("click", handleEditorClick);
     bankEditorHost?.addEventListener("keydown", handleEditorKeydown);
