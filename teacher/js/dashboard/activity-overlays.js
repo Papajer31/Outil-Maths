@@ -8,6 +8,7 @@ export function createActivityOverlayManager({
   updateActivityFolder,
   deleteActivityFolder,
   deleteMyActivity,
+  saveActivityConfig,
   buildActivityTreeState,
   sortFoldersByDisplay,
   showDashboardShareToast,

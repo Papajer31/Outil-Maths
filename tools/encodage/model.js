@@ -1,10 +1,19 @@
 import {
   LEVELS,
   GRAPH_ORDER,
-  PLAUSIBLE_GROUPS,
-  VARIANT_HINTS,
+  GRAPH_UNITS,
   FALLBACKS
 } from "./graphs-data.js";
+
+export const INPUT_MODES = Object.freeze({
+  GRAPHEMES: "graphemes",
+  LETTERS: "letters"
+});
+
+export const LENGTH_HINT_MODES = Object.freeze({
+  NONE: "none",
+  BOXES: "boxes"
+});
 
 export const RESPONSE_MODES = Object.freeze({
   LIBRE: "libre",
@@ -18,10 +27,24 @@ export const INDIVIDUAL_VALIDATION_MODES = Object.freeze({
 });
 
 export const DEFAULT_INDIVIDUAL_MAX_ATTEMPTS = 3;
+export const RECENT_GRAPH_COUNT = 6;
+export const RECENT_POOL_WEIGHT = 0.75;
+
 const MIN_INDIVIDUAL_MAX_ATTEMPTS = 1;
 const MAX_INDIVIDUAL_MAX_ATTEMPTS = 12;
-
+const GRAPH_BY_ID = new Map(GRAPH_UNITS.map((unit) => [unit.id, unit]));
 const GRAPH_SET = new Set(GRAPH_ORDER);
+const BASE_LETTERS = Object.freeze("abcdefghijklmnopqrstuvwxyz".split(""));
+const HOMOGRAPH_HINTS = Object.freeze({
+  x_ks: "/ks/",
+  x_gz: "/gz/",
+  x_s: "/s/",
+  x_z: "/z/",
+  y_i: "i",
+  y_y: "y",
+  y_ii: "ii"
+});
+
 let WORD_CATALOG = [];
 
 export function setWordCatalog(words) {
@@ -34,6 +57,8 @@ export function getWordCatalog() {
 
 export function getDefaultSettings() {
   return {
+    inputMode: INPUT_MODES.GRAPHEMES,
+    lengthHintMode: LENGTH_HINT_MODES.NONE,
     mode: RESPONSE_MODES.LIBRE,
     individualValidationMode: INDIVIDUAL_VALIDATION_MODES.UNLIMITED,
     individualMaxAttempts: DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
@@ -45,101 +70,167 @@ export function getAvailableGraphs() {
   return [...GRAPH_ORDER];
 }
 
-const GRAPH_FILENAME_OVERRIDES = Object.freeze({
-  "é": "e_aigu",
-  "è": "e_grave",
-  "ê": "e_circonflexe",
-  "ç": "c_cedille"
-});
-
-export function getGraphFilename(graph) {
-  const safeGraph = String(graph || "").trim();
-  if (!safeGraph) return "";
-
-  const baseName = GRAPH_FILENAME_OVERRIDES[safeGraph] || safeGraph;
-  if (/^[a-z0-9_]+$/i.test(baseName)) {
-    return `${baseName}.jpg`;
-  }
-
-  return `${encodeLegacyFilenameBase(baseName)}.jpg`;
+export function getGraphUnit(id) {
+  const unit = getGraphUnitRef(id);
+  return unit ? { ...unit } : null;
 }
 
-export function getGraphLabel(graph) {
-  const example = VARIANT_HINTS[String(graph || "").trim()];
-  if (example) {
-    return `${visibleTextOfGraph(graph)} (${example})`;
+export function getGraphLabel(id) {
+  const unit = getGraphUnitRef(id);
+  return unit?.label || String(id || "").trim();
+}
+
+export function getGraphFamily(id) {
+  const unit = getGraphUnitRef(id);
+  return unit?.family || "";
+}
+
+export function getGraphAsset(id) {
+  const unit = getGraphUnitRef(id);
+  return unit?.asset || "";
+}
+
+export function getGraphFilename(id) {
+  return getGraphAsset(id);
+}
+
+export function getGraphImageUrl(id) {
+  const asset = getGraphAsset(id);
+  if (!asset) return "";
+  return new URL(`./assets/graphs/${asset}`, import.meta.url).href;
+}
+
+export function visibleTextOfGraph(id) {
+  return getGraphLabel(id);
+}
+
+export function isKnownGraph(id) {
+  return GRAPH_SET.has(String(id || "").trim());
+}
+
+export function getGraphFallbackDisplay(id, activeFamilyIds = []) {
+  const safeId = String(id || "").trim();
+  const label = getGraphLabel(safeId);
+  const family = getGraphFamily(safeId);
+  let subLabel = "";
+
+  if (family) {
+    const sameLabelCount = (Array.isArray(activeFamilyIds) ? activeFamilyIds : [])
+      .map((item) => String(item || "").trim())
+      .filter((item) => item && getGraphFamily(item) === family && getGraphLabel(item) === label)
+      .length;
+
+    if (sameLabelCount > 1) {
+      subLabel = HOMOGRAPH_HINTS[safeId] || safeId;
+    }
   }
-  return visibleTextOfGraph(graph);
+
+  return {
+    label,
+    subLabel
+  };
+}
+
+export function buildStudentGraphTiles(graphOrder) {
+  const activeGraphs = normalizeGraphOrder(graphOrder);
+  const groups = new Map();
+
+  activeGraphs.forEach((id, index) => {
+    const unit = getGraphUnitRef(id);
+    if (!unit) return;
+
+    const existing = groups.get(unit.family);
+    if (existing) {
+      existing.units.push(unit);
+      return;
+    }
+
+    groups.set(unit.family, {
+      family: unit.family,
+      firstIndex: index,
+      units: [unit]
+    });
+  });
+
+  return [...groups.values()]
+    .sort((a, b) => a.firstIndex - b.firstIndex)
+    .map((group) => {
+      const units = group.units.map((unit) => ({ ...unit }));
+      if (units.length === 1) {
+        return {
+          type: "single",
+          id: units[0].id,
+          family: group.family,
+          units
+        };
+      }
+
+      return {
+        type: "family",
+        id: `family:${group.family}`,
+        family: group.family,
+        units
+      };
+    });
 }
 
 export function normalizeSettings(settings) {
-  const base = {
-    ...getDefaultSettings(),
-    ...(settings ?? {})
-  };
-
-  base.mode = base.mode === RESPONSE_MODES.CASES
-    ? RESPONSE_MODES.CASES
-    : RESPONSE_MODES.LIBRE;
-
-  base.individualValidationMode = normalizeIndividualValidationMode(base.individualValidationMode);
-  base.individualMaxAttempts = clampInt(
-    base.individualMaxAttempts,
-    MIN_INDIVIDUAL_MAX_ATTEMPTS,
-    MAX_INDIVIDUAL_MAX_ATTEMPTS,
-    DEFAULT_INDIVIDUAL_MAX_ATTEMPTS
-  );
-
-  const uniqueGraphs = [];
-  const seen = new Set();
-
-  for (const graph of Array.isArray(base.graphOrder) ? base.graphOrder : []) {
-    const safeGraph = String(graph || "").trim();
-    if (!safeGraph) continue;
-    if (!GRAPH_SET.has(safeGraph)) continue;
-    if (seen.has(safeGraph)) continue;
-    seen.add(safeGraph);
-    uniqueGraphs.push(safeGraph);
-  }
-
-  base.graphOrder = uniqueGraphs;
+  const raw = settings ?? {};
+  const defaults = getDefaultSettings();
+  const inputMode = normalizeInputMode(raw.inputMode ?? defaults.inputMode);
+  const lengthHintMode = normalizeLengthHintMode(raw.lengthHintMode, raw.mode);
+  const graphOrder = normalizeGraphOrder(raw.graphOrder ?? defaults.graphOrder);
 
   return {
-    mode: base.mode,
-    individualValidationMode: base.individualValidationMode,
-    individualMaxAttempts: base.individualMaxAttempts,
-    graphOrder: base.graphOrder
+    inputMode,
+    lengthHintMode,
+    mode: lengthHintMode === LENGTH_HINT_MODES.BOXES ? RESPONSE_MODES.CASES : RESPONSE_MODES.LIBRE,
+    individualValidationMode: normalizeIndividualValidationMode(raw.individualValidationMode ?? defaults.individualValidationMode),
+    individualMaxAttempts: clampInt(
+      raw.individualMaxAttempts ?? defaults.individualMaxAttempts,
+      MIN_INDIVIDUAL_MAX_ATTEMPTS,
+      MAX_INDIVIDUAL_MAX_ATTEMPTS,
+      DEFAULT_INDIVIDUAL_MAX_ATTEMPTS
+    ),
+    graphOrder
   };
-}
-
-function normalizeIndividualValidationMode(value) {
-  const safeValue = String(value || "").trim();
-  if (safeValue === INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE) {
-    return INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE;
-  }
-  if (safeValue === INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS) {
-    return INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS;
-  }
-  return INDIVIDUAL_VALIDATION_MODES.UNLIMITED;
 }
 
 export function getWordPool(settings) {
   const cfg = normalizeSettings(settings);
-  const selectedGraphs = new Set(cfg.graphOrder);
 
-  return WORD_CATALOG.filter((word) => isWordPlayable(word, selectedGraphs));
+  if (cfg.inputMode === INPUT_MODES.LETTERS) {
+    const letterPlayable = WORD_CATALOG.filter((word) => isWordLetterPlayable(word));
+    if (!cfg.graphOrder.length) {
+      return cloneData(letterPlayable);
+    }
+
+    const selectedGraphs = new Set(cfg.graphOrder);
+    return cloneData(letterPlayable.filter((word) => isWordGraphPlayable(word, selectedGraphs)));
+  }
+
+  const selectedGraphs = new Set(cfg.graphOrder);
+  return cloneData(WORD_CATALOG.filter((word) => isWordGraphPlayable(word, selectedGraphs)));
 }
 
 export function getSelectedGraphUsageStats(settings) {
   const cfg = normalizeSettings(settings);
-  const pool = getWordPool(cfg);
+  const selectedGraphs = new Set(cfg.graphOrder);
+  const pool = WORD_CATALOG.filter((word) => isWordGraphPlayable(word, selectedGraphs));
   const counts = new Map(cfg.graphOrder.map((graph) => [graph, 0]));
 
   for (const word of pool) {
     for (const unit of Array.isArray(word?.units) ? word.units : []) {
       const graph = String(unit?.graph || "").trim();
-      if (!counts.has(graph)) continue;
-      counts.set(graph, counts.get(graph) + 1);
+      let countedGraph = graph;
+      if (!counts.has(countedGraph)) {
+        const fallbackGraph = getAcceptedFallbackGraph(graph);
+        if (fallbackGraph && counts.has(fallbackGraph)) {
+          countedGraph = fallbackGraph;
+        }
+      }
+      if (!counts.has(countedGraph)) continue;
+      counts.set(countedGraph, counts.get(countedGraph) + 1);
     }
   }
 
@@ -157,26 +248,57 @@ export function canGenerateQuestion(settings) {
   return getWordPool(settings).length > 0;
 }
 
-export function pickQuestion(settings, { avoidKey = null } = {}) {
-  const pool = getWordPool(settings);
-  if (!pool.length) return null;
+export function getRecentGraphs(settings) {
+  const cfg = normalizeSettings(settings);
+  const graphs = cfg.graphOrder;
+  if (graphs.length <= RECENT_GRAPH_COUNT) {
+    return [...graphs];
+  }
+  return graphs.slice(-RECENT_GRAPH_COUNT);
+}
 
-  let choice = null;
+export function splitWordPoolByRecentGraphs(pool, recentGraphs) {
+  const recentSet = new Set((Array.isArray(recentGraphs) ? recentGraphs : [])
+    .map((graph) => String(graph || "").trim())
+    .filter((graph) => graph && isKnownGraph(graph)));
+  const recent = [];
+  const revision = [];
 
-  if (pool.length === 1) {
-    choice = pool[0];
-  } else {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const candidate = pool[Math.floor(Math.random() * pool.length)];
-      if (!avoidKey || questionKey(candidate) !== avoidKey) {
-        choice = candidate;
-        break;
-      }
-      if (!choice) choice = candidate;
+  for (const word of Array.isArray(pool) ? pool : []) {
+    if (wordContainsAnyNonSilentGraph(word, recentSet)) {
+      recent.push(word);
+    } else {
+      revision.push(word);
     }
   }
 
-  choice ||= pool[0];
+  return { recent, revision };
+}
+
+export function pickWeightedWord(pool, { recentGraphs = [], avoidKey = null } = {}) {
+  const candidates = Array.isArray(pool) ? pool : [];
+  if (!candidates.length) return null;
+
+  const { recent, revision } = splitWordPoolByRecentGraphs(candidates, recentGraphs);
+  const preferRecent = Math.random() < RECENT_POOL_WEIGHT;
+  const primary = preferRecent ? recent : revision;
+  const fallback = preferRecent ? revision : recent;
+
+  return pickRandomAvoiding(primary, avoidKey)
+    || pickRandomAvoiding(fallback, avoidKey)
+    || pickRandomAvoiding(candidates, avoidKey)
+    || candidates[0];
+}
+
+export function pickQuestion(settings, { avoidKey = null } = {}) {
+  const cfg = normalizeSettings(settings);
+  const pool = getWordPool(cfg);
+  if (!pool.length) return null;
+
+  const choice = pickWeightedWord(pool, {
+    recentGraphs: getRecentGraphs(cfg),
+    avoidKey
+  }) || pool[0];
 
   return {
     key: questionKey(choice),
@@ -191,23 +313,22 @@ export function questionKey(question) {
   return String(question.slug || question.word || question.key || "").trim().toLowerCase();
 }
 
-export function visibleTextOfGraph(graph) {
-  if (graph === "s1" || graph === "s2") return "s";
-  if (graph === "c1" || graph === "c2") return "c";
-  if (graph === "g1" || graph === "g2") return "g";
-  return String(graph || "");
-}
-
 export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = [] } = {}) {
   const wordUnits = Array.isArray(question?.units) ? question.units : [];
-  const selectedGraphsSet = new Set((Array.isArray(selectedGraphs) ? selectedGraphs : []).map((graph) => String(graph || "").trim()).filter(Boolean));
+  const selectedGraphsSet = new Set((Array.isArray(selectedGraphs) ? selectedGraphs : [])
+    .map((graph) => String(graph || "").trim())
+    .filter((graph) => graph && isKnownGraph(graph)));
 
   const studentEntries = [];
   for (const entry of Array.isArray(answerEntries) ? answerEntries : []) {
     if (!entry) continue;
     if (entry.injected) continue;
+    const graph = String(entry.graph ?? entry.id ?? "").trim();
+    if (!graph) continue;
     studentEntries.push({
-      graph: entry.graph,
+      type: "graph",
+      id: graph,
+      graph,
       injected: false,
       mark: "",
       title: "",
@@ -216,35 +337,34 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
     });
   }
 
-  const expectedUnits = wordUnits.map((unit) => ({
-    graph: unit.graph,
-    isSilent: unit.isSilent === true
-  }));
+  const expectedUnits = wordUnits
+    .map((unit) => ({
+      graph: String(unit?.graph || "").trim(),
+      isSilent: unit?.isSilent === true
+    }))
+    .filter((unit) => unit.graph);
 
   const m = expectedUnits.length;
   const n = studentEntries.length;
   const INS = 1.5;
 
-  function inSamePlausibleClass(a, b) {
+  function inSamePlausibleFamily(a, b) {
     const safeA = String(a || "").trim();
     const safeB = String(b || "").trim();
     if (!safeA || !safeB) return false;
-    return PLAUSIBLE_GROUPS.some((group) => group.includes(safeA) && group.includes(safeB));
-  }
-
-  function isVariantGroup(graph) {
-    return graph === "s1" || graph === "s2" || graph === "c1" || graph === "c2" || graph === "g1" || graph === "g2";
+    if (!selectedGraphsSet.has(safeB)) return false;
+    const familyA = getGraphFamily(safeA);
+    const familyB = getGraphFamily(safeB);
+    return !!familyA && familyA === familyB;
   }
 
   function sameVisibleLetter(a, b) {
     return visibleTextOfGraph(a) === visibleTextOfGraph(b);
   }
 
-  function makeVariantTooltip(expected, got) {
-    const expHint = VARIANT_HINTS[expected] ?? expected;
-    const gotHint = VARIANT_HINTS[got] ?? got;
-    const letter = visibleTextOfGraph(expected);
-    return `Tu as choisi le ${letter} de "${gotHint}", ici c’est plutôt le ${letter} de "${expHint}".`;
+  function isAcceptedFallback(expected, got) {
+    const fallbackGraph = getAcceptedFallbackGraph(expected);
+    return !!fallbackGraph && fallbackGraph === String(got || "").trim();
   }
 
   function subCost(expUnit, got) {
@@ -257,12 +377,9 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
     }
 
     if (got === expected) return 0;
+    if (isAcceptedFallback(expected, got)) return 0;
 
-    if (isVariantGroup(expected) && isVariantGroup(got) && sameVisibleLetter(expected, got)) {
-      return 0.2;
-    }
-
-    if (inSamePlausibleClass(expected, got) && selectedGraphsSet.has(got)) {
+    if (inSamePlausibleFamily(expected, got)) {
       return 1;
     }
 
@@ -358,11 +475,11 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
         if (got === expected || sameVisibleLetter(expected, got)) {
           pair.got.mark = "green-dotted";
           pair.got.title = "Lettre muette correcte.";
-          pair.got.displayGraph = visibleTextOfGraph(expected);
+          pair.got.displayGraph = expected;
         } else {
           pair.got.mark = "red";
           pair.got.title = `Ici, on attendait la lettre muette ${visibleTextOfGraph(expected)}.`;
-          pair.got.displayGraph = visibleTextOfGraph(got);
+          pair.got.displayGraph = got;
           hasRed = true;
         }
 
@@ -370,27 +487,18 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
         continue;
       }
 
-      if (got === expected) {
+      if (got === expected || isAcceptedFallback(expected, got)) {
         pair.got.mark = "green";
         pair.got.title = "Correct.";
-        pair.got.displayGraph = visibleTextOfGraph(expected);
+        pair.got.displayGraph = expected;
         displayEntries.push(pair.got);
         continue;
       }
 
-      if (isVariantGroup(expected) && isVariantGroup(got) && sameVisibleLetter(expected, got)) {
-        pair.got.mark = "orange";
-        pair.got.title = makeVariantTooltip(expected, got);
-        pair.got.displayGraph = visibleTextOfGraph(expected);
-        displayEntries.push(pair.got);
-        hasOrange = true;
-        continue;
-      }
-
-      if (inSamePlausibleClass(expected, got) && selectedGraphsSet.has(got)) {
+      if (inSamePlausibleFamily(expected, got)) {
         pair.got.mark = "orange";
         pair.got.title = `Graphème plausible ici, mais on attendait ${visibleTextOfGraph(expected)}.`;
-        pair.got.displayGraph = visibleTextOfGraph(got);
+        pair.got.displayGraph = got;
         displayEntries.push(pair.got);
         hasOrange = true;
         continue;
@@ -398,7 +506,7 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
 
       pair.got.mark = "red";
       pair.got.title = `Ici, on attendait ${visibleTextOfGraph(expected)}.`;
-      pair.got.displayGraph = visibleTextOfGraph(got);
+      pair.got.displayGraph = got;
       displayEntries.push(pair.got);
       hasRed = true;
       continue;
@@ -409,12 +517,14 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
 
       if (pair.expected.isSilent) {
         displayEntries.push({
+          type: "graph",
+          id: expected,
           graph: expected,
           injected: true,
           mark: "green-dotted",
           title: "Lettre muette ajoutée automatiquement.",
           badge: "",
-          displayGraph: visibleTextOfGraph(expected)
+          displayGraph: expected
         });
       } else {
         hasRed = true;
@@ -425,7 +535,7 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
     if (!pair.expected && pair.got) {
       pair.got.mark = "red";
       pair.got.title = "Graphème en trop.";
-      pair.got.displayGraph = visibleTextOfGraph(pair.got.graph);
+      pair.got.displayGraph = pair.got.graph;
       displayEntries.push(pair.got);
       hasRed = true;
     }
@@ -439,7 +549,59 @@ export function evaluateWordAttempt(question, answerEntries, { selectedGraphs = 
   };
 }
 
-export function buildCanonicalAnswerEntries(question) {
+export function evaluateLetterAttempt(question, answerEntries, { preserveSlots = false } = {}) {
+  const expectedLetters = buildLetterUnitsFromWord(question?.word).map((unit) => unit.id);
+  const rawEntries = Array.isArray(answerEntries) ? answerEntries : [];
+  const max = preserveSlots ? expectedLetters.length : Math.max(expectedLetters.length, rawEntries.length);
+  const entries = [];
+  let hasRed = false;
+
+  for (let index = 0; index < max; index += 1) {
+    const expected = expectedLetters[index] || "";
+    const raw = rawEntries[index] || null;
+    const got = String(raw?.id ?? raw?.letter ?? raw?.graph ?? "").trim();
+
+    if (!raw || raw.injected) {
+      if (expected) hasRed = true;
+      if (preserveSlots) entries.push(null);
+      continue;
+    }
+
+    const isCorrect = !!expected && got === expected;
+    if (!isCorrect) hasRed = true;
+
+    entries.push({
+      type: "letter",
+      id: got,
+      graph: got,
+      letter: got,
+      injected: false,
+      mark: isCorrect ? "green" : "red",
+      title: isCorrect ? "Correct." : expected ? `Ici, on attendait ${expected}.` : "Lettre en trop.",
+      badge: "",
+      displayGraph: got
+    });
+  }
+
+  if (rawEntries.length > expectedLetters.length) {
+    hasRed = true;
+  }
+
+  return {
+    verdict: hasRed ? "red" : "green",
+    entries: preserveSlots ? entries : entries.filter(Boolean)
+  };
+}
+
+export function buildCanonicalAnswerEntries(question, options = {}) {
+  const inputMode = normalizeInputMode(typeof options === "string" ? options : options?.inputMode);
+  if (inputMode === INPUT_MODES.LETTERS) {
+    return buildCanonicalLetterAnswerEntries(question);
+  }
+  return buildCanonicalGraphAnswerEntries(question);
+}
+
+export function buildCanonicalGraphAnswerEntries(question) {
   const units = Array.isArray(question?.units) ? question.units : [];
 
   return units.map((unit) => {
@@ -447,14 +609,64 @@ export function buildCanonicalAnswerEntries(question) {
     const isSilent = unit?.isSilent === true;
 
     return {
+      type: "graph",
+      id: graph,
       graph,
       injected: false,
       mark: isSilent ? "green-dotted" : "green",
       title: isSilent ? "Lettre muette correcte." : "Correct.",
       badge: "",
-      displayGraph: visibleTextOfGraph(graph)
+      displayGraph: graph
     };
   }).filter((entry) => entry.graph);
+}
+
+export function buildCanonicalLetterAnswerEntries(question) {
+  return buildLetterUnitsFromWord(question?.word).map((unit) => ({
+    type: "letter",
+    id: unit.id,
+    graph: unit.id,
+    letter: unit.id,
+    injected: false,
+    mark: "green",
+    title: "Correct.",
+    badge: "",
+    displayGraph: unit.id
+  }));
+}
+
+export function buildLetterUnitsFromWord(word) {
+  return Array.from(String(word || "").normalize("NFC").toLocaleLowerCase("fr-FR"))
+    .filter((char) => !/\s/u.test(char))
+    .map((char) => ({ type: "letter", id: char, label: char }))
+    .filter((unit) => isDisplayableLetter(unit.id));
+}
+
+export function getLetterChoicesForQuestion(question) {
+  const choices = [...BASE_LETTERS];
+  const seen = new Set(choices);
+
+  for (const unit of buildLetterUnitsFromWord(question?.word)) {
+    if (seen.has(unit.id)) continue;
+    seen.add(unit.id);
+    choices.push(unit.id);
+  }
+
+  return choices;
+}
+
+export function getLetterAsset(letter) {
+  const safeLetter = String(letter || "").trim().toLocaleLowerCase("fr-FR");
+  if (/^[a-z]$/.test(safeLetter)) {
+    return `${safeLetter.toLocaleUpperCase("fr-FR")}.webp`;
+  }
+  return "";
+}
+
+export function getLetterImageUrl(letter) {
+  const asset = getLetterAsset(letter);
+  if (!asset) return "";
+  return new URL(`../../student/lettres/${asset}`, import.meta.url).href;
 }
 
 export function getAcceptedFallbackGraph(graph) {
@@ -462,7 +674,49 @@ export function getAcceptedFallbackGraph(graph) {
   return FALLBACKS[safeGraph] || "";
 }
 
+function normalizeInputMode(value) {
+  return String(value || "").trim() === INPUT_MODES.LETTERS
+    ? INPUT_MODES.LETTERS
+    : INPUT_MODES.GRAPHEMES;
+}
 
+function normalizeLengthHintMode(value, legacyMode = null) {
+  const safeValue = String(value || "").trim();
+  if (safeValue === LENGTH_HINT_MODES.BOXES) return LENGTH_HINT_MODES.BOXES;
+  if (safeValue === LENGTH_HINT_MODES.NONE) return LENGTH_HINT_MODES.NONE;
+  return legacyMode === RESPONSE_MODES.CASES ? LENGTH_HINT_MODES.BOXES : LENGTH_HINT_MODES.NONE;
+}
+
+function normalizeIndividualValidationMode(value) {
+  const safeValue = String(value || "").trim();
+  if (safeValue === INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE) {
+    return INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE;
+  }
+  if (safeValue === INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS) {
+    return INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS;
+  }
+  return INDIVIDUAL_VALIDATION_MODES.UNLIMITED;
+}
+
+function normalizeGraphOrder(graphOrder) {
+  const uniqueGraphs = [];
+  const seen = new Set();
+
+  for (const graph of Array.isArray(graphOrder) ? graphOrder : []) {
+    const safeGraph = String(graph || "").trim();
+    if (!safeGraph) continue;
+    if (!GRAPH_SET.has(safeGraph)) continue;
+    if (seen.has(safeGraph)) continue;
+    seen.add(safeGraph);
+    uniqueGraphs.push(safeGraph);
+  }
+
+  return uniqueGraphs;
+}
+
+function getGraphUnitRef(id) {
+  return GRAPH_BY_ID.get(String(id || "").trim()) || null;
+}
 
 function normalizeWordCatalog(words) {
   return (Array.isArray(words) ? words : [])
@@ -506,33 +760,55 @@ function getGraphsForPresetLevel(level) {
   return out;
 }
 
-function isWordPlayable(word, selectedGraphs) {
+function isWordGraphPlayable(word, selectedGraphs) {
   const units = Array.isArray(word?.units) ? word.units : [];
   if (!units.length) return false;
 
   return units.every((unit) => {
     if (!unit) return false;
+    const graph = String(unit.graph || "").trim();
+    if (!graph) return false;
+
+    const fallbackGraph = getAcceptedFallbackGraph(graph);
+    const isKnownOrAliased = isKnownGraph(graph) || !!fallbackGraph;
+    if (!isKnownOrAliased) return false;
+
     if (unit.isSilent === true) return true;
-    return selectedGraphs.has(String(unit.graph || "").trim());
+    if (selectedGraphs.has(graph)) return true;
+    return !!fallbackGraph && selectedGraphs.has(fallbackGraph);
   });
 }
 
-function encodeLegacyFilenameBase(graph) {
-  const safeGraph = String(graph || "");
-  let out = "";
+function isWordLetterPlayable(word) {
+  const expected = buildLetterUnitsFromWord(word?.word);
+  const raw = Array.from(String(word?.word || "").normalize("NFC").toLocaleLowerCase("fr-FR"))
+    .filter((char) => !/\s/u.test(char));
+  return raw.length > 0 && expected.length === raw.length;
+}
 
-  for (const char of safeGraph) {
-    const code = char.codePointAt(0);
-    if (code == null) continue;
+function wordContainsAnyNonSilentGraph(word, recentSet) {
+  if (!(recentSet instanceof Set) || recentSet.size === 0) return false;
+  return (Array.isArray(word?.units) ? word.units : []).some((unit) => {
+    if (!unit || unit.isSilent === true) return false;
+    const graph = String(unit.graph || "").trim();
+    if (recentSet.has(graph)) return true;
+    const fallbackGraph = getAcceptedFallbackGraph(graph);
+    return !!fallbackGraph && recentSet.has(fallbackGraph);
+  });
+}
 
-    if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)) {
-      out += char;
-    } else {
-      out += `#U${code.toString(16).padStart(4, "0")}`;
-    }
-  }
+function pickRandomAvoiding(pool, avoidKey) {
+  const candidates = Array.isArray(pool) ? pool : [];
+  if (!candidates.length) return null;
+  const usable = avoidKey
+    ? candidates.filter((item) => questionKey(item) !== avoidKey)
+    : candidates;
+  if (!usable.length) return null;
+  return usable[Math.floor(Math.random() * usable.length)] || null;
+}
 
-  return out;
+function isDisplayableLetter(char) {
+  return /^\p{L}$/u.test(String(char || ""));
 }
 
 function cloneData(value) {

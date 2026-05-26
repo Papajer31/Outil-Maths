@@ -24,6 +24,10 @@
   overflow-x:auto;
 }
 
+[data-tv-radio-group="oa_visualHint"].tv-radio-group-inline{
+  min-height:44px;
+}
+
 [data-tv-collapsible="oa_word_list_section"]{
   min-height:68px;
 }

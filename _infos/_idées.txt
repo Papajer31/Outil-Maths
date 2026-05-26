@@ -21,7 +21,12 @@ OUTIL VOCABULAIRE -> Clique sur le mot qui peut être entre ces mots repères.
 OUTIL PHONOLOGIE -> Mettre en place l'outil déjà créé en modifiant la logique (correction de bug : chaque nouveau mot nettoie la fenêtre de chips éventuels)
 OUTIL PHONOLOGIE -> Dictée muette (affichage d'images tout simplement)
 OUTIL MATHS -> Balance et tout ce que ça implique
+OUTIL PROF -> Manipulation de monnaie
+OUTIL PROF -> Manipulation des c, d, u
+OUTIL PROF -> Manipulation d'étiquettes mots
+OUTIL PROF -> tirage au sort de phrases
 
 
-! lettre colorée différemment pour l'outil ordre alpha
 ! Droite graduée avec placement continu
+! Outil sélection - widget sélection -> lettres (à implémenter) / mots / groupe de mots
+! Outil d'encodage revoir toutes les situations

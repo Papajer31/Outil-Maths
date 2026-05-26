@@ -198,6 +198,11 @@
   transition:left 2s ease, top 2s ease;
 }
 
+.oa-chip-discriminant{
+  color:#2563eb;
+  font-weight:1000;
+}
+
 .oa-correction-overlay{
   position:absolute;
   inset:0;

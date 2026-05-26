@@ -8,13 +8,15 @@ import {
   refreshStepper
 } from "../../shared/config-widgets.js";
 import {
-  RESPONSE_MODES,
+  INPUT_MODES,
+  LENGTH_HINT_MODES,
   INDIVIDUAL_VALIDATION_MODES,
   DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
   getAvailableGraphs,
   getDefaultSettings,
   normalizeSettings,
-  getGraphFilename,
+  getGraphImageUrl,
+  getGraphFallbackDisplay,
   getGraphLabel,
   setWordCatalog,
   getWordPool,
@@ -46,10 +48,27 @@ function getPresetErrorMessage(error, fallback) {
   return message || fallback;
 }
 
+function getResponseUiFromContext(context = {}) {
+  const safeValue = String(
+    context?.responseUi
+    ?? context?.response_ui
+    ?? context?.passationProfile?.responseUi
+    ?? context?.passationProfile?.response_ui
+    ?? ""
+  ).trim().toLowerCase();
+
+  return safeValue === "free" ? "free" : "boxed";
+}
+
+function shouldShowValidationSettings(context = {}) {
+  return getResponseUiFromContext(context) === "boxed";
+}
+
 export function renderToolSettings(container, settings, context = {}) {
   injectStyles();
 
   const cfg = normalizeSettings(settings);
+  const showValidation = shouldShowValidationSettings(context);
   const teacherSpaceId = Number(context?.teacherSpace?.id || 0) || null;
 
   if (editorState.teacherSpaceId !== teacherSpaceId) {
@@ -59,86 +78,65 @@ export function renderToolSettings(container, settings, context = {}) {
   closePresetModal();
 
   container.innerHTML = `
-    <div class="phono-config-root">
+    <div
+      class="phono-config-root"
+      data-phono-input-mode="${escapeAttr(cfg.inputMode)}"
+      data-phono-length-hint-mode="${escapeAttr(cfg.lengthHintMode)}"
+      data-phono-validation-mode="${escapeAttr(cfg.individualValidationMode)}"
+      data-phono-validation-attempts="${escapeAttr(cfg.individualMaxAttempts)}"
+      data-graph-order-store="${escapeAttr(cfg.graphOrder.join("¦"))}"
+    >
       <div class="phono-config-stack">
         <section class="tv-group tv-group-inline phono-mode-group">
           ${renderInlineRadioControl({
-          title: "Mode de réponse",
-          id: "phono_mode",
-          value: cfg.mode,
+          title: "Saisie attendue",
+          id: "phono_input_mode",
+          value: cfg.inputMode,
           options: [
-            { value: RESPONSE_MODES.LIBRE, label: "Libre" },
-            { value: RESPONSE_MODES.CASES, label: "Cases" }
+            { value: INPUT_MODES.GRAPHEMES, label: "Graphèmes" },
+            { value: INPUT_MODES.LETTERS, label: "Lettres" }
           ],
           rootClassName: "phono-mode-radio-control"
         })}
         </section>
 
-        <section class="tv-group tv-group-inline phono-validation-group" data-phono-validation-group>
-          <div class="phono-validation-line">
-            <div class="tv-group-title phono-validation-title">Validation</div>
-            ${renderInlineRadioControl({
-              id: "phono_individual_validation",
-              value: cfg.individualValidationMode,
-              options: [
-                { value: INDIVIDUAL_VALIDATION_MODES.UNLIMITED, label: "Essais illimités" },
-                { value: INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE, label: "Tolérance graphophonique" },
-                { value: INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS, label: "Essais limités" }
-              ],
-              rootClassName: "phono-validation-radio-control"
-            })}
-            ${renderStepperField({
-              id: "phono_individual_max_attempts",
-              label: "Nombre d’essais",
-              value: cfg.individualMaxAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
-              inputMin: INDIVIDUAL_ATTEMPTS_MIN,
-              inputMax: INDIVIDUAL_ATTEMPTS_MAX,
-              step: 1,
-              fieldClassName: "phono-attempts-field"
-            })}
-          </div>
+        <section class="tv-group tv-group-inline phono-mode-group">
+          ${renderInlineRadioControl({
+          title: "Indice de longueur",
+          id: "phono_length_hint_mode",
+          value: cfg.lengthHintMode,
+          options: [
+            { value: LENGTH_HINT_MODES.NONE, label: "Aucun indice" },
+            { value: LENGTH_HINT_MODES.BOXES, label: "Cases visibles" }
+          ],
+          rootClassName: "phono-mode-radio-control"
+        })}
         </section>
 
-        <section class="tv-group">
-          <div class="phono-library-head">
-            <div class="tv-group-title">Bibliothèque de graphèmes</div>
-            <div class="phono-library-head-right">
-              <div class="phono-library-summary${getWordPool(cfg).length === 0 ? " is-warning" : ""}" data-selection-summary>
-                ${renderSelectionSummary(cfg)}
-              </div>
-              <div data-graph-usage-help>
-                ${renderGraphUsageHelp(cfg)}
-              </div>
-            </div>
-          </div>
-
-          <div data-preset-shell>
-            ${renderPresetShell({
-              selectedId: findMatchingPresetId(cfg.graphOrder),
-              previewGraph: editorState.previewGraph
-            })}
-          </div>
-
-          <div
-            class="phono-graph-board"
-            data-graph-board
-            data-graph-order="${escapeAttr(cfg.graphOrder.join("¦"))}"
-          >
-            ${renderGraphBoard(cfg.graphOrder)}
-          </div>
-        </section>
+        ${showValidation ? renderValidationSettings(cfg) : ""}
+        ${renderLibrarySettings(cfg)}
       </div>
     </div>
   `;
 
-  bindRadio(container, "phono_mode");
-  bindRadio(container, "phono_individual_validation", {
-    onChange: () => syncValidationModeUi(container)
+  bindRadio(container, "phono_input_mode", {
+    onChange: () => {
+      renderToolSettings(container, readCurrentSettings(container), context);
+    }
   });
-  bindValidationModeEvents(container);
-  syncValidationModeUi(container);
+  bindRadio(container, "phono_length_hint_mode");
+
+  if (showValidation) {
+    bindRadio(container, "phono_individual_validation", {
+      onChange: () => syncValidationModeUi(container)
+    });
+    bindValidationModeEvents(container);
+    syncValidationModeUi(container);
+  }
+
   bindPresetSelect(container);
   bindEvents(container, context);
+  bindGraphAssetFallbacks(container);
   ensurePublicWordCatalogLoaded(container).catch(() => {});
   ensurePresetsLoaded(container, context).catch((err) => {
     editorState.status = "error";
@@ -146,10 +144,86 @@ export function renderToolSettings(container, settings, context = {}) {
   });
 }
 
+function renderValidationSettings(cfg) {
+  return `
+    <section class="tv-group tv-group-inline phono-validation-group" data-phono-validation-group>
+      <div class="phono-validation-line">
+        <div class="tv-group-title phono-validation-title">Validation</div>
+        ${renderInlineRadioControl({
+          id: "phono_individual_validation",
+          value: cfg.individualValidationMode,
+          options: [
+            { value: INDIVIDUAL_VALIDATION_MODES.UNLIMITED, label: "Essais illimités" },
+            { value: INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE, label: "Tolérance graphophonique" },
+            { value: INDIVIDUAL_VALIDATION_MODES.LIMITED_ATTEMPTS, label: "Essais limités" }
+          ],
+          rootClassName: "phono-validation-radio-control"
+        })}
+        ${renderStepperField({
+          id: "phono_individual_max_attempts",
+          label: "Nombre d’essais",
+          value: cfg.individualMaxAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
+          inputMin: INDIVIDUAL_ATTEMPTS_MIN,
+          inputMax: INDIVIDUAL_ATTEMPTS_MAX,
+          step: 1,
+          fieldClassName: "phono-attempts-field"
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function renderLibrarySettings(cfg) {
+  if (cfg.inputMode === INPUT_MODES.LETTERS) {
+    return `
+      <section class="tv-group">
+        <div class="phono-library-head">
+          <div class="tv-group-title">Bibliothèque de graphèmes</div>
+        </div>
+        <div class="phono-library-disabled">
+          En mode lettres, la bibliothèque de graphèmes n’est pas utilisée.
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="tv-group">
+      <div class="phono-library-head">
+        <div class="tv-group-title">Bibliothèque de graphèmes</div>
+        <div class="phono-library-head-right">
+          <div class="phono-library-summary${getWordPool(cfg).length === 0 ? " is-warning" : ""}" data-selection-summary>
+            ${renderSelectionSummary(cfg)}
+          </div>
+          <div data-graph-usage-help>
+            ${renderGraphUsageHelp(cfg)}
+          </div>
+        </div>
+      </div>
+
+      <div data-preset-shell>
+        ${renderPresetShell({
+          selectedId: findMatchingPresetId(cfg.graphOrder),
+          previewGraph: editorState.previewGraph
+        })}
+      </div>
+
+      <div
+        class="phono-graph-board"
+        data-graph-board
+        data-graph-order="${escapeAttr(cfg.graphOrder.join("¦"))}"
+      >
+        ${renderGraphBoard(cfg.graphOrder)}
+      </div>
+    </section>
+  `;
+}
+
 export function readToolSettings(container) {
   return normalizeSettings({
-    mode: readRadio(container, "phono_mode", RESPONSE_MODES.LIBRE),
-    individualValidationMode: readRadio(container, "phono_individual_validation", INDIVIDUAL_VALIDATION_MODES.UNLIMITED),
+    inputMode: readRadio(container, "phono_input_mode", readStoredInputMode(container)),
+    lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
+    individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
     graphOrder: readGraphOrder(container, [])
   });
@@ -313,7 +387,11 @@ function bindEvents(container, context) {
     suppressNextClick(container);
   });
 
-  container.addEventListener("click", (event) => {
+  if (container.__phonoConfigClickHandler) {
+    container.removeEventListener("click", container.__phonoConfigClickHandler);
+  }
+
+  container.__phonoConfigClickHandler = (event) => {
     const saveBtn = event.target.closest("[data-preset-save='1']");
     if (saveBtn) {
       openPresetModal(container, context);
@@ -326,7 +404,9 @@ function bindEvents(container, context) {
       return;
     }
 
-  });
+  };
+
+  container.addEventListener("click", container.__phonoConfigClickHandler);
 
 }
 
@@ -341,12 +421,14 @@ function toggleGraphSelection(container, graph) {
 
 function setGraphOrder(container, graphOrder) {
   const cfg = normalizeSettings({
-    mode: readRadio(container, "phono_mode", RESPONSE_MODES.LIBRE),
-    individualValidationMode: readRadio(container, "phono_individual_validation", INDIVIDUAL_VALIDATION_MODES.UNLIMITED),
+    inputMode: readRadio(container, "phono_input_mode", readStoredInputMode(container)),
+    lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
+    individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
     graphOrder
   });
 
+  storeCurrentSettings(container, cfg);
   updateGraphBoard(container, cfg.graphOrder);
   refreshSelectionStats(container, cfg);
   syncPresetSelectionWithGraphOrder(container, cfg.graphOrder);
@@ -354,11 +436,42 @@ function setGraphOrder(container, graphOrder) {
 
 function readCurrentSettings(container) {
   return normalizeSettings({
-    mode: readRadio(container, "phono_mode", RESPONSE_MODES.LIBRE),
-    individualValidationMode: readRadio(container, "phono_individual_validation", INDIVIDUAL_VALIDATION_MODES.UNLIMITED),
+    inputMode: readRadio(container, "phono_input_mode", readStoredInputMode(container)),
+    lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
+    individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
     graphOrder: readGraphOrder(container, [])
   });
+}
+
+function getConfigRoot(container) {
+  return container.querySelector(".phono-config-root");
+}
+
+function storeCurrentSettings(container, cfg) {
+  const root = getConfigRoot(container);
+  if (!root) return;
+  root.dataset.phonoInputMode = cfg.inputMode;
+  root.dataset.phonoLengthHintMode = cfg.lengthHintMode;
+  root.dataset.phonoValidationMode = cfg.individualValidationMode;
+  root.dataset.phonoValidationAttempts = String(cfg.individualMaxAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS);
+  root.dataset.graphOrderStore = cfg.graphOrder.join("¦");
+}
+
+function readStoredInputMode(container) {
+  return String(getConfigRoot(container)?.dataset.phonoInputMode || INPUT_MODES.GRAPHEMES);
+}
+
+function readStoredLengthHintMode(container) {
+  return String(getConfigRoot(container)?.dataset.phonoLengthHintMode || LENGTH_HINT_MODES.NONE);
+}
+
+function readStoredValidationMode(container) {
+  return String(getConfigRoot(container)?.dataset.phonoValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED);
+}
+
+function readStoredValidationAttempts(container) {
+  return Number(getConfigRoot(container)?.dataset.phonoValidationAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS);
 }
 
 function bindValidationModeEvents(container) {
@@ -391,7 +504,7 @@ function syncValidationModeUi(container) {
 function readIndividualMaxAttempts(container) {
   const input = container.querySelector("#phono_individual_max_attempts");
   if (!input) {
-    return DEFAULT_INDIVIDUAL_MAX_ATTEMPTS;
+    return readStoredValidationAttempts(container);
   }
 
   return readStepper(container, "phono_individual_max_attempts", {
@@ -403,6 +516,13 @@ function readIndividualMaxAttempts(container) {
 function readGraphOrder(container, fallback = []) {
   const host = container.querySelector("[data-graph-board]");
   if (!host) {
+    const stored = String(getConfigRoot(container)?.dataset.graphOrderStore || "");
+    if (stored) {
+      return stored
+        .split("¦")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
     return Array.isArray(fallback) ? [...fallback] : [];
   }
 
@@ -421,6 +541,11 @@ function updateGraphBoard(container, graphOrder) {
 
   host.dataset.graphOrder = graphOrder.join("¦");
   host.innerHTML = renderGraphBoard(graphOrder);
+  const root = getConfigRoot(container);
+  if (root) {
+    root.dataset.graphOrderStore = graphOrder.join("¦");
+  }
+  bindGraphAssetFallbacks(host);
 }
 
 function updateSelectionSummary(container, cfg) {
@@ -490,6 +615,59 @@ function renderGraphUsageRows(stats) {
   `;
 }
 
+function renderGraphVisual(graph, {
+  activeIds = [],
+  rootClassName = "phono-graph-visual",
+  imgClassName = "phono-graph-img",
+  fallbackClassName = "phono-graph-fallback"
+} = {}) {
+  const imageUrl = getGraphImageUrl(graph);
+  const fallback = getGraphFallbackDisplay(graph, activeIds);
+  const subLabel = fallback.subLabel
+    ? `<span class="${escapeAttr(fallbackClassName)}-sub">${escapeHtml(fallback.subLabel)}</span>`
+    : "";
+
+  return `
+    <span class="${escapeAttr(rootClassName)}" data-graph-visual>
+      ${imageUrl ? `<img class="${escapeAttr(imgClassName)}" src="${escapeAttr(imageUrl)}" alt="" draggable="false" data-graph-img>` : ""}
+      <span class="${escapeAttr(fallbackClassName)}" data-graph-fallback data-unit-size="${escapeAttr(getUnitSizeBucket(fallback.label))}">
+        <span>${escapeHtml(fallback.label)}</span>
+        ${subLabel}
+      </span>
+    </span>
+  `;
+}
+
+function getUnitSizeBucket(text) {
+  const length = Array.from(String(text || "")).length;
+  if (length >= 5) return "long";
+  if (length >= 3) return "medium";
+  return "short";
+}
+
+function bindGraphAssetFallbacks(root) {
+  root.querySelectorAll("[data-graph-visual]").forEach((visual) => {
+    const img = visual.querySelector("[data-graph-img]");
+    if (!(img instanceof HTMLImageElement)) {
+      visual.classList.add("is-fallback");
+      return;
+    }
+
+    img.addEventListener("error", () => {
+      img.hidden = true;
+      visual.classList.add("is-fallback");
+    }, { once: true });
+
+    if (!img.getAttribute("src")) {
+      img.hidden = true;
+      visual.classList.add("is-fallback");
+    } else if (img.complete && img.naturalWidth === 0) {
+      img.hidden = true;
+      visual.classList.add("is-fallback");
+    }
+  });
+}
+
 function renderGraphBoard(graphOrder) {
   const selected = Array.isArray(graphOrder) ? graphOrder : [];
   const selectedSet = new Set(selected);
@@ -507,6 +685,7 @@ function renderGraphBoard(graphOrder) {
 
 function renderGraphTile(graph, { selected }) {
   const title = getGraphLabel(graph);
+  const activeIds = getAvailableGraphs();
 
   return `
     <button
@@ -519,7 +698,11 @@ function renderGraphTile(graph, { selected }) {
       title="${escapeAttr(title)}"
       draggable="${selected ? "true" : "false"}"
     >
-      <img class="phono-graph-img" src="${getGraphImageUrl(graph)}" alt="" draggable="false">
+      ${renderGraphVisual(graph, {
+        activeIds,
+        imgClassName: "phono-graph-img",
+        fallbackClassName: "phono-graph-fallback"
+      })}
     </button>
   `;
 }
@@ -626,7 +809,12 @@ function renderHoverPreview(graph) {
   }
 
   return `
-    <img class="phono-hover-preview-img" src="${getGraphImageUrl(safeGraph)}" alt="">
+    ${renderGraphVisual(safeGraph, {
+      activeIds: getAvailableGraphs(),
+      rootClassName: "phono-hover-preview-visual",
+      imgClassName: "phono-hover-preview-img",
+      fallbackClassName: "phono-hover-preview-fallback"
+    })}
   `;
 }
 
@@ -644,6 +832,7 @@ function updatePresetShell(container, { selectedId = null } = {}) {
   });
 
   bindPresetSelect(container);
+  bindGraphAssetFallbacks(host);
 }
 
 function bindPresetSelect(container) {
@@ -1053,6 +1242,7 @@ function setPreviewGraph(container, graph) {
   const host = container.querySelector("[data-hover-preview]");
   if (!host) return;
   host.innerHTML = renderHoverPreview(safeGraph);
+  bindGraphAssetFallbacks(host);
 }
 
 function createPresetId() {
@@ -1204,8 +1394,10 @@ function createDragGhost(tile, image) {
   if (!ctx) return null;
 
   ctx.clearRect(0, 0, width, height);
-  ctx.globalAlpha = 0.4;
-  ctx.drawImage(image, 0, 0, width, height);
+  if (image.complete && image.naturalWidth > 0) {
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(image, 0, 0, width, height);
+  }
   ctx.globalAlpha = 1;
   ctx.strokeStyle = "rgba(92, 227, 106, .98)";
   ctx.lineWidth = 2;
@@ -1220,10 +1412,6 @@ function suppressNextClick(container) {
 function isClickSuppressed(container) {
   const until = Number(container.dataset.phonoSuppressClickUntil || 0);
   return Number.isFinite(until) && Date.now() < until;
-}
-
-function getGraphImageUrl(graph) {
-  return new URL(`./assets/graphs/${getGraphFilename(graph)}`, import.meta.url).href;
 }
 
 function arraysEqual(a, b) {

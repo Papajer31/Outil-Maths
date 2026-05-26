@@ -3,7 +3,8 @@ import {
   LIST_TYPES,
   pickQuestion,
   questionKey,
-  isAnswerCorrect
+  isAnswerCorrect,
+  getDiscriminatingLetterRanges
 } from "./model.js";
 import {
   listPublicVocabularyWordsForSpace
@@ -102,6 +103,7 @@ function createRuntimeState(initialContext = {}) {
     currentQuestion: null,
     lastQuestionId: null,
     wordEntries: [],
+    visualHintRanges: new Map(),
     answerRevealed: false,
     locked: false,
     correctionTimers: [],
@@ -177,6 +179,7 @@ function resetQuestionRuntimeState(state) {
   state.bankOrder = [];
   state.bankPositions.clear();
   state.answerOrder = [];
+  state.visualHintRanges = new Map();
 }
 
 function renderShell(state) {
@@ -265,6 +268,7 @@ async function loadNextQuestion(state, context = {}) {
   state.currentQuestion = nextQuestion;
   state.lastQuestionId = questionKey(nextQuestion);
   state.wordEntries = wordEntries;
+  updateVisualHintRanges(state, settings, nextQuestion);
   updatePromptDisplay(state);
 
   if (state.showAnswerBox) {
@@ -465,12 +469,74 @@ function renderLoadingState(state) {
   }
 }
 
+function updateVisualHintRanges(state, settings, question) {
+  if (
+    !settings?.visualHint
+    || question?.mode !== LIST_TYPES.WORDS
+    || !Array.isArray(question?.answerItems)
+  ) {
+    state.visualHintRanges = new Map();
+    return;
+  }
+
+  state.visualHintRanges = getDiscriminatingLetterRanges(question.answerItems);
+}
+
+function setChipLabelContent(chip, value, state) {
+  if (!chip) return;
+
+  const text = String(value ?? "");
+  const ranges = normalizeChipHighlightRanges(state?.visualHintRanges?.get(text), text.length);
+
+  if (!ranges.length) {
+    chip.textContent = text;
+    return;
+  }
+
+  chip.textContent = "";
+  let cursor = 0;
+
+  ranges.forEach((range) => {
+    appendChipText(chip, text.slice(cursor, range.start));
+
+    const span = document.createElement("span");
+    span.className = "oa-chip-discriminant";
+    span.textContent = text.slice(range.start, range.end);
+    chip.appendChild(span);
+
+    cursor = range.end;
+  });
+
+  appendChipText(chip, text.slice(cursor));
+}
+
+function appendChipText(chip, text) {
+  if (!text) return;
+  chip.appendChild(document.createTextNode(text));
+}
+
+function normalizeChipHighlightRanges(ranges, textLength) {
+  return (Array.isArray(ranges) ? ranges : [])
+    .map((range) => ({
+      start: clampInt(range?.start, 0, textLength),
+      end: clampInt(range?.end, 0, textLength)
+    }))
+    .filter((range) => range.end > range.start)
+    .sort((a, b) => a.start - b.start)
+    .reduce((out, range) => {
+      const previous = out[out.length - 1];
+      if (previous && range.start < previous.end) return out;
+      out.push(range);
+      return out;
+    }, []);
+}
+
 function createChipElement(value, state, { floating = false } = {}) {
   const chip = document.createElement("button");
   chip.className = `oa-chip${floating ? " oa-chip--floating" : ""}`;
   chip.type = "button";
   chip.dataset.value = value;
-  chip.textContent = value;
+  setChipLabelContent(chip, value, state);
   attachDragBehavior(state, chip, { floating });
   return chip;
 }
@@ -812,7 +878,7 @@ function renderCorrectionLane(state, answerItems) {
     const chip = document.createElement("div");
     chip.className = "oa-chip oa-chip--correction-slot";
     chip.dataset.value = value;
-    chip.textContent = value;
+    setChipLabelContent(chip, value, state);
     state.correctionLane.appendChild(chip);
   });
 
@@ -857,8 +923,8 @@ function createCorrectionOverlay(state, originals, laneMap, workspace, { positio
   originals.forEach(({ value, rect }, index) => {
     const clone = document.createElement("div");
     clone.className = "oa-chip oa-chip--correction-copy";
-    clone.textContent = value;
     clone.dataset.value = value;
+    setChipLabelContent(clone, value, state);
     clone.style.width = `${Math.round(rect.width)}px`;
     clone.style.height = `${Math.round(rect.height)}px`;
     clone.style.left = `${Math.round(rect.left - workspaceOrigin.left)}px`;
@@ -975,6 +1041,7 @@ function teardownState(state, container) {
   state.bankOrder = [];
   state.bankPositions.clear();
   state.answerOrder = [];
+  state.visualHintRanges = new Map();
   state.chipsByValue.clear();
   state.answerRevealed = false;
   state.locked = false;
@@ -1209,4 +1276,3 @@ function injectStyles() {
   link.dataset.oaActivityStyle = href;
   document.head.appendChild(link);
 }
-

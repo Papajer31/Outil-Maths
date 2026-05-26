@@ -496,6 +496,8 @@ function renderMultiplicationProfileBranch(multiplications, profile) {
 }
 
 function renderMultiplicationTablesBranch(multiplications) {
+  const hasSelectedTables = Array.isArray(multiplications.tables) && multiplications.tables.length > 0;
+
   return `
     ${renderNumberCheckboxWidget({
       title: "Tables travaillées",
@@ -504,6 +506,7 @@ function renderMultiplicationTablesBranch(multiplications) {
       values: MULTIPLICATION_TABLE_OPTIONS,
       selectedValues: multiplications.tables
     })}
+    ${hasSelectedTables ? `
     ${renderRadioGroup({
       title: "Ordre des tables",
       id: "op_multiplications_orderMode",
@@ -520,7 +523,7 @@ function renderMultiplicationTablesBranch(multiplications) {
       options: [
         { value: MULTIPLICATION_FACTOR_POSITIONS.FIRST, label: "Premier facteur" },
         { value: MULTIPLICATION_FACTOR_POSITIONS.SECOND, label: "Second facteur" },
-        { value: MULTIPLICATION_FACTOR_POSITIONS.BOTH, label: "Les deux" }
+        { value: MULTIPLICATION_FACTOR_POSITIONS.BOTH, label: "Aléatoire" }
       ]
     })}
     ${renderNumberCheckboxWidget({
@@ -530,6 +533,7 @@ function renderMultiplicationTablesBranch(multiplications) {
       values: MULTIPLICATION_MULTIPLIER_OPTIONS,
       selectedValues: multiplications.multipliers
     })}
+    ` : ""}
   `;
 }
 
@@ -681,8 +685,10 @@ function readMultiplicationsSettings(container, previousMultiplications = {}, op
     : previous.profile;
   const isTablesProfile = profile === MULTIPLICATION_PROFILES.TABLES;
   const isCalculationProfile = profile === MULTIPLICATION_PROFILES.CALCULATION;
+  const hasRenderedTableInputs = !!container.querySelector("[data-ops-multiplication-table]");
+  const hasRenderedMultiplierInputs = !!container.querySelector("[data-ops-multiplication-multiplier]");
 
-  const tables = isMultiplicationActive && isTablesProfile
+  const tables = isMultiplicationActive && isTablesProfile && hasRenderedTableInputs
     ? readCheckedNumberValues(container, "[data-ops-multiplication-table]", MULTIPLICATION_TABLE_OPTIONS)
     : previous.tables;
   const orderMode = isMultiplicationActive && isTablesProfile
@@ -691,7 +697,7 @@ function readMultiplicationsSettings(container, previousMultiplications = {}, op
   const factorPosition = isMultiplicationActive && isTablesProfile
     ? readRadio(container, "op_multiplications_factorPosition", previous.factorPosition)
     : previous.factorPosition;
-  const multipliers = isMultiplicationActive && isTablesProfile
+  const multipliers = isMultiplicationActive && isTablesProfile && hasRenderedMultiplierInputs
     ? readCheckedNumberValues(container, "[data-ops-multiplication-multiplier]", MULTIPLICATION_MULTIPLIER_OPTIONS)
     : previous.multipliers;
 
@@ -1262,6 +1268,7 @@ function applyToolSettingsState(container, settings) {
   const subtractions = normalizeSubtractionsSettings(settings?.specific?.subtractions);
   const multiplications = normalizeMultiplicationsSettings(settings?.specific?.multiplications);
   const additionGenerationMode = String(additions.generationMode || "");
+  const subtractionGenerationMode = String(subtractions.generationMode || "");
   const multiplicationProfile = String(multiplications.profile || "");
   const multiplicationGenerationMode = String(multiplications.generationMode || "");
   const termCounts = Array.isArray(additions.termCounts) ? additions.termCounts : [];
@@ -1279,10 +1286,17 @@ function applyToolSettingsState(container, settings) {
     incomplete: !isKnownOperationType(operation)
   });
 
+  setWidgetState(container.querySelector('[data-tv-radio-group="op_additions_generationMode"]')?.closest(".tv-group"), {
+    incomplete: operation === OPERATION_TYPES.ADDITION && !additionGenerationMode
+  });
   setWidgetState(container.querySelector('[data-ops-widget="addition-term-counts"]'), {
     incomplete: operation === OPERATION_TYPES.ADDITION
       && additionGenerationMode === ADDITION_GENERATION_MODES.RANDOM
       && termCounts.length === 0
+  });
+
+  setWidgetState(container.querySelector('[data-tv-radio-group="op_subtractions_generationMode"]')?.closest(".tv-group"), {
+    incomplete: operation === OPERATION_TYPES.SUBTRACTION && !subtractionGenerationMode
   });
 
   setWidgetState(container.querySelector('[data-tv-radio-group="op_multiplications_profile"]')?.closest(".tv-group"), {
@@ -1294,9 +1308,7 @@ function applyToolSettingsState(container, settings) {
       && (!Array.isArray(multiplications.tables) || multiplications.tables.length === 0)
   });
   setWidgetState(container.querySelector('[data-ops-widget="multiplication-multipliers"]'), {
-    incomplete: operation === OPERATION_TYPES.MULTIPLICATION
-      && multiplicationProfile === MULTIPLICATION_PROFILES.TABLES
-      && (!Array.isArray(multiplications.multipliers) || multiplications.multipliers.length === 0)
+    incomplete: false
   });
   setWidgetState(container.querySelector('[data-tv-radio-group="op_multiplications_generationMode"]')?.closest(".tv-group"), {
     incomplete: operation === OPERATION_TYPES.MULTIPLICATION
@@ -1648,8 +1660,45 @@ function bindMinMaxLiveSync(container, idPrefix) {
   const root = container.querySelector(`[data-tv-minmax="${cssEscape(idPrefix)}"]`);
   if (!root) return;
 
-  root.addEventListener("input", () => syncUi(container));
-  root.addEventListener("change", () => syncUi(container));
+  let inputSyncTimer = null;
+  const syncDelayMs = 450;
+
+  const cancelPendingSync = () => {
+    if (inputSyncTimer == null) return;
+    window.clearTimeout(inputSyncTimer);
+    inputSyncTimer = null;
+  };
+
+  const runSync = () => {
+    cancelPendingSync();
+    syncUi(container);
+  };
+
+  const scheduleSync = () => {
+    cancelPendingSync();
+    inputSyncTimer = window.setTimeout(() => {
+      inputSyncTimer = null;
+      syncUi(container);
+    }, syncDelayMs);
+  };
+
+  root.addEventListener("input", (event) => {
+    if (shouldDeferMinMaxLiveSync(event)) {
+      scheduleSync();
+      return;
+    }
+
+    runSync();
+  });
+  root.addEventListener("change", runSync);
+}
+
+function shouldDeferMinMaxLiveSync(event) {
+  const target = event?.target;
+  if (!(target instanceof HTMLInputElement)) return false;
+  if (!target.classList.contains("tv-input-stepper")) return false;
+  if (target.dataset.tvStepperSyntheticInput === "true") return false;
+  return document.activeElement === target;
 }
 
 function setWidgetState(root, {

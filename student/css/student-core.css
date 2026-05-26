@@ -732,19 +732,20 @@ body.student-route-activities .student-app{
   position:relative;
   overflow:hidden;
   border-radius:999px;
+  contain:paint;
 }
 
 .mini-timer-bar{
+  position:absolute;
+  inset:0 auto 0 0;
   height:100%;
   width:100%;
   background:var(--good);
-  transform-origin:left center;
-  transform:scaleX(1);
 }
 
 @keyframes miniDrain{
-  from{ transform:scaleX(1); }
-  to{ transform:scaleX(0); }
+  from{ width:100%; }
+  to{ width:0%; }
 }
 
 .tool-center{

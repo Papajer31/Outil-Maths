@@ -32,7 +32,8 @@ export function getDefaultSettings() {
     itemCount: 4,
     prefixConstraint: PREFIX_CONSTRAINTS.EXACT_1,
     prefixMatchMode: PREFIX_MATCH_MODES.EXACT,
-    commonPrefixLength: 1
+    commonPrefixLength: 1,
+    visualHint: false
   };
 }
 
@@ -47,6 +48,7 @@ export function normalizeSettings(settings) {
     : LIST_TYPES.WORDS;
 
   base.itemCount = clampInt(base.itemCount, 2, 6);
+  base.visualHint = normalizeBoolean(base.visualHint);
 
   const prefixConfig = normalizePrefixConstraint(
     base.prefixConstraint,
@@ -259,6 +261,31 @@ export function isAnswerCorrect(answerItems, expectedItems) {
   );
 }
 
+export function getDiscriminatingLetterRanges(words) {
+  const descriptors = (Array.isArray(words) ? words : [])
+    .map((word) => createWordDescriptor(word))
+    .filter((descriptor) => descriptor.units.length > 0);
+
+  if (descriptors.length <= 1) {
+    return new Map();
+  }
+
+  const sharedPrefixLength = getSharedUnitPrefixLength(descriptors.map((descriptor) => descriptor.units));
+  const ranges = new Map();
+
+  descriptors.forEach((descriptor) => {
+    const unit = descriptor.units[sharedPrefixLength];
+    if (!unit) return;
+
+    ranges.set(descriptor.value, [{
+      start: unit.start,
+      end: unit.end
+    }]);
+  });
+
+  return ranges;
+}
+
 function pickLettersQuestion(settings, { avoidKey = null, attempts = 100 } = {}) {
   const count = clampInt(settings.itemCount, 2, 6);
   if (count > ALPHABET.length) return null;
@@ -440,6 +467,71 @@ function normalizeWordKey(value) {
     .replace(/[’']/g, "'")
     .toLowerCase()
     .trim();
+}
+
+function normalizeBoolean(value) {
+  if (value === true) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes" || text === "oui";
+}
+
+function createWordDescriptor(value) {
+  const word = String(value ?? "");
+  return {
+    value: word,
+    units: splitWordUnits(word)
+  };
+}
+
+function splitWordUnits(word) {
+  const units = [];
+  let offset = 0;
+
+  for (const char of String(word ?? "")) {
+    const start = offset;
+    const end = start + char.length;
+    offset = end;
+
+    if (/^\p{M}$/u.test(char) && units.length > 0) {
+      const previous = units[units.length - 1];
+      previous.raw += char;
+      previous.end = end;
+      previous.key = normalizeWordKey(previous.raw);
+      continue;
+    }
+
+    units.push({
+      raw: char,
+      key: normalizeWordKey(char),
+      start,
+      end
+    });
+  }
+
+  return units.filter((unit) => unit.key);
+}
+
+function getSharedUnitPrefixLength(unitLists) {
+  const lists = Array.isArray(unitLists) ? unitLists.filter((list) => Array.isArray(list)) : [];
+  if (lists.length <= 1) return lists[0]?.length ?? 0;
+
+  let prefixLength = lists[0].length;
+
+  for (let i = 1; i < lists.length; i++) {
+    const current = lists[i];
+    let j = 0;
+    while (
+      j < prefixLength
+      && j < current.length
+      && lists[0][j]?.key === current[j]?.key
+    ) {
+      j += 1;
+    }
+    prefixLength = j;
+    if (prefixLength <= 0) return 0;
+  }
+
+  return prefixLength;
 }
 
 function compareWordEntries(a, b) {

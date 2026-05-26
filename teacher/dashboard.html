@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="../shared/selection-text.css">
   <link rel="stylesheet" href="../shared/help-popover.css">
   <link rel="stylesheet" href="./css/question-banks.css">
+  <link rel="stylesheet" href="./css/teacher-tools.css">
 </head>
 
 <body>
@@ -68,6 +69,11 @@
 
                 <button id="btnNavBanks" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Banques</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavTeacherTools" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Tableau</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
               </div>
@@ -263,6 +269,12 @@
               <section id="bankEditorHost" class="dashboard-bank-editor-host hidden" aria-live="polite">
                 <div class="dashboard-bank-empty-state">Chargement…</div>
               </section>
+            </div>
+
+            <div id="teacherToolsView" class="dashboard-content-view dashboard-teacher-tools-view hidden">
+              <div id="teacherToolsHost" class="dashboard-teacher-tools-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
+              </div>
             </div>
 
             <div id="editorView" class="dashboard-content-view dashboard-editor-view hidden">

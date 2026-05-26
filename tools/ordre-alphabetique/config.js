@@ -72,6 +72,16 @@ export function renderToolSettings(container, settings, context = {}) {
             ]
           }),
 
+          renderRadioGroup({
+            title: "Indice visuel",
+            id: "oa_visualHint",
+            value: cfg.visualHint ? "yes" : "no",
+            options: [
+              { value: "yes", label: "oui" },
+              { value: "no", label: "non" }
+            ]
+          }),
+
           renderSection("Liste de mots", `
             <div class="oa-word-editor">
               <div class="oa-word-editor-note">Un mot par ligne. Les mots sont triés alphabétiquement à l’enregistrement.</div>
@@ -103,6 +113,7 @@ export function renderToolSettings(container, settings, context = {}) {
   });
   bindRadio(container, "oa_itemCount");
   bindRadio(container, "oa_prefixConstraint");
+  bindRadio(container, "oa_visualHint");
   bindCollapsibleSection(container, "oa_word_list_section");
   bindWordEditor(container, context);
   syncWordSettingsVisibility(container);
@@ -119,7 +130,8 @@ export function readToolSettings(container) {
   const settings = normalizeSettings({
     listType,
     itemCount,
-    prefixConstraint: readRadio(container, "oa_prefixConstraint", PREFIX_CONSTRAINTS.EXACT_1)
+    prefixConstraint: readRadio(container, "oa_prefixConstraint", PREFIX_CONSTRAINTS.EXACT_1),
+    visualHint: readRadio(container, "oa_visualHint", "no") === "yes"
   });
 
   if (settings.listType !== LIST_TYPES.WORDS) {

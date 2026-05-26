@@ -644,8 +644,46 @@ function bindResultConstraintCheckbox(container, branch) {
 function bindMinMaxLiveSync(container, idPrefix) {
   const root = container.querySelector(`[data-tv-minmax="${cssEscape(idPrefix)}"]`);
   if (!root) return;
-  root.addEventListener("input", () => syncUi(container));
-  root.addEventListener("change", () => syncUi(container));
+
+  let inputSyncTimer = null;
+  const syncDelayMs = 450;
+
+  const cancelPendingSync = () => {
+    if (inputSyncTimer == null) return;
+    window.clearTimeout(inputSyncTimer);
+    inputSyncTimer = null;
+  };
+
+  const runSync = () => {
+    cancelPendingSync();
+    syncUi(container);
+  };
+
+  const scheduleSync = () => {
+    cancelPendingSync();
+    inputSyncTimer = window.setTimeout(() => {
+      inputSyncTimer = null;
+      syncUi(container);
+    }, syncDelayMs);
+  };
+
+  root.addEventListener("input", (event) => {
+    if (shouldDeferMinMaxLiveSync(event)) {
+      scheduleSync();
+      return;
+    }
+
+    runSync();
+  });
+  root.addEventListener("change", runSync);
+}
+
+function shouldDeferMinMaxLiveSync(event) {
+  const target = event?.target;
+  if (!(target instanceof HTMLInputElement)) return false;
+  if (!target.classList.contains("tv-input-stepper")) return false;
+  if (target.dataset.tvStepperSyntheticInput === "true") return false;
+  return document.activeElement === target;
 }
 
 function setWidgetState(root, { incomplete = false, warning = false } = {}) {

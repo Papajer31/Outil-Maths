@@ -32,6 +32,9 @@ import {
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
+import {
+  normalizeActivitySequence
+} from "../../shared/activity-config.js";
 import { sanitizeActivityConfigJson } from "../../shared/api-common.js";
 import {
   ACTIVITY_SHARE_MESSAGES,
@@ -56,6 +59,7 @@ import { createEditorController } from "./dashboard/editor-controller.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
 import { createQuestionBanksViewController } from "./dashboard/question-banks-view.js";
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
+import { createTeacherToolsViewController } from "./dashboard/teacher-tools-view.js";
 import {
   applyContextualHelpPreference,
   getContextualHelpEnabled,
@@ -84,6 +88,7 @@ const btnCloseProfileOverlay = document.getElementById("btnCloseProfileOverlay")
 const btnNavClass = document.getElementById("btnNavClass");
 const btnNavActivities = document.getElementById("btnNavActivities");
 const btnNavBanks = document.getElementById("btnNavBanks");
+const btnNavTeacherTools = document.getElementById("btnNavTeacherTools");
 const btnStudentListView = document.getElementById("btnStudentListView");
 const btnStudentTileView = document.getElementById("btnStudentTileView");
 const navHelpButtons = Array.from(document.querySelectorAll("[data-help-icon]"));
@@ -99,6 +104,8 @@ const configHeader = document.getElementById("configHeader");
 const classView = document.getElementById("classView");
 const activitiesView = document.getElementById("activitiesView");
 const banksView = document.getElementById("banksView");
+const teacherToolsView = document.getElementById("teacherToolsView");
+const teacherToolsHost = document.getElementById("teacherToolsHost");
 const editorView = document.getElementById("editorView");
 
 const btnAddStudent = document.getElementById("btnAddStudent");
@@ -154,7 +161,7 @@ let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
 let rightPanelMode = "activities"; // conservé pour la logique activités
-let currentDashboardSection = "activities"; // "activities" | "class" | "banks"
+let currentDashboardSection = "activities"; // "activities" | "class" | "banks" | "teacher-tools"
 let currentActivitiesViewMode = "list"; // "list" | "editor"
 let currentActivityModeFilter = "all";
 let showDashboardHelpIcons = getContextualHelpEnabled();
@@ -166,9 +173,11 @@ let activeConfigEditor = null;
 let hasMountedClassView = false;
 let hasMountedActivitiesView = false;
 let hasMountedBanksView = false;
+let hasMountedTeacherToolsView = false;
 let mountedClassTeacherSpaceId = "";
 let mountedActivitiesTeacherSpaceId = "";
 let mountedBanksTeacherSpaceId = "";
+let mountedTeacherToolsTeacherSpaceId = "";
 
 const studentNotesDrafts = new Map();
 let cachedActivities = null;
@@ -180,6 +189,7 @@ let dashboardShareManager = null;
 let editorController = null;
 let activitiesViewController = null;
 let banksViewController = null;
+let teacherToolsViewController = null;
 let studentController = null;
 const helpPopoverController = initContextualHelpSystem({ root: document });
 
@@ -220,6 +230,7 @@ const activityOverlayManager = createActivityOverlayManager({
   updateActivityFolder,
   deleteActivityFolder,
   deleteMyActivity,
+  saveActivityConfig,
   buildActivityTreeState: (...args) => activitiesViewController?.buildActivityTreeState(...args),
   sortFoldersByDisplay: sortDashboardFoldersByDisplay,
   showDashboardShareToast,
@@ -356,6 +367,14 @@ banksViewController = createQuestionBanksViewController({
   btnImportCancel: btnBankImportCancel,
   btnImportConfirm: btnBankImportConfirm,
   getCurrentTeacherSpace: () => currentTeacherSpace,
+  showToast: showDashboardShareToast
+});
+
+teacherToolsViewController = createTeacherToolsViewController({
+  view: teacherToolsView,
+  host: teacherToolsHost,
+  getCurrentTeacherSpace: () => currentTeacherSpace,
+  getCurrentStudents: () => currentStudents,
   showToast: showDashboardShareToast
 });
 
@@ -496,6 +515,17 @@ async function ensureBanksViewMounted({ forceRefresh = false } = {}){
   mountedBanksTeacherSpaceId = teacherSpaceId;
 }
 
+async function ensureTeacherToolsViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedTeacherToolsView && mountedTeacherToolsTeacherSpaceId === teacherSpaceId) {
+    teacherToolsViewController?.refresh?.();
+    return;
+  }
+  teacherToolsViewController?.render?.();
+  hasMountedTeacherToolsView = true;
+  mountedTeacherToolsTeacherSpaceId = teacherSpaceId;
+}
+
 function getActivityById(activityId){
   const safeActivityId = String(activityId || "").trim();
   if (!safeActivityId) return null;
@@ -626,10 +656,12 @@ function renderDashboardShellState(){
   btnNavActivities?.classList.toggle("is-active", currentDashboardSection === "activities");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
   btnNavBanks?.classList.toggle("is-active", currentDashboardSection === "banks");
+  btnNavTeacherTools?.classList.toggle("is-active", currentDashboardSection === "teacher-tools");
   activitiesView?.classList.toggle("hidden", currentDashboardSection !== "activities" || currentActivitiesViewMode !== "list");
   editorView?.classList.toggle("hidden", currentDashboardSection !== "activities" || currentActivitiesViewMode !== "editor");
   classView?.classList.toggle("hidden", currentDashboardSection !== "class");
   banksView?.classList.toggle("hidden", currentDashboardSection !== "banks");
+  teacherToolsView?.classList.toggle("hidden", currentDashboardSection !== "teacher-tools");
 
   navHelpButtons.forEach((button) => {
     button.classList.toggle("is-hidden", !showDashboardHelpIcons);
@@ -719,6 +751,11 @@ btnNavBanks?.addEventListener("click", async () => {
   currentDashboardSection = "banks";
   renderDashboardShellState();
   await ensureBanksViewMounted();
+});
+btnNavTeacherTools?.addEventListener("click", async () => {
+  currentDashboardSection = "teacher-tools";
+  renderDashboardShellState();
+  await ensureTeacherToolsViewMounted();
 });
 btnStudentListView?.addEventListener("click", async () => {
   if (studentViewMode === "list") return;

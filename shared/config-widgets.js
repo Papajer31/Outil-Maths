@@ -1039,7 +1039,9 @@ function bindStepper(input, {
 
     input.value = String(next);
     syncStepperUI(input, { inputMin, inputMax });
+    input.dataset.tvStepperSyntheticInput = "true";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    delete input.dataset.tvStepperSyntheticInput;
     return true;
   }
 

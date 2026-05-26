@@ -89,7 +89,9 @@ export function syncPersistentStudentStarfield(routeName){
   persistentStarfieldHost?.classList.toggle("is-hidden", !shouldShow);
 }
 
-export function mountStudentStarDrift(host, presetName){
+export function mountStudentStarDrift(host, presetName, {
+  measureFromLayout = false
+} = {}){
   const layer = host?.querySelector?.(".student-stars-layer");
   if (!layer) return () => {};
 
@@ -192,8 +194,10 @@ export function mountStudentStarDrift(host, presetName){
 
   function measureLayer(){
     const rect = layer.getBoundingClientRect();
-    layerWidth = Math.max(rect.width || host.clientWidth || window.innerWidth, 1);
-    layerHeight = Math.max(rect.height || host.clientHeight || window.innerHeight, 1);
+    const layoutWidth = layer.offsetWidth || host.clientWidth || 0;
+    const layoutHeight = layer.offsetHeight || host.clientHeight || 0;
+    layerWidth = Math.max((measureFromLayout ? layoutWidth : rect.width) || layoutWidth || window.innerWidth, 1);
+    layerHeight = Math.max((measureFromLayout ? layoutHeight : rect.height) || layoutHeight || window.innerHeight, 1);
   }
 }
 

@@ -1,12 +1,19 @@
 import {
+  INPUT_MODES,
+  LENGTH_HINT_MODES,
   normalizeSettings,
   INDIVIDUAL_VALIDATION_MODES,
   pickQuestion,
   questionKey,
   visibleTextOfGraph,
   evaluateWordAttempt,
-  getGraphFilename,
+  evaluateLetterAttempt,
+  buildStudentGraphTiles,
+  getGraphImageUrl,
+  getGraphFallbackDisplay,
   getGraphLabel,
+  getLetterChoicesForQuestion,
+  getLetterImageUrl,
   setWordCatalog,
   buildCanonicalAnswerEntries
 } from "./model.js";
@@ -26,6 +33,8 @@ const QUESTION_PROMPT = "Encode ce mot.";
 const TOUCH_DRAG_THRESHOLD = 8;
 const LIBRARY_SCROLL_LOCK_THRESHOLD = 10;
 const LIBRARY_DRAG_INTENT_THRESHOLD = 14;
+const FAMILY_CYCLE_MS = 5000;
+const FAMILY_FADE_MS = 1000;
 
 let stylesReadyPromise = null;
 
@@ -171,6 +180,7 @@ function createRuntimeState(initialContext = {}) {
     sessionControls: initialContext?.sessionControls ?? initialContext?.services?.sessionControls ?? null,
     dom: {},
     suppressLibraryClickUntil: 0,
+    suppressLibraryClickOnce: false,
     pendingLibraryTouch: createPendingLibraryTouch(),
     pointerDrag: createPointerDrag(),
     dragFromAnswerIndex: null,
@@ -181,7 +191,11 @@ function createRuntimeState(initialContext = {}) {
     answerScaleObserver: null,
     answerScaleRaf: 0,
     onWindowResize: null,
-    insertBar: null
+    insertBar: null,
+    familyCycleTimers: new Map(),
+    openFamilyPopup: null,
+    onDocumentPointerDownFamily: null,
+    onDocumentClickFamily: null
   };
 }
 
@@ -250,14 +264,16 @@ export function createActivity(initialContext = {}) {
       await injectActivityStyles();
       await ensurePhonologyWordCatalog();
 
-      if (!state.dom.root || !state.dom.root.isConnected) {
+      if (!state.dom.root || !state.dom.root.isConnected || state.dom.root.dataset.responseUi !== state.responseUi) {
         renderShell();
         bindStaticEvents();
       }
 
       const nextQuestion = pickQuestion(state.settings, { avoidKey: state.lastQuestionId });
       if (!nextQuestion) {
-        throw new Error("Aucun mot jouable avec les graphèmes sélectionnés pour cette activité.");
+        throw new Error(state.settings.inputMode === INPUT_MODES.LETTERS
+          ? "Aucun mot jouable pour cette activité."
+          : "Aucun mot jouable avec les graphèmes sélectionnés pour cette activité.");
       }
 
       state.currentQuestion = nextQuestion;
@@ -284,7 +300,7 @@ export function createActivity(initialContext = {}) {
 
       syncRuntimeState(state, context ?? state.latestContext);
 
-      if (!state.dom.root || !state.dom.root.isConnected) {
+      if (!state.dom.root || !state.dom.root.isConnected || state.dom.root.dataset.responseUi !== state.responseUi) {
         renderShell();
         bindStaticEvents();
       }
@@ -354,7 +370,6 @@ export function createActivity(initialContext = {}) {
       answerBox: container.querySelector("#phono_answerBox"),
       answerTrack: container.querySelector("#phono_answerTrack"),
       graphLibrary: container.querySelector("#phono_graphLibrary"),
-      btnCheck: container.querySelector("#phono_btnCheck"),
       btnClear: container.querySelector("#phono_btnClear"),
       imageOverlay: container.querySelector("#phono_imageOverlay"),
       imageOverlayImg: container.querySelector("#phono_imageOverlayImg")
@@ -368,9 +383,13 @@ export function createActivity(initialContext = {}) {
     if (!container) return;
 
     syncRuntimeState(state);
+    const isBoxedResponse = state.responseUi === "boxed";
+    closeFamilyPopup();
+    clearFamilyCycleTimers();
+    resetAnswerScaleHandling();
 
     container.innerHTML = `
-      <div class="phono-root">
+      <div class="phono-root${isBoxedResponse ? "" : " is-response-free"}" data-response-ui="${isBoxedResponse ? "boxed" : "free"}">
         ${renderToolInstruction({ id: "phono_prompt" })}
         <div class="phono-layout">
           <section class="phono-top-zone">
@@ -378,23 +397,28 @@ export function createActivity(initialContext = {}) {
               <img id="phono_wordImage" class="phono-word-image" alt="">
             </div>
 
-            <div id="phono_answerBox" class="phono-answer" aria-label="Boite de réponse">
-              <div id="phono_answerTrack" class="phono-answer-track"></div>
-            </div>
+            ${isBoxedResponse ? `
+              <div id="phono_answerBox" class="phono-answer" aria-label="Boite de réponse">
+                <div id="phono_answerTrack" class="phono-answer-track"></div>
+              </div>
 
-            <div class="phono-action-col">
-              ${usesShellValidationMode(state.latestContext)
-                ? ``
-                : `<button id="phono_btnCheck" class="phono-btn phono-btn-primary phono-btn-check-side" type="button">Vérifier</button>`}
-              <button id="phono_btnClear" class="phono-btn phono-btn-secondary phono-btn-clear-side" type="button" aria-label="Effacer la réponse" title="Effacer"><span class="phono-material-icon" aria-hidden="true">delete</span></button>
-            </div>
+              <div class="phono-action-col">
+                <button id="phono_btnClear" class="phono-btn phono-btn-secondary phono-btn-clear-side" type="button" aria-label="Effacer la réponse" title="Effacer"><span class="phono-material-icon" aria-hidden="true">delete</span></button>
+              </div>
+            ` : `
+              <div id="phono_answerBox" class="phono-answer phono-answer-correction-only" aria-label="Correction">
+                <div id="phono_answerTrack" class="phono-answer-track"></div>
+              </div>
+            `}
           </section>
 
-          <section class="phono-bottom-zone">
-            <div class="phono-panel phono-library-panel">
-              <div id="phono_graphLibrary" class="phono-library"></div>
-            </div>
-          </section>
+          ${isBoxedResponse ? `
+            <section class="phono-bottom-zone">
+              <div class="phono-panel phono-library-panel">
+                <div id="phono_graphLibrary" class="phono-library"></div>
+              </div>
+            </section>
+          ` : ""}
         </div>
 
         <div id="phono_imageOverlay" class="phono-image-overlay hidden" aria-hidden="true">
@@ -405,16 +429,11 @@ export function createActivity(initialContext = {}) {
 
     ensureDom();
     updatePromptDisplay();
+    syncPhaseClasses();
   }
 
   function bindStaticEvents() {
     const dom = ensureDom();
-
-    dom.btnCheck?.addEventListener("click", (event) => {
-      event.preventDefault();
-      evaluateCurrent();
-      event.currentTarget?.blur?.();
-    });
 
     dom.btnClear?.addEventListener("click", (event) => {
       event.preventDefault();
@@ -433,6 +452,32 @@ export function createActivity(initialContext = {}) {
       document.addEventListener("pointermove", state.onGlobalPointerMove, { passive: false });
       document.addEventListener("pointerup", state.onGlobalPointerUp, { passive: false });
       document.addEventListener("pointercancel", state.onGlobalPointerCancel, { passive: false });
+      state.onDocumentPointerDownFamily = (event) => {
+        if (!state.openFamilyPopup) return;
+        const target = event.target;
+        if (state.openFamilyPopup.popup?.contains(target) || state.openFamilyPopup.tile?.contains(target)) {
+          return;
+        }
+
+        const isLibraryTap = !!target?.closest?.("#phono_graphLibrary");
+        if (isLibraryTap) {
+          event.preventDefault();
+          event.stopPropagation();
+          suppressNextLibraryClick();
+        }
+
+        closeFamilyPopup();
+      };
+      state.onDocumentClickFamily = (event) => {
+        const target = event.target;
+        if (!target?.closest?.("#phono_graphLibrary")) return;
+        if (!shouldSuppressLibraryClick({ consume: true })) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      document.addEventListener("pointerdown", state.onDocumentPointerDownFamily, true);
+      document.addEventListener("click", state.onDocumentClickFamily, true);
       state.globalHandlersBound = true;
     }
 
@@ -472,73 +517,424 @@ export function createActivity(initialContext = {}) {
     const dom = ensureDom();
     if (!dom.graphLibrary) return;
 
-    const totalGraphs = Array.isArray(state.settings.graphOrder) ? state.settings.graphOrder.length : 0;
-    dom.graphLibrary.style.setProperty("--phono-library-cols", String(getLibraryColumnCount(totalGraphs)));
+    closeFamilyPopup();
+    clearFamilyCycleTimers();
+
+    if (state.responseUi !== "boxed") {
+      dom.graphLibrary.innerHTML = "";
+      return;
+    }
+
     dom.graphLibrary.innerHTML = "";
 
-    for (const graph of state.settings.graphOrder) {
-      const tile = document.createElement("div");
-      tile.className = "phono-tile";
-      tile.dataset.graph = graph;
-      tile.draggable = true;
-
-      const btn = document.createElement("div");
-      btn.className = "phono-tile-btn";
-
-      const image = document.createElement("img");
-      image.src = getGraphImageUrl(graph);
-      image.alt = getGraphLabel(graph);
-
-      btn.appendChild(image);
-      tile.appendChild(btn);
-
-      tile.addEventListener("click", (event) => {
-        if (!isEditingAnswer()) return;
-        if (shouldSuppressLibraryClick()) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-        addGraphToAnswer(graph);
-      });
-
-      tile.addEventListener("dragstart", (event) => {
-        if (!isEditingAnswer()) {
-          event.preventDefault();
-          return;
-        }
-
-        event.dataTransfer?.setData("text/plain", graph);
-        if (event.dataTransfer) {
-          event.dataTransfer.effectAllowed = "copy";
-        }
-
-        const dragEl = makeDragChip(graph);
-        document.body.appendChild(dragEl);
-        event.dataTransfer?.setDragImage(dragEl, dragEl.offsetWidth / 2, dragEl.offsetHeight / 2);
-        requestAnimationFrame(() => dragEl.remove());
-      });
-
-      tile.addEventListener("pointerdown", (event) => {
-        if (!isEditingAnswer()) return;
-        if (event.pointerType === "mouse") return;
-        if (state.pointerDrag.active || state.pendingLibraryTouch.active) return;
-        beginPendingLibraryTouch(graph, event.pointerId, event.clientX, event.clientY);
-      });
-
-      dom.graphLibrary.appendChild(tile);
+    if (state.settings.inputMode === INPUT_MODES.LETTERS) {
+      const letters = getLetterChoicesForQuestion(state.currentQuestion);
+      dom.graphLibrary.style.setProperty("--phono-library-cols", String(getLibraryColumnCount(letters.length)));
+      for (const letter of letters) {
+        dom.graphLibrary.appendChild(createLetterLibraryTile(letter));
+      }
+      return;
     }
+
+    const tiles = buildStudentGraphTiles(state.settings.graphOrder);
+    dom.graphLibrary.style.setProperty("--phono-library-cols", String(getLibraryColumnCount(tiles.length)));
+
+    tiles.forEach((tileModel, index) => {
+      if (tileModel.type === "family") {
+        dom.graphLibrary.appendChild(createFamilyLibraryTile(tileModel, index));
+      } else {
+        dom.graphLibrary.appendChild(createGraphLibraryTile(tileModel.units[0]));
+      }
+    });
+  }
+
+  function createGraphLibraryTile(unit) {
+    const graph = String(unit?.id || "").trim();
+    const tile = document.createElement("div");
+    tile.className = "phono-tile";
+    tile.dataset.graph = graph;
+    tile.draggable = true;
+
+    const btn = document.createElement("div");
+    btn.className = "phono-tile-btn";
+    btn.appendChild(createGraphVisual(graph, [graph]));
+    tile.appendChild(btn);
+
+    tile.addEventListener("click", (event) => {
+      if (!isEditingAnswer()) return;
+      if (shouldSuppressLibraryClick({ consume: true })) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      addGraphToAnswer(graph);
+    });
+
+    tile.addEventListener("dragstart", (event) => {
+      if (!isEditingAnswer()) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer?.setData("text/plain", serializeUnitPayload("graph", graph));
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "copy";
+      }
+
+      const dragEl = makeDragChip({ type: "graph", id: graph });
+      document.body.appendChild(dragEl);
+      event.dataTransfer?.setDragImage(dragEl, dragEl.offsetWidth / 2, dragEl.offsetHeight / 2);
+      requestAnimationFrame(() => dragEl.remove());
+    });
+
+    tile.addEventListener("pointerdown", (event) => {
+      if (!isEditingAnswer()) return;
+      if (event.pointerType === "mouse") return;
+      if (state.pointerDrag.active || state.pendingLibraryTouch.active) return;
+      beginPendingLibraryTouch(graph, event.pointerId, event.clientX, event.clientY);
+    });
+
+    return tile;
+  }
+
+  function createLetterLibraryTile(letter) {
+    const safeLetter = String(letter || "").trim();
+    const tile = document.createElement("div");
+    tile.className = "phono-tile phono-letter-tile";
+    tile.dataset.letter = safeLetter;
+    tile.draggable = true;
+
+    const btn = document.createElement("div");
+    btn.className = "phono-tile-btn";
+    btn.appendChild(createLetterVisual(safeLetter));
+    tile.appendChild(btn);
+
+    tile.addEventListener("click", (event) => {
+      if (!isEditingAnswer()) return;
+      if (shouldSuppressLibraryClick({ consume: true })) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      addLetterToAnswer(safeLetter);
+    });
+
+    tile.addEventListener("dragstart", (event) => {
+      if (!isEditingAnswer()) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer?.setData("text/plain", serializeUnitPayload("letter", safeLetter));
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "copy";
+      }
+
+      const dragEl = makeDragChip({ type: "letter", id: safeLetter });
+      document.body.appendChild(dragEl);
+      event.dataTransfer?.setDragImage(dragEl, dragEl.offsetWidth / 2, dragEl.offsetHeight / 2);
+      requestAnimationFrame(() => dragEl.remove());
+    });
+
+    tile.addEventListener("pointerdown", (event) => {
+      if (!isEditingAnswer()) return;
+      if (event.pointerType === "mouse") return;
+      if (state.pointerDrag.active || state.pendingLibraryTouch.active) return;
+      beginPendingLibraryTouch(safeLetter, event.pointerId, event.clientX, event.clientY);
+    });
+
+    return tile;
+  }
+
+  function createFamilyLibraryTile(tileModel, index) {
+    const activeIds = tileModel.units.map((unit) => unit.id);
+    const tile = document.createElement("div");
+    tile.className = "phono-tile phono-family-tile";
+    tile.dataset.family = tileModel.family;
+    tile.dataset.familyIndex = "0";
+    tile.setAttribute("role", "button");
+    tile.tabIndex = 0;
+    tile.setAttribute("aria-label", `Choisir un graphème de la famille ${tileModel.family}`);
+
+    const stack = document.createElement("div");
+    stack.className = "phono-family-stack";
+
+    const card = document.createElement("div");
+    card.className = "phono-family-card is-top";
+    const initialLayer = createFamilyVisualLayer(activeIds[0], activeIds, "current");
+    card.appendChild(initialLayer);
+    stack.appendChild(card);
+
+    tile.appendChild(stack);
+
+    const open = (event) => {
+      if (!isEditingAnswer()) return;
+      if (shouldSuppressLibraryClick({ consume: true })) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        return;
+      }
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      openFamilyPopup(tile, tileModel);
+    };
+
+    tile.addEventListener("click", open);
+    tile.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        open(event);
+      }
+    });
+
+    scheduleFamilyCycle(tile, tileModel, index);
+    return tile;
+  }
+
+  function createGraphVisual(graph, activeIds = []) {
+    const visual = document.createElement("span");
+    visual.className = "phono-unit-visual";
+
+    const imageUrl = getGraphImageUrl(graph);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.alt = getGraphLabel(graph);
+      image.draggable = false;
+      image.addEventListener("error", () => {
+        image.hidden = true;
+        visual.classList.add("is-fallback");
+      }, { once: true });
+      image.src = imageUrl;
+      visual.appendChild(image);
+    } else {
+      visual.classList.add("is-fallback");
+    }
+
+    visual.appendChild(createGraphFallback(graph, activeIds));
+    return visual;
+  }
+
+  function createFamilyVisualLayer(graph, activeIds = [], kind = "current") {
+    const layer = document.createElement("span");
+    layer.className = `phono-family-visual-layer is-${kind}`;
+    layer.appendChild(createGraphVisual(graph, activeIds));
+    return layer;
+  }
+
+  function createGraphFallback(graph, activeIds = []) {
+    const display = getGraphFallbackDisplay(graph, activeIds);
+    const fallback = document.createElement("span");
+    fallback.className = "phono-unit-fallback";
+    fallback.dataset.unitSize = getUnitSizeBucket(display.label);
+
+    const label = document.createElement("span");
+    label.textContent = display.label;
+    fallback.appendChild(label);
+
+    if (display.subLabel) {
+      const sub = document.createElement("span");
+      sub.className = "phono-unit-fallback-sub";
+      sub.textContent = display.subLabel;
+      fallback.appendChild(sub);
+    }
+
+    return fallback;
+  }
+
+  function createLetterVisual(letter) {
+    const safeLetter = String(letter || "").trim();
+    const visual = document.createElement("span");
+    visual.className = "phono-unit-visual phono-letter-visual";
+
+    const imageUrl = getLetterImageUrl(safeLetter);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.alt = safeLetter;
+      image.draggable = false;
+      image.addEventListener("error", () => {
+        image.hidden = true;
+        visual.classList.add("is-fallback");
+      }, { once: true });
+      image.src = imageUrl;
+      visual.appendChild(image);
+    } else {
+      visual.classList.add("is-fallback");
+    }
+
+    const fallback = document.createElement("span");
+    fallback.className = "phono-unit-fallback";
+    fallback.textContent = safeLetter;
+    visual.appendChild(fallback);
+
+    return visual;
+  }
+
+  function scheduleFamilyCycle(tile, tileModel, tileIndex) {
+    const units = Array.isArray(tileModel?.units) ? tileModel.units : [];
+    if (units.length < 2) return;
+
+    const interval = window.setInterval(() => {
+      advanceFamilyTile(tile, tileModel);
+    }, FAMILY_CYCLE_MS);
+
+    state.familyCycleTimers.set(tile, { timeout: 0, interval });
+  }
+
+  function advanceFamilyTile(tile, tileModel) {
+    if (!tile?.isConnected) return;
+    if (state.openFamilyPopup?.family === tileModel.family) return;
+
+    const units = Array.isArray(tileModel?.units) ? tileModel.units : [];
+    if (units.length < 2) return;
+
+    const activeIds = units.map((unit) => unit.id);
+    const current = Number(tile.dataset.familyIndex || 0);
+    const next = (Number.isFinite(current) ? current + 1 : 1) % units.length;
+    tile.dataset.familyIndex = String(next);
+
+    const topCard = tile.querySelector(".phono-family-card.is-top");
+    if (!topCard) return;
+
+    const previousLayers = topCard.querySelectorAll(".phono-family-visual-layer.is-next");
+    previousLayers.forEach((layer) => layer.remove());
+
+    const currentLayer = topCard.querySelector(".phono-family-visual-layer.is-current");
+    const nextLayer = createFamilyVisualLayer(units[next].id, activeIds, "next");
+    nextLayer.style.setProperty("--phono-family-fade-duration", `${FAMILY_FADE_MS}ms`);
+    currentLayer?.style.setProperty("--phono-family-fade-duration", `${FAMILY_FADE_MS}ms`);
+    topCard.appendChild(nextLayer);
+
+    requestAnimationFrame(() => {
+      nextLayer.getBoundingClientRect();
+      nextLayer.classList.add("is-visible");
+      currentLayer?.classList.add("is-fading");
+    });
+
+    window.setTimeout(() => {
+      nextLayer.classList.remove("is-next", "is-visible");
+      nextLayer.classList.add("is-current");
+      currentLayer?.remove();
+    }, FAMILY_FADE_MS + 120);
+  }
+
+  function clearFamilyCycleTimers() {
+    for (const timer of state.familyCycleTimers.values()) {
+      if (timer.timeout) window.clearTimeout(timer.timeout);
+      if (timer.interval) window.clearInterval(timer.interval);
+    }
+    state.familyCycleTimers.clear();
+  }
+
+  function openFamilyPopup(tile, tileModel) {
+    if (!tile || !tileModel) return;
+    closeFamilyPopup();
+
+    const activeIds = tileModel.units.map((unit) => unit.id);
+    const tileRect = tile.getBoundingClientRect();
+    const popupCols = getFamilyPopupColumnCount(tileModel.units.length, tileRect.width);
+
+    tile.classList.add("is-open");
+    state.dom.graphLibrary?.classList.add("is-family-popup-open");
+
+    const popup = document.createElement("div");
+    popup.className = "phono-family-popup";
+    popup.dataset.family = tileModel.family;
+    popup.style.setProperty("--phono-popup-cols", String(popupCols));
+    popup.style.setProperty("--phono-popup-tile-width", `${Math.max(1, tileRect.width)}px`);
+    popup.style.setProperty("--phono-popup-tile-height", `${Math.max(1, tileRect.height)}px`);
+
+    const grid = document.createElement("div");
+    grid.className = "phono-family-popup-grid";
+
+    tileModel.units.forEach((unit) => {
+      const choice = document.createElement("button");
+      choice.className = "phono-family-choice";
+      choice.type = "button";
+      choice.setAttribute("aria-label", getGraphLabel(unit.id));
+      choice.appendChild(createGraphVisual(unit.id, activeIds));
+      choice.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        addGraphToAnswer(unit.id);
+        closeFamilyPopup();
+      });
+      grid.appendChild(choice);
+    });
+
+    popup.appendChild(grid);
+    state.dom.root?.appendChild(popup);
+    positionFamilyPopup(popup, tile);
+
+    state.openFamilyPopup = {
+      family: tileModel.family,
+      tile,
+      popup
+    };
+  }
+
+  function positionFamilyPopup(popup, tile) {
+    const root = state.dom.root;
+    if (!root || !popup || !tile) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    const gap = 8;
+
+    let left = tileRect.left - rootRect.left;
+    let top = tileRect.bottom - rootRect.top + gap;
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+
+    const popupRect = popup.getBoundingClientRect();
+    left = clamp(left, gap, Math.max(gap, rootRect.width - popupRect.width - gap));
+
+    if (top + popupRect.height > rootRect.height - gap) {
+      top = tileRect.top - rootRect.top - popupRect.height - gap;
+    }
+    top = clamp(top, gap, Math.max(gap, rootRect.height - popupRect.height - gap));
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+  }
+
+  function getFamilyPopupColumnCount(unitCount, tileWidth) {
+    const safeCount = Math.max(1, Number(unitCount) || 1);
+    const desiredCols = safeCount > 5 ? Math.ceil(safeCount / 2) : safeCount;
+    const rootWidth = state.dom.root?.getBoundingClientRect?.().width || 0;
+    const safeTileWidth = Math.max(1, Number(tileWidth) || 1);
+    const gap = 8;
+    const horizontalChrome = 28;
+    const availableWidth = Math.max(safeTileWidth, rootWidth - horizontalChrome);
+    const maxCols = Math.max(1, Math.floor((availableWidth + gap) / (safeTileWidth + gap)));
+
+    return Math.max(1, Math.min(desiredCols, maxCols, safeCount));
+  }
+
+  function closeFamilyPopup() {
+    if (state.openFamilyPopup?.tile) {
+      state.openFamilyPopup.tile.classList.remove("is-open");
+    }
+    state.dom.graphLibrary?.classList.remove("is-family-popup-open");
+    if (state.openFamilyPopup?.popup?.parentNode) {
+      state.openFamilyPopup.popup.remove();
+    }
+    state.openFamilyPopup = null;
   }
 
   function clearAnswer() {
     const question = state.currentQuestion;
 
-    if (state.settings.mode === "cases") {
-      const units = Array.isArray(question?.units) ? question.units : [];
-      state.answer = units.map((unit) => unit.isSilent
-        ? { graph: unit.graph, injected: true, mark: "", title: "", badge: "", displayGraph: null }
-        : null
-      );
+    if (isSlotsMode()) {
+      if (state.settings.inputMode === INPUT_MODES.LETTERS) {
+        const letters = buildCanonicalAnswerEntries(question, { inputMode: INPUT_MODES.LETTERS });
+        state.answer = letters.map(() => null);
+      } else {
+        const units = Array.isArray(question?.units) ? question.units : [];
+        state.answer = units.map((unit) => unit.isSilent
+          ? { type: "graph", id: unit.graph, graph: unit.graph, injected: true, mark: "", title: "", badge: "", displayGraph: null }
+          : null
+        );
+      }
     } else {
       state.answer = [];
     }
@@ -554,15 +950,85 @@ export function createActivity(initialContext = {}) {
     clearAnswer();
   }
 
+  function isSlotsMode() {
+    return state.settings.lengthHintMode === LENGTH_HINT_MODES.BOXES;
+  }
+
+  function isFreeLengthMode() {
+    return state.settings.lengthHintMode !== LENGTH_HINT_MODES.BOXES;
+  }
+
+  function getExpectedAnswerLength() {
+    if (state.settings.inputMode === INPUT_MODES.LETTERS) {
+      return buildCanonicalAnswerEntries(state.currentQuestion, { inputMode: INPUT_MODES.LETTERS }).length;
+    }
+    return Array.isArray(state.currentQuestion?.units) ? state.currentQuestion.units.length : 0;
+  }
+
+  function getEntryDisplayText(entry) {
+    if (entry?.type === "letter") {
+      return String(entry.displayGraph ?? entry.letter ?? entry.id ?? entry.graph ?? "");
+    }
+    return visibleTextOfGraph(entry?.displayGraph ?? entry?.graph ?? entry?.id ?? "");
+  }
+
+  function getUnitSizeBucket(text) {
+    const length = Array.from(String(text || "")).length;
+    if (length >= 5) return "long";
+    if (length >= 3) return "medium";
+    return "short";
+  }
+
+  function serializeUnitPayload(type, id) {
+    return `${type}:${String(id || "")}`;
+  }
+
+  function parseUnitPayload(payload) {
+    const raw = String(payload || "").trim();
+    if (!raw) return { type: "graph", id: "" };
+    if (raw.startsWith("letter:")) return { type: "letter", id: raw.slice(7) };
+    if (raw.startsWith("graph:")) return { type: "graph", id: raw.slice(6) };
+    return { type: "graph", id: raw };
+  }
+
   function addGraphToAnswer(graph, event = null, insertIndex = null) {
     if (!isEditingAnswer()) return;
 
     const selectedSet = new Set(state.settings.graphOrder);
     if (!selectedSet.has(graph)) return;
 
-    const entry = { graph, injected: false, mark: "", title: "", badge: "", displayGraph: null };
+    const entry = { type: "graph", id: graph, graph, injected: false, mark: "", title: "", badge: "", displayGraph: null };
+    addEntryToAnswer(entry, event, insertIndex);
+  }
 
-    if (state.settings.mode === "libre") {
+  function addLetterToAnswer(letter, event = null, insertIndex = null) {
+    if (!isEditingAnswer()) return;
+    const safeLetter = String(letter || "").trim();
+    if (!safeLetter) return;
+    const entry = { type: "letter", id: safeLetter, graph: safeLetter, letter: safeLetter, injected: false, mark: "", title: "", badge: "", displayGraph: null };
+    addEntryToAnswer(entry, event, insertIndex);
+  }
+
+  function addCurrentInputToAnswer(id, event = null, insertIndex = null) {
+    if (state.settings.inputMode === INPUT_MODES.LETTERS) {
+      addLetterToAnswer(id, event, insertIndex);
+    } else {
+      addGraphToAnswer(id, event, insertIndex);
+    }
+  }
+
+  function addPayloadToAnswer(payload, event = null, insertIndex = null) {
+    const unit = parseUnitPayload(payload);
+    if (!unit.id) return;
+    if (unit.type === "letter") {
+      addLetterToAnswer(unit.id, event, insertIndex);
+    } else {
+      addGraphToAnswer(unit.id, event, insertIndex);
+    }
+  }
+
+  function addEntryToAnswer(entry, event = null, insertIndex = null) {
+    if (isFreeLengthMode()) {
       if (insertIndex == null) {
         state.answer.push(entry);
       } else {
@@ -589,7 +1055,7 @@ export function createActivity(initialContext = {}) {
   function removeAt(index) {
     if (!isEditingAnswer()) return;
 
-    if (state.settings.mode === "libre") {
+    if (isFreeLengthMode()) {
       const entry = state.answer[index];
       if (!entry || entry.injected) return;
       state.answer.splice(index, 1);
@@ -609,14 +1075,14 @@ export function createActivity(initialContext = {}) {
 
     dom.answerTrack.innerHTML = "";
 
-    const isSlotsMode = state.settings.mode === "cases";
-    dom.answerBox.classList.toggle("is-slots", isSlotsMode);
-    dom.answerBox.classList.toggle("is-inline-row", !isSlotsMode);
-    dom.answerTrack.classList.toggle("is-slots-track", isSlotsMode);
-    dom.answerTrack.classList.toggle("is-inline-track", !isSlotsMode);
+    const slotsMode = isSlotsMode();
+    dom.answerBox.classList.toggle("is-slots", slotsMode);
+    dom.answerBox.classList.toggle("is-inline-row", !slotsMode);
+    dom.answerTrack.classList.toggle("is-slots-track", slotsMode);
+    dom.answerTrack.classList.toggle("is-inline-track", !slotsMode);
 
-    if (isSlotsMode) {
-      const slotCount = Math.max(state.answer.length, state.currentQuestion?.units?.length || 0);
+    if (slotsMode) {
+      const slotCount = Math.max(state.answer.length, getExpectedAnswerLength());
 
       for (let index = 0; index < slotCount; index += 1) {
         const slot = document.createElement("div");
@@ -634,9 +1100,9 @@ export function createActivity(initialContext = {}) {
         slot.addEventListener("drop", (event) => {
           if (!isEditingAnswer()) return;
           event.preventDefault();
-          const graph = event.dataTransfer?.getData("text/plain");
-          if (graph) {
-            addGraphToAnswer(graph, event);
+          const payload = event.dataTransfer?.getData("text/plain");
+          if (payload) {
+            addPayloadToAnswer(payload, event);
           }
         });
 
@@ -668,7 +1134,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function renderCanonicalAnswer() {
-    state.answer = buildCanonicalAnswerEntries(state.currentQuestion);
+    state.answer = buildCanonicalAnswerEntries(state.currentQuestion, { inputMode: state.settings.inputMode });
     renderAnswer();
   }
 
@@ -677,10 +1143,12 @@ export function createActivity(initialContext = {}) {
     chip.className = "phono-chip";
     chip.dataset.graph = entry.graph;
     chip.dataset.idx = String(index);
-    chip.textContent = visibleTextOfGraph(entry.displayGraph ?? entry.graph);
+    const displayText = getEntryDisplayText(entry);
+    chip.textContent = displayText;
+    chip.dataset.unitSize = getUnitSizeBucket(displayText);
 
     const visualMark = getVisualMark(entry.mark);
-    if (visualMark.chipClass && state.settings.mode !== "cases") {
+    if (visualMark.chipClass && !isSlotsMode()) {
       chip.classList.add(visualMark.chipClass);
     }
 
@@ -688,7 +1156,7 @@ export function createActivity(initialContext = {}) {
       chip.classList.add("dotted");
     }
 
-    if (state.settings.mode === "libre" && !entry.injected) {
+    if (isFreeLengthMode() && !entry.injected) {
       chip.draggable = isEditingAnswer();
 
       chip.addEventListener("dragstart", (event) => {
@@ -781,9 +1249,13 @@ export function createActivity(initialContext = {}) {
       return;
     }
 
-    const result = evaluateWordAttempt(state.currentQuestion, state.answer, {
-      selectedGraphs: state.settings.graphOrder
-    });
+    const result = state.settings.inputMode === INPUT_MODES.LETTERS
+      ? evaluateLetterAttempt(state.currentQuestion, state.answer, {
+        preserveSlots: isSlotsMode()
+      })
+      : evaluateWordAttempt(state.currentQuestion, state.answer, {
+        selectedGraphs: state.settings.graphOrder
+      });
 
     const verdict = String(result.verdict || "").trim();
     state.answer = Array.isArray(result.entries) ? result.entries : [];
@@ -810,7 +1282,7 @@ export function createActivity(initialContext = {}) {
       return false;
     }
 
-    const mode = state.settings.individualValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED;
+    const mode = getEffectiveIndividualValidationMode();
 
     if (mode === INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE) {
       return verdict === "red";
@@ -864,7 +1336,7 @@ export function createActivity(initialContext = {}) {
   function canExposeFinalCorrectionToggle() {
     return state.responseUi === "boxed"
       && !!state.currentQuestion
-      && isFinalCorrectionToggleValidationMode(state.settings.individualValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED);
+      && isFinalCorrectionToggleValidationMode(getEffectiveIndividualValidationMode());
   }
 
   function getAnswerDisplayStateForShell() {
@@ -896,7 +1368,15 @@ export function createActivity(initialContext = {}) {
       && state.shellToggleAvailable === true
       && !!state.currentQuestion
       && !!state.studentAnswerSnapshot
-      && isFinalCorrectionToggleValidationMode(state.settings.individualValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED);
+      && isFinalCorrectionToggleValidationMode(getEffectiveIndividualValidationMode());
+  }
+
+  function getEffectiveIndividualValidationMode() {
+    const mode = state.settings.individualValidationMode || INDIVIDUAL_VALIDATION_MODES.UNLIMITED;
+    if (state.settings.inputMode === INPUT_MODES.LETTERS && mode === INDIVIDUAL_VALIDATION_MODES.GRAPHO_TOLERANCE) {
+      return INDIVIDUAL_VALIDATION_MODES.UNLIMITED;
+    }
+    return mode;
   }
 
   function isAnswerDisplayPhase() {
@@ -942,6 +1422,27 @@ export function createActivity(initialContext = {}) {
     queueAnswerScaleUpdate();
   }
 
+  function resetAnswerScaleHandling() {
+    if (state.answerScaleObserver) {
+      state.answerScaleObserver.disconnect();
+      state.answerScaleObserver = null;
+    }
+
+    if (state.answerScaleRaf) {
+      cancelAnimationFrame(state.answerScaleRaf);
+      state.answerScaleRaf = 0;
+    }
+
+    if (state.onWindowResize) {
+      window.removeEventListener("resize", state.onWindowResize);
+      state.onWindowResize = null;
+    }
+
+    if (state.dom.answerBox) {
+      delete state.dom.answerBox.dataset.scaleReady;
+    }
+  }
+
   function queueAnswerScaleUpdate() {
     if (state.answerScaleRaf) {
       cancelAnimationFrame(state.answerScaleRaf);
@@ -960,7 +1461,7 @@ export function createActivity(initialContext = {}) {
 
     track.style.transform = "scale(1)";
 
-    if (state.settings.mode === "cases") {
+    if (isSlotsMode()) {
       return;
     }
 
@@ -997,7 +1498,7 @@ export function createActivity(initialContext = {}) {
         event.dataTransfer.dropEffect = payload === "__MOVE__" ? "move" : "copy";
       }
 
-      if (state.settings.mode !== "libre") return;
+      if (!isFreeLengthMode()) return;
       const index = getInsertIndexFromPointer(dom.answerBox, event.clientX, event.clientY);
       showInsertBarAt(dom.answerBox, index);
     });
@@ -1017,7 +1518,7 @@ export function createActivity(initialContext = {}) {
 
       if (!payload) return;
 
-      if (state.settings.mode === "libre") {
+      if (isFreeLengthMode()) {
         const index = getInsertIndexFromPointer(dom.answerBox, event.clientX, event.clientY);
 
         if (payload === "__MOVE__" && state.dragFromAnswerIndex != null) {
@@ -1032,11 +1533,11 @@ export function createActivity(initialContext = {}) {
           return;
         }
 
-        addGraphToAnswer(payload, event, index);
+        addPayloadToAnswer(payload, event, index);
         return;
       }
 
-      addGraphToAnswer(payload, event);
+      addPayloadToAnswer(payload, event);
     });
   }
 
@@ -1085,17 +1586,12 @@ export function createActivity(initialContext = {}) {
   }
 
   function syncActionButton() {
-    const button = state.dom.btnCheck;
     const clearButton = state.dom.btnClear;
-    const manual = state.phaseMode === "answer-manual";
-    const timed = state.phaseMode === "answer-timed";
     const activeQuestion = isEditingAnswer();
 
-    if (button) {
-      button.textContent = manual ? "Nouveau mot" : "Vérifier";
-      button.classList.toggle("is-answer-manual", manual);
-      button.classList.toggle("is-answer-timed", timed);
-      button.disabled = timed;
+    syncPhaseClasses();
+    if (!activeQuestion) {
+      closeFamilyPopup();
     }
 
     if (clearButton) {
@@ -1103,17 +1599,30 @@ export function createActivity(initialContext = {}) {
       clearButton.classList.toggle("is-disabled-phase", !activeQuestion);
     }
 
-    state.latestContext?.services?.notifyValidationStateChanged?.();
+    if (state.currentQuestion || state.phaseMode !== "question-active") {
+      state.latestContext?.services?.notifyValidationStateChanged?.();
+    }
   }
 
-  function getGraphImageUrl(graph) {
-    return new URL(`./assets/graphs/${getGraphFilename(graph)}`, import.meta.url).href;
+  function syncPhaseClasses() {
+    const root = state.dom.root;
+    if (!root) return;
+    const isBoxed = state.responseUi === "boxed";
+    const isAnswerPhase = state.phaseMode === "answer-manual" || state.phaseMode === "answer-timed";
+    root.classList.toggle("is-response-free", !isBoxed);
+    root.classList.toggle("is-response-boxed", isBoxed);
+    root.classList.toggle("is-question-active", state.phaseMode === "question-active");
+    root.classList.toggle("is-answer-phase", isAnswerPhase);
+    root.classList.toggle("is-input-letters", state.settings.inputMode === INPUT_MODES.LETTERS);
+    root.classList.toggle("is-input-graphemes", state.settings.inputMode !== INPUT_MODES.LETTERS);
   }
 
-  function makeDragChip(graph) {
+  function makeDragChip(unit) {
     const element = document.createElement("div");
     element.className = "phono-chip good";
-    element.textContent = visibleTextOfGraph(graph);
+    element.textContent = typeof unit === "object"
+      ? getEntryDisplayText(unit)
+      : visibleTextOfGraph(unit);
     element.style.position = "absolute";
     element.style.left = "-9999px";
     element.style.top = "-9999px";
@@ -1221,12 +1730,22 @@ export function createActivity(initialContext = {}) {
     state.pendingLibraryTouch = createPendingLibraryTouch();
   }
 
-  function shouldSuppressLibraryClick() {
-    return Date.now() < state.suppressLibraryClickUntil;
+  function shouldSuppressLibraryClick(options = {}) {
+    const shouldSuppress = state.suppressLibraryClickOnce || Date.now() < state.suppressLibraryClickUntil;
+    if (shouldSuppress && options.consume) {
+      state.suppressLibraryClickOnce = false;
+    }
+    return shouldSuppress;
   }
 
   function suppressNextLibraryClick() {
-    state.suppressLibraryClickUntil = Date.now() + 400;
+    state.suppressLibraryClickOnce = true;
+    state.suppressLibraryClickUntil = Date.now() + 900;
+    window.setTimeout(() => {
+      if (Date.now() >= state.suppressLibraryClickUntil) {
+        state.suppressLibraryClickOnce = false;
+      }
+    }, 950);
   }
 
   function handleGlobalPointerMoveForLibrary(event) {
@@ -1324,7 +1843,7 @@ export function createActivity(initialContext = {}) {
 
     updateGhost(x, y);
 
-    if (state.settings.mode === "libre") {
+    if (isFreeLengthMode()) {
       if (isOverAnswerBox(x, y)) {
         const index = getInsertIndexFromPointer(state.dom.answerBox, x, y);
         showInsertBarAt(state.dom.answerBox, index);
@@ -1346,7 +1865,7 @@ export function createActivity(initialContext = {}) {
 
     if (!moved || !isEditingAnswer()) return;
 
-    if (state.settings.mode === "libre") {
+    if (isFreeLengthMode()) {
       if (!isOverAnswerBox(x, y)) return;
       const index = getInsertIndexFromPointer(state.dom.answerBox, x, y);
 
@@ -1361,15 +1880,15 @@ export function createActivity(initialContext = {}) {
         return;
       }
 
-      addGraphToAnswer(graph, null, index);
+      addCurrentInputToAnswer(graph, null, index);
       return;
     }
 
     const slot = slotFromPoint(x, y);
     if (slot) {
-      addGraphToAnswer(graph, { target: slot });
+      addCurrentInputToAnswer(graph, { target: slot });
     } else {
-      addGraphToAnswer(graph, null);
+      addCurrentInputToAnswer(graph, null);
     }
   }
 
@@ -1395,7 +1914,7 @@ export function createActivity(initialContext = {}) {
   }
 
   function isEditingAnswer() {
-    return state.responseUi === "boxed" && state.phaseMode === "question-active";
+    return state.responseUi === "boxed" && state.phaseMode === "question-active" && !!state.currentQuestion;
   }
 
   function updatePromptDisplay() {
@@ -1427,11 +1946,19 @@ export function createActivity(initialContext = {}) {
   function teardownRuntime(container) {
     releaseDragState();
     resetPendingLibraryTouch();
+    closeFamilyPopup();
+    clearFamilyCycleTimers();
 
     if (state.globalHandlersBound) {
       document.removeEventListener("pointermove", state.onGlobalPointerMove, { passive: false });
       document.removeEventListener("pointerup", state.onGlobalPointerUp, { passive: false });
       document.removeEventListener("pointercancel", state.onGlobalPointerCancel, { passive: false });
+      if (state.onDocumentPointerDownFamily) {
+        document.removeEventListener("pointerdown", state.onDocumentPointerDownFamily, true);
+      }
+      if (state.onDocumentClickFamily) {
+        document.removeEventListener("click", state.onDocumentClickFamily, true);
+      }
     }
 
     if (state.answerScaleObserver) {

@@ -330,6 +330,8 @@ export async function mountConfigEditor(options = {}){
   els = createEditorElements();
   editorAbortController = new AbortController();
   resetEditorState();
+  renderConfigTable();
+  renderEmptyToolPanel();
 
   await boot();
 
@@ -447,6 +449,8 @@ async function boot(){
       } catch (err) {
         setMessage(err?.message || "Impossible d’ouvrir les réglages du premier outil.", true);
       }
+    } else {
+      renderEmptyToolPanel();
     }
 
     await refreshActivityDurationEstimate();

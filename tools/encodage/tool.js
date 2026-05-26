@@ -1,13 +1,13 @@
 import * as config from "./config.js";
 import { createActivity as createEncodageActivity } from "./activity.js";
-import { normalizeSettings } from "./model.js";
+import { INPUT_MODES, normalizeSettings } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
 const DEFAULT_INSTRUCTION = "Encode ce mot.";
 
 export default defineTool("encodage", "Encodage", {
-  version: "1",
-  description: "Encodage phonographique avec bibliothèque de graphèmes, réponse libre ou en cases et correction différenciée.",
+  version: "2",
+  description: "Encodage phonographique avec graphèmes canoniques, familles d’affichage, saisie graphèmes ou lettres et tirage pondéré.",
   tags: ["phonologie", "encodage", "graphèmes", "drag-drop", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
   supportsCustomInstruction: true,
@@ -40,7 +40,7 @@ export default defineTool("encodage", "Encodage", {
 
   getRunProfile(context = {}) {
     const settings = normalizeSettings(context?.settings);
-    if (!Array.isArray(settings.graphOrder) || settings.graphOrder.length === 0) {
+    if (settings.inputMode === INPUT_MODES.GRAPHEMES && (!Array.isArray(settings.graphOrder) || settings.graphOrder.length === 0)) {
       return {
         blockingMessage: "Aucun graphème n’est sélectionné pour cette activité."
       };
