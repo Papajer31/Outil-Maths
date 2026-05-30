@@ -29,7 +29,8 @@ Contient l’espace enseignant :
 - onglet **Banques** ;
 - partage ;
 - projection ;
-- intégration de l’éditeur tools-first dans le dashboard.
+- intégration de l’éditeur tools-first dans le dashboard ;
+- onglet **Tableau** pour les widgets interactifs projetables.
 
 Le dashboard est découpé en contrôleurs sous `teacher/js/dashboard/`, notamment :
 - `activities-view.js` ;
@@ -87,7 +88,57 @@ Contient les briques communes actives :
 
 Dans le zip courant, `shared/module-registry.js` et `shared/module-factory.js` ne sont pas présents. Les anciennes mentions de ces fichiers dans la documentation sont donc obsolètes.
 
-### 2.4. `tools/`
+### 2.4. `teacher/js/teacher-tools/`
+
+Racine active des widgets de tableau interactif.
+
+Ces widgets ne sont pas des activités élèves :
+- pas de séance ;
+- pas de déroulé de questions ;
+- pas de jauge ;
+- pas de stockage Supabase dans le MVP actuel.
+
+Ils sont pilotés depuis l’onglet **Tableau** du dashboard et affichés dans une fenêtre de projection unique :
+- `teacher/teacher-tools-projector.html`.
+
+Structure actuelle :
+- `teacher/js/teacher-tools/registry.js` : registre des widgets Tableau ;
+- `teacher/js/teacher-tools/channel.js` : canal `BroadcastChannel` dashboard ↔ projection ;
+- `teacher/js/teacher-tools/core/tool-contract.js` : contrat commun minimal des widgets ;
+- `teacher/js/teacher-tools/projector-app.js` : scène projetée, drag, resize, verrouillage, modes d’affichage ;
+- `teacher/js/teacher-tools/widgets/<widget-id>/` : dossier propre à chaque widget.
+
+Widgets Tableau actifs :
+- `random-student` : tirage au sort d’élève basé sur la liste de la classe ;
+- `image` : affichage d’une image sans bordure, redimensionnable, zoomable et déplaçable.
+
+Convention widget Tableau :
+```text
+teacher/js/teacher-tools/widgets/<widget-id>/
+  tool.js
+  model.js
+  control.js
+  projector.js
+  <widget-id>.css
+```
+
+Le widget expose typiquement :
+- `createInitialState(...)` ;
+- `createProjectorState(...)` ;
+- `applyAction(...)` ;
+- `createControlPanel(...)` ;
+- `renderProjector(...)` ;
+- `defaultLayout`, `minLayout` et `interaction`.
+
+La scène Tableau stocke notamment :
+- `scene.background` ;
+- `scene.locked` ;
+- `selectedWidgetId` ;
+- `widgets[]` avec `id`, `toolId`, `visible`, `viewMode`, `zIndex`, `layout`, `state`.
+
+Le verrouillage de scène empêche les déplacements et redimensionnements accidentels, sans bloquer l’utilisation métier des widgets.
+
+### 2.5. `tools/`
 
 Racine active des outils modernes.
 
@@ -107,7 +158,7 @@ Contenu actif :
 - `tools/qcm/` ;
 - `tools/selection/`.
 
-### 2.5. Ancienne racine `modules/`
+### 2.6. Ancienne racine `modules/`
 
 La racine historique `modules/` n’est pas présente dans le dépôt courant.
 
@@ -129,7 +180,7 @@ Il expose :
 - une méta-racine logique `tools / Outils` ;
 - la liste des outils actifs.
 
-À ce jour, douze outils sont déclarés :
+À ce jour, treize outils élèves sont déclarés :
 - `operations` ;
 - `nombre-cible` ;
 - `monnaie` ;

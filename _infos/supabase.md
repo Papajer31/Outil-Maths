@@ -1,666 +1,431 @@
-# Supabase — état actuel du projet
+# Supabase — état cible propre du Site d’outils
 
-## 1) Rôle global
+Version de cadrage : **refonte sans rétrocompatibilité**.
 
-Supabase sert de backend principal pour :
-- l’authentification enseignant ;
-- le stockage des espaces enseignant ;
-- la gestion des classes internes et des élèves ;
-- le stockage des activités, de leur configuration et de leur organisation en dossiers ;
-- la gestion des banques de mots de vocabulaire ;
-- la gestion des presets de phonologie enseignant ;
-- la gestion des listes personnelles de verbes pour l’outil Conjugaison ;
-- la gestion des banques de contenus / questions et de leur arborescence dédiée ;
-- la diffusion publique de certaines données aux élèves via RPC ou tables publiques en lecture ;
-- la résolution des images et des mots de l’outil Encodage.
+Ce document décrit la base Supabase cible **comme si le projet repartait de zéro**. Il ne cherche pas à préserver les anciennes activités, ni l’ancien modèle `activity_configs + activity_folders`.
 
-Ce document résume **l’état structurel déductible du dépôt courant et des attentes front**.
+## 1. Principe général
 
-Important :
-- le zip courant ne contient pas directement les migrations SQL ;
-- les fichiers joints actuels ne contiennent pas non plus de fichier SQL complet ;
-- cette doc décrit donc ce que le front attend réellement aujourd’hui, pas une migration exhaustive prête à appliquer ;
-- dans l’organisation documentaire du projet, d’éventuels SQL de référence peuvent être conservés sous `_infos/`.
+Le nouveau modèle sépare clairement les responsabilités.
 
----
+| Zone produit | Rôle |
+|---|---|
+| **Catalogue** | Activités proposées par le site, fixes pour l’enseignant normal. Le prof peut tester et masquer/afficher pour l’Exploration. |
+| **Exploration** | Côté élève : accès libre à l’arborescence globale du site, filtrée par les activités visibles pour la classe. |
+| **Aventure** | Côté élève : progression adaptative personnelle définie par le site. Visible uniquement en mode seul. Anciennement appelée “Expédition” dans le cadrage. |
+| **Missions** | Côté prof : espace où le prof assemble des activités du Catalogue, règle la passation et attribue à la classe ou à des élèves. Côté élève : une Mission apparait seulement si elle est attribuée. |
+| **Banques** | Ressources personnelles ou système utilisées par certains outils : questions, vocabulaire, listes de verbes, graphèmes, images, etc. |
 
-## 2) Conventions générales
-
-- schéma utilisé : `public` ;
-- tables privées enseignant protégées par RLS ;
-- accès publics élève via RPC contrôlées ;
-- bucket Storage utilisé pour Encodage : `images` ;
-- convention d’assets image :
-  - `slug` = identifiant technique stable ;
-  - `storage_path` pointe vers le fichier public dans le bucket.
-
----
-
-## 3) Tables principales attendues par le front
-
-## 3.1. `teacher_spaces`
-
-### Rôle
-
-Espace enseignant principal.
-Un enseignant authentifié possède un unique espace, identifié publiquement par un `access_code`.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `owner_user_id` ;
-- `access_code` ;
-- `created_at` ;
-- `updated_at` ;
-- `last_opened_at`.
-
-### Usage visible dans le code
-
-- lecture de l’espace courant ;
-- création de l’espace si absent ;
-- mise à jour du code d’accès ;
-- mise à jour de `last_opened_at`.
-
----
-
-## 3.2. `teacher_classes`
-
-### Rôle
-
-Conteneur interne de classes lié à un espace enseignant.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `name` ;
-- `display_order` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture des classes d’un espace ;
-- création ;
-- renommage ;
-- réordonnancement ;
-- suppression.
-
-Remarque :
-- le produit fonctionne très souvent avec une logique « Ma classe » ;
-- la structure de table reste néanmoins multi-classes.
-
----
-
-## 3.3. `students`
-
-### Rôle
-
-Élèves rattachés à une classe enseignant.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_class_id` ;
-- `first_name` ;
-- `grade_level` ;
-- `display_order` ;
-- `is_active` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture des élèves par classe ;
-- lecture agrégée pour l’espace enseignant ;
-- création ;
-- modification ;
-- suppression logique ou physique selon implémentation SQL ;
-- réordonnancement.
-
----
-
-## 3.4. `activity_configs`
-
-### Rôle
-
-Stockage principal des activités et de leur configuration JSON.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `module_key` ;
-- `config_name` ;
-- `config_name_normalized` ;
-- `config_json` ;
-- `created_at` ;
-- `updated_at`.
-
-### Point métier important
-
-Dans l’état actuel du projet :
-- les activités sont stockées comme des configurations JSON séquencées ;
-- `config_json.sequence` contient une suite ordonnée d’outils ;
-- les métadonnées de dashboard et de mode d’activité sont aussi portées dans `config_json`.
-
-### Point de transition important
-
-Le champ `module_key` existe toujours en base.
-Dans le flux actif actuel :
-- la clé logique réellement utilisée côté app est essentiellement `tools`.
-
-Autrement dit :
-- le stockage reste compatible avec l’ancienne notion de module ;
-- le produit actif s’oriente maintenant vers une racine unique d’outils.
-
----
-
-## 3.5. `activity_folders`
-
-### Rôle
-
-Organisation des activités en dossiers / sous-dossiers dans le dashboard enseignant et dans la navigation élève.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `parent_id` ;
-- `name` ;
-- `display_order` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture privée enseignant ;
-- lecture publique par RPC ;
-- création ;
-- renommage ;
-- déplacement logique par `parent_id` ;
-- suppression.
-
----
-
-## 3.6. `teacher_vocabulary_words`
-
-### Rôle
-
-Banque de mots de vocabulaire propre à chaque espace enseignant.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `word` ;
-- `word_normalized` ;
-- `dictionary_page` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture de la banque enseignant ;
-- remplacement complet via RPC ;
-- reset depuis la banque par défaut via RPC.
-
----
-
-## 3.7. `vocabulary_default_words`
-
-### Rôle
-
-Liste publique de mots servant de base à la banque de vocabulaire de chaque espace enseignant.
-
-### Colonnes attendues
-
-- `id` ;
-- `word` ;
-- `word_normalized` ;
-- `dictionary_page` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible côté produit
-
-- source de clonage initial ou de reset pour `teacher_vocabulary_words`.
-
----
-
-## 3.8. `teacher_phonology_presets`
-
-### Rôle
-
-Presets enseignant liés à la phonologie, actuellement utilisés pour Encodage.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `tool_key` ;
-- `name` ;
-- `graph_order` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture ;
-- upsert ;
-- suppression.
-
-Remarque :
-- rien d’équivalent n’est encore branché pour les nouveaux outils mathématiques `operations`, `nombre-cible`, `monnaie` ou `operations-trous` ;
-- leurs réglages vivent dans `activity_configs.config_json`.
-
----
-
-
-## 3.8 bis. `teacher_conjugation_lists`
-
-### Rôle
-
-Listes personnelles de verbes enregistrées par l’enseignant pour l’outil Conjugaison.
-
-Ces listes vivent dans Supabase comme ressources de l’espace enseignant. Une activité peut référencer une liste personnelle : si la liste est corrigée ou complétée, les activités qui la référencent utilisent la version mise à jour.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `name` ;
-- `normalized_name` ;
-- `verbs_json` avec la forme `{ "infinitives": [...] }` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture des listes personnelles de l’espace enseignant ;
-- création ;
-- renommage ;
-- mise à jour du contenu ;
-- suppression sécurisée côté UI après recherche des activités qui référencent la liste ;
-- résolution publique contrôlée via RPC `get_conjugation_personal_list` lors du chargement runtime élève.
-
-Remarque :
-- les listes personnelles sont privées par RLS ;
-- l’accès élève ne lit pas directement la table, il passe par la RPC publique contrôlée par `access_code`.
-
-## 3.9. `image_assets`
-
-### Rôle
-
-Catalogue public minimal d’assets image, utilisé notamment pour Encodage.
-
-### Colonnes attendues par le front
-
-- `slug` ;
-- `storage_path` ;
-- `is_active`.
-
-Le front exploite surtout ces champs.
-
-### Usage visible dans le code
-
-- lecture publique ;
-- filtrage éventuel sur `is_active` ;
-- résolution d’URL publique via Storage.
-
----
-
-## 3.10. `phonology_words`
-
-### Rôle
-
-Table publique de mots pour Encodage.
-
-### Colonnes attendues par le front
-
-- `slug` ;
-- `word` ;
-- `units` ;
-- `is_active`.
-
-### Usage visible dans le code
-
-- lecture publique ;
-- filtrage éventuel sur `is_active` ;
-- consommation directe de `units` côté front.
-
----
-
-## 3.11. `question_bank_folders`
-
-### Rôle
-
-Organisation dédiée des banques de questions en dossiers / sous-dossiers dans l’onglet enseignant `Banques`.
-Cette arborescence est **strictement séparée** de `activity_folders` : elle utilise les mêmes styles et le même modèle UX côté dashboard, mais ne partage pas les données des activités.
-
-### Colonnes attendues par le front
-
-- `id` ;
-- `teacher_space_id` ;
-- `parent_id` ;
-- `name` ;
-- `display_order` ;
-- `created_at` ;
-- `updated_at`.
-
-### Usage visible dans le code
-
-- lecture privée enseignant ;
-- création de dossier à l’emplacement courant ;
-- renommage ;
-- suppression si le dossier est vide ;
-- construction du fil d’Ariane et de l’explorateur `Banques`.
-
----
-
-## 3.12. `question_banks`
-
-### Rôle
-
-Table de banques de contenus, conçue pour rester extensible.
-
-Types réellement exploités par le front :
-- `text_answer` → questions à réponse textuelle courte ;
-- `qcm` → questions à choix unique ;
-- `selection` → sélection de mots dans un énoncé.
-
-La table reste volontairement générique afin de pouvoir accueillir plus tard d’autres mécaniques.
-
-### Colonnes attendues / utilisées
-
-- `id` ;
-- `teacher_space_id` ;
-- `source_bank_id` ;
-- `folder_id` ;
-- `display_order` ;
-- `bank_type` ;
-- `title` ;
-- `title_normalized` ;
-- `description` ;
-- `subject` ;
-- `grade_level` ;
-- `tags` ;
-- `is_system` ;
-- `share_code` ;
-- `created_at` ;
-- `updated_at`.
-
-### Statuts prévus
-
-- banque personnelle : `is_system = false`, rattachée à un `teacher_space_id` ;
-- banque système : `is_system = true`, sans `teacher_space_id`, lisible par tous les enseignants connectés ;
-- banque copiée/importée : banque personnelle pouvant référencer une banque source via `source_bank_id`.
-
-Organisation :
-- `folder_id = null` place la banque à la racine de l’explorateur Banques ;
-- `folder_id` pointe vers `question_bank_folders.id` pour ranger la banque dans un dossier ;
-- `display_order` ordonne les banques parmi les dossiers et banques du même niveau.
-
-Les banques système restent hors arborescence enseignant (`folder_id = null`) et sont affichées à la racine.
-
-Le partage par code est préparé par la colonne `share_code`, mais l’UX complète d’import par code peut être ajoutée plus tard.
-
----
-
-## 3.13. `question_bank_items`
-
-### Rôle
-
-Items ordonnés d’une banque.
-Chaque item possède un `item_type` et un `payload_json` afin que la structure reste extensible.
-
-### Colonnes attendues / utilisées
-
-- `id` ;
-- `bank_id` ;
-- `item_type` ;
-- `prompt` ;
-- `payload_json` ;
-- `position` ;
-- `is_active` ;
-- `created_at` ;
-- `updated_at`.
-
-### Payload `text_answer`
-
-Le front exploite notamment :
-
-```json
-{
-  "mainAnswer": "Charlemagne",
-  "acceptedAnswers": ["Charles le Grand", "Charles Ier"],
-  "explanation": ""
-}
-```
-
-### Payload `qcm`
-
-Le front exploite notamment :
-
-```json
-{
-  "correctAnswer": "Charlemagne",
-  "distractors": ["Clovis", "Louis XIV", "Charles Martel"],
-  "explanation": ""
-}
-```
-
-Dans l’import rapide, les distracteurs QCM sont saisis dans une seule colonne `Distracteurs`, séparés par `;`.
-L’éditeur les affiche ensuite en colonnes `Distracteur 1`, `Distracteur 2`, etc., avec uniquement les colonnes utiles plus une colonne vide d’avance.
-Le front transforme le tout en tableau `distractors` avant sauvegarde.
-
-### Payload `selection`
-
-Le front exploite notamment :
-
-```json
-{
-  "expectedTokenIndexes": [1, 2, 8],
-  "expectedSelectionText": "gentil; petit; jaune",
-  "explanation": "Les adjectifs précisent les noms."
-}
-```
-
-`expectedTokenIndexes` stocke les indices des tokens-mots dans l’énoncé, afin de gérer correctement les mots répétés.
-La consigne d’un exercice de sélection appartient à l’activité via le widget commun de consigne personnalisable ; elle n’est pas stockée item par item dans la banque.
-
----
-
-## 4) RPC publiques attendues par le front élève
-
-Le front élève appelle actuellement les RPC suivantes :
-- `access_code_exists` ;
-- `get_space_activities` ;
-- `get_activity_config` ;
-- `get_space_activity_folders` ;
-- `get_space_classes` ;
-- `get_space_students` ;
-- `get_space_vocabulary_words` ;
-- `get_question_bank_items_for_space`.
-
-### Détail attendu pour `get_question_bank_items_for_space`
-
-Le front attend :
-- paramètres `p_access_code text`, `p_bank_id uuid` ;
-- retour des items actifs seulement ;
-- accès autorisé si la banque est système ou si elle appartient à l’espace correspondant au code d’accès ;
-- exécution possible pour l’accès élève public.
-
----
-
-## 5) Fonctions privées / RPC utilisées côté enseignant
-
-Le front enseignant appelle ou attend notamment :
-- `replace_teacher_vocabulary_words` ;
-- `reset_teacher_vocabulary_words` ;
-- `replace_question_bank_items`.
-
-### Détail attendu pour `replace_question_bank_items`
-
-Le front attend :
-- paramètres `p_bank_id uuid`, `p_items jsonb` ;
-- remplacement atomique ou équivalent fiable : suppression des items de la banque puis insertion de la nouvelle liste ;
-- maintien des contrôles RLS si la fonction est exécutée avec les droits de l’utilisateur courant ;
-- exécution réservée aux utilisateurs authentifiés.
-
-Le front possède aussi un fallback : si la RPC est absente, il tente suppression puis insertion directe côté client. Une RPC opérationnelle rend normalement ce fallback inutile.
-
-### Migration ajoutée pour l’explorateur Banques
-
-Le dépôt contient maintenant le fichier SQL suivant :
+Le flux élève cible est :
 
 ```txt
-_infos/sql/2026-05-10_question_bank_folders.sql
+Code classe
+→ seul / groupe
+→ prénom(s)
+→ code élève uniquement en mode seul
+→ écran principal
+   - Exploration
+   - Aventure uniquement en mode seul
+   - Mission uniquement si disponible
 ```
 
-Il ajoute :
-- la table `question_bank_folders` ;
-- `folder_id` et `display_order` sur `question_banks` ;
-- les index utiles ;
-- les policies RLS des dossiers de banques ;
-- un trigger de validation pour empêcher qu’une banque personnelle pointe vers un dossier d’un autre espace enseignant.
+## 2. Ce qui disparait volontairement
 
-Hotfix associé :
+Les éléments suivants appartiennent à l’ancien modèle et ne doivent pas être conservés dans le socle cible :
+
+| Ancien élément | Décision |
+|---|---|
+| `activity_configs` | Supprimé du modèle cible. Une activité n’est plus une configuration personnelle séquencée. |
+| `activity_folders` | Supprimé du Catalogue. La logique d’arborescence libre est transférée vers `mission_folders`. |
+| `config_json.sequence` | Supprimé comme modèle métier d’activité. Les suites vivent dans les Missions. |
+| `get_space_activities` | Remplacé par la logique Catalogue/visibilité et Missions. |
+| `get_activity_config` | Remplacé par le chargement des activités du Catalogue côté code, puis par le futur super-admin. |
+| `get_space_activity_folders` | Remplacé par l’arborescence fixe du Catalogue côté code et les Missions attribuées. |
+| Bloc “Mode de passation général” | Supprimé du Catalogue. La passation est définie par la porte d’entrée ou par la Mission. |
+| Réglages communs dans les activités du Catalogue | Supprimés pour l’enseignant normal. Exploration a des réglages système fixes ; Aventure adapte ; Mission règle explicitement. |
+
+## 3. Tables principales du socle
+
+## 3.1 `teacher_spaces`
+
+Espace propriétaire d’un enseignant authentifié.
+
+Colonnes principales :
+
+- `id`
+- `owner_user_id`
+- `access_code`
+- `created_at`
+- `updated_at`
+- `last_opened_at`
+
+Contraintes :
+
+- un espace par utilisateur ;
+- `access_code` unique ;
+- format recommandé : `^[A-Z]{3,12}$`.
+
+## 3.2 `teacher_classes`
+
+Classes internes d’un espace enseignant.
+
+Colonnes principales :
+
+- `id`
+- `teacher_space_id`
+- `name`
+- `display_order`
+
+La table reste multi-classes, même si le flux courant utilise souvent une classe principale.
+
+## 3.3 `students`
+
+Élèves rattachés à une classe.
+
+Colonnes principales :
+
+- `id`
+- `teacher_class_id`
+- `first_name`
+- `grade_level`
+- `student_code`
+- `display_order`
+- `is_active`
+
+`student_code` est le **code élève** interne à la classe :
+
+- 3 caractères ;
+- lisible et modifiable par l’enseignant ;
+- utilisé uniquement en mode seul ;
+- destiné à éviter qu’un élève modifie l’Aventure personnelle d’un camarade ;
+- ce n’est pas un mot de passe confidentiel.
+
+## 4. Catalogue et Exploration
+
+## 4.1 Catalogue fixe
+
+Le Catalogue est d’abord défini côté code, pas en base.
+
+Arborescence cible :
 
 ```txt
-_infos/sql/2026-05-10_question_bank_folders_rls_hotfix.sql
+Français
+  Lecture
+  Écriture
+  Oral
+  Vocabulaire
+  Grammaire
+  Orthographe
+
+Mathématiques
+  Nombres
+  Calculs
+  Résolution de problèmes
+  Grandeurs et mesures
+  Espace et géométrie
+  Organisation et gestion de données
+
+EMC
+Questionner le monde
+Anglais
+Autres
 ```
 
-Ce correctif retire des policies INSERT/UPDATE la vérification directe du parent dans `question_bank_folders`, qui pouvait provoquer `infinite recursion detected in policy for relation "question_bank_folders"`.
-La cohérence du parent, de l’espace enseignant et l’interdiction de déplacer un dossier dans ses descendants sont prises en charge par un trigger `SECURITY DEFINER`.
+Chaque activité du Catalogue aura un identifiant stable côté code, par exemple :
 
----
+```txt
+maths.calculs.operations.additions-sans-retenue
+francais.lecture.encodage.graphèmes-simples
+```
 
-## 6) Lecture fonctionnelle de `activity_configs.config_json`
+## 4.2 `catalog_activity_visibility`
 
-Une activité active contient notamment :
-- `sequence` → séquence ordonnée d’outils ;
-- `globals` → réglages globaux d’activité ;
-- `activity_mode` → mode social de passation ;
-- `response_ui` → réponse saisie (`boxed`) ou non saisie (`free`) ;
-- `progress_mode` → situation d’évaluation (`evaluated`) ou d’entrainement (`practice`) ;
-- `dashboard` → métadonnées d’affichage / visibilité / dossier / ordre.
+Table d’overrides par espace enseignant.
 
-`activity_mode` est le mode social réellement sauvegardé de l’activité. Dans l’éditeur, il peut être basculé entre `individual` et `group` depuis la tuile déployable `Mode de passation général`, après vérification de compatibilité de tous les outils de la séquence. Cette bascule n’est pas un mode temporaire de lancement : une fois enregistrée, elle modifie la configuration stockée dans `activity_configs.config_json`.
+Rôle :
 
-Cadrage produit retenu : le mode de passation général d’une activité repose sur trois critères globaux persistés : `activity_mode` (`individual/group`), `response_ui` (`boxed/free`) et `progress_mode` (`evaluated/practice`). Le profil `individual + free + evaluated` est interdit par l’éditeur car il reviendrait à évaluer individuellement un élève sans réponse saisie.
+- stocker ce que l’enseignant masque ou réaffiche dans l’Exploration ;
+- ne pas stocker le Catalogue complet ;
+- absence de ligne = comportement par défaut, donc activité visible.
 
-Chaque item de `sequence` contient un `draft` normalisé qui peut porter notamment :
-- `questionCount` ;
-- `questionFlowMode` (`fixed`, `unlimited`, `successGoal`) ;
-- `timePerQ` ;
-- `answerTime` ;
-- `questionTransitionSec` ;
-- `questionTransitionInfinite` ;
-- `toolMaxTimeMin` ;
-- `toolMaxTimeInfinite` ;
-- `successGoalCorrectCount` ;
-- `successGoalSafetyMilestones` ;
-- les variantes infinies des réglages temporels concernés ;
-- `settings`, qui contient les réglages propres à l’outil.
+Colonnes principales :
 
-Dans l’UI actuelle, le widget `Questions` distingue `Nombre fixe`, `Illimitées` et `Objectif de réussite` via le champ explicite `questionFlowMode`. `Objectif de réussite` est disponible quand `response_ui = boxed` et `progress_mode = evaluated`, et utilise `successGoalCorrectCount` et `successGoalSafetyMilestones`.
+- `teacher_space_id`
+- `catalog_activity_id`
+- `is_visible`
 
-Conséquence produit :
-- la table `activity_configs` ne stocke plus seulement une configuration d’ancien module ;
-- elle stocke désormais un **conteneur d’activité** capable d’héberger une séquence d’outils.
+## 4.3 Réglages d’Exploration
 
-Les outils actifs, y compris `nombre-cible`, `monnaie` et `operations-trous`, sont stockés comme items de `sequence`. Leurs réglages métier vivent dans `draft.settings`, tandis que les réglages communs de flux, de rythme et de durée maximale vivent directement dans le `draft` de l’item.
+Exploration utilise des réglages système imposés :
 
-La projection n’est pas un mode de passation stocké : elle est un contexte d’exécution qui respecte `activity_mode`, `response_ui` et `progress_mode`.
+```txt
+Nombre de questions : 5
+Temps par question : infini
+Temps d’affichage réponse : infini
+Temps entre questions : 0
+Durée maximale : infini
+Consigne : consigne par défaut de l’outil
+```
 
----
+Ces réglages ne sont pas modifiables par l’enseignant normal dans le Catalogue.
 
-## 7) RLS / exposition attendue
+## 5. Missions
 
-### Tables privées enseignant
+L’onglet **Missions** remplace l’ancien rôle de l’onglet Activités composé.
 
-Attendu en accès propriétaire authentifié :
-- `teacher_spaces` ;
-- `teacher_classes` ;
-- `students` ;
-- `activity_configs` ;
-- `activity_folders` ;
-- `teacher_vocabulary_words` ;
-- `teacher_phonology_presets` ;
-- `teacher_conjugation_lists` ;
-- `question_bank_folders` ;
-- `question_banks` personnelles ;
-- `question_bank_items` des banques personnelles.
+Une Mission est :
 
-### Tables publiques en lecture
+```txt
+une suite ordonnée d’activités du Catalogue
++ des réglages de passation
++ une attribution à la classe ou à des élèves
++ un rangement libre dans une arborescence personnelle
+```
 
-Attendu en lecture publique ou semi-publique selon SQL :
-- `image_assets` ;
-- `phonology_words` ;
-- probablement `vocabulary_default_words`.
+## 5.1 `mission_folders`
 
-### Banques système
+Arborescence libre personnelle de l’enseignant pour ranger ses Missions.
 
-Pour `question_banks` :
-- les banques système sont lisibles par les comptes authentifiés ;
-- elles ne sont pas modifiables par le front enseignant ;
-- les items héritent des droits de leur banque parente.
+Elle reprend l’esprit de l’ancien `activity_folders`, mais sans confusion avec le Catalogue.
 
-### Accès élève aux banques
+Attention RLS :
 
-L’élève ne lit pas directement `question_banks` / `question_bank_items`.
-Il passe par `get_question_bank_items_for_space`, qui contrôle :
-- le code d’accès ;
-- la banque demandée ;
-- le statut système ou propriétaire de la banque ;
-- `is_active = true` sur les items.
+- ne pas valider parent/enfant dans une policy RLS qui relit `mission_folders` ;
+- utiliser une policy simple + trigger `SECURITY DEFINER` pour éviter les récursions infinies.
 
----
+## 5.2 `missions`
 
-## 8) Mini-langage de mise en forme
+Objet principal créé par l’enseignant.
 
-Les champs d’énoncé et d’explication peuvent utiliser un mini-langage stocké en texte brut :
+Colonnes principales :
 
-- `§` → retour à la ligne ;
-- `*mot*` → gras ;
-- `_mot_` → italique ;
-- `[mot]` → mise en évidence colorée.
+- `id`
+- `teacher_space_id`
+- `folder_id`
+- `title`
+- `title_normalized`
+- `status` : `draft`, `active`, `archived`
+- `answer_mode` : `student_input`, `manual_validation`
+- `intent_mode` : `practice`, `evaluation`
+- `question_count`
+- `question_time_seconds` : `null` = infini
+- `answer_display_seconds` : `null` = infini
+- `transition_seconds`
+- `mission_time_seconds` : `null` = infini
+- `instructions`
 
-Le rendu est assuré côté front par :
-- `shared/simple-markup.js` ;
-- `shared/simple-markup.css`.
+## 5.3 `mission_steps`
 
-Le HTML n’est pas stocké directement en base.
+Suite ordonnée d’activités du Catalogue.
 
----
+Colonnes principales :
 
-## 9) Ce que Supabase ne porte pas encore pour le nouveau coeur tools-first
+- `mission_id`
+- `catalog_activity_id`
+- `position`
+- `difficulty_mode`
+- `difficulty_level`
+- `step_options_json`
 
-Dans l’état visible du dépôt :
-- il n’y a pas de table dédiée aux presets du nouvel outil `operations` ;
-- il n’y a pas de table dédiée à `nombre-cible` ;
-- il n’y a pas de table dédiée à `monnaie` ;
-- il n’y a pas de table dédiée à `operations-trous` ;
-- il n’y a pas encore de table spécifique au coeur `tools/` lui-même ;
-- les outils vivent principalement dans `activity_configs.config_json` ;
-- les contenus réutilisables génériques passent maintenant par `question_bank_folders`, `question_banks` et `question_bank_items` ;
-- les assets de l’outil `monnaie` sont locaux au dépôt, pas dans Supabase Storage dans l’état courant.
+Pour le MVP, `difficulty_level = 3` et `difficulty_mode = 'normal'` suffisent. Les raffinements peuvent attendre.
 
-Autrement dit :
-- l’architecture front est tools-first ;
-- le stockage des activités reste généraliste ;
-- seules certaines familles de contenus disposent de tables dédiées.
+## 5.4 `mission_assignments`
 
----
+Attribution d’une Mission.
 
-## 10) Limites de cette doc
+Cibles MVP :
 
-Ce fichier ne remplace pas :
-- les migrations SQL réelles ;
-- les policies exactes ligne par ligne ;
-- les contraintes exhaustives ;
-- les données seed ;
-- les éventuels réglages manuels Supabase non visibles dans le dépôt.
+- toute une classe ;
+- un ou plusieurs élèves sélectionnés.
 
-Il sert de **contexte backend pratique aligné avec le front actuellement présent dans le zip**.
+Pas encore de groupes enregistrés dans ce socle.
+
+Côté élève :
+
+```txt
+Mode seul
+→ missions attribuées à l’élève + missions de sa classe
+
+Mode groupe
+→ missions attribuées à la classe
+```
+
+## 6. Aventure et adaptation
+
+L’Aventure est la progression adaptative personnelle définie par le site.
+
+Elle est :
+
+- visible uniquement en mode seul ;
+- protégée par le code élève ;
+- définie par le site / futur super-admin ;
+- transparente pour l’élève.
+
+## 6.1 Niveaux adaptatifs
+
+Chaque activité du Catalogue aura à terme 5 niveaux :
+
+| Niveau | Libellé interne |
+|---:|---|
+| 1 | Grande difficulté |
+| 2 | Petite difficulté |
+| 3 | Normal |
+| 4 | Réussite |
+| 5 | Grande réussite |
+
+Niveau de départ : **3 — Normal**.
+
+Règle MVP :
+
+```txt
+réussite → +1 niveau
+erreur → -1 niveau
+bornes → 1 à 5
+```
+
+Ces niveaux ne sont pas affichés à l’élève.
+
+## 6.2 `student_catalog_activity_levels`
+
+Stocke le niveau actuel d’un élève pour une activité du Catalogue.
+
+Clé logique :
+
+```txt
+student_id + catalog_activity_id
+```
+
+## 6.3 `student_catalog_activity_attempts`
+
+Journal léger des essais, utile pour l’Aventure et les futurs suivis.
+
+## 7. Banques et ressources
+
+## 7.1 `question_banks`, `question_bank_items`, `question_bank_folders`
+
+Modèle conservé et nettoyé.
+
+Rôle :
+
+- banques système ;
+- banques personnelles enseignant ;
+- items typés : `text_answer`, `qcm`, `selection`, etc. ;
+- rangement libre des banques personnelles.
+
+Important : les banques système ne sont pas rangées dans les dossiers personnels.
+
+## 7.2 `vocabulary_default_words`, `teacher_vocabulary_words`
+
+Conservé pour les outils qui utilisent une banque de mots générale, notamment Ordre alphabétique.
+
+À terme, ce modèle pourra être absorbé par les banques système/personnelles, mais il reste utile pour ne pas exploser le patch.
+
+## 7.3 `image_assets`
+
+Ressources images globales.
+
+Modèle retenu :
+
+- `slug` comme clé stable ;
+- `storage_path` unique ;
+- `tags`, `notes`, `is_active`.
+
+Bucket Storage actuel : `images`.
+
+## 7.4 `phonology_words`
+
+Mots de l’outil Encodage :
+
+- `slug`
+- `word`
+- `units`
+- `is_active`
+
+`units` contient les graphèmes normalisés et les lettres muettes.
+
+## 7.5 `teacher_phonology_presets`
+
+Presets personnels de graphèmes pour Encodage.
+
+À conserver tant que l’outil en dépend.
+
+## 7.6 `teacher_conjugation_lists`
+
+Listes personnelles de verbes pour Conjugaison.
+
+## 8. RLS
+
+Règles générales :
+
+- les données enseignant sont protégées par `teacher_spaces.owner_user_id = auth.uid()` ;
+- les ressources système actives peuvent être lues publiquement quand nécessaire ;
+- les séances élèves passent par des RPC `SECURITY DEFINER` contrôlées par `access_code` ;
+- les fonctions puissantes d’écriture publique sont interdites ;
+- la clé `service_role` ne doit jamais être utilisée côté navigateur.
+
+## 9. RPC publiques utiles côté élève
+
+| Fonction | Rôle |
+|---|---|
+| `access_code_exists(access_code)` | Vérifie l’existence d’un code classe. |
+| `get_space_classes(access_code)` | Liste les classes de l’espace. |
+| `get_space_students(access_code)` | Liste les élèves actifs, sans exposer les codes élèves. |
+| `verify_student_code(access_code, student_id, student_code)` | Valide le code élève en mode seul. |
+| `get_catalog_visibility_for_space(access_code)` | Récupère les overrides de visibilité Exploration. |
+| `get_space_missions(access_code, student_ids, is_group)` | Liste les Missions actives disponibles. |
+| `get_space_mission_steps(access_code, mission_id)` | Récupère les étapes d’une Mission. |
+| `get_question_bank_items_for_space(access_code, bank_id)` | Lit les items actifs d’une banque système ou personnelle de l’espace. |
+| `get_space_vocabulary_words(access_code)` | Lit la banque de vocabulaire enseignant. |
+| `get_conjugation_personal_list(access_code, list_id)` | Lit une liste personnelle de verbes autorisée par l’espace. |
+| `record_catalog_activity_result(...)` | Met à jour le niveau adaptatif d’un élève après vérification du code élève. |
+
+## 10. Ordre d’exécution SQL proposé
+
+Pour une base neuve ou après reset destructif :
+
+```txt
+00_reset_destructif.sql            optionnel, destructif
+01_core.sql                        espaces, classes, élèves, code élève
+02_catalogue_exploration.sql       visibilité Catalogue → Exploration
+03_missions.sql                    missions, étapes, attributions
+04_banques_questions.sql           banques de questions
+05_ressources_systeme.sql          images, phonologie, vocabulaire
+06_ressources_personnelles.sql     presets graphèmes, listes verbes
+07_adaptation_aventure.sql         niveaux adaptatifs et journal léger
+```
+
+Les seeds volumineux sont séparés dans `sql/seeds/`.
+
+Les scripts de diagnostic sont séparés dans `sql/checks/`.
+
+## 11. Patch JS à prévoir après SQL
+
+Le SQL cible ne suffit pas : le front actuel attend encore des objets de l’ancien modèle.
+
+À modifier côté code :
+
+1. **Élève**
+   - ajouter le code élève en mode seul ;
+   - afficher `Exploration`, `Aventure`, `Mission` ;
+   - masquer `Aventure` en mode groupe ;
+   - charger Exploration depuis le Catalogue fixe + `catalog_activity_visibility` ;
+   - charger Mission via `get_space_missions`.
+
+2. **Prof**
+   - renommer `Activités` → `Catalogue` ;
+   - retirer l’éditeur d’activités pour l’enseignant normal ;
+   - garder `Tester` et `Masquer/Afficher` ;
+   - créer l’onglet `Missions` à partir de l’ancienne UX d’Activités ;
+   - remplacer `activity_folders` par `mission_folders` ;
+   - remplacer `activity_configs` par `missions + mission_steps`.
+
+3. **Runtime**
+   - Exploration lance une activité unique avec réglages système ;
+   - Mission transforme ses étapes en séquence runtime ;
+   - Aventure restera un chantier séparé.
+
+## 12. Décision sur la rétrocompatibilité
+
+Aucune rétrocompatibilité.
+
+Les anciennes activités peuvent être supprimées. L’objectif est de vérifier que le nouveau modèle rend la recréation simple.

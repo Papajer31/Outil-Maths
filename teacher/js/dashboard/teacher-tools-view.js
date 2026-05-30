@@ -8,9 +8,16 @@ import {
   listTeacherTools
 } from "../teacher-tools/registry.js";
 import {
-  bindSelect,
-  renderSelectControl
-} from "../../../shared/config-widgets.js";
+  TEACHER_TOOL_DEFAULT_LAYOUT,
+  TEACHER_TOOL_DEFAULT_MIN_LAYOUT,
+  TEACHER_TOOL_VIEW_MODE_COLLAPSED,
+  TEACHER_TOOL_VIEW_MODE_NORMAL,
+  TEACHER_TOOL_VIEW_MODE_STAGE,
+  getTeacherToolLayout,
+  getTeacherToolLayoutAspectRatio,
+  getTeacherToolMinLayout,
+  normalizeTeacherToolViewMode
+} from "../teacher-tools/core/tool-contract.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 
 const SCENE_BACKGROUNDS = Object.freeze([
@@ -22,14 +29,24 @@ const SCENE_BACKGROUNDS = Object.freeze([
   { id: "seyes", label: "Seyès léger" }
 ]);
 
-const DEFAULT_WIDGET_LAYOUTS = Object.freeze({
-  "random-student": { x: 0.30, y: 0.26, width: 0.40, height: 0.30 }
-});
-
-const SCENE_VERSION = 1;
+const SCENE_VERSION = 2;
+const SCENE_ASPECT_RATIO = 16 / 9;
+const WIDGET_VIEW_MODE_NORMAL = TEACHER_TOOL_VIEW_MODE_NORMAL;
+const WIDGET_VIEW_MODE_COLLAPSED = TEACHER_TOOL_VIEW_MODE_COLLAPSED;
+const WIDGET_VIEW_MODE_STAGE = TEACHER_TOOL_VIEW_MODE_STAGE;
+const WIDGET_LAYOUT_MAX_WIDTH = 1;
+const WIDGET_LAYOUT_MAX_HEIGHT = 1;
 
 function normalizeToolId(value){
   return String(value || "").trim();
+}
+
+function normalizeWidgetViewMode(value){
+  return normalizeTeacherToolViewMode(value);
+}
+
+function normalizeWidgetLocked(value){
+  return value === true;
 }
 
 function clamp01(value, fallback = 0){
@@ -38,10 +55,59 @@ function clamp01(value, fallback = 0){
   return Math.max(0, Math.min(1, number));
 }
 
-function normalizeLayout(layout, toolId){
-  const fallback = DEFAULT_WIDGET_LAYOUTS[toolId] || { x: 0.08, y: 0.10, width: 0.34, height: 0.24 };
-  const width = Math.max(0.12, Math.min(0.96, Number(layout?.width) || fallback.width));
-  const height = Math.max(0.10, Math.min(0.90, Number(layout?.height) || fallback.height));
+function getToolDefaultLayout(toolId){
+  return getTeacherToolLayout(getTeacherTool(toolId) || { defaultLayout: TEACHER_TOOL_DEFAULT_LAYOUT });
+}
+
+function getToolMinLayout(toolId){
+  return getTeacherToolMinLayout(getTeacherTool(toolId) || { minLayout: TEACHER_TOOL_DEFAULT_MIN_LAYOUT });
+}
+
+function getToolLayoutAspectRatio(toolId, state = {}){
+  return getTeacherToolLayoutAspectRatio(getTeacherTool(toolId) || {}, { state });
+}
+
+function constrainLayoutToAspect(layout, toolId, state = {}, { prefer = "width" } = {}){
+  const ratio = getToolLayoutAspectRatio(toolId, state);
+  if (!ratio) return layout;
+
+  const minLayout = getToolMinLayout(toolId);
+  const maxWidth = WIDGET_LAYOUT_MAX_WIDTH;
+  const maxHeight = WIDGET_LAYOUT_MAX_HEIGHT;
+
+  const fromWidth = (width) => ({
+    width,
+    height: width * SCENE_ASPECT_RATIO / ratio
+  });
+  const fromHeight = (height) => ({
+    width: height * ratio / SCENE_ASPECT_RATIO,
+    height
+  });
+
+  let size = prefer === "height"
+    ? fromHeight(Number(layout.height) || minLayout.height)
+    : fromWidth(Number(layout.width) || minLayout.width);
+
+  if (size.width < minLayout.width) size = fromWidth(minLayout.width);
+  if (size.height < minLayout.height) size = fromHeight(minLayout.height);
+  if (size.width > maxWidth) size = fromWidth(maxWidth);
+  if (size.height > maxHeight) size = fromHeight(maxHeight);
+
+  return {
+    ...layout,
+    width: Math.max(0.01, Math.min(maxWidth, size.width)),
+    height: Math.max(0.01, Math.min(maxHeight, size.height))
+  };
+}
+
+function normalizeLayout(layout, toolId, state = {}, options = {}){
+  const fallback = getToolDefaultLayout(toolId);
+  const minLayout = getToolMinLayout(toolId);
+  let width = Math.max(minLayout.width, Math.min(WIDGET_LAYOUT_MAX_WIDTH, Number(layout?.width) || fallback.width));
+  let height = Math.max(minLayout.height, Math.min(WIDGET_LAYOUT_MAX_HEIGHT, Number(layout?.height) || fallback.height));
+  const ratioLayout = constrainLayoutToAspect({ width, height }, toolId, state, options);
+  width = ratioLayout.width;
+  height = ratioLayout.height;
   return {
     x: Math.min(1 - width, clamp01(layout?.x, fallback.x)),
     y: Math.min(1 - height, clamp01(layout?.y, fallback.y)),
@@ -73,29 +139,70 @@ function createWidget(toolId, { widgets = [] } = {}){
     label: tool?.label || "Widget",
     icon: tool?.icon || "widgets",
     visible: true,
+    locked: tool?.defaultLocked === true,
+    viewMode: TEACHER_TOOL_VIEW_MODE_NORMAL,
     zIndex: getNextWidgetZIndex(widgets),
     layout: normalizeLayout(null, safeToolId),
     state: tool?.createInitialState?.() || {}
   };
 }
 
+function normalizeSceneMeta(sceneState = {}){
+  const rawScene = sceneState?.scene && typeof sceneState.scene === "object" ? sceneState.scene : {};
+  return {
+    background: SCENE_BACKGROUNDS.some((item) => item.id === rawScene.background)
+      ? rawScene.background
+      : (SCENE_BACKGROUNDS.some((item) => item.id === sceneState?.background) ? sceneState.background : "space"),
+    locked: rawScene.locked === true || sceneState?.locked === true
+  };
+}
+
+function cloneWidgetState(rawState = {}){
+  if (!rawState || typeof rawState !== "object") return {};
+  try {
+    if (typeof structuredClone === "function") return structuredClone(rawState);
+  } catch {}
+  return JSON.parse(JSON.stringify(rawState));
+}
+
+function cloneWidgetStateForTool(widget = {}){
+  const tool = getTeacherTool(widget?.toolId);
+  if (typeof tool?.cloneState === "function") {
+    try {
+      return tool.cloneState({ state: widget.state, widget });
+    } catch {}
+  }
+  return cloneWidgetState(widget?.state);
+}
+
+function disposeWidgetState(widget = {}){
+  const tool = getTeacherTool(widget?.toolId);
+  if (typeof tool?.disposeState !== "function") return;
+  try {
+    tool.disposeState({ state: widget.state, widget });
+  } catch {}
+}
+
 function cloneSceneState(sceneState, { getStudents } = {}){
   return {
     version: SCENE_VERSION,
-    background: String(sceneState?.background || "space"),
+    scene: normalizeSceneMeta(sceneState),
     selectedWidgetId: String(sceneState?.selectedWidgetId || ""),
     widgets: (Array.isArray(sceneState?.widgets) ? sceneState.widgets : []).map((widget, index) => {
+      const { layer: _legacyLayer, ...widgetWithoutLayer } = widget || {};
       const tool = getTeacherTool(widget?.toolId);
-      const rawState = widget?.state && typeof widget.state === "object" ? { ...widget.state } : {};
+      const rawState = cloneWidgetState(widget?.state);
       const projectorState = tool?.createProjectorState?.({
         state: rawState,
         students: getStudents?.() || []
       }) || rawState;
 
       return {
-        ...widget,
+        ...widgetWithoutLayer,
+        locked: normalizeWidgetLocked(widget?.locked),
+        viewMode: normalizeWidgetViewMode(widget?.viewMode),
         zIndex: normalizeWidgetZIndex(widget, index),
-        layout: normalizeLayout(widget?.layout, widget?.toolId),
+        layout: normalizeLayout(widget?.layout, widget?.toolId, projectorState),
         state: projectorState
       };
     })
@@ -110,12 +217,14 @@ export function createTeacherToolsViewController({
   showToast
 } = {}){
   const tools = listTeacherTools();
-  const firstWidget = createWidget(tools[0]?.id || "random-student");
   let sceneState = {
     version: SCENE_VERSION,
-    background: "space",
-    selectedWidgetId: firstWidget.id,
-    widgets: [firstWidget]
+    scene: {
+      background: "space",
+      locked: false
+    },
+    selectedWidgetId: "",
+    widgets: []
   };
   let channelId = createTeacherToolsChannelId();
   let channel = null;
@@ -123,6 +232,11 @@ export function createTeacherToolsViewController({
   let projectorWindow = null;
   let activeControlSession = null;
   let widgetPickerOverlay = null;
+  let isBackgroundOverlayOpen = false;
+  let backgroundOverlayOutsideHandler = null;
+  let backgroundOverlayKeyHandler = null;
+  let draggedWidgetId = "";
+  let widgetDropIndex = -1;
   let projectorStatus = {
     connected: false,
     lastSeenAt: 0
@@ -137,6 +251,48 @@ export function createTeacherToolsViewController({
     if (!selectedWidgetId) return null;
     return sceneState.widgets.find((widget) => widget.id === selectedWidgetId) || null;
   }
+
+  function getWidgetsInStackOrder(){
+    return sceneState.widgets
+      .map((widget, index) => ({ widget, index }))
+      .sort((a, b) => {
+        const zDiff = (Number(b.widget.zIndex) || 0) - (Number(a.widget.zIndex) || 0);
+        return zDiff || a.index - b.index;
+      })
+      .map((entry) => entry.widget);
+  }
+
+  function getWidgetViewMode(widgetId){
+    const safeWidgetId = String(widgetId || "").trim();
+    const widget = sceneState.widgets.find((item) => item.id === safeWidgetId) || null;
+    return normalizeWidgetViewMode(widget?.viewMode);
+  }
+
+
+  function setWidgetViewMode(widgetId, mode, { sync = true, renderView = true } = {}){
+    const safeWidgetId = String(widgetId || "").trim();
+    if (!safeWidgetId) return;
+    if (!sceneState.widgets.some((widget) => widget.id === safeWidgetId)) return;
+
+    const safeMode = normalizeWidgetViewMode(mode);
+    sceneState = {
+      ...sceneState,
+      widgets: sceneState.widgets.map((widget) => {
+        if (safeMode === WIDGET_VIEW_MODE_STAGE && widget.id !== safeWidgetId && normalizeWidgetViewMode(widget.viewMode) === WIDGET_VIEW_MODE_STAGE) {
+          return { ...widget, viewMode: WIDGET_VIEW_MODE_NORMAL };
+        }
+        if (widget.id !== safeWidgetId) return widget;
+        return { ...widget, viewMode: safeMode };
+      })
+    };
+
+    if (renderView) render();
+    if (sync) sendToProjector("widget-view-mode", {
+      widgetId: safeWidgetId,
+      mode: safeMode
+    });
+  }
+
 
   function ensureSelection(){
     if (!String(sceneState.selectedWidgetId || "").trim()) return;
@@ -186,6 +342,22 @@ export function createTeacherToolsViewController({
           applyWidgetActionFromProjector(message.widgetId, message.action, message.payload);
           return;
         }
+        if (message?.type === "widget-meta") {
+          applyWidgetMetaFromProjector(message.widgetId, message.patch);
+          return;
+        }
+        if (message?.type === "remove-widget") {
+          removeWidget(message.widgetId);
+          return;
+        }
+        if (message?.type === "widget-view-mode") {
+          setWidgetViewMode(message.widgetId, message.mode, { sync: false });
+          return;
+        }
+        if (message?.type === "scene-lock") {
+          setSceneLocked(message.locked === true, { sync: false });
+          return;
+        }
         if (message?.type === "select-widget") {
           selectWidget(message.widgetId, { sync: false });
         }
@@ -204,7 +376,9 @@ export function createTeacherToolsViewController({
 
   function syncProjector(){
     sendToProjector("scene-state", {
-      scene: cloneSceneState(sceneState, { getStudents: () => getCurrentStudents?.() || [] })
+      scene: cloneSceneState(sceneState, {
+        getStudents: () => getCurrentStudents?.() || []
+      })
     });
   }
 
@@ -270,12 +444,16 @@ export function createTeacherToolsViewController({
         if (widget.id !== safeWidgetId) return widget;
         didUpdate = true;
         const nextToolId = patch.toolId || widget.toolId;
+        const nextState = patch.state && typeof patch.state === "object" ? patch.state : widget.state;
+        const { layer: _legacyWidgetLayer, ...widgetWithoutLayer } = widget;
+        const { layer: _legacyPatchLayer, ...patchWithoutLayer } = patch;
         return {
-          ...widget,
-          ...patch,
+          ...widgetWithoutLayer,
+          ...patchWithoutLayer,
+          locked: normalizeWidgetLocked(patch.locked ?? widget.locked),
           zIndex: Math.max(1, Math.trunc(Number(patch.zIndex ?? widget.zIndex) || index + 1)),
-          layout: normalizeLayout(patch.layout || widget.layout, nextToolId),
-          state: patch.state && typeof patch.state === "object" ? patch.state : widget.state
+          layout: normalizeLayout(patch.layout || widget.layout, nextToolId, nextState),
+          state: nextState
         };
       })
     };
@@ -296,12 +474,29 @@ export function createTeacherToolsViewController({
         if (widget.id !== safeWidgetId) return widget;
         return {
           ...widget,
-          layout: normalizeLayout(layout, widget.toolId)
+          layout: normalizeLayout(layout, widget.toolId, widget.state)
         };
       })
     };
 
     renderWidgetListOnly();
+  }
+
+
+  function applyWidgetMetaFromProjector(widgetId, patch = {}){
+    const safeWidgetId = String(widgetId || "").trim();
+    if (!safeWidgetId || !patch || typeof patch !== "object") return;
+
+    const safePatch = {};
+    if (Object.prototype.hasOwnProperty.call(patch, "locked")) {
+      safePatch.locked = normalizeWidgetLocked(patch.locked);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "zIndex")) {
+      safePatch.zIndex = Math.max(1, Math.trunc(Number(patch.zIndex) || 1));
+    }
+
+    if (!Object.keys(safePatch).length) return;
+    updateWidget(safeWidgetId, safePatch, { renderPanel: true, sync: true });
   }
 
   function applyWidgetActionFromProjector(widgetId, action, payload = {}){
@@ -340,13 +535,98 @@ export function createTeacherToolsViewController({
     }
   }
 
-  function setBackground(background){
+  function cleanupBackgroundOverlayListeners(){
+    if (backgroundOverlayOutsideHandler) {
+      document.removeEventListener("click", backgroundOverlayOutsideHandler);
+      backgroundOverlayOutsideHandler = null;
+    }
+    if (backgroundOverlayKeyHandler) {
+      document.removeEventListener("keydown", backgroundOverlayKeyHandler);
+      backgroundOverlayKeyHandler = null;
+    }
+  }
+
+  function closeBackgroundOverlay({ renderView = true } = {}){
+    const wasOpen = isBackgroundOverlayOpen;
+    isBackgroundOverlayOpen = false;
+    cleanupBackgroundOverlayListeners();
+    if (wasOpen && renderView) render();
+  }
+
+  function openBackgroundOverlay(){
+    if (isBackgroundOverlayOpen) return;
+    cleanupBackgroundOverlayListeners();
+    isBackgroundOverlayOpen = true;
+    render();
+
+    window.setTimeout(() => {
+      if (!isBackgroundOverlayOpen) return;
+      backgroundOverlayOutsideHandler = (event) => {
+        const target = event.target;
+        const menuWrap = host?.querySelector(".tt-background-menu-wrap");
+        if (target instanceof Node && menuWrap?.contains(target)) return;
+        closeBackgroundOverlay();
+      };
+      backgroundOverlayKeyHandler = (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        closeBackgroundOverlay();
+      };
+      document.addEventListener("click", backgroundOverlayOutsideHandler);
+      document.addEventListener("keydown", backgroundOverlayKeyHandler);
+    }, 0);
+  }
+
+  function toggleBackgroundOverlay(){
+    if (isBackgroundOverlayOpen) {
+      closeBackgroundOverlay();
+      return;
+    }
+    openBackgroundOverlay();
+  }
+
+  function setBackground(background, { renderView = true } = {}){
     const safeBackground = SCENE_BACKGROUNDS.some((item) => item.id === background) ? background : "space";
+    closeBackgroundOverlay({ renderView: false });
     sceneState = {
       ...sceneState,
-      background: safeBackground
+      scene: {
+        ...normalizeSceneMeta(sceneState),
+        background: safeBackground
+      }
     };
+    if (renderView) render();
     syncProjector();
+  }
+
+  function setSceneLocked(locked, { sync = true, renderView = true } = {}){
+    const isLocked = locked === true;
+    closeBackgroundOverlay({ renderView: false });
+    sceneState = {
+      ...sceneState,
+      scene: {
+        ...normalizeSceneMeta(sceneState),
+        locked: isLocked
+      }
+    };
+    if (renderView) render();
+    if (sync) sendToProjector("scene-lock", { locked: isLocked });
+  }
+
+  function toggleSceneLocked(){
+    setSceneLocked(!normalizeSceneMeta(sceneState).locked);
+  }
+
+  function toggleWidgetLocked(widgetId){
+    const widget = getWidgetById(widgetId);
+    if (!widget) return;
+    updateWidget(widget.id, { locked: !normalizeWidgetLocked(widget.locked) });
+  }
+
+  function toggleSelectedWidgetLocked(){
+    const widget = getSelectedWidget();
+    if (!widget) return;
+    toggleWidgetLocked(widget.id);
   }
 
   function selectWidget(widgetId, { sync = true } = {}){
@@ -371,24 +651,10 @@ export function createTeacherToolsViewController({
     if (sync) syncProjector();
   }
 
-  function resetSceneLayout(){
-    sceneState = {
-      ...sceneState,
-      widgets: sceneState.widgets.map((widget) => ({
-        ...widget,
-        visible: true,
-        layout: normalizeLayout(null, widget.toolId)
-      }))
-    };
-    render();
-    syncProjector();
-    showToast?.("Disposition de projection réinitialisée.");
-  }
-
   function centerSelectedWidget(){
     const widget = getSelectedWidget();
     if (!widget) return;
-    const layout = normalizeLayout(widget.layout, widget.toolId);
+    const layout = normalizeLayout(widget.layout, widget.toolId, widget.state);
     updateWidget(widget.id, {
       visible: true,
       layout: {
@@ -410,10 +676,10 @@ export function createTeacherToolsViewController({
       zIndex: getNextWidgetZIndex(sceneState.widgets),
       layout: normalizeLayout({
         ...widget.layout,
-        x: Math.min(0.96 - Number(widget.layout?.width || 0.34), Number(widget.layout?.x || 0) + 0.04),
-        y: Math.min(0.90 - Number(widget.layout?.height || 0.24), Number(widget.layout?.y || 0) + 0.04)
-      }, widget.toolId),
-      state: widget.state && typeof widget.state === "object" ? { ...widget.state } : {}
+        x: Math.min(WIDGET_LAYOUT_MAX_WIDTH - Number(widget.layout?.width || 0.34), Number(widget.layout?.x || 0) + 0.04),
+        y: Math.min(WIDGET_LAYOUT_MAX_HEIGHT - Number(widget.layout?.height || 0.24), Number(widget.layout?.y || 0) + 0.04)
+      }, widget.toolId, widget.state),
+      state: cloneWidgetStateForTool(widget)
     };
 
     sceneState = {
@@ -428,15 +694,79 @@ export function createTeacherToolsViewController({
   function bringSelectedWidgetToFront(){
     const widget = getSelectedWidget();
     if (!widget) return;
-    updateWidget(widget.id, {
-      zIndex: getNextWidgetZIndex(sceneState.widgets)
+    moveWidgetToStackIndex(widget.id, 0);
+  }
+
+  function sendSelectedWidgetToBack(){
+    const widget = getSelectedWidget();
+    if (!widget) return;
+    moveWidgetToStackIndex(widget.id, sceneState.widgets.length - 1);
+  }
+
+  function moveWidgetToStackIndex(widgetId, dropIndex){
+    const safeWidgetId = String(widgetId || "").trim();
+    if (!safeWidgetId) return;
+
+    const currentStack = getWidgetsInStackOrder();
+    if (!currentStack.some((widget) => widget.id === safeWidgetId)) return;
+
+    const remainingStack = currentStack.filter((widget) => widget.id !== safeWidgetId);
+    const safeDropIndex = Math.max(0, Math.min(Math.trunc(Number(dropIndex) || 0), remainingStack.length));
+    const nextStack = [
+      ...remainingStack.slice(0, safeDropIndex),
+      currentStack.find((widget) => widget.id === safeWidgetId),
+      ...remainingStack.slice(safeDropIndex)
+    ].filter(Boolean);
+
+    const nextZIndexById = new Map();
+    const stackLength = nextStack.length;
+    nextStack.forEach((widget, index) => {
+      nextZIndexById.set(widget.id, stackLength - index);
     });
+
+    let didChange = false;
+    sceneState = {
+      ...sceneState,
+      widgets: sceneState.widgets.map((widget) => {
+        const nextZIndex = nextZIndexById.get(widget.id) || widget.zIndex;
+        if (Number(widget.zIndex) === nextZIndex) return widget;
+        didChange = true;
+        return {
+          ...widget,
+          zIndex: nextZIndex
+        };
+      })
+    };
+
+    if (!didChange) return;
+    render();
+    syncProjector();
+  }
+
+  function toggleSelectedWidgetCollapse(){
+    const widget = getSelectedWidget();
+    if (!widget) return;
+    const mode = getWidgetViewMode(widget.id);
+    setWidgetViewMode(widget.id, mode === WIDGET_VIEW_MODE_COLLAPSED
+      ? WIDGET_VIEW_MODE_NORMAL
+      : WIDGET_VIEW_MODE_COLLAPSED);
+  }
+
+  function toggleSelectedWidgetStageMode(){
+    const widget = getSelectedWidget();
+    if (!widget) return;
+    const mode = getWidgetViewMode(widget.id);
+    setWidgetViewMode(widget.id, mode === WIDGET_VIEW_MODE_STAGE
+      ? WIDGET_VIEW_MODE_NORMAL
+      : WIDGET_VIEW_MODE_STAGE);
   }
 
   function removeWidget(widgetId){
     const safeWidgetId = String(widgetId || "").trim();
     if (!safeWidgetId) return;
-    if (!sceneState.widgets.some((widget) => widget.id === safeWidgetId)) return;
+    const removedWidget = sceneState.widgets.find((widget) => widget.id === safeWidgetId) || null;
+    if (!removedWidget) return;
+    disposeWidgetState(removedWidget);
 
     sceneState = {
       ...sceneState,
@@ -546,16 +876,42 @@ export function createTeacherToolsViewController({
     overlay.querySelector("[data-teacher-tool-pick], [data-widget-picker-close]")?.focus?.();
   }
 
-  function renderBackgroundSelect(){
-    return renderSelectControl({
-      id: "ttSceneBackground",
-      value: sceneState.background,
-      options: SCENE_BACKGROUNDS.map((background) => ({
-        value: background.id,
-        label: background.label
-      })),
-      rootClassName: "tt-background-select"
-    });
+  function renderBackgroundMenu(){
+    const currentBackground = normalizeSceneMeta(sceneState).background;
+    return `
+      <div class="tt-background-menu-wrap">
+        <button
+          id="btnTeacherToolsBackground"
+          class="btn tt-header-action-btn"
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded="${isBackgroundOverlayOpen ? "true" : "false"}"
+          aria-controls="ttSceneBackgroundMenu"
+        >
+          <span class="dashboard-material-icon" aria-hidden="true">wallpaper</span>
+          <span>Arrière plan</span>
+        </button>
+        <div
+          id="ttSceneBackgroundMenu"
+          class="tt-background-menu"
+          role="menu"
+          ${isBackgroundOverlayOpen ? "" : "hidden"}
+        >
+          ${SCENE_BACKGROUNDS.map((background) => `
+            <button
+              class="tt-background-option${background.id === currentBackground ? " is-selected" : ""}"
+              type="button"
+              role="menuitemradio"
+              aria-checked="${background.id === currentBackground ? "true" : "false"}"
+              data-scene-background="${escapeAttr(background.id)}"
+            >
+              <span class="tt-background-option-swatch is-${escapeAttr(background.id)}" aria-hidden="true"></span>
+              <span>${escapeHtml(background.label)}</span>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `;
   }
 
   function renderWidgetList(){
@@ -563,22 +919,27 @@ export function createTeacherToolsViewController({
       return `<div class="tt-widget-empty">Aucun widget actif.</div>`;
     }
 
-    return sceneState.widgets.map((widget) => {
+    return getWidgetsInStackOrder().map((widget) => {
       const tool = getTeacherTool(widget.toolId);
       const isSelected = widget.id === sceneState.selectedWidgetId;
+      const isLocked = normalizeWidgetLocked(widget.locked);
       return `
-        <div class="tt-widget-row${isSelected ? " is-selected" : ""}" data-widget-row="${escapeAttr(widget.id)}">
-          <button class="tt-widget-select" type="button" data-widget-select="${escapeAttr(widget.id)}">
+        <div class="tt-widget-row${isSelected ? " is-selected" : ""}${isLocked ? " is-locked" : ""}" data-widget-row="${escapeAttr(widget.id)}" draggable="true">
+          <button class="tt-widget-select" type="button" data-widget-select="${escapeAttr(widget.id)}" draggable="false">
             <span class="dashboard-material-icon" aria-hidden="true">${escapeHtml(widget.icon || tool?.icon || "widgets")}</span>
             <span class="tt-widget-row-main">
               <strong>${escapeHtml(widget.label || tool?.label || "Widget")}</strong>
+              ${isLocked ? `<small>Verrouillé</small>` : ""}
             </span>
           </button>
-          <button class="tt-widget-row-icon-btn" type="button" data-widget-remove="${escapeAttr(widget.id)}" title="Retirer ce widget" aria-label="Retirer ce widget">
+          <button class="tt-widget-row-icon-btn ${isLocked ? "is-locked" : ""}" type="button" data-widget-lock="${escapeAttr(widget.id)}" title="${isLocked ? "Déverrouiller ce widget" : "Verrouiller ce widget"}" aria-label="${isLocked ? "Déverrouiller ce widget" : "Verrouiller ce widget"}" aria-pressed="${isLocked ? "true" : "false"}" draggable="false">
+            <span class="dashboard-material-icon" aria-hidden="true">${isLocked ? "lock" : "lock_open"}</span>
+          </button>
+          <button class="tt-widget-row-icon-btn" type="button" data-widget-remove="${escapeAttr(widget.id)}" title="Retirer ce widget" aria-label="Retirer ce widget" draggable="false">
             <span class="dashboard-material-icon" aria-hidden="true">delete</span>
           </button>
-          <label class="tt-widget-toggle" title="Afficher ou masquer dans la projection">
-            <input type="checkbox" data-widget-visible="${escapeAttr(widget.id)}" ${widget.visible ? "checked" : ""}>
+          <label class="tt-widget-toggle" title="Afficher ou masquer dans la projection" draggable="false">
+            <input type="checkbox" data-widget-visible="${escapeAttr(widget.id)}" ${widget.visible ? "checked" : ""} draggable="false">
             <span aria-hidden="true"></span>
           </label>
         </div>
@@ -591,6 +952,106 @@ export function createTeacherToolsViewController({
     if (!listHost) return;
     listHost.innerHTML = renderWidgetList();
     bindWidgetListEvents(listHost);
+  }
+
+  function clearWidgetDropIndicator(listRoot = null){
+    const root = listRoot || host?.querySelector("[data-widget-list]");
+    root?.querySelector(".tt-widget-drop-indicator")?.remove();
+    root?.querySelectorAll(".tt-widget-row.is-dragging").forEach((row) => {
+      row.classList.remove("is-dragging");
+    });
+    widgetDropIndex = -1;
+  }
+
+  function getWidgetDropIndexFromEvent(listRoot, event){
+    const rows = Array.from(listRoot?.querySelectorAll(".tt-widget-row[data-widget-row]") || [])
+      .filter((row) => row.dataset.widgetRow !== draggedWidgetId);
+    if (!rows.length) return 0;
+
+    const pointerY = Number(event.clientY) || 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const rect = rows[index].getBoundingClientRect();
+      if (pointerY < rect.top + rect.height / 2) return index;
+    }
+    return rows.length;
+  }
+
+  function renderWidgetDropIndicator(listRoot, dropIndex){
+    if (!listRoot) return;
+    listRoot.querySelector(".tt-widget-drop-indicator")?.remove();
+
+    const indicator = document.createElement("div");
+    indicator.className = "tt-widget-drop-indicator";
+    indicator.setAttribute("aria-hidden", "true");
+
+    const rows = Array.from(listRoot.querySelectorAll(".tt-widget-row[data-widget-row]"))
+      .filter((row) => row.dataset.widgetRow !== draggedWidgetId);
+    const targetRow = rows[Math.max(0, Math.min(dropIndex, rows.length))] || null;
+    if (targetRow) {
+      listRoot.insertBefore(indicator, targetRow);
+      return;
+    }
+    listRoot.append(indicator);
+  }
+
+  function findWidgetRow(listRoot, widgetId){
+    const safeWidgetId = String(widgetId || "").trim();
+    if (!safeWidgetId) return null;
+    return Array.from(listRoot?.querySelectorAll(".tt-widget-row[data-widget-row]") || [])
+      .find((row) => row.dataset.widgetRow === safeWidgetId) || null;
+  }
+
+  function handleWidgetDragStart(event){
+    const row = event.currentTarget;
+    const widgetId = String(row?.dataset?.widgetRow || "").trim();
+    if (!widgetId) {
+      event.preventDefault();
+      return;
+    }
+
+    draggedWidgetId = widgetId;
+    row.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", widgetId);
+    }
+  }
+
+  function handleWidgetDragOver(event){
+    if (!draggedWidgetId) return;
+    const listRoot = event.currentTarget;
+    const dropIndex = getWidgetDropIndexFromEvent(listRoot, event);
+    event.preventDefault();
+    widgetDropIndex = dropIndex;
+    renderWidgetDropIndicator(listRoot, dropIndex);
+    findWidgetRow(listRoot, draggedWidgetId)?.classList.add("is-dragging");
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleWidgetDrop(event){
+    if (!draggedWidgetId) return;
+    const listRoot = event.currentTarget;
+    const dropIndex = widgetDropIndex >= 0
+      ? widgetDropIndex
+      : getWidgetDropIndexFromEvent(listRoot, event);
+    const widgetId = draggedWidgetId;
+    event.preventDefault();
+    draggedWidgetId = "";
+    clearWidgetDropIndicator(listRoot);
+    moveWidgetToStackIndex(widgetId, dropIndex);
+  }
+
+  function handleWidgetDragEnd(event){
+    const listRoot = event.currentTarget?.closest?.("[data-widget-list]") || host?.querySelector("[data-widget-list]");
+    draggedWidgetId = "";
+    clearWidgetDropIndicator(listRoot);
+  }
+
+  function handleWidgetDragLeave(event){
+    const listRoot = event.currentTarget;
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && listRoot.contains(relatedTarget)) return;
+    clearWidgetDropIndicator(listRoot);
   }
 
   function bindWidgetListEvents(root = host){
@@ -606,11 +1067,32 @@ export function createTeacherToolsViewController({
       });
     });
 
+    root?.querySelectorAll("[data-widget-lock]").forEach((button) => {
+      button.addEventListener("click", () => {
+        toggleWidgetLocked(button.dataset.widgetLock);
+      });
+    });
+
     root?.querySelectorAll("[data-widget-remove]").forEach((button) => {
       button.addEventListener("click", () => {
         removeWidget(button.dataset.widgetRemove);
       });
     });
+
+    root?.querySelectorAll("[data-widget-row]").forEach((row) => {
+      row.addEventListener("dragstart", handleWidgetDragStart);
+      row.addEventListener("dragend", handleWidgetDragEnd);
+    });
+
+    const listRoot = root?.matches?.("[data-widget-list]")
+      ? root
+      : root?.querySelector?.("[data-widget-list]");
+    if (listRoot && !listRoot.dataset.widgetDndBound) {
+      listRoot.dataset.widgetDndBound = "true";
+      listRoot.addEventListener("dragover", handleWidgetDragOver);
+      listRoot.addEventListener("drop", handleWidgetDrop);
+      listRoot.addEventListener("dragleave", handleWidgetDragLeave);
+    }
   }
 
   function addWidget(toolId){
@@ -664,7 +1146,9 @@ export function createTeacherToolsViewController({
       syncProjector,
       openProjector,
       showToast,
-      sceneState: cloneSceneState(sceneState)
+      sceneState: cloneSceneState(sceneState, {
+        getStudents: () => getCurrentStudents?.() || []
+      })
     }) || null;
   }
 
@@ -689,6 +1173,14 @@ export function createTeacherToolsViewController({
   function render(){
     if (!host) return;
     ensureSelection();
+    const selectedWidget = getSelectedWidget();
+    const selectedWidgetViewMode = selectedWidget
+      ? getWidgetViewMode(selectedWidget.id)
+      : WIDGET_VIEW_MODE_NORMAL;
+    const isSelectedWidgetCollapsed = selectedWidgetViewMode === WIDGET_VIEW_MODE_COLLAPSED;
+    const isSelectedWidgetStageMode = selectedWidgetViewMode === WIDGET_VIEW_MODE_STAGE;
+    const isSelectedWidgetLocked = selectedWidget ? normalizeWidgetLocked(selectedWidget.locked) : false;
+    const isSceneLocked = normalizeSceneMeta(sceneState).locked;
 
     host.innerHTML = `
       <div class="dashboard-config-header tt-header">
@@ -700,11 +1192,16 @@ export function createTeacherToolsViewController({
           ${renderProjectorStatus()}
         </div>
 
-        <div class="dashboard-config-header-actions">
+        <div class="dashboard-config-header-actions tt-header-actions">
           <button id="btnTeacherToolsOpenProjector" class="btn primary" type="button">
             <span class="dashboard-material-icon" aria-hidden="true">open_in_new</span>
             <span>Ouvrir la projection</span>
           </button>
+          <button id="btnTeacherToolsToggleSceneLock" class="btn tt-header-action-btn ${isSceneLocked ? "is-locked" : ""}" type="button" title="${isSceneLocked ? "Déverrouiller la scène" : "Verrouiller la scène"}" aria-label="${isSceneLocked ? "Déverrouiller la scène" : "Verrouiller la scène"}" aria-pressed="${isSceneLocked ? "true" : "false"}">
+            <span class="dashboard-material-icon" aria-hidden="true">${isSceneLocked ? "lock" : "lock_open"}</span>
+            <span>${isSceneLocked ? "Déverrouiller" : "Verrouiller"}</span>
+          </button>
+          ${renderBackgroundMenu()}
         </div>
       </div>
 
@@ -729,25 +1226,38 @@ export function createTeacherToolsViewController({
                 <span>Contrôles</span>
               </div>
               <div class="tt-board-header-right">
-                <div class="tt-board-background-field">
-                  <span>Fond</span>
-                  ${renderBackgroundSelect()}
-                </div>
                 <div class="tt-board-actions">
-                  <button id="ttResetSceneLayout" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Réinitialiser la scène" aria-label="Réinitialiser la scène">
-                    <span class="dashboard-material-icon" aria-hidden="true">restart_alt</span>
+                  <button id="ttToggleWidgetLock" class="tt-board-action-btn ${isSelectedWidgetLocked ? "is-locked" : ""}" type="button" title="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-label="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-pressed="${isSelectedWidgetLocked ? "true" : "false"}" ${selectedWidget ? "" : "disabled"}>
+                    <span class="dashboard-material-icon" aria-hidden="true">${isSelectedWidgetLocked ? "lock" : "lock_open"}</span>
+                    <span>${isSelectedWidgetLocked ? "Déverrouiller" : "Verrouiller"}</span>
                   </button>
-                  <button id="ttCenterWidget" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Centrer le widget" aria-label="Centrer le widget">
+                  <button id="ttToggleWidgetCollapse" class="tt-board-action-btn" type="button" ${selectedWidget ? "" : "disabled"}>
+                    <span class="dashboard-material-icon" aria-hidden="true">${isSelectedWidgetCollapsed ? "expand_more" : "expand_less"}</span>
+                    <span>${isSelectedWidgetCollapsed ? "Déployer" : "Replier"}</span>
+                  </button>
+                  <button id="ttToggleWidgetStageMode" class="tt-board-action-btn" type="button" ${selectedWidget ? "" : "disabled"}>
+                    <span class="dashboard-material-icon" aria-hidden="true">${isSelectedWidgetStageMode ? "fullscreen_exit" : "fullscreen"}</span>
+                    <span>${isSelectedWidgetStageMode ? "Taille normale" : "Scène complète"}</span>
+                  </button>
+                  <button id="ttCenterWidget" class="tt-board-action-btn" type="button" title="Centrer le widget" aria-label="Centrer le widget" ${selectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">filter_center_focus</span>
+                    <span>Centrer</span>
                   </button>
-                  <button id="ttDuplicateWidget" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Dupliquer le widget" aria-label="Dupliquer le widget" ${getSelectedWidget() ? "" : "disabled"}>
+                  <button id="ttDuplicateWidget" class="tt-board-action-btn" type="button" title="Dupliquer le widget" aria-label="Dupliquer le widget" ${selectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">content_copy</span>
+                    <span>Dupliquer</span>
                   </button>
-                  <button id="ttBringWidgetFront" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Mettre le widget devant" aria-label="Mettre le widget devant" ${getSelectedWidget() ? "" : "disabled"}>
+                  <button id="ttBringWidgetFront" class="tt-board-action-btn" type="button" title="Mettre le widget devant" aria-label="Mettre le widget devant" ${selectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">flip_to_front</span>
+                    <span>Devant</span>
                   </button>
-                  <button id="ttRemoveWidget" class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" title="Retirer le widget" aria-label="Retirer le widget" ${getSelectedWidget() ? "" : "disabled"}>
+                  <button id="ttSendWidgetBack" class="tt-board-action-btn" type="button" title="Mettre le widget derrière" aria-label="Mettre le widget derrière" ${selectedWidget ? "" : "disabled"}>
+                    <span class="dashboard-material-icon" aria-hidden="true">flip_to_back</span>
+                    <span>Derrière</span>
+                  </button>
+                  <button id="ttRemoveWidget" class="tt-board-action-btn is-danger" type="button" title="Retirer le widget" aria-label="Retirer le widget" ${selectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+                    <span>Retirer</span>
                   </button>
                 </div>
               </div>
@@ -762,16 +1272,21 @@ export function createTeacherToolsViewController({
     `;
 
     host.querySelector("#btnTeacherToolsOpenProjector")?.addEventListener("click", openProjector);
-    host.querySelector("#ttOpenWidgetPicker")?.addEventListener("click", openWidgetPickerOverlay);
-    bindSelect(host, "ttSceneBackground", {
-      onChange: (value) => {
-        setBackground(value);
-      }
+    host.querySelector("#btnTeacherToolsToggleSceneLock")?.addEventListener("click", toggleSceneLocked);
+    host.querySelector("#btnTeacherToolsBackground")?.addEventListener("click", toggleBackgroundOverlay);
+    host.querySelectorAll("[data-scene-background]").forEach((button) => {
+      button.addEventListener("click", () => {
+        setBackground(button.dataset.sceneBackground);
+      });
     });
-    host.querySelector("#ttResetSceneLayout")?.addEventListener("click", resetSceneLayout);
+    host.querySelector("#ttOpenWidgetPicker")?.addEventListener("click", openWidgetPickerOverlay);
+    host.querySelector("#ttToggleWidgetLock")?.addEventListener("click", toggleSelectedWidgetLocked);
+    host.querySelector("#ttToggleWidgetCollapse")?.addEventListener("click", toggleSelectedWidgetCollapse);
+    host.querySelector("#ttToggleWidgetStageMode")?.addEventListener("click", toggleSelectedWidgetStageMode);
     host.querySelector("#ttCenterWidget")?.addEventListener("click", centerSelectedWidget);
     host.querySelector("#ttDuplicateWidget")?.addEventListener("click", duplicateSelectedWidget);
     host.querySelector("#ttBringWidgetFront")?.addEventListener("click", bringSelectedWidgetToFront);
+    host.querySelector("#ttSendWidgetBack")?.addEventListener("click", sendSelectedWidgetToBack);
     host.querySelector("#ttRemoveWidget")?.addEventListener("click", removeSelectedWidget);
 
     bindWidgetListEvents(host);
@@ -788,6 +1303,7 @@ export function createTeacherToolsViewController({
       activeControlSession?.destroy?.();
       activeControlSession = null;
       closeWidgetPickerOverlay();
+      closeBackgroundOverlay({ renderView: false });
       channel?.close?.();
       channel = null;
       if (view) view.innerHTML = "";

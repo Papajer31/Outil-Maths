@@ -12,6 +12,7 @@ Avoir la possibilité de "mélanger" les outils de la séquence lors de la sessi
 Onglet "Banques" avec les banques de phrases/questions/problèmes...
 Onglet "Outils" pour régler les configurations par défaut et ajouter des tags aux outils.
 
+Au moment de l'ajout de l'élève, même pas besoin de restreindre la "classe", un simple input libre convient.
 
 OUTIL MATHS -> Il y a X trucs, mais il n'y a que Y machins.
 OUTIL MATHS -> Additions du type 10+10+10+N (avec des 5+5 possibles)
@@ -30,3 +31,4 @@ OUTIL PROF -> tirage au sort de phrases
 ! Droite graduée avec placement continu
 ! Outil sélection - widget sélection -> lettres (à implémenter) / mots / groupe de mots
 ! Outil d'encodage revoir toutes les situations
+! Possibilité de mettre 0 seconde dans le temps d'affichage des réponses

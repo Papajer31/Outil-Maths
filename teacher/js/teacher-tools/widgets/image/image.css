@@ -1,0 +1,406 @@
+/* ========================================
+   WIDGET TABLEAU — IMAGE
+======================================== */
+
+.tt-image-control{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.tt-image-preview-card,
+.tt-image-empty-card{
+  min-width:0;
+  border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.045);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px;
+}
+
+.tt-image-empty-card{
+  flex-direction:column;
+  align-items:flex-start;
+  color:rgba(255,255,255,.68);
+}
+
+.tt-image-empty-card strong{
+  color:#fff;
+}
+
+.tt-image-preview-thumb{
+  flex:0 0 88px;
+  width:88px;
+  height:64px;
+  background:rgba(0,0,0,.22);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+
+.tt-image-preview-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+}
+
+.tt-image-preview-meta{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.tt-image-preview-meta strong,
+.tt-image-preview-meta span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.tt-image-preview-meta strong{
+  color:#fff;
+  font-size:15px;
+  font-weight:900;
+}
+
+.tt-image-preview-meta span{
+  color:rgba(255,255,255,.62);
+  font-size:13px;
+  font-weight:700;
+}
+
+.tt-image-source-grid{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr);
+  gap:10px;
+}
+
+.tt-image-file-btn{
+  cursor:pointer;
+}
+
+.tt-image-file-btn input{
+  display:none;
+}
+
+.tt-image-url-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:8px;
+}
+
+.tt-image-url-row input{
+  min-width:0;
+  min-height:42px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.18);
+  color:#fff;
+  padding:0 12px;
+  font:inherit;
+  font-size:14px;
+}
+
+.tt-image-control .tt-widget-action-btn.is-danger{
+  color:#ffb8b8;
+  border-color:rgba(255,110,110,.25);
+  background:rgba(120,26,26,.18);
+}
+
+.ttp-widget-frame[data-tool-id="image"]{
+  --ttp-widget-shadow:none;
+  --ttp-widget-border-color:transparent;
+  --ttp-widget-active-border-color:transparent;
+  --ttp-widget-active-ring:transparent;
+  --ttp-widget-selected-ring:transparent;
+  border-color:transparent;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  backdrop-filter:none;
+  overflow:visible;
+}
+
+.ttp-widget-frame[data-tool-id="image"].is-selected,
+.ttp-widget-frame[data-tool-id="image"].is-chrome-visible,
+.ttp-widget-frame[data-tool-id="image"].is-selected.is-chrome-visible,
+.ttp-widget-frame[data-tool-id="image"].is-dragging{
+  border-color:transparent;
+  box-shadow:none;
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-body{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  height:auto;
+  padding:0;
+  overflow:hidden;
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-chrome,
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-bottom-chrome{
+  position:absolute;
+  left:0;
+  right:0;
+  z-index:5;
+  color:#fff;
+  text-shadow:0 2px 8px rgba(0,0,0,.36);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-chrome{
+  top:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.50), rgba(0,0,0,0));
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-bottom-chrome{
+  bottom:0;
+  background:linear-gradient(0deg, rgba(0,0,0,.44), rgba(0,0,0,0));
+}
+
+.ttp-widget-frame[data-tool-id="image"]:not(.is-chrome-visible) .ttp-widget-chrome,
+.ttp-widget-frame[data-tool-id="image"]:not(.is-chrome-visible) .ttp-widget-bottom-chrome{
+  background:transparent;
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-resize{
+  z-index:8;
+  background:rgba(0,0,0,.42);
+  color:#fff;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);
+}
+
+.ttp-image-viewer,
+.ttp-image-empty{
+  position:absolute;
+  inset:0;
+  min-width:0;
+  min-height:0;
+}
+
+.ttp-image-viewer{
+  overflow:hidden;
+  cursor:grab;
+  touch-action:none;
+}
+
+.ttp-image-viewer.is-zoomed{
+  cursor:move;
+}
+
+.ttp-widget-frame.is-dragging .ttp-image-viewer{
+  cursor:grabbing;
+}
+
+.ttp-image-stage{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transform-origin:center center;
+  will-change:transform;
+}
+
+.ttp-image-img{
+  max-width:100%;
+  max-height:100%;
+  width:auto;
+  height:auto;
+  object-fit:contain;
+  display:block;
+  user-select:none;
+  -webkit-user-drag:none;
+  transform-origin:center center;
+  will-change:transform;
+  filter:drop-shadow(0 16px 34px rgba(0,0,0,.20));
+}
+
+.ttp-image-empty{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  color:#fff;
+  touch-action:auto;
+}
+
+.ttp-image-empty-card{
+  width:min(560px, 92%);
+  max-height:calc(100% - 24px);
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(10,14,24,.76);
+  backdrop-filter:blur(14px);
+  box-shadow:0 22px 70px rgba(0,0,0,.30);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:22px;
+  text-align:center;
+}
+
+.ttp-image-empty-card > .ttp-material-icon{
+  font-size:42px;
+  opacity:.76;
+}
+
+.ttp-image-empty-card strong{
+  font-size:24px;
+  line-height:1.1;
+}
+
+.ttp-image-empty-card p{
+  margin:0;
+  color:rgba(255,255,255,.68);
+  font-size:14px;
+  line-height:1.35;
+}
+
+.ttp-image-empty-actions{
+  width:100%;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:6px;
+}
+
+.ttp-image-file-btn{
+  min-height:42px;
+  border:1px solid rgba(61,195,118,.50);
+  background:rgba(23,119,65,.30);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:0 14px;
+  cursor:pointer;
+  font:inherit;
+  font-size:14px;
+  font-weight:900;
+}
+
+.ttp-image-file-btn input{
+  display:none;
+}
+
+.ttp-image-url-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:8px;
+}
+
+.ttp-image-url-row input{
+  min-width:0;
+  min-height:38px;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(0,0,0,.22);
+  color:#fff;
+  padding:0 10px;
+  font:inherit;
+  font-size:14px;
+}
+
+.ttp-image-error,
+.ttp-image-load-warning{
+  color:#ffd6d6 !important;
+}
+
+.ttp-image-load-warning{
+  position:absolute;
+  left:50%;
+  bottom:54px;
+  transform:translateX(-50%);
+  z-index:3;
+  max-width:calc(100% - 32px);
+  border-radius:999px;
+  background:rgba(120,26,26,.82);
+  padding:8px 12px;
+  font-size:13px;
+  font-weight:900;
+  text-align:center;
+}
+
+.ttp-image-zoom-label{
+  min-width:54px;
+  min-height:26px;
+  border-radius:999px;
+  background:rgba(0,0,0,.30);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 8px;
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  text-shadow:none;
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-icon-btn:disabled{
+  opacity:.34;
+  cursor:not-allowed;
+}
+
+@media (max-width: 900px){
+  .tt-image-source-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Widget image : viewport sans cadre avec HUD lisible sur toute image. */
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-chrome{
+  background:linear-gradient(180deg, rgba(3,7,18,.90), rgba(3,7,18,.60) 58%, rgba(3,7,18,0));
+  text-shadow:0 2px 8px rgba(0,0,0,.86);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-bottom-chrome{
+  background:linear-gradient(0deg, rgba(3,7,18,.88), rgba(3,7,18,.48) 58%, rgba(3,7,18,0));
+  text-shadow:0 2px 8px rgba(0,0,0,.86);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-icon-btn{
+  background:rgba(3,7,18,.78);
+  color:#fff;
+  box-shadow:0 6px 18px rgba(0,0,0,.34);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-icon-btn:hover{
+  background:rgba(3,7,18,.94);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-icon-btn:disabled{
+  background:rgba(3,7,18,.52);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-resize{
+  background:rgba(3,7,18,.78);
+  box-shadow:0 8px 22px rgba(0,0,0,.36);
+}
+
+.ttp-widget-frame[data-tool-id="image"] .ttp-widget-resize:hover{
+  background:rgba(3,7,18,.94);
+}
+
+.ttp-image-img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+
+.ttp-image-zoom-label{
+  background:rgba(3,7,18,.84);
+  box-shadow:0 6px 18px rgba(0,0,0,.30);
+  text-shadow:0 1px 2px rgba(0,0,0,.80);
+}

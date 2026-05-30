@@ -43,7 +43,7 @@ export function renderSelectModeView(root) {
               class="selectmode-card${currentMode === "group" ? " is-selected" : ""}"
               data-activity-mode="group"
             >
-              <div class="selectmode-card-title">Je suis en groupe</div>
+              <div class="selectmode-card-title">Nous sommes plusieurs</div>
               <div class="selectmode-card-visual" aria-hidden="true">
                 <img
                   class="selectmode-card-img"

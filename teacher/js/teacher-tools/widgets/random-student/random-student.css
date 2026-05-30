@@ -1,0 +1,268 @@
+.tt-board-control-pane .tt-random-student-list-panel,
+.tt-board-control-pane .tt-random-student-current-name,
+.tt-board-control-pane .tt-random-student-history-chip{
+  border-radius:0;
+}
+
+.tt-random-student-list-panel{
+  min-width:0;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;
+  background:rgba(0,0,0,.14);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:14px;
+}
+
+.tt-random-student-list-panel h4{
+  margin:0;
+  color:#fff;
+  font-size:17px;
+  line-height:1.25;
+}
+
+.tt-random-student-list-panel p{
+  margin:0;
+  color:rgba(255,255,255,.52);
+  font-size:13px;
+  line-height:1.35;
+}
+
+.tt-random-student-tile-grid{
+  display:grid;
+  grid-template-columns:repeat(8, minmax(0, 1fr));
+  gap:8px;
+}
+
+.tt-random-student-tile{
+  min-width:0;
+  min-height:52px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:8px;
+  background:rgba(255,255,255,.055);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px;
+  cursor:pointer;
+  font:inherit;
+  text-align:center;
+  transition:background-color .12s ease, border-color .12s ease, opacity .12s ease, box-shadow .12s ease;
+}
+
+.tt-random-student-tile:hover{
+  border-color:rgba(245,158,11,.28);
+  background:rgba(255,255,255,.075);
+}
+
+.tt-random-student-tile.is-included{
+  border-color:rgba(63,180,112,.28);
+  background:rgba(23,119,65,.16);
+}
+
+.tt-random-student-tile.is-drawn{
+  border-color:rgba(245,158,11,.44);
+  box-shadow:inset 0 0 0 1px rgba(245,158,11,.10);
+}
+
+.tt-random-student-tile.is-excluded{
+  color:rgba(255,255,255,.48);
+  border-color:rgba(255,255,255,.08);
+  background:rgba(255,255,255,.025);
+  opacity:.78;
+}
+
+.tt-random-student-list-panel.is-force-draw-pending{
+  border-color:rgba(245,158,11,.34);
+  box-shadow:inset 0 0 0 1px rgba(245,158,11,.08);
+}
+
+.tt-random-student-list-panel.is-force-draw-pending .tt-random-student-tile{
+  cursor:crosshair;
+}
+
+.tt-random-student-list-panel.is-force-draw-pending .tt-random-student-tile:hover{
+  border-color:rgba(245,158,11,.60);
+  background:rgba(245,158,11,.14);
+}
+
+.tt-random-student-tile-main{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.tt-random-student-tile-main strong{
+  max-width:100%;
+  font-size:14px;
+  line-height:1.1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.tt-random-student-list-empty{
+  min-height:44px;
+  border:1px dashed rgba(255,255,255,.12);
+  color:rgba(255,255,255,.56);
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  font-style:italic;
+}
+
+.tt-random-student-result-line{
+  min-width:0;
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:nowrap;
+  overflow:hidden;
+  color:rgba(255,255,255,.72);
+  font-size:15px;
+  font-weight:800;
+}
+
+.tt-random-student-result-label{
+  flex:0 0 auto;
+}
+
+.tt-random-student-current-name{
+  flex:0 1 220px;
+  min-height:38px;
+  min-width:150px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  padding:0 14px;
+  font-size:18px;
+  font-weight:800;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.tt-random-student-inline-history{
+  min-width:0;
+  flex:1 1 auto;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  overflow:hidden;
+}
+
+.tt-random-student-inline-label{
+  flex:0 0 auto;
+  color:rgba(255,255,255,.50);
+  font-size:13px;
+}
+
+.tt-random-student-history-chip{
+  min-width:0;
+  max-width:118px;
+  flex:1 1 0;
+  min-height:32px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:8px;
+  background:rgba(255,255,255,.045);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 9px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:13px;
+  font-weight:700;
+}
+
+.tt-random-student-history-empty-inline{
+  flex:0 0 auto;
+  color:rgba(255,255,255,.54);
+  font-size:13px;
+  font-style:italic;
+}
+
+.tt-random-student-history-more{
+  flex:0 0 28px;
+  min-height:32px;
+  color:rgba(255,255,255,.58);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  line-height:1;
+  letter-spacing:1px;
+}
+
+.ttp-random-student{
+  height:100%;
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  text-align:center;
+}
+
+.ttp-random-student-name{
+  max-width:100%;
+  font-size:clamp(42px, 7.5vw, 116px);
+  font-weight:900;
+  line-height:.92;
+  text-transform:uppercase;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  text-shadow:0 10px 34px rgba(0,0,0,.24);
+}
+
+.ttp-stage[data-background="white"] .ttp-random-student-name,
+.ttp-stage[data-background="seyes"] .ttp-random-student-name{
+  text-shadow:none;
+}
+
+.ttp-random-student.is-drawing .ttp-random-student-name{
+  opacity:1;
+}
+
+.ttp-random-student.is-settling .ttp-random-student-name{
+  animation:ttp-double-pop .56s cubic-bezier(.2,1.35,.28,1) both;
+}
+
+.ttp-random-student-controls{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.ttp-random-student-toggle{
+  min-height:30px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0 10px;
+  font-size:12px;
+  font-weight:900;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.ttp-random-student-toggle input{
+  width:16px;
+  height:16px;
+  accent-color:rgb(23,119,65);
+}

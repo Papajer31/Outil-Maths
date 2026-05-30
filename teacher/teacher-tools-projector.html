@@ -13,13 +13,19 @@
         <section id="teacherToolsProjectorStage" class="ttp-stage" data-background="space">
           <div id="teacherToolsProjectorStarfield" class="ttp-space-starfield" aria-hidden="true"></div>
 
-          <div class="ttp-topbar" aria-label="Commandes de la projection">
+          <div id="teacherToolsTopbar" class="ttp-topbar" aria-label="Commandes de la projection">
             <button id="btnTeacherToolsFullscreen" class="ttp-btn" type="button">
               <span class="ttp-material-icon" aria-hidden="true">fullscreen</span>
               <span>Plein écran</span>
             </button>
+            <button id="btnTeacherToolsSceneLock" class="ttp-btn" type="button" aria-pressed="false" aria-label="Verrouiller la scène">
+              <span class="ttp-material-icon" aria-hidden="true">lock_open</span>
+            </button>
             <button id="btnTeacherToolsClose" class="ttp-btn" type="button" aria-label="Fermer la projection">
               <span class="ttp-material-icon" aria-hidden="true">close</span>
+            </button>
+            <button id="btnTeacherToolsTopbarToggle" class="ttp-btn ttp-topbar-toggle" type="button" aria-expanded="true" aria-label="Replier les commandes">
+              <span class="ttp-material-icon" aria-hidden="true">keyboard_arrow_down</span>
             </button>
           </div>
 

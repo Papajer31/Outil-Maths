@@ -26,6 +26,7 @@ Le dashboard enseignant fonctionne avec :
 - gestion des activités et des dossiers ;
 - éditeur de configuration intégré ;
 - onglet **Banques** pour les banques de contenus ;
+- onglet **Tableau** pour des widgets interactifs projetables ;
 - partage d’activité ;
 - lancement et suivi de projection.
 
@@ -33,6 +34,17 @@ L’onglet **Banques** est une partie active du produit. Il permet de gérer des
 - texte ;
 - QCM ;
 - sélection de mots dans un énoncé.
+
+L’onglet **Tableau** est une famille séparée des activités élèves. Il sert de régie de projection pour des widgets manipulables au tableau :
+- scène projetée unique via `teacher/teacher-tools-projector.html` ;
+- communication dashboard ↔ projection par `BroadcastChannel` ;
+- widgets flottants avec drag, resize, visibilité, ordre d’empilement et verrouillage de scène ;
+- fonds de scène sélectionnables ;
+- dossiers de widgets sous `teacher/js/teacher-tools/widgets/<widget-id>/`.
+
+Widgets Tableau actifs :
+- `Tirage élève` : tirage au sort depuis la liste de classe, avec ou sans remise ;
+- `Image` : affichage d’image locale ou par URL, sans bordure visible, zoomable, déplaçable et redimensionnable.
 
 ### B. Espace élève
 
@@ -528,7 +540,7 @@ En pratique, cela signifie aujourd’hui :
 - stabiliser le shell `#/session` avant de multiplier les raffinements visuels ;
 - homogénéiser la validation shell et le toggle correction/réponse ;
 - fiabiliser les outils de banques (`question-reponse`, `qcm`, `selection`) au même niveau que les outils déjà stabilisés ;
-- continuer l’ajout des nouveaux outils uniquement dans `tools/`.
+- continuer l’ajout des nouveaux outils élèves uniquement dans `tools/`, et des widgets Tableau dans `teacher/js/teacher-tools/widgets/`.
 
 ---
 
@@ -540,7 +552,8 @@ La priorité concrète est maintenant :
 3. consolider les nouveaux outils mathématiques (`nombre-cible`, `monnaie`, `operations-trous`) ;
 4. fiabiliser l’onglet **Banques** et les trois outils qui en dépendent ;
 5. faire les réglages fins d’UI des outils actifs ;
-6. seulement ensuite poursuivre l’assainissement global du vocabulaire hérité.
+6. poursuivre la consolidation de l’onglet **Tableau** et ajouter les widgets prof un par un ;
+7. seulement ensuite poursuivre l’assainissement global du vocabulaire hérité.
 ---
 
 ## Aide contextuelle
