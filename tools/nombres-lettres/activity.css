@@ -1,6 +1,6 @@
 @font-face{
   font-family:"BelleAllureGS";
-  src:url("../../fonts/BELLEALLUREGS-FIN.OTF") format("opentype");
+  src:url("../../shared/ui-assets/fonts/BELLEALLUREGS-FIN.OTF") format("opentype");
   font-weight:400;
   font-style:normal;
 }
@@ -14,21 +14,22 @@
   flex-direction:column;
   gap:18px;
   padding:0;
-  box-sizing:border-box;
-  color:var(--text);
   overflow:hidden;
-}
 
+  --tool-answer-font-size:112px;
+  --tool-answer-font-weight:1000;
+  --tool-answer-line-height:1;
+  --tool-answer-min-height:146px;
+  --tool-answer-padding:14px 24px;
+  --tool-answer-radius:28px;
+}
 
 .nl-stage{
   flex:1 1 auto;
-  min-width:0;
-  min-height:0;
   display:flex;
   align-items:center;
   justify-content:center;
   gap:42px;
-  box-sizing:border-box;
   overflow:hidden;
 }
 
@@ -73,9 +74,6 @@
   width:min(620px, 100%);
   min-height:270px;
   border-radius:32px;
-  background:rgba(255,255,255,.96);
-  color:#182034;
-  box-shadow:0 18px 42px rgba(0,0,0,.22);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -83,7 +81,7 @@
 }
 
 .nl-number-card-value{
-  font-family:"Andika", system-ui, sans-serif;
+  font-family:var(--tool-font-family);
   font-size:156px;
   font-weight:1000;
   line-height:1;
@@ -92,9 +90,6 @@
 
 .nl-source-number{
   max-width:100%;
-  color:#e9edf5;
-  text-align:center;
-  font-family:"Andika", system-ui, sans-serif;
   font-size:156px;
   font-weight:1000;
   line-height:1;
@@ -106,12 +101,7 @@
   --nl-seyes-substep:19.5px;
   --nl-seyes-font-size:48px;
   --nl-seyes-text-top:13px;
-  position:relative;
-  width:min(1200px, 100%);
-  min-height:150px;
-  border-radius:20px;
-  overflow:hidden;
-  background:
+  --tool-answer-bg:
     repeating-linear-gradient(to bottom,
       rgba(95, 145, 205, .16) 0 1px,
       transparent 1px,
@@ -128,6 +118,12 @@
       transparent var(--nl-seyes-step)
     ),
     #fff;
+  --tool-answer-border-width:0px;
+  position:relative;
+  width:min(1200px, 100%);
+  min-height:150px;
+  border-radius:20px;
+  overflow:hidden;
   box-shadow:0 18px 42px rgba(0,0,0,.18);
 }
 
@@ -190,31 +186,17 @@
 .nl-number-input,
 .nl-number-display{
   width:min(440px, 100%);
-  min-height:146px;
-  border:none;
-  border-radius:28px;
-  background:rgba(255,255,255,.96);
-  color:#182034;
-  text-align:center;
-  font-family:"Andika", system-ui, sans-serif;
-  font-size:112px;
-  font-weight:1000;
-  line-height:1;
-  padding:14px 24px;
-  outline:none;
+  --tool-answer-placeholder-color:rgba(24, 32, 52, .28);
+  --tool-answer-bg:rgba(255,255,255,.96);
+  --tool-answer-color:#182034;
+  --tool-answer-border-width:0px;
   box-shadow:0 18px 42px rgba(0,0,0,.22);
-  box-sizing:border-box;
 }
 
 .nl-number-display{
-  cursor:default;
-  caret-color:transparent;
   pointer-events:none;
 }
 
-.nl-number-input::placeholder{
-  color:rgba(24, 32, 52, .28);
-}
 
 .nl-answer-card.is-correct,
 .nl-answer-panel.is-correct,
@@ -232,7 +214,8 @@
   outline-offset: 4px;
 }
 
-.nl-answer-card--placeholder{
+.nl-answer-card--placeholder,
+.nl-answer-panel--placeholder{
   color:rgba(24, 32, 52, .28);
 }
 
@@ -255,6 +238,10 @@
 }
 
 @media (max-width: 1400px){
+  .nl-root{
+    --tool-answer-font-size:96px;
+    --tool-answer-min-height:128px;
+  }
 
   .nl-number-card{
     min-height:230px;
@@ -271,11 +258,5 @@
     --nl-seyes-step:70px;
     --nl-seyes-substep:17.5px;
     --nl-seyes-text-top:78px;
-  }
-
-  .nl-number-input,
-  .nl-number-display{
-    min-height:128px;
-    font-size:96px;
   }
 }

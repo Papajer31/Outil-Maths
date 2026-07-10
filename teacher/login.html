@@ -39,6 +39,10 @@
               Connexion
             </button>
 
+            <button class="teacher-create-account-link" id="btnOpenTeacherSignup" type="button">
+              Créer un compte enseignant
+            </button>
+
             <div id="teacherLoginMessage" class="home-message teacher-login-message" aria-live="polite"></div>
           </div>
         </div>
@@ -48,6 +52,52 @@
     <footer class="page-footer">
       <a class="footer-link" href="../index.html">Retour à l’accueil élève</a>
     </footer>
+
+    <div class="teacher-signup-modal hidden" id="teacherSignupModal" role="dialog" aria-modal="true" aria-labelledby="teacher-signup-title">
+      <div class="teacher-signup-backdrop" data-close-signup="true"></div>
+
+      <section class="teacher-signup-panel panel" tabindex="-1">
+        <button class="teacher-signup-close" id="btnCloseTeacherSignup" type="button" aria-label="Fermer">×</button>
+
+        <header class="teacher-signup-header">
+          <h2 id="teacher-signup-title">Créer un compte enseignant</h2>
+        </header>
+
+        <div class="teacher-signup-grid">
+          <label class="teacher-signup-field">
+            <span>Nom affiché</span>
+            <input id="teacherSignupNameInput" class="input-text teacher-signup-input" type="text" autocomplete="name" placeholder="Ex. M. Papier">
+          </label>
+
+          <label class="teacher-signup-field">
+            <span>Email</span>
+            <input id="teacherSignupEmailInput" class="input-text teacher-signup-input" type="email" autocomplete="username" placeholder="adresse@email.fr">
+          </label>
+
+          <label class="teacher-signup-field">
+            <span>Mot de passe</span>
+            <input id="teacherSignupPasswordInput" class="input-text teacher-signup-input" type="password" autocomplete="new-password" placeholder="6 caractères minimum">
+          </label>
+
+          <label class="teacher-signup-field">
+            <span>Confirmation</span>
+            <input id="teacherSignupPasswordConfirmInput" class="input-text teacher-signup-input" type="password" autocomplete="new-password" placeholder="Retape le mot de passe">
+          </label>
+
+          <label class="teacher-signup-field teacher-signup-field-wide">
+            <span>Code classe (uniquement des lettres majuscules, entre 3 et 12 caractères)</span>
+            <input id="teacherSignupAccessCodeInput" class="input-text teacher-signup-input teacher-signup-code-input" type="text" autocomplete="off" maxlength="12" placeholder="Ex. TUJER">
+          </label>
+        </div>
+
+        <div class="teacher-signup-actions">
+          <button class="btn btn-secondary" id="btnCancelTeacherSignup" type="button">Annuler</button>
+          <button class="btn btn-primary" id="btnSubmitTeacherSignup" type="button">Créer le compte</button>
+        </div>
+
+        <div id="teacherSignupMessage" class="home-message teacher-signup-message" aria-live="polite"></div>
+      </section>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

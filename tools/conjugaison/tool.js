@@ -3,7 +3,7 @@ import { createActivity as createConjugaisonActivity } from "./activity.js";
 import { normalizeSettings } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
-const DEFAULT_INSTRUCTION = "Conjugue le verbe demandé.";
+const DEFAULT_INSTRUCTION = "Conjugue le verbe demandé avec le pronom personnel.";
 
 export default defineTool("conjugaison", "Conjugaison", {
   version: "1",

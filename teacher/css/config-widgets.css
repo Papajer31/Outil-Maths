@@ -8,6 +8,10 @@
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
 }
 
+.tv-group[hidden]{
+  display:none !important;
+}
+
 .tv-group-inline{
   padding-top:12px;
   padding-bottom:12px;
@@ -234,10 +238,51 @@
   justify-content:flex-start;
 }
 
+.tv-stepper-field-inline{
+  width:100%;
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.tv-stepper-field-inline .tv-stepper-field-label{
+  flex:1 1 auto;
+  min-width:0;
+  font-size:20px;
+}
+
+.tv-stepper-field-inline .tv-stepper-field-control{
+  flex:0 0 auto;
+  justify-content:flex-end;
+}
+
 .tv-stepper-field-control-row{
   display:flex;
   align-items:center;
   gap:10px;
+}
+
+.flash-config-display-field,
+.flash-config-preparation-field{
+  width:100%;
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.flash-config-display-field .tv-stepper-field-label,
+.flash-config-preparation-field .tv-stepper-field-label{
+  flex:1 1 auto;
+  min-width:0;
+  font-size:20px;
+}
+
+.flash-config-display-field .tv-stepper-field-control,
+.flash-config-preparation-field .tv-stepper-field-control{
+  flex:0 0 auto;
+  justify-content:flex-end;
 }
 
 .tv-stepper-infinity-btn{
@@ -277,17 +322,21 @@
 }
 
 .tv-stepper{
-  display:grid;
-  grid-template-columns:auto 38px 72px 38px;
+  --tv-stepper-input-width:max(72px, calc(var(--tv-stepper-input-ch, 2ch) + 38px));
+  display:inline-flex;
   align-items:center;
-  gap:4px;
+  gap:6px;
+  width:max-content;
+  max-width:100%;
+  min-width:0;
 }
 
 .tv-stepper.tv-stepper-no-inline-label{
-  grid-template-columns:38px 72px 38px;
+  width:max-content;
 }
 
 .tv-stepper-label{
+  flex:0 0 auto;
   white-space:nowrap;
   font-weight:700;
   color:var(--text);
@@ -314,11 +363,13 @@
 }
 
 .tv-input-stepper{
-  width:72px;
+  flex:0 0 var(--tv-stepper-input-width);
+  width:var(--tv-stepper-input-width);
   min-width:72px;
-  max-width:72px;
+  max-width:none;
   height:38px;
   padding:0 8px;
+  box-sizing:border-box;
   text-align:center;
   font-size:22px;
   font-weight:700;
@@ -326,6 +377,7 @@
 }
 
 .tv-stepper-btn{
+  flex:0 0 38px;
   width:38px;
   height:38px;
   min-width:38px;
@@ -362,7 +414,6 @@
 }
 
 .tv-stepper-icon{
-  font-family:"MaterialSymbols";
   font-size:22px;
   line-height:1;
   font-style:normal;
@@ -370,11 +421,6 @@
   display:block;
   user-select:none;
   pointer-events:none;
-  font-variation-settings:
-    "FILL" 0,
-    "wght" 500,
-    "GRAD" 0,
-    "opsz" 24;
 }
 
 .tv-checkbox-row{
@@ -622,16 +668,33 @@
   display:flex;
   align-items:center;
   flex-wrap:wrap;
-  gap:18px 24px;
+  gap:8px;
+}
+
+.tv-radio-group-inline .tv-radio-options{
+  justify-content:flex-end;
 }
 
 .tv-radio-row{
-  display:flex;
+  position:relative;
+  min-width:42px;
+  min-height:38px;
+  box-sizing:border-box;
+  padding:0 14px;
+  display:inline-flex;
   align-items:center;
-  gap:10px;
+  justify-content:center;
+  gap:0;
+  border-radius:999px;
+  background:rgba(255,255,255,.055);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
   font-size:18px;
   font-weight:600;
+  line-height:1;
   color:var(--text);
+  cursor:pointer;
+  text-align:center;
+  transition:background-color .12s ease, box-shadow .12s ease, transform .12s ease, opacity .12s ease;
 }
 
 .tv-radio-row.is-disabled{
@@ -639,8 +702,46 @@
   cursor:not-allowed;
 }
 
+.tv-radio-row:hover{
+  background:rgba(255,255,255,.10);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.tv-radio-row:has(.tv-radio:checked){
+  background:rgba(255,216,94,.16);
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.72);
+}
+
+.tv-radio-row:has(.tv-radio:focus-visible){
+  box-shadow:
+    inset 0 0 0 2px rgba(255,216,94,.82),
+    0 0 0 3px rgba(255,216,94,.12);
+}
+
 .tv-radio{
-  width:20px;
-  height:20px;
-  accent-color:var(--warn);
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:pointer;
+}
+
+.tv-radio-row span{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+}
+
+@media (max-width: 980px){
+  .tv-radio-group-inline{
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+  }
+
+  .tv-radio-group-inline .tv-radio-options{
+    justify-content:flex-start;
+  }
 }

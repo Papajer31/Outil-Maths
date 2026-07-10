@@ -19,6 +19,7 @@ import {
 } from "./activity-tree.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { renderSimpleMarkupToHtml } from "../../../shared/simple-markup.js";
+import { openToolAssetPicker } from "../../../shared/tool-assets/asset-picker.js";
 import {
   findTokenIndexesFromSelectionText,
   formatSelectionIndexes,
@@ -28,6 +29,8 @@ import {
 } from "../../../shared/selection-text.js";
 
 const DEFAULT_BANK_TYPE = "text_answer";
+const BANK_ROOT_PERSONAL = "__bank_root_personal";
+const BANK_ROOT_SYSTEM = "__bank_root_system";
 const QCM_BANK_TYPE = "qcm";
 const SELECTION_BANK_TYPE = "selection";
 const BANK_CREATION_TYPE_VALUES = [DEFAULT_BANK_TYPE, QCM_BANK_TYPE, SELECTION_BANK_TYPE];
@@ -668,7 +671,6 @@ export function createQuestionBanksViewController({
   btnCreateBank,
   btnCreateBankFolder,
   btnBackBankExplorer,
-  btnDeleteBank,
   btnSaveBank,
   importModal,
   importInput,
@@ -677,6 +679,22 @@ export function createQuestionBanksViewController({
   btnImportCancel,
   btnImportConfirm,
   getCurrentTeacherSpace,
+  listQuestionBanksForSpace: listQuestionBanksForSpaceApi = listQuestionBanksForSpace,
+  listQuestionBankFoldersForSpace: listQuestionBankFoldersForSpaceApi = listQuestionBankFoldersForSpace,
+  createQuestionBankForSpace: createQuestionBankForSpaceApi = createQuestionBankForSpace,
+  createQuestionBankFolderForSpace: createQuestionBankFolderForSpaceApi = createQuestionBankFolderForSpace,
+  updateQuestionBank: updateQuestionBankApi = updateQuestionBank,
+  updateQuestionBankFolder: updateQuestionBankFolderApi = updateQuestionBankFolder,
+  deleteQuestionBank: deleteQuestionBankApi = deleteQuestionBank,
+  deleteQuestionBankFolder: deleteQuestionBankFolderApi = deleteQuestionBankFolder,
+  listQuestionBankItems: listQuestionBankItemsApi = listQuestionBankItems,
+  replaceQuestionBankItems: replaceQuestionBankItemsApi = replaceQuestionBankItems,
+  copyQuestionBankToSpace: copyQuestionBankToSpaceApi = copyQuestionBankToSpace,
+  requireTeacherSpace = true,
+  bankRootMode = "teacher",
+  allowFolders = true,
+  allowSystemBankEditing = false,
+  rootLabel = "Banques",
   showToast
 } = {}) {
   let banks = [];
@@ -706,17 +724,78 @@ export function createQuestionBanksViewController({
   let renderedWindowStart = -1;
   let renderedWindowEnd = -1;
   let renderedVirtualMode = false;
+  let activeBankCell = null;
   let draggedBankId = null;
   let bankDropTarget = null;
   let isMovingBank = false;
+  const usesVirtualRoots = bankRootMode !== "flat";
+
+  function getScopedElementById(id) {
+    const selector = `#${CSS.escape(String(id || ""))}`;
+    return banksView?.querySelector(selector) || document.getElementById(id);
+  }
+
+  function canEditBankRecord(bank) {
+    return Boolean(bank && (allowSystemBankEditing || bank.is_system !== true));
+  }
 
   function getExplorerBanks() {
     return (banks || []).map((bank, index) => ({
       ...bank,
       config_name: bank?.title || "Banque sans titre",
-      folder_id: bank?.is_system === true ? null : (String(bank?.folder_id ?? "").trim() || null),
+      folder_id: usesVirtualRoots
+        ? (bank?.is_system === true
+          ? BANK_ROOT_SYSTEM
+          : (String(bank?.folder_id ?? "").trim() || BANK_ROOT_PERSONAL))
+        : (String(bank?.folder_id ?? "").trim() || null),
       display_order: Number.isFinite(Number(bank?.display_order)) ? Number(bank.display_order) : index
     }));
+  }
+
+  function getExplorerFolders() {
+    if (!usesVirtualRoots) {
+      return (allowFolders ? bankFolders : []).map((folder, index) => ({
+        ...folder,
+        parent_id: String(folder?.parent_id ?? "").trim() || null,
+        display_order: Number.isFinite(Number(folder?.display_order)) ? Number(folder.display_order) : index
+      }));
+    }
+
+    const roots = [
+      {
+        id: BANK_ROOT_PERSONAL,
+        parent_id: null,
+        name: "Banques personnelles",
+        display_order: 0,
+        is_virtual_root: true,
+        is_system_root: false
+      },
+      {
+        id: BANK_ROOT_SYSTEM,
+        parent_id: null,
+        name: "Banques système",
+        display_order: 1,
+        is_virtual_root: true,
+        is_system_root: true
+      }
+    ];
+    const personalFolders = (bankFolders || []).map((folder, index) => ({
+      ...folder,
+      parent_id: String(folder?.parent_id ?? "").trim() || BANK_ROOT_PERSONAL,
+      display_order: Number.isFinite(Number(folder?.display_order)) ? Number(folder.display_order) : index
+    }));
+    return [...roots, ...personalFolders];
+  }
+
+  function isVirtualBankRoot(folderId) {
+    if (!usesVirtualRoots) return false;
+    const id = String(folderId || "").trim();
+    return id === BANK_ROOT_PERSONAL || id === BANK_ROOT_SYSTEM;
+  }
+
+  function isSystemBankLocation(folderId = currentOpenFolderId) {
+    if (!usesVirtualRoots) return false;
+    return String(folderId || "").trim() === BANK_ROOT_SYSTEM;
   }
 
   function getBanksForCurrentType(
@@ -734,7 +813,7 @@ export function createQuestionBanksViewController({
 
   function buildBankTreeState({
     banksSource = getExplorerBanks(),
-    foldersSource = bankFolders
+    foldersSource = getExplorerFolders()
   } = {}) {
     return buildDashboardActivityTreeState({
       activitiesSource: banksSource,
@@ -745,7 +824,7 @@ export function createQuestionBanksViewController({
   function buildVisibleBankTree() {
     return buildDashboardVisibleActivityTree({
       activitiesSource: getBanksForCurrentType(),
-      foldersSource: bankFolders,
+      foldersSource: getExplorerFolders(),
       collapsedFolderIds: collapsedBankFolderIds,
       currentActivityMode: currentBankTypeFilter
     });
@@ -882,7 +961,7 @@ export function createQuestionBanksViewController({
     const safeSourceBankId = String(sourceBankId || "");
     const treeState = buildBankTreeState({
       banksSource: getExplorerBanks().filter((bank) => String(bank.id) !== safeSourceBankId),
-      foldersSource: bankFolders
+      foldersSource: getExplorerFolders()
     });
     const parentId = normalizeTreeId(folderId);
     const childFolders = treeState.folderChildren.get(parentId) || [];
@@ -895,7 +974,7 @@ export function createQuestionBanksViewController({
     if (!bankBreadcrumb) return;
     const breadcrumb = getFolderBreadcrumb(treeState);
     bankBreadcrumb.innerHTML = [
-      `<button class="dashboard-breadcrumb-btn${breadcrumb.length === 0 ? " is-current" : ""}" type="button" data-action="open-root">Banques</button>`,
+      `<button class="dashboard-breadcrumb-btn${breadcrumb.length === 0 ? " is-current" : ""}" type="button" data-action="open-root">${escapeHtml(rootLabel)}</button>`,
       ...breadcrumb.map((folder, index) => {
         const isCurrent = index === breadcrumb.length - 1;
         return `
@@ -955,6 +1034,18 @@ export function createQuestionBanksViewController({
   }
 
   function renderExplorerFolderTile(folder) {
+    const folderActions = allowFolders
+      ? `
+        <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-folder" data-folder-id="${escapeAttr(folder.id)}" title="Renommer le dossier" aria-label="Renommer le dossier">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-folder" data-folder-id="${escapeAttr(folder.id)}" title="Supprimer le dossier" aria-label="Supprimer le dossier">
+            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+          </button>
+        </div>
+      `
+      : "";
     return `
       <article class="dashboard-activity-tile dashboard-activity-tile--folder" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}">
         <button
@@ -967,14 +1058,7 @@ export function createQuestionBanksViewController({
           <span class="dashboard-activity-tile-title">${escapeHtml(folder.name || "")}</span>
         </button>
 
-        <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
-          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-folder" data-folder-id="${escapeAttr(folder.id)}" title="Renommer le dossier" aria-label="Renommer le dossier">
-            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
-          </button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-folder" data-folder-id="${escapeAttr(folder.id)}" title="Supprimer le dossier" aria-label="Supprimer le dossier">
-            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-          </button>
-        </div>
+        ${folderActions}
       </article>
     `;
   }
@@ -1000,10 +1084,10 @@ export function createQuestionBanksViewController({
   function renderExplorerBankTile(bank) {
     const bankId = String(bank.id || "");
     const typeLabel = getBankTypeLabel(bank.bank_type);
-    const canDrag = bank.is_system !== true;
-    const actionButtons = bank.is_system === true
-      ? ""
-      : `
+    const canEditBank = canEditBankRecord(bank);
+    const canDrag = allowFolders && canEditBank && bank.is_system !== true;
+    const actionButtons = canEditBank
+      ? `
         <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-bank" data-bank-id="${escapeAttr(bankId)}" title="Renommer la banque" aria-label="Renommer la banque">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
@@ -1013,7 +1097,8 @@ export function createQuestionBanksViewController({
             <span class="dashboard-material-icon" aria-hidden="true">delete</span>
           </button>
         </div>
-      `;
+      `
+      :"";
     return `
       <article
         class="dashboard-activity-tile dashboard-activity-tile--activity"
@@ -1070,7 +1155,7 @@ export function createQuestionBanksViewController({
             <div class="dashboard-activity-tree-row dashboard-activity-tree-root ${normalizeTreeId(currentOpenFolderId) ? "" : "is-selected"}">
               <button class="dashboard-activity-tree-main dashboard-activity-tree-main--root" type="button" data-action="open-root">
                 <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">home</span>
-                <span class="dashboard-activity-tree-node-label">Banques</span>
+                <span class="dashboard-activity-tree-node-label">${escapeHtml(rootLabel)}</span>
               </button>
             </div>
             ${treeHtml || '<div class="dashboard-activity-tree-empty">Aucun dossier pour le moment.</div>'}
@@ -1098,6 +1183,16 @@ export function createQuestionBanksViewController({
     updateBankTypeFilterButtons();
     banksList.classList.add("dashboard-explorer-host");
     banksList.innerHTML = renderExplorerShell(treeState, visibleNodes);
+    const isSystemLocation = isSystemBankLocation(currentOpenFolderId);
+    if (btnCreateBank) {
+      btnCreateBank.disabled = isSystemLocation;
+      btnCreateBank.title = isSystemLocation ? "Les banques système se créent dans l’onglet Admin." : "";
+    }
+    if (btnCreateBankFolder) {
+      btnCreateBankFolder.hidden = !allowFolders;
+      btnCreateBankFolder.disabled = isSystemLocation;
+      btnCreateBankFolder.title = isSystemLocation ? "Les banques système sont protégées en écriture." : "";
+    }
     bindExplorerEvents();
   }
 
@@ -1166,15 +1261,16 @@ export function createQuestionBanksViewController({
   }
 
   async function openCreateFolderOverlay(parentId = currentOpenFolderId) {
+    if (!allowFolders) return;
     const teacherSpace = getCurrentTeacherSpace?.();
-    if (!teacherSpace?.id) return;
+    if (requireTeacherSpace && !teacherSpace?.id) return;
     openNameInputOverlay({
       title: "Créer un dossier",
       confirmLabel: "Créer",
       initialName: "",
       placeholder: "Nom du dossier",
       onConfirm: async (name) => {
-        const created = await createQuestionBankFolderForSpace(teacherSpace.id, { name, parent_id: parentId });
+        const created = await createQuestionBankFolderForSpaceApi(teacherSpace.id, { name, parent_id: parentId });
         bankFolders = [...bankFolders, created];
         knownBankFolderIds.add(String(created.id));
         collapsedBankFolderIds.add(String(created.id));
@@ -1184,6 +1280,7 @@ export function createQuestionBanksViewController({
   }
 
   function openRenameFolderOverlay(folderId) {
+    if (!allowFolders) return;
     const folder = getFolderById(folderId);
     if (!folder) return;
     openNameInputOverlay({
@@ -1192,7 +1289,7 @@ export function createQuestionBanksViewController({
       initialName: folder.name || "",
       placeholder: "Nom du dossier",
       onConfirm: async (name) => {
-        const updated = await updateQuestionBankFolder(folder.id, { name });
+        const updated = await updateQuestionBankFolderApi(folder.id, { name });
         bankFolders = bankFolders.map((item) => String(item.id) === String(folder.id) ? { ...item, ...updated } : item);
         renderExplorer();
       }
@@ -1201,7 +1298,7 @@ export function createQuestionBanksViewController({
 
   function openRenameBankOverlay(bankId) {
     const bank = getBankById(bankId);
-    if (!bank || bank.is_system === true) return;
+    if (!canEditBankRecord(bank)) return;
 
     openNameInputOverlay({
       title: "Renommer la banque",
@@ -1213,7 +1310,7 @@ export function createQuestionBanksViewController({
           throw new Error("Une banque porte déjà ce nom.");
         }
 
-        const updated = await updateQuestionBank(bank.id, { title: name });
+        const updated = await updateQuestionBankApi(bank.id, { title: name });
         banks = banks.map((item) => String(item.id) === String(updated.id) ? { ...item, ...updated } : item);
         if (String(selectedBankId || "") === String(updated.id)) {
           selectedBank = { ...(selectedBank || {}), ...updated };
@@ -1227,19 +1324,20 @@ export function createQuestionBanksViewController({
 
   async function deleteBankFromExplorer(bankId) {
     const bank = getBankById(bankId);
-    if (!bank || bank.is_system === true) return;
+    if (!canEditBankRecord(bank)) return;
 
     const ok = window.confirm(`Supprimer la banque « ${bank.title} » ?`);
     if (!ok) return;
 
     try {
-      await deleteQuestionBank(bank.id);
+      await deleteQuestionBankApi(bank.id);
       banks = banks.filter((item) => String(item.id) !== String(bank.id));
       if (String(selectedBankId || "") === String(bank.id)) {
         selectedBankId = null;
         selectedBank = null;
         itemDrafts = [];
         metaDraft = null;
+        activeBankCell = null;
         expandedItemIndex = -1;
         setPendingChanges(false);
         setSaveStatus("idle", "Aucune banque sélectionnée");
@@ -1253,6 +1351,7 @@ export function createQuestionBanksViewController({
   }
 
   function openDeleteFolderOverlay(folderId) {
+    if (!allowFolders) return;
     const folder = getFolderById(folderId);
     if (!folder) return;
     const overlay = document.createElement("div");
@@ -1286,7 +1385,7 @@ export function createQuestionBanksViewController({
       message.textContent = "Suppression…";
       message.classList.remove("is-error");
       try {
-        await deleteQuestionBankFolder(folder.id);
+        await deleteQuestionBankFolderApi(folder.id);
         bankFolders = bankFolders.filter((item) => String(item.id) !== String(folder.id));
         collapsedBankFolderIds.delete(String(folder.id));
         knownBankFolderIds.delete(String(folder.id));
@@ -1376,16 +1475,21 @@ export function createQuestionBanksViewController({
 
   async function moveBankToDropTarget(bankId, dropTarget) {
     const teacherSpace = getCurrentTeacherSpace?.();
-    if (!teacherSpace?.id || !dropTarget) return;
+    if ((requireTeacherSpace && !teacherSpace?.id) || !dropTarget || !allowFolders) return;
 
     const sourceBank = getBankById(bankId);
-    if (!sourceBank || sourceBank.is_system === true) {
+    if (!canEditBankRecord(sourceBank) || sourceBank.is_system === true) {
       clearBankDropMarkers();
       return;
     }
 
-    const targetFolderId = dropTarget.mode === "append-root" ? null : normalizeTreeId(dropTarget.targetId);
-    if (dropTarget.mode === "inside" && !getFolderById(targetFolderId)) {
+    let targetFolderId = dropTarget.mode === "append-root" ? null : normalizeTreeId(dropTarget.targetId);
+    if (targetFolderId === BANK_ROOT_SYSTEM) {
+      clearBankDropMarkers();
+      return;
+    }
+    if (targetFolderId === BANK_ROOT_PERSONAL) targetFolderId = null;
+    if (dropTarget.mode === "inside" && targetFolderId && !getFolderById(targetFolderId)) {
       clearBankDropMarkers();
       return;
     }
@@ -1404,7 +1508,7 @@ export function createQuestionBanksViewController({
     renderExplorer();
 
     try {
-      const updated = await updateQuestionBank(sourceBank.id, {
+      const updated = await updateQuestionBankApi(sourceBank.id, {
         folder_id: targetFolderId,
         display_order: nextDisplayOrder
       });
@@ -1426,7 +1530,7 @@ export function createQuestionBanksViewController({
     const card = event.currentTarget;
     const bankId = String(card?.dataset?.nodeId || "");
     const bank = getBankById(bankId);
-    if (!bankId || !bank || bank.is_system === true || isMovingBank) {
+    if (!allowFolders || !bankId || !canEditBankRecord(bank) || bank.is_system === true || isMovingBank) {
       event.preventDefault();
       return;
     }
@@ -1548,6 +1652,7 @@ export function createQuestionBanksViewController({
     selectedBank = null;
     itemDrafts = [];
     metaDraft = null;
+    activeBankCell = null;
     expandedItemIndex = -1;
     setTableBusy(false);
     setPendingChanges(false);
@@ -1589,7 +1694,7 @@ export function createQuestionBanksViewController({
 
   function canEditSelectedBank() {
     const bank = getSelectedBank();
-    return Boolean(bank && bank.is_system !== true);
+    return canEditBankRecord(bank);
   }
 
   function canEditSelectedBankItems() {
@@ -1601,11 +1706,11 @@ export function createQuestionBanksViewController({
   }
 
   function getItemsRowsHost() {
-    return document.getElementById("bankItemsRows");
+    return getScopedElementById("bankItemsRows");
   }
 
   function getItemsLoadingHost() {
-    return document.getElementById("bankItemsLoading");
+    return getScopedElementById("bankItemsLoading");
   }
 
   function setTableBusy(next = false, label = "Chargement…") {
@@ -1626,7 +1731,7 @@ export function createQuestionBanksViewController({
   }
 
   function renderBankEditorMessage() {
-    const messageEl = document.getElementById("bankEditorMessage");
+    const messageEl = getScopedElementById("bankEditorMessage");
     if (!messageEl) return;
 
     const safeStatus = saveStatus || "idle";
@@ -1658,7 +1763,7 @@ export function createQuestionBanksViewController({
       }
 
       btnSaveBank.disabled = !canEditBank || safeStatus === "saving" || safeStatus === "loading";
-      btnSaveBank.classList.toggle("readonly", bank?.is_system === true);
+      btnSaveBank.classList.toggle("readonly", bank?.is_system === true && !allowSystemBankEditing);
     }
 
     renderBankEditorMessage();
@@ -1680,15 +1785,15 @@ export function createQuestionBanksViewController({
       bankEditorHeaderTitle.title = bank?.title || "";
     }
 
-    const btnRenameBankFromHeader = document.getElementById("btnRenameBankFromHeader");
+    const btnRenameBankFromHeader = getScopedElementById("btnRenameBankFromHeader");
     if (btnRenameBankFromHeader) {
-      btnRenameBankFromHeader.disabled = !bank || bank.is_system === true || isSaving;
-      btnRenameBankFromHeader.title = bank?.is_system === true
+      btnRenameBankFromHeader.disabled = !canEditBank || isSaving;
+      btnRenameBankFromHeader.title = bank?.is_system === true && !allowSystemBankEditing
         ? "Cette banque proposée ne peut pas être renommée"
         : "Renommer la banque";
     }
 
-    const bankEditorTypePill = document.getElementById("bankEditorTypePill");
+    const bankEditorTypePill = getScopedElementById("bankEditorTypePill");
     if (bankEditorTypePill) {
       bankEditorTypePill.hidden = !bank;
       bankEditorTypePill.textContent = bank ? getBankTypeLabel(bank.bank_type) : "";
@@ -1697,7 +1802,7 @@ export function createQuestionBanksViewController({
 
     syncBankMetaExpansionUi();
 
-    const importButton = document.getElementById("btnImportBank");
+    const importButton = getScopedElementById("btnImportBank");
     if (importButton) {
       importButton.disabled = !canEditSelectedBankItems() || isSaving;
       importButton.title = bank && !selectedBankIsEditableType()
@@ -1705,7 +1810,7 @@ export function createQuestionBanksViewController({
         : "";
     }
 
-    const exportEditButton = document.getElementById("btnExportEditBank");
+    const exportEditButton = getScopedElementById("btnExportEditBank");
     if (exportEditButton) {
       exportEditButton.disabled = !bank || !selectedBankIsEditableType() || isSaving;
       exportEditButton.title = bank && !selectedBankIsEditableType()
@@ -1713,16 +1818,9 @@ export function createQuestionBanksViewController({
         : "";
     }
 
-    if (btnDeleteBank) {
-      btnDeleteBank.disabled = !bank || bank.is_system === true || isSaving;
-      btnDeleteBank.title = bank?.is_system === true
-        ? "Les banques proposées ne peuvent pas être supprimées."
-        : "";
-    }
-
     if (!bank) {
       setSaveStatus("idle", "Aucune banque sélectionnée");
-    } else if (bank.is_system === true) {
+    } else if (bank.is_system === true && !allowSystemBankEditing) {
       setSaveStatus("readonly", "Banque proposée en lecture seule");
     } else if (hasPendingChanges && !isSaving && saveStatus !== "error") {
       setSaveStatus("dirty", "Modifications non enregistrées");
@@ -1763,7 +1861,7 @@ export function createQuestionBanksViewController({
     renderExplorer();
   }
 
-  function buildBankMetaFieldsMarkup({ isSystem = false } = {}) {
+  function buildBankMetaFieldsMarkup({ isReadonly = false } = {}) {
     if (!metaDraft) return "";
     const tagsText = Array.isArray(metaDraft.tags) ? metaDraft.tags.join("; ") : "";
 
@@ -1771,19 +1869,19 @@ export function createQuestionBanksViewController({
       <div class="dashboard-bank-meta-grid dashboard-bank-header-meta-grid">
         <label class="dashboard-bank-field">
           <span>Matière</span>
-          <input id="bankSubjectInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.subject)}" ${isSystem ? "disabled" : ""}>
+          <input id="bankSubjectInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.subject)}" ${isReadonly ? "disabled" : ""}>
         </label>
         <label class="dashboard-bank-field">
           <span>Niveau</span>
-          <input id="bankGradeInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.grade_level)}" ${isSystem ? "disabled" : ""}>
+          <input id="bankGradeInput" class="dashboard-bank-input" type="text" value="${escapeAttr(metaDraft.grade_level)}" ${isReadonly ? "disabled" : ""}>
         </label>
         <label class="dashboard-bank-field dashboard-bank-field-wide">
           <span>Tags <small>séparés par ;</small></span>
-          <input id="bankTagsInput" class="dashboard-bank-input" type="text" value="${escapeAttr(tagsText)}" ${isSystem ? "disabled" : ""}>
+          <input id="bankTagsInput" class="dashboard-bank-input" type="text" value="${escapeAttr(tagsText)}" ${isReadonly ? "disabled" : ""}>
         </label>
         <label class="dashboard-bank-field dashboard-bank-field-wide">
           <span>Description</span>
-          <textarea id="bankDescriptionInput" class="dashboard-bank-textarea" ${isSystem ? "disabled" : ""}>${escapeHtml(metaDraft.description)}</textarea>
+          <textarea id="bankDescriptionInput" class="dashboard-bank-textarea" ${isReadonly ? "disabled" : ""}>${escapeHtml(metaDraft.description)}</textarea>
         </label>
       </div>
     `;
@@ -1791,8 +1889,8 @@ export function createQuestionBanksViewController({
 
   function renderBankHeaderMetaPanel() {
     const bank = getSelectedBank();
-    const panel = document.getElementById("bankEditorMetaPanel");
-    const toggleButton = document.getElementById("btnToggleBankMeta");
+    const panel = getScopedElementById("bankEditorMetaPanel");
+    const toggleButton = getScopedElementById("btnToggleBankMeta");
     if (!panel) return;
 
     if (!bank || !metaDraft) {
@@ -1805,7 +1903,7 @@ export function createQuestionBanksViewController({
       return;
     }
 
-    panel.innerHTML = buildBankMetaFieldsMarkup({ isSystem: bank.is_system === true });
+    panel.innerHTML = buildBankMetaFieldsMarkup({ isReadonly: bank.is_system === true && !allowSystemBankEditing });
     syncBankMetaExpansionUi();
   }
 
@@ -1820,7 +1918,7 @@ export function createQuestionBanksViewController({
 
     return `
       <div class="dashboard-bank-editor">
-        ${isSystem ? `
+        ${isSystem && !allowSystemBankEditing ? `
           <div class="dashboard-bank-readonly-note">
             <span class="dashboard-material-icon" aria-hidden="true">lock</span>
             <span>Cette banque est proposée à tous les enseignants. Crée une copie personnelle pour la modifier.</span>
@@ -1879,6 +1977,12 @@ export function createQuestionBanksViewController({
                   </div>
                 </div>
               </div>
+              ${isQcmType(bankType) ? `
+                <button id="btnInsertBankAsset" class="btn dashboard-bank-insert-asset-btn" type="button" disabled title="Clique d’abord dans une case QCM.">
+                  <span class="dashboard-material-icon" aria-hidden="true">image</span>
+                  <span>Insérer une image</span>
+                </button>
+              ` : ""}
               <button id="btnAddBankItem" class="btn" type="button" ${canEditItems ? "" : "disabled"}>
                 <span class="dashboard-material-icon" aria-hidden="true">add</span>
                 <span>Ajouter une question</span>
@@ -2186,6 +2290,7 @@ export function createQuestionBanksViewController({
     updateActionState();
     updateItemsSummaryUi();
     renderTableBusy();
+    syncActiveBankCellUi();
   }
 
   function updateItemsSummaryUi() {
@@ -2195,13 +2300,13 @@ export function createQuestionBanksViewController({
       countLabel.textContent = `- ${count} question${count > 1 ? "s" : ""}`;
     }
 
-    const previewButton = document.getElementById("btnBankPreview");
+    const previewButton = getScopedElementById("btnBankPreview");
     if (previewButton) {
       previewButton.disabled = !count;
       if (!count) closePreviewPopup();
     }
 
-    const previewInput = document.getElementById("bankPreviewIndexInput");
+    const previewInput = getScopedElementById("bankPreviewIndexInput");
     if (previewInput) {
       previewInput.max = String(Math.max(1, count));
       previewInput.value = String(clampPreviewIndex(previewItemIndex) + 1);
@@ -2274,6 +2379,7 @@ export function createQuestionBanksViewController({
     updateItemsSummaryUi();
     syncPreviewPopupContent();
     renderTableBusy();
+    syncActiveBankCellUi();
   }
 
   function appendItemRow(index) {
@@ -2340,10 +2446,10 @@ export function createQuestionBanksViewController({
 
   function syncMetaDraftFromInputs() {
     if (!metaDraft) return;
-    metaDraft.subject = document.getElementById("bankSubjectInput")?.value ?? metaDraft.subject;
-    metaDraft.grade_level = document.getElementById("bankGradeInput")?.value ?? metaDraft.grade_level;
-    metaDraft.tags = normalizeTagsInput(document.getElementById("bankTagsInput")?.value ?? metaDraft.tags);
-    metaDraft.description = document.getElementById("bankDescriptionInput")?.value ?? metaDraft.description;
+    metaDraft.subject = getScopedElementById("bankSubjectInput")?.value ?? metaDraft.subject;
+    metaDraft.grade_level = getScopedElementById("bankGradeInput")?.value ?? metaDraft.grade_level;
+    metaDraft.tags = normalizeTagsInput(getScopedElementById("bankTagsInput")?.value ?? metaDraft.tags);
+    metaDraft.description = getScopedElementById("bankDescriptionInput")?.value ?? metaDraft.description;
   }
 
   function updateDraftItem(index, field, value) {
@@ -2493,6 +2599,175 @@ export function createQuestionBanksViewController({
     if (select && typeof field?.select === "function") {
       field.select();
     }
+    setActiveBankCellFromField(field, { preserveSelection: true });
+  }
+
+
+
+  function getBankFieldInfo(field) {
+    const element = field instanceof Element ? field.closest("[data-bank-field]") : null;
+    if (!element) return null;
+    const row = element.closest(".dashboard-bank-row");
+    const rowIndex = Number(row?.dataset?.itemIndex);
+    const fieldName = String(element.dataset.bankField || "");
+    if (!Number.isFinite(rowIndex) || !fieldName) return null;
+    return { rowIndex, fieldName, element };
+  }
+
+  function getActiveBankFieldElement(cell = activeBankCell) {
+    if (!cell) return null;
+    return bankEditorHost?.querySelector(
+      `.dashboard-bank-row[data-item-index="${cell.rowIndex}"] [data-bank-field="${CSS.escape(cell.fieldName)}"]`
+    ) || null;
+  }
+
+  function isQcmImageField(fieldName) {
+    return fieldName === "prompt"
+      || fieldName === "correctAnswer"
+      || /^distractor[1-5]$/.test(fieldName || "");
+  }
+
+  function recordBankFieldSelection(field) {
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return;
+    const info = getBankFieldInfo(field);
+    if (!info || !activeBankCell || activeBankCell.rowIndex !== info.rowIndex || activeBankCell.fieldName !== info.fieldName) return;
+    activeBankCell = {
+      ...activeBankCell,
+      selectionStart: Number.isFinite(field.selectionStart) ? field.selectionStart : field.value.length,
+      selectionEnd: Number.isFinite(field.selectionEnd) ? field.selectionEnd : field.value.length
+    };
+  }
+
+  function setActiveBankCellFromField(field, { preserveSelection = false } = {}) {
+    const info = getBankFieldInfo(field);
+    if (!info || !isQcmType(getSelectedBankType()) || !isQcmImageField(info.fieldName)) {
+      activeBankCell = null;
+      syncActiveBankCellUi();
+      return;
+    }
+
+    const element = info.element;
+    const value = "value" in element ? String(element.value || "") : "";
+    const defaultSelection = value.length;
+    activeBankCell = {
+      rowIndex: info.rowIndex,
+      fieldName: info.fieldName,
+      selectionStart: preserveSelection && Number.isFinite(element.selectionStart) ? element.selectionStart : defaultSelection,
+      selectionEnd: preserveSelection && Number.isFinite(element.selectionEnd) ? element.selectionEnd : defaultSelection
+    };
+    syncActiveBankCellUi();
+  }
+
+  function canInsertImageInActiveBankCell() {
+    if (!isQcmType(getSelectedBankType()) || !canEditSelectedBankItems() || !activeBankCell) return false;
+    if (!isQcmImageField(activeBankCell.fieldName)) return false;
+    const field = getActiveBankFieldElement();
+    return field instanceof HTMLInputElement && !field.disabled;
+  }
+
+  function syncActiveBankCellUi() {
+    bankEditorHost?.querySelectorAll(".is-bank-cell-active").forEach((element) => {
+      element.classList.remove("is-bank-cell-active");
+    });
+
+    const field = getActiveBankFieldElement();
+    if (field && isQcmType(getSelectedBankType()) && isQcmImageField(activeBankCell?.fieldName)) {
+      field.classList.add("is-bank-cell-active");
+    }
+
+    const button = getScopedElementById("btnInsertBankAsset");
+    if (button) {
+      const canInsert = canInsertImageInActiveBankCell();
+      button.disabled = !canInsert;
+      button.title = canInsert
+        ? "Insérer une image dans la case active."
+        : "Clique d’abord dans une case QCM.";
+    }
+  }
+
+  function buildAssetInsertionValue(value, assetId, selectionStart, selectionEnd) {
+    const source = String(value || "");
+    const start = Math.max(0, Math.min(source.length, Math.trunc(Number(selectionStart)) || 0));
+    const end = Math.max(start, Math.min(source.length, Math.trunc(Number(selectionEnd)) || start));
+    const before = source.slice(0, start);
+    const after = source.slice(end);
+    const replacesAllContent = !before.trim() && !after.trim();
+    const token = replacesAllContent ? `asset:${assetId}` : `{{asset:${assetId}}}`;
+    let insertion = token;
+
+    if (!replacesAllContent) {
+      if (before && !/\s$/.test(before)) insertion = ` ${insertion}`;
+      if (after && !/^\s/.test(after)) insertion = `${insertion} `;
+    }
+
+    const nextValue = `${before}${insertion}${after}`;
+    return {
+      value: nextValue,
+      caret: before.length + insertion.length
+    };
+  }
+
+  async function insertImageInActiveBankCell() {
+    if (!canInsertImageInActiveBankCell()) {
+      showToast?.("Clique d’abord dans une case QCM.", { isError: true });
+      return;
+    }
+
+    const targetCell = { ...activeBankCell };
+    const asset = await openToolAssetPicker({
+      type: "image",
+      title: "Insérer une image",
+      emptyMessage: "Aucune image disponible dans shared/tool-assets."
+    });
+    if (!asset?.id) {
+      focusBankCell(targetCell.rowIndex, targetCell.fieldName, { select: false });
+      return;
+    }
+
+    activeBankCell = targetCell;
+    let field = getActiveBankFieldElement(targetCell);
+    if (!(field instanceof HTMLInputElement)) {
+      focusBankCell(targetCell.rowIndex, targetCell.fieldName, { select: false });
+      field = getActiveBankFieldElement(targetCell);
+    }
+    if (!(field instanceof HTMLInputElement) || field.disabled) return;
+
+    const insertion = buildAssetInsertionValue(
+      field.value,
+      asset.id,
+      targetCell.selectionStart ?? field.value.length,
+      targetCell.selectionEnd ?? field.value.length
+    );
+    const previousQcmColumnCount = /^distractor[1-5]$/.test(targetCell.fieldName)
+      ? getCurrentQcmDistractorColumnCount()
+      : 0;
+
+    field.value = insertion.value;
+    updateDraftItem(targetCell.rowIndex, targetCell.fieldName, insertion.value);
+    activeBankCell = {
+      rowIndex: targetCell.rowIndex,
+      fieldName: targetCell.fieldName,
+      selectionStart: insertion.caret,
+      selectionEnd: insertion.caret
+    };
+
+    const nextQcmColumnCount = /^distractor[1-5]$/.test(targetCell.fieldName)
+      ? getCurrentQcmDistractorColumnCount()
+      : previousQcmColumnCount;
+
+    if (previousQcmColumnCount && previousQcmColumnCount !== nextQcmColumnCount) {
+      refreshItemsTable({ preserveScroll: true, force: true });
+    } else {
+      const row = field.closest(".dashboard-bank-row");
+      refreshRowFeedback(row, targetCell.rowIndex);
+    }
+
+    focusBankCell(targetCell.rowIndex, targetCell.fieldName, { select: false });
+    const updatedField = getActiveBankFieldElement();
+    if (updatedField instanceof HTMLInputElement) {
+      updatedField.setSelectionRange(insertion.caret, insertion.caret);
+      recordBankFieldSelection(updatedField);
+    }
   }
 
   function addDraftItemAndFocus() {
@@ -2510,16 +2785,16 @@ export function createQuestionBanksViewController({
   }
 
   function closeMarkupHelpPopup() {
-    const popup = document.getElementById("bankMarkupHelpPopup");
-    const button = document.getElementById("btnBankMarkupHelp");
+    const popup = getScopedElementById("bankMarkupHelpPopup");
+    const button = getScopedElementById("btnBankMarkupHelp");
     if (!popup || !button) return;
     popup.hidden = true;
     button.setAttribute("aria-expanded", "false");
   }
 
   function closePreviewPopup() {
-    const popup = document.getElementById("bankPreviewPopup");
-    const button = document.getElementById("btnBankPreview");
+    const popup = getScopedElementById("bankPreviewPopup");
+    const button = getScopedElementById("btnBankPreview");
     if (!popup || !button) return;
     popup.hidden = true;
     button.setAttribute("aria-expanded", "false");
@@ -2534,9 +2809,9 @@ export function createQuestionBanksViewController({
   }
 
   function syncPreviewPopupContent() {
-    const popup = document.getElementById("bankPreviewPopup");
-    const content = document.getElementById("bankPreviewContent");
-    const input = document.getElementById("bankPreviewIndexInput");
+    const popup = getScopedElementById("bankPreviewPopup");
+    const content = getScopedElementById("bankPreviewContent");
+    const input = getScopedElementById("bankPreviewIndexInput");
     if (!popup || popup.hidden || !content) return;
 
     previewItemIndex = clampPreviewIndex(previewItemIndex);
@@ -2734,32 +3009,11 @@ export function createQuestionBanksViewController({
     return true;
   }
 
-  async function deleteSelectedBank() {
-    const bank = getSelectedBank();
-    if (!bank || bank.is_system === true || isSaving) return;
-
-    const ok = window.confirm(`Supprimer la banque « ${bank.title} » ?`);
-    if (!ok) return;
-
-    try {
-      await deleteQuestionBank(bank.id);
-      selectedBankId = null;
-      selectedBank = null;
-      itemDrafts = [];
-      metaDraft = null;
-      expandedItemIndex = -1;
-      setPendingChanges(false);
-      await refresh({ forceRefresh: true });
-    } catch (err) {
-      showToast?.(err?.message || "Impossible de supprimer la banque.", { isError: true });
-    }
-  }
-
   function syncBankMetaExpansionUi() {
     const bank = getSelectedBank();
     const canShowMeta = Boolean(bank && metaDraft);
-    const metaPanel = document.getElementById("bankEditorMetaPanel");
-    const button = document.getElementById("btnToggleBankMeta");
+    const metaPanel = getScopedElementById("bankEditorMetaPanel");
+    const button = getScopedElementById("btnToggleBankMeta");
     const label = isMetaExpanded
       ? "Masquer les informations facultatives"
       : "Afficher les informations facultatives";
@@ -2777,8 +3031,8 @@ export function createQuestionBanksViewController({
   }
 
   function togglePreviewPopup() {
-    const popup = document.getElementById("bankPreviewPopup");
-    const button = document.getElementById("btnBankPreview");
+    const popup = getScopedElementById("bankPreviewPopup");
+    const button = getScopedElementById("btnBankPreview");
     if (!popup || !button || !itemDrafts.length) return;
 
     previewItemIndex = clampPreviewIndex(previewItemIndex);
@@ -2787,13 +3041,13 @@ export function createQuestionBanksViewController({
     button.setAttribute("aria-expanded", String(nextOpen));
     if (nextOpen) {
       syncPreviewPopupContent();
-      document.getElementById("bankPreviewIndexInput")?.focus();
+      getScopedElementById("bankPreviewIndexInput")?.focus();
     }
   }
 
   function toggleMarkupHelpPopup() {
-    const popup = document.getElementById("bankMarkupHelpPopup");
-    const button = document.getElementById("btnBankMarkupHelp");
+    const popup = getScopedElementById("bankMarkupHelpPopup");
+    const button = getScopedElementById("btnBankMarkupHelp");
     if (!popup || !button) return;
 
     const nextOpen = popup.hidden;
@@ -2809,10 +3063,10 @@ export function createQuestionBanksViewController({
     if (!teacherSpace?.id) return;
     try {
       const newTitle = buildUniqueBankTitle(banks, bank.title);
-      const { bank: copiedBank } = await copyQuestionBankToSpace(bank.id, teacherSpace.id, {
+      const { bank: copiedBank } = await copyQuestionBankToSpaceApi(bank.id, teacherSpace.id, {
         title: newTitle,
-        folder_id: currentOpenFolderId,
-        display_order: getNextBankOrderForFolder(currentOpenFolderId)
+        folder_id: null,
+        display_order: getNextBankOrderForFolder(null)
       });
       await refresh({ forceRefresh: true, preferredBankId: copiedBank.id });
       showToast?.("Copie personnelle créée.");
@@ -2827,6 +3081,8 @@ export function createQuestionBanksViewController({
 
     const field = target.closest("[data-bank-field]");
     if (field) {
+      setActiveBankCellFromField(field, { preserveSelection: true });
+      recordBankFieldSelection(field);
       const row = field.closest(".dashboard-bank-row");
       const index = Number(row?.dataset?.itemIndex);
       const shouldTrackQcmColumns = isQcmType(getSelectedBankType()) && /^distractor[1-5]$/.test(field.dataset.bankField || "");
@@ -2884,6 +3140,11 @@ export function createQuestionBanksViewController({
       return;
     }
 
+    if (target.closest("#btnInsertBankAsset")) {
+      void insertImageInActiveBankCell();
+      return;
+    }
+
     if (target.closest("#btnAddBankItem")) {
       addDraftItemAndFocus();
       return;
@@ -2925,10 +3186,30 @@ export function createQuestionBanksViewController({
     const field = target?.closest("[data-bank-field]");
     if (!field) return;
 
+    setActiveBankCellFromField(field, { preserveSelection: true });
+    recordBankFieldSelection(field);
+
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       addDraftItemAndFocus();
     }
+  }
+
+
+  function handleEditorFocusIn(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    const field = target?.closest("[data-bank-field]");
+    if (!field) return;
+    setActiveBankCellFromField(field, { preserveSelection: true });
+    recordBankFieldSelection(field);
+  }
+
+  function handleEditorSelectionChange(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    const field = target?.closest("[data-bank-field]");
+    if (!field) return;
+    setActiveBankCellFromField(field, { preserveSelection: true });
+    recordBankFieldSelection(field);
   }
 
   function handleEditorPaste(event) {
@@ -2947,6 +3228,7 @@ export function createQuestionBanksViewController({
     }
 
     selectedBankId = bankId;
+    activeBankCell = null;
     selectedBank = banks.find((bank) => String(bank.id) === String(bankId)) || null;
     metaDraft = selectedBank ? {
       title: selectedBank.title || "",
@@ -2969,11 +3251,14 @@ export function createQuestionBanksViewController({
     if (!selectedBank) return false;
 
     try {
-      const items = await listQuestionBankItems(selectedBank.id);
+      const items = await listQuestionBankItemsApi(selectedBank.id);
       itemDrafts = items.map(normalizeItemDraft);
       hasPendingChanges = false;
       setTableBusy(false);
-      setSaveStatus(selectedBank.is_system === true ? "readonly" : "saved", selectedBank.is_system === true ? "Banque proposée en lecture seule" : "Banque chargée");
+      setSaveStatus(
+        selectedBank.is_system === true && !allowSystemBankEditing ? "readonly" : "saved",
+        selectedBank.is_system === true && !allowSystemBankEditing ? "Banque proposée en lecture seule" : "Banque chargée"
+      );
       updateActionState();
       renderEditor();
       return true;
@@ -2988,7 +3273,7 @@ export function createQuestionBanksViewController({
   async function refresh({ forceRefresh = false, preferredBankId = null } = {}) {
     if (isRendering) return;
     const teacherSpace = getCurrentTeacherSpace?.();
-    if (!teacherSpace?.id) {
+    if (requireTeacherSpace && !teacherSpace?.id) {
       selectedBankId = null;
       selectedBank = null;
       itemDrafts = [];
@@ -3014,8 +3299,8 @@ export function createQuestionBanksViewController({
     isRendering = true;
     try {
       const [nextBanks, nextFolders] = await Promise.all([
-        listQuestionBanksForSpace(teacherSpace.id, { includeSystem: true }),
-        listQuestionBankFoldersForSpace(teacherSpace.id)
+        listQuestionBanksForSpaceApi(teacherSpace?.id, { includeSystem: true }),
+        allowFolders ? listQuestionBankFoldersForSpaceApi(teacherSpace?.id) : Promise.resolve([])
       ]);
       banks = Array.isArray(nextBanks) ? nextBanks : [];
       bankFolders = Array.isArray(nextFolders) ? nextFolders : [];
@@ -3032,6 +3317,7 @@ export function createQuestionBanksViewController({
         selectedBank = null;
         itemDrafts = [];
         metaDraft = null;
+        activeBankCell = null;
         expandedItemIndex = -1;
         setTableBusy(false);
         setPendingChanges(false);
@@ -3055,7 +3341,7 @@ export function createQuestionBanksViewController({
 
   async function createBank({ title, bankType } = {}) {
     const teacherSpace = getCurrentTeacherSpace?.();
-    if (!teacherSpace?.id) return;
+    if (requireTeacherSpace && !teacherSpace?.id) return;
 
     const safeType = isEditableBankType(bankType) ? normalizeBankType(bankType) : DEFAULT_BANK_TYPE;
     const safeTitle = String(title || "").trim();
@@ -3063,11 +3349,11 @@ export function createQuestionBanksViewController({
       throw new Error("Nom de banque vide.");
     }
 
-    const bank = await createQuestionBankForSpace(teacherSpace.id, {
+    const bank = await createQuestionBankForSpaceApi(teacherSpace?.id, {
       title: safeTitle,
       bank_type: safeType,
-      folder_id: currentOpenFolderId,
-      display_order: getNextBankOrderForFolder(currentOpenFolderId)
+      folder_id: allowFolders && !isVirtualBankRoot(currentOpenFolderId) ? currentOpenFolderId : null,
+      display_order: getNextBankOrderForFolder(allowFolders && !isVirtualBankRoot(currentOpenFolderId) ? currentOpenFolderId : null)
     });
     await refresh({ forceRefresh: true, preferredBankId: bank.id });
     if (String(selectedBankId) === String(bank.id) && !itemDrafts.length && selectedBankIsEditableType()) {
@@ -3081,7 +3367,7 @@ export function createQuestionBanksViewController({
 
   function openCreateBankOverlay() {
     const teacherSpace = getCurrentTeacherSpace?.();
-    if (!teacherSpace?.id) return;
+    if (requireTeacherSpace && !teacherSpace?.id) return;
 
     const currentFilter = normalizeBankTypeFilter(currentBankTypeFilter);
     let selectedType = getInitialBankCreationTypeFromFilter(currentFilter);
@@ -3260,14 +3546,14 @@ export function createQuestionBanksViewController({
 
   async function saveBank() {
     const bank = getSelectedBank();
-    if (!bank || bank.is_system === true || isSaving) return;
+    if (!canEditBankRecord(bank) || isSaving) return;
     syncMetaDraftFromInputs();
 
     const title = String(metaDraft?.title || "").trim();
     if (!title) {
       showToast?.("Le titre de la banque est obligatoire.", { isError: true });
       setSaveStatus("error", "Titre obligatoire");
-      document.getElementById("btnRenameBankFromHeader")?.focus();
+      getScopedElementById("btnRenameBankFromHeader")?.focus();
       return;
     }
 
@@ -3290,7 +3576,7 @@ export function createQuestionBanksViewController({
     setSaveStatus("saving", "Enregistrement…");
     setPendingChanges(hasPendingChanges);
     try {
-      const updatedBank = await updateQuestionBank(bank.id, {
+      const updatedBank = await updateQuestionBankApi(bank.id, {
         title,
         description: metaDraft.description,
         subject: metaDraft.subject,
@@ -3299,7 +3585,7 @@ export function createQuestionBanksViewController({
         bank_type: bank.bank_type || DEFAULT_BANK_TYPE
       });
       const updatedItems = shouldSaveItems
-        ? await replaceQuestionBankItems(bank.id, itemDrafts)
+        ? await replaceQuestionBankItemsApi(bank.id, itemDrafts)
         : itemDrafts;
       banks = banks.map((item) => String(item.id) === String(updatedBank.id) ? updatedBank : item);
       selectedBank = updatedBank;
@@ -3736,16 +4022,36 @@ export function createQuestionBanksViewController({
     textarea?.setSelectionRange(0, 0);
   }
 
+  function handleDocumentPointerDown(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.closest(".dashboard-bank-markup-help-wrap")) {
+      closeMarkupHelpPopup();
+    }
+    if (!target.closest(".dashboard-bank-preview-wrap")) {
+      closePreviewPopup();
+    }
+  }
+
+  function handleDocumentKeydown(event) {
+    if (event.key === "Escape") {
+      closeMarkupHelpPopup();
+      closePreviewPopup();
+    }
+  }
+
   function bindEvents() {
     btnCreateBank?.addEventListener("click", openCreateBankOverlay);
-    btnCreateBankFolder?.addEventListener("click", () => { void openCreateFolderOverlay(currentOpenFolderId); });
+    if (allowFolders) {
+      btnCreateBankFolder?.addEventListener("click", () => { void openCreateFolderOverlay(currentOpenFolderId); });
+    }
     bankExplorerHeader?.querySelectorAll("[data-bank-type-filter]").forEach((btn) => {
       btn.addEventListener("click", () => {
         setCurrentBankTypeFilter(btn.dataset.bankTypeFilter);
       });
     });
     updateBankTypeFilterButtons();
-    document.getElementById("btnRenameBankFromHeader")?.addEventListener("click", () => {
+    getScopedElementById("btnRenameBankFromHeader")?.addEventListener("click", () => {
       const bank = getSelectedBank();
       if (!bank) return;
       openRenameBankOverlay(bank.id);
@@ -3755,11 +4061,13 @@ export function createQuestionBanksViewController({
     banksList?.addEventListener("dragleave", handleBankDragLeave);
     btnBackBankExplorer?.addEventListener("click", () => { void closeBankEditor(); });
     btnSaveBank?.addEventListener("click", saveBank);
-    btnDeleteBank?.addEventListener("click", deleteSelectedBank);
     bankEditorHeader?.addEventListener("input", handleEditorInput);
     bankEditorHeader?.addEventListener("click", handleEditorClick);
     bankEditorHost?.addEventListener("input", handleEditorInput);
     bankEditorHost?.addEventListener("click", handleEditorClick);
+    bankEditorHost?.addEventListener("focusin", handleEditorFocusIn);
+    bankEditorHost?.addEventListener("keyup", handleEditorSelectionChange);
+    bankEditorHost?.addEventListener("mouseup", handleEditorSelectionChange);
     bankEditorHost?.addEventListener("keydown", handleEditorKeydown);
     bankEditorHost?.addEventListener("paste", handleEditorPaste);
 
@@ -3786,23 +4094,14 @@ export function createQuestionBanksViewController({
       }
     });
 
-    document.addEventListener("pointerdown", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (!target.closest(".dashboard-bank-markup-help-wrap")) {
-        closeMarkupHelpPopup();
-      }
-      if (!target.closest(".dashboard-bank-preview-wrap")) {
-        closePreviewPopup();
-      }
-    });
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeydown);
+  }
 
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        closeMarkupHelpPopup();
-        closePreviewPopup();
-      }
-    });
+  function destroy() {
+    document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    document.removeEventListener("keydown", handleDocumentKeydown);
+    unbindRowsHostEvents();
   }
 
   bindEvents();
@@ -3813,6 +4112,7 @@ export function createQuestionBanksViewController({
     refresh,
     isEditorOpen: () => bankViewMode === "editor",
     closeEditor: closeBankEditor,
+    destroy,
     hasPendingChanges: () => hasPendingChanges,
     getLeaveWarningMessage: () => "Des modifications non enregistrées existent dans une banque."
   };

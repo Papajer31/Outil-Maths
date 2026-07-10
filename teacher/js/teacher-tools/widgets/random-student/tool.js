@@ -11,10 +11,10 @@ import { renderRandomStudentProjector } from "./projector.js";
 export const randomStudentTeacherTool = defineTeacherTool({
   id: "random-student",
   label: "Tirage élève",
-  icon: "casino",
+  icon: "patient_list",
   description: "Tirer au sort un élève de la classe, avec ou sans remise dans le tirage.",
 
-  defaultLayout: { x: 0.30, y: 0.26, width: 0.40, height: 0.30 },
+  defaultLayout: { x: 0.34, y: 0.30, width: 0.30, height: 0.20 },
   minLayout: { width: 0.18, height: 0.14 },
   interaction: {
     moveMode: "body",

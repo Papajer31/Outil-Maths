@@ -1,0 +1,288 @@
+.rn-root {
+  --rn-line-color: #e9edf5;
+  --rn-marker-a-color: #0070c0;
+  --rn-marker-b-color: #c00000;
+  --rn-highlight-color: #ffb020;
+  --rn-highlight-width: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  font-family: "Andika", system-ui, sans-serif;
+  color: #17324d;
+}
+
+.rn-stage {
+  --rn-side-margin: 50px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: calc(100% - (2 * var(--rn-side-margin)));
+  margin: 0 var(--rn-side-margin);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 176px;
+  row-gap: 18px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.rn-line-panel {
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  overflow: visible;
+}
+
+.rn-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.rn-svg--graduated {
+  min-height: 250px;
+}
+
+.rn-svg--picbille {
+  min-height: 210px;
+}
+
+.rn-svg-baseline {
+  stroke: var(--rn-line-color);
+  stroke-width: 6;
+  stroke-linecap: butt;
+}
+
+.rn-svg-tick {
+  stroke: var(--rn-line-color);
+  stroke-linecap: butt;
+}
+
+.rn-svg-tick--target {
+  stroke: var(--rn-highlight-color);
+  filter: drop-shadow(0 2px 0 rgba(0,0,0,0.15));
+}
+
+.rn-svg-tick--marker {
+  stroke: var(--rn-line-color);
+}
+
+.rn-svg-tick--marker-1 {
+  stroke: var(--rn-marker-a-color);
+}
+
+.rn-svg-tick--marker-2 {
+  stroke: var(--rn-marker-b-color);
+}
+
+.rn-svg-label {
+  font-family: "Andika", system-ui, sans-serif;
+  font-size: 54px;
+  font-weight: 1000;
+  fill: var(--rn-line-color);
+  dominant-baseline: middle;
+}
+
+.rn-svg-label--marker-1 {
+  fill: var(--rn-marker-a-color);
+}
+
+.rn-svg-label--marker-2 {
+  fill: var(--rn-marker-b-color);
+}
+
+.rn-picbille-highlight {
+  fill: #0070c0;
+  opacity: 1;
+}
+
+.rn-response-lane {
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  overflow: visible;
+}
+
+.rn-connector {
+  position: absolute;
+  left: var(--rn-response-x, 50%);
+  top: var(--rn-connector-y, -54px);
+  width: var(--rn-highlight-width);
+  height: var(--rn-connector-height, 178px);
+  background: var(--rn-highlight-color);
+  border-radius: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rn-connector[hidden] {
+  display: none;
+}
+
+.rn-connector--answer {
+  background: var(--rn-highlight-color);
+}
+
+.rn-connector--incorrect {
+  background: var(--rn-highlight-color);
+}
+
+.rn-connector--passive-correction-motion {
+  transform: translateX(-50%) translate(var(--rn-connector-start-x, 0), var(--rn-connector-start-y, 0)) scaleY(var(--rn-connector-start-scale-y, 1));
+  transform-origin: center top;
+  animation: rnConnectorToCorrection 420ms ease forwards;
+}
+
+.rn-response-box {
+  position: absolute;
+  left: var(--rn-response-x, 50%);
+  top: var(--rn-response-y, 0);
+  min-width: 190px;
+  min-height: 112px;
+  padding: 12px 26px;
+  box-sizing: border-box;
+  border-radius: 24px;
+  border: 4px dashed #ccced0;
+  background: #191e27;
+  box-shadow: 0 10px 24px rgba(31, 42, 68, 0.12);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  user-select: none;
+  touch-action: none;
+  z-index: 3;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.rn-response-box:focus {
+  outline: none;
+}
+
+.rn-response-box--draggable:not([aria-disabled="true"]) {
+  cursor: grab;
+}
+
+.rn-response-box--draggable:not([aria-disabled="true"]):active {
+  cursor: grabbing;
+}
+
+.rn-response-box--placed {
+  border-style: dashed;
+  border-color: #ccced0;
+}
+
+.rn-response-box--correct,
+.rn-response-box--correct-answer {
+  border-style: solid;
+  border-color: #2f9e44;
+  background: #191e27;
+}
+
+.rn-response-box--incorrect {
+  border-style: solid;
+  border-color: #d64545;
+  background: #191e27;
+}
+
+.rn-root--passive-free .rn-response-box,
+.rn-root--passive-free .rn-response-box--pending,
+.rn-root--passive-free .rn-response-box--placed,
+.rn-root--passive-free .rn-response-box--correct,
+.rn-root--passive-free .rn-response-box--correct-answer,
+.rn-root--passive-free .rn-response-box--incorrect,
+.rn-root--passive-free .rn-response-box--neutral-correction {
+  border-style: solid;
+  border-color: #e9edf5;
+  background: #191e27;
+  box-shadow: 0 10px 24px rgba(31, 42, 68, 0.12);
+}
+
+.rn-root--passive-free .rn-response-box--draggable:not([aria-disabled="true"]),
+.rn-root--passive-free .rn-response-box--draggable:not([aria-disabled="true"]):active {
+  cursor: default;
+}
+
+.rn-root--passive-free.rn-root--number-to-graduation.rn-root--answer .rn-response-box,
+.rn-root--passive-free.rn-root--number-to-graduation.rn-root--answer .rn-connector {
+  transition:
+    left 420ms ease,
+    top 420ms ease,
+    height 420ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.rn-response-number {
+  font-size: 56px;
+  font-weight: 1000;
+  line-height: 1;
+  color: #e9edf5;
+  min-width: 150px;
+  text-align: center;
+}
+
+.rn-response-number--hidden {
+  visibility: hidden;
+}
+
+.rn-number-input {
+  width: 150px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #e9edf5;
+  caret-color: #e9edf5;
+  font-family: "Andika", system-ui, sans-serif;
+  font-size: 56px;
+  font-weight: 1000;
+  line-height: 1;
+  text-align: center;
+  appearance: textfield;
+}
+
+.rn-number-input::-webkit-outer-spin-button,
+.rn-number-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.rn-root--answer .rn-response-box {
+  cursor: default;
+  touch-action: auto;
+}
+
+@keyframes rnConnectorToCorrection {
+  to {
+    transform: translateX(-50%) translate(0, 0) scaleY(1);
+  }
+}
+
+@media (max-width: 900px) {
+  .rn-stage {
+    --rn-side-margin: 24px;
+  }
+
+  .rn-response-box {
+    min-width: 150px;
+    min-height: 96px;
+    border-radius: 20px;
+    padding: 10px 18px;
+  }
+
+  .rn-response-number,
+  .rn-number-input {
+    font-size: 44px;
+  }
+}

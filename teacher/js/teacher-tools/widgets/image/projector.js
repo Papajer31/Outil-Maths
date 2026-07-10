@@ -45,7 +45,7 @@ function getImagePanBounds(viewport, state = {}){
   let imageWidth = rect.width;
   let imageHeight = rect.height;
 
-  if (naturalWidth > 0 && naturalHeight > 0) {
+  if (state.preserveProportions !== false && naturalWidth > 0 && naturalHeight > 0) {
     const imageRatio = naturalWidth / naturalHeight;
     const viewportRatio = rect.width / rect.height;
     if (imageRatio >= viewportRatio) {
@@ -87,6 +87,7 @@ function setImageStageTransform(stage, offsetX, offsetY, zoom){
 function syncViewerDragState(viewer, state){
   if (!viewer) return;
   viewer.classList.toggle("is-zoomed", state.zoom > 1);
+  viewer.classList.toggle("is-stretched", state.preserveProportions === false);
   if (state.zoom > 1) {
     viewer.setAttribute("data-no-widget-drag", "");
   } else {
@@ -221,21 +222,30 @@ function renderChromeControls({ chromeHost, state, sendAction } = {}){
 
   chromeHost.innerHTML = `
     <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-image-action="zoom-out" title="Zoom arrière" aria-label="Zoom arrière" ${state.zoom <= IMAGE_ZOOM_MIN ? "disabled" : ""}>zoom_out</button>
-    <span class="ttp-image-zoom-label" aria-label="Zoom actuel">${escapeHtml(formatImageZoom(state.zoom))}</span>
+    <button class="ttp-image-zoom-label" type="button" data-widget-action data-image-action="center" title="Revenir à 100 %" aria-label="Revenir à 100 %">${escapeHtml(formatImageZoom(state.zoom))}</button>
     <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-image-action="zoom-in" title="Zoom avant" aria-label="Zoom avant" ${state.zoom >= IMAGE_ZOOM_MAX ? "disabled" : ""}>zoom_in</button>
-    <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-image-action="center" title="Centrer et adapter" aria-label="Centrer et adapter">fit_screen</button>
+    <label class="ttp-image-proportions-toggle" data-widget-action>
+      <input type="checkbox" data-image-preserve-proportions ${state.preserveProportions ? "checked" : ""}>
+      <span>Proportions</span>
+    </label>
     <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-image-action="clear" title="Retirer l’image" aria-label="Retirer l’image">delete</button>
   `;
   chromeHost.querySelector("[data-image-action='zoom-out']")?.addEventListener("click", () => sendAction?.("adjust-zoom", { delta: -IMAGE_ZOOM_STEP }));
   chromeHost.querySelector("[data-image-action='zoom-in']")?.addEventListener("click", () => sendAction?.("adjust-zoom", { delta: IMAGE_ZOOM_STEP }));
   chromeHost.querySelector("[data-image-action='center']")?.addEventListener("click", () => sendAction?.("center"));
   chromeHost.querySelector("[data-image-action='clear']")?.addEventListener("click", () => sendAction?.("clear-image"));
+  chromeHost.querySelector("[data-image-preserve-proportions]")?.addEventListener("change", (event) => {
+    sendAction?.("set-preserve-proportions", {
+      preserveProportions: event.currentTarget.checked === true
+    });
+  });
 }
 
 export function renderImageProjector({ host, chromeHost, widgetInfoHost, state, sendAction } = {}){
   if (!host) return;
   const safeState = normalizeImageState(state);
   const hasImage = Boolean(safeState.source);
+  host.closest?.(".ttp-widget-frame")?.classList.toggle("has-empty-image", !hasImage);
   const maxOffset = getMaxImageOffset(safeState.zoom);
   renderChromeControls({ chromeHost, state: safeState, sendAction });
 
@@ -247,7 +257,7 @@ export function renderImageProjector({ host, chromeHost, widgetInfoHost, state, 
 
   if (!hasImage) {
     host.innerHTML = `
-      <section class="ttp-image-empty" data-no-widget-drag>
+      <section class="ttp-image-empty">
         <div class="ttp-image-empty-card">
           <span class="ttp-material-icon" aria-hidden="true">image</span>
           <strong>Ajouter une image</strong>
@@ -285,7 +295,7 @@ export function renderImageProjector({ host, chromeHost, widgetInfoHost, state, 
   }
 
   host.innerHTML = `
-    <section class="ttp-image-viewer ${safeState.zoom > 1 ? "is-zoomed" : ""}" ${safeState.zoom > 1 ? "data-no-widget-drag" : ""}>
+    <section class="ttp-image-viewer ${safeState.zoom > 1 ? "is-zoomed" : ""}${safeState.preserveProportions ? "" : " is-stretched"}" ${safeState.zoom > 1 ? "data-no-widget-drag" : ""}>
       <div class="ttp-image-stage" aria-hidden="true">
         <img class="ttp-image-img" src="${escapeAttr(safeState.source)}" alt="${escapeAttr(safeState.imageName || "Image projetée")}">
       </div>

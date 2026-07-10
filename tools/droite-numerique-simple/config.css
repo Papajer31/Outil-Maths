@@ -1,0 +1,132 @@
+.rns-config-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rns-config-root .tv-group {
+  min-height: 38px;
+}
+
+.rns-config-root .tv-group-collapsible {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rns-config-root .tv-group-collapsible .tv-group-toggle {
+  min-height: 36px;
+}
+
+.rns-config-root .tv-group-collapsible:has(.tv-group-toggle[aria-expanded="false"]) {
+  min-height: 64px;
+}
+
+.rns-config-root .tv-group-content.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rns-config-root .tv-radio-options {
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rns-config-root .rn-checkbox-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.rns-config-root .tv-radio-row,
+.rns-config-root .rn-checkbox-options .tv-checkbox-row {
+  position: relative;
+  min-width: 42px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  justify-content: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.rns-config-root .tv-radio-row:hover,
+.rns-config-root .rn-checkbox-options .tv-checkbox-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.rns-config-root .tv-radio-row:has(.tv-radio:checked),
+.rns-config-root .rn-checkbox-options .tv-checkbox-row:has(.tv-checkbox:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.rns-config-root .tv-radio-row:has(.tv-radio:focus-visible),
+.rns-config-root .rn-checkbox-options .tv-checkbox-row:has(.tv-checkbox:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.rns-config-root .tv-radio-row.is-disabled,
+.rns-config-root .tv-radio-row:has(.tv-radio:disabled),
+.rns-config-root .rn-checkbox-options .tv-checkbox-row:has(.tv-checkbox:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.rns-config-root .tv-radio-row .tv-radio,
+.rns-config-root .rn-checkbox-options .tv-checkbox-row .tv-checkbox {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rns-config-root .tv-radio-row .tv-radio:disabled,
+.rns-config-root .rn-checkbox-options .tv-checkbox-row .tv-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.rns-config-root .tv-radio-row span,
+.rns-config-root .rn-checkbox-options .tv-checkbox-row span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rns-config-root .rn-graduated-settings,
+.rns-config-root .rn-picbille-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.rns-config-root .rn-graduated-settings[hidden],
+.rns-config-root .rn-picbille-settings[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 980px) {
+  .rns-config-root .tv-radio-options,
+  .rns-config-root .rn-checkbox-options {
+    justify-content: flex-start;
+  }
+}

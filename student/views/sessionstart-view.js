@@ -8,6 +8,7 @@ import { ensureSelectedActivityMeta } from "../student-activity-meta.js";
 import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
 import { requestAppFullscreen } from "../../shared/dom-helpers.js";
 import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
+import { normalizeCatalogRuntimeContext } from "../../shared/catalogue.js";
 import { closeProjectedWindow } from "../projected-session.js";
 
 const rocketOffUrl = new URL("../../shared/ui-assets/rocket-off.svg", import.meta.url).href;
@@ -16,10 +17,16 @@ const rocketOnUrl = new URL("../../shared/ui-assets/rocket-on.svg", import.meta.
 export function renderSessionStartView(root){
   const isProjectedTeacherMode = studentState.sessionMode === "projected-teacher";
   const isSharedSessionEntry = studentState.sharedSessionEntry === true;
+  const isCatalogTestMode = normalizeCatalogRuntimeContext(
+    studentState.selectedConfig?.catalog_context
+      ?? studentState.selectedConfig?.catalogContext
+      ?? studentState.projectedSession?.catalogRuntimeContext
+      ?? ""
+  ) === "test";
   root.innerHTML = `
     <div class="sessionstart-shell student-screen-shell student-stars-shell" id="sessionStartShell">
       <div class="student-stars-content">
-        ${isSharedSessionEntry ? "" : `
+        ${isSharedSessionEntry || isCatalogTestMode ? "" : `
           <button
             class="student-nav-btn student-nav-back"
             id="btnBackFromSessionStart"
@@ -86,7 +93,7 @@ export function renderSessionStartView(root){
   }, { signal });
 
   els.start?.addEventListener("click", () => {
-    if (requiresStudent && getSelectedParticipantsValidationIssue()) return;
+    if (requiresStudent && !isCatalogTestMode && getSelectedParticipantsValidationIssue()) return;
     if (blockingMessage || isLaunching) return;
 
     isLaunching = true;
@@ -100,6 +107,7 @@ export function renderSessionStartView(root){
 
   els.shell?.addEventListener("click", (event) => {
     if (event.target.closest("[data-skip-autofs='true']")) return;
+    if (isCatalogTestMode) return;
     requestAppFullscreen();
   }, { signal });
 
@@ -127,7 +135,7 @@ export function renderSessionStartView(root){
       requiresStudent = !!meta.requiresStudent;
       blockingMessage = String(meta.blockingMessage || "").trim();
 
-      if (requiresStudent && !isProjectedTeacherMode) {
+      if (requiresStudent && !isProjectedTeacherMode && !isCatalogTestMode) {
         const selectionIssue = getSelectedParticipantsValidationIssue(meta);
         if (selectionIssue) {
           blockingMessage = selectionIssue;
@@ -152,8 +160,8 @@ export function renderSessionStartView(root){
   }
 
   function syncStartButton(){
-    const selectionIssue = requiresStudent ? getSelectedParticipantsValidationIssue() : "";
-    const missingStudent = requiresStudent && !!selectionIssue;
+    const selectionIssue = requiresStudent && !isCatalogTestMode ? getSelectedParticipantsValidationIssue() : "";
+    const missingStudent = requiresStudent && !isCatalogTestMode && !!selectionIssue;
     const mustDisable = missingStudent || !!blockingMessage;
 
     els.start?.toggleAttribute("disabled", mustDisable);

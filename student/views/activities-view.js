@@ -1,5 +1,12 @@
 import { studentState } from "../student-state.js";
-import { goBackToSelectStudents, openActivityFolder, selectActivity } from "../student-actions.js";
+import {
+  goBackToSelectStudents,
+  openActivityFolder,
+  refreshMissionsForCurrentSelection,
+  selectActivity,
+  selectActivityEntry,
+  selectMission
+} from "../student-actions.js";
 import { requestAppFullscreen, escapeHtml, escapeAttr } from "../../shared/dom-helpers.js";
 import { createPlanetSvg, nextSeed } from "../../shared/planetGenerator.js";
 import {
@@ -19,6 +26,8 @@ let activityPlanetSeedScope = "";
 export function renderActivitiesView(root){
   const isSharedSessionEntry = studentState.sharedSessionEntry === true;
   const treeState = buildActivityTreeState();
+  const entry = normalizeEntry(studentState.activityEntry);
+
   root.innerHTML = `
     <div class="activities-shell student-screen-shell student-stars-shell" id="activitiesShell">
       <div class="student-stars-content activities-layout">
@@ -45,12 +54,16 @@ export function renderActivitiesView(root){
         `}
 
         <div class="activities-breadcrumb-wrap">
-          ${renderActivitiesBreadcrumb(treeState)}
+          ${entry ? renderActivitiesBreadcrumb(treeState, entry) : ""}
         </div>
 
         <div class="activities-stage">
           <div id="activitiesList" class="activities-list activities-list-alone">
-            ${renderActivitiesContent(treeState)}
+            ${entry === "exploration"
+              ? renderExplorationContent(treeState)
+              : entry === "missions"
+                ? renderMissionsContent()
+                : renderEntryHub()}
           </div>
         </div>
       </div>
@@ -67,6 +80,22 @@ export function renderActivitiesView(root){
       if (event.target.closest("[data-skip-autofs='true']")) return;
       requestAppFullscreen();
     });
+
+  document.querySelectorAll("[data-entry]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const nextEntry = String(button.dataset.entry || "").trim();
+      if (nextEntry === "missions") {
+        await refreshMissionsForCurrentSelection();
+      }
+      selectActivityEntry(nextEntry);
+    });
+  });
+
+  document.querySelectorAll("[data-mission-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void selectMission(button.dataset.missionId || "");
+    });
+  });
 
   document.querySelectorAll("[data-config-name]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -88,18 +117,80 @@ export function renderActivitiesView(root){
 }
 
 function handleActivitiesBack(treeState = buildActivityTreeState()){
-  const currentFolderId = normalizeFolderId(studentState.currentActivityFolderId);
-  const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
-
-  if (!currentFolder) {
+  const entry = normalizeEntry(studentState.activityEntry);
+  if (!entry) {
     goBackToSelectStudents();
     return;
   }
 
-  openActivityFolder(currentFolder.parent_id || "");
+  if (entry === "exploration") {
+    const currentFolderId = normalizeFolderId(studentState.currentActivityFolderId);
+    const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
+    if (currentFolder) {
+      openActivityFolder(currentFolder.parent_id || "");
+      return;
+    }
+  }
+
+  selectActivityEntry("");
 }
 
-function renderActivitiesContent(treeState = buildActivityTreeState()){
+function renderEntryHub(){
+  const isGroup = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) === "group";
+  const missions = Array.isArray(studentState.missions) ? studentState.missions : [];
+  const missionTile = missions.length
+    ? renderEntryTile({
+      entry: "missions",
+      label: missions.length > 1 ? "Missions" : "Mission",
+      subtitle: missions.length > 1 ? `${missions.length} missions disponibles` : "Une mission est disponible",
+      planetKey: "entry:missions"
+    })
+    : "";
+
+  return `
+    <div class="activities-row">
+      ${renderEntryTile({
+        entry: "exploration",
+        label: "Exploration",
+        subtitle: "Choisis une activité librement.",
+        planetKey: "entry:exploration"
+      })}
+      ${isGroup ? "" : renderEntryTile({
+        entry: "adventure",
+        label: "Aventure",
+        subtitle: "Bientôt : le site choisira la prochaine étape.",
+        planetKey: "entry:adventure",
+        disabled: true
+      })}
+      ${missionTile}
+    </div>
+  `;
+}
+
+function renderEntryTile({ entry, label, subtitle = "", planetKey, disabled = false }){
+  const attrs = disabled
+    ? `disabled aria-disabled="true" data-skip-autofs="true"`
+    : `data-entry="${escapeAttr(entry)}"`;
+  return `
+    <button
+      class="activity-tile ${disabled ? "activity-tile-disabled" : ""}"
+      type="button"
+      ${attrs}
+    >
+      <span
+        class="activity-planet-visual ${shouldAnimateActivityPlanets() ? "is-levitating" : ""}"
+        aria-hidden="true"
+        style="${buildActivityPlanetMotionStyle(planetKey)}"
+      >
+        ${renderActivityPlanet(planetKey)}
+      </span>
+      <span class="activity-tile-label">${escapeHtml(label)}</span>
+      ${subtitle ? `<span class="activity-tile-hint" style="display:block;text-align:center;font-size:0.8rem;opacity:0.78;">${escapeHtml(subtitle)}</span>` : ""}
+    </button>
+  `;
+}
+
+function renderExplorationContent(treeState = buildActivityTreeState()){
   if (studentState.isLoadingActivities){
     return `
       <div class="activities-placeholder">
@@ -119,11 +210,8 @@ function renderActivitiesContent(treeState = buildActivityTreeState()){
   const currentFolderId = normalizeFolderId(studentState.currentActivityFolderId);
   const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
   const items = getOrderedChildNodes(treeState, currentFolder?.id || null);
-  const featuredActivity = !currentFolder
-    ? getFeaturedRootActivity(getCurrentStudentActivitiesMode())
-    : null;
 
-  if (!items.length && !currentFolder && !featuredActivity){
+  if (!items.length && !currentFolder){
     return `
       <div class="activities-placeholder">
         Aucune activité disponible.
@@ -132,13 +220,6 @@ function renderActivitiesContent(treeState = buildActivityTreeState()){
   }
 
   const rows = chunkItems(items, getActivityRowSize());
-  const featuredRow = featuredActivity
-    ? `
-      <div class="activities-featured-row">
-        ${renderActivityTile(featuredActivity, { featured: true })}
-      </div>
-    `
-    : "";
   const childRows = rows.map((row) => `
     <div class="activities-row">
       ${row.map((node) => node.type === "folder"
@@ -156,13 +237,57 @@ function renderActivitiesContent(treeState = buildActivityTreeState()){
     `
     : "";
 
-  return `${featuredRow}${childRows}${emptyFolderPlaceholder}`;
+  return `${childRows}${emptyFolderPlaceholder}`;
 }
 
-function renderActivitiesBreadcrumb(treeState = buildActivityTreeState()){
+function renderMissionsContent(){
+  const missions = Array.isArray(studentState.missions) ? studentState.missions : [];
+  if (!missions.length) {
+    return "";
+  }
+
+  const rows = chunkItems(missions, getActivityRowSize());
+  return rows.map((row) => `
+    <div class="activities-row">
+      ${row.map((mission) => renderMissionTile(mission)).join("")}
+    </div>
+  `).join("");
+}
+
+function renderMissionTile(mission){
+  return `
+    <button
+      class="activity-tile activity-mission-tile"
+      type="button"
+      data-mission-id="${escapeAttr(mission?.id || "")}"
+    >
+      <span
+        class="activity-planet-visual ${shouldAnimateActivityPlanets() ? "is-levitating" : ""}"
+        aria-hidden="true"
+        style="${buildActivityPlanetMotionStyle(`mission:${String(mission?.id || "")}`)}"
+      >
+        ${renderActivityPlanet(`mission:${String(mission?.id || "")}`)}
+      </span>
+      <span class="activity-tile-label">${escapeHtml(mission?.title || "Mission")}</span>
+      <span class="activity-tile-hint" style="display:block;text-align:center;font-size:0.8rem;opacity:0.78;">
+        ${escapeHtml(formatMissionSubtitle(mission))}
+      </span>
+    </button>
+  `;
+}
+
+function formatMissionSubtitle(mission){
+  const intent = String(mission?.intent_mode || "practice") === "evaluation" ? "Évaluation" : "Entrainement";
+  const answer = String(mission?.answer_mode || "student_input") === "manual_validation" ? "sans saisie" : "réponse saisie";
+  return `${intent} · ${answer}`;
+}
+
+function renderActivitiesBreadcrumb(treeState = buildActivityTreeState(), entry = normalizeEntry(studentState.activityEntry)){
   const currentFolderId = normalizeFolderId(studentState.currentActivityFolderId);
   const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
-  const trail = buildBreadcrumbTrail(treeState, currentFolder);
+  const trail = entry === "exploration"
+    ? buildBreadcrumbTrail(treeState, currentFolder)
+    : [{ label: "Mission", folderId: "", clickable: false }];
 
   return `
     <nav class="activities-breadcrumb" aria-label="Navigation dossiers">
@@ -174,7 +299,7 @@ function renderActivitiesBreadcrumb(treeState = buildActivityTreeState()){
             <button
               type="button"
               class="activities-breadcrumb-btn"
-              data-breadcrumb-folder-id="${escapeAttr(item.folderId ?? "")}"
+              data-breadcrumb-folder-id="${escapeAttr(item.folderId ?? "") }"
             >
               ${escapeHtml(item.label)}
             </button>
@@ -192,7 +317,7 @@ function renderFolderTile(folder){
     <button
       class="activity-tile activity-folder-tile"
       type="button"
-      data-folder-id="${escapeAttr(folder?.id ?? "")}"
+      data-folder-id="${escapeAttr(folder?.id ?? "") }"
     >
       <span
         class="activity-planet-visual ${shouldAnimateActivityPlanets() ? "is-levitating" : ""}"
@@ -206,12 +331,12 @@ function renderFolderTile(folder){
   `;
 }
 
-function renderActivityTile(activity, { featured = false } = {}){
+function renderActivityTile(activity){
   return `
     <button
-      class="activity-tile ${featured ? "activity-tile-featured" : ""}"
+      class="activity-tile"
       type="button"
-      data-config-name="${escapeAttr(activity?.config_name || "")}"
+      data-config-name="${escapeAttr(activity?.config_name || activity?.id || "") }"
     >
       <span
         class="activity-planet-visual ${shouldAnimateActivityPlanets() ? "is-levitating" : ""}"
@@ -220,20 +345,9 @@ function renderActivityTile(activity, { featured = false } = {}){
       >
         ${renderActivityPlanet(`activity:${String(activity?.id || activity?.config_name || "")}`)}
       </span>
-      <span class="activity-tile-label ${featured ? "activity-tile-label-featured" : ""}">${escapeHtml(activity?.config_name || "Sans nom")}</span>
+      <span class="activity-tile-label">${escapeHtml(activity?.config_name || "Sans nom")}</span>
     </button>
   `;
-}
-
-function getFeaturedRootActivity(currentMode){
-  const safeMode = normalizeActivityMode(currentMode, DEFAULT_ACTIVITY_MODE);
-  if (!isStudentFacingActivityMode(safeMode)) return null;
-
-  return ((studentState.activities || [])
-    .filter((activity) => activity?.is_visible !== false)
-    .filter((activity) => normalizeActivityMode(activity?.activity_mode, DEFAULT_ACTIVITY_MODE) === safeMode)
-    .filter((activity) => activity?.is_highlighted === true)
-    .sort(compareActivityRecordsForDisplay)[0]) || null;
 }
 
 function getCurrentStudentActivitiesMode(){
@@ -316,7 +430,7 @@ function buildBreadcrumbTrail(treeState, currentFolder){
   }
 
   const trail = [{
-    label: "Activités",
+    label: "Exploration",
     folderId: "",
     clickable: folders.length > 0
   }];
@@ -426,21 +540,6 @@ function compareOrderedTreeNodes(a, b){
   return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
 }
 
-function compareActivityRecordsForDisplay(a, b){
-  const orderA = Number(a?.display_order);
-  const orderB = Number(b?.display_order);
-  if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) {
-    return orderA - orderB;
-  }
-
-  const labelA = String(a?.config_name || "");
-  const labelB = String(b?.config_name || "");
-  const byLabel = labelA.localeCompare(labelB, "fr", { sensitivity: "base" });
-  if (byLabel !== 0) return byLabel;
-
-  return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
-}
-
 function ensureBucket(map, key){
   if (!map.has(key)) {
     map.set(key, []);
@@ -451,6 +550,11 @@ function ensureBucket(map, key){
 function normalizeFolderId(value){
   const folderId = String(value ?? "").trim();
   return folderId || null;
+}
+
+function normalizeEntry(value){
+  const entry = String(value || "").trim().toLowerCase();
+  return entry === "exploration" || entry === "missions" ? entry : "";
 }
 
 function getActivityRowSize(){

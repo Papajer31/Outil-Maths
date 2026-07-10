@@ -12,12 +12,29 @@ import {
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
 import { renderSimpleMarkupToHtml } from "../../shared/simple-markup.js";
+import { scheduleQuestionAutoFit, teardownQuestionAutoFit } from "../../shared/tool-ui/question-auto-fit.js";
 import { listPublicQuestionBankItemsForSpace } from "../../shared/public-api.js";
+import {
+  createFlashRuntimeState,
+  syncFlashRuntimeSettings,
+  resetFlashRuntimeQuestion,
+  clearFlashRuntimeTimers,
+  ensureFlashRuntimeStyles,
+  getFlashReadyDelayMs,
+  renderFlashCueMarkup,
+  renderFlashItemMarkup,
+  setFlashAnswerVisible,
+  setFlashQuestionHidden,
+  showFlashReplayButton,
+  shouldDelayFlashAnswers,
+  wait
+} from "../flash-shared/runtime.js";
 
 let stylesInjected = false;
 
 export function createActivity(initialContext = {}) {
   injectStyles();
+  if (initialContext?.flashRuntime?.enabled === true) ensureFlashRuntimeStyles();
   const state = createRuntimeState(initialContext);
 
   return {
@@ -102,11 +119,13 @@ function createRuntimeState(initialContext = {}) {
     pendingValidationValue: "",
     answerDisplayMode: "correction",
     showResponseBox: shouldShowResponseBox(initialContext),
+    flash: createFlashRuntimeState(initialContext),
   };
 }
 
 function syncRuntimeState(state, context = state.latestContext) {
   state.showResponseBox = shouldShowResponseBox(context);
+  syncFlashRuntimeSettings(state.flash, context?.settings || state.currentSettings || {});
 }
 
 function renderShell(state) {
@@ -116,12 +135,12 @@ function renderShell(state) {
   syncRuntimeState(state);
 
   container.innerHTML = `
-    <div class="qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
+    <div class="tool-runtime tool-runtime--question-reponse${state.flash?.enabled ? " tool-runtime--flash tool-runtime--flash-texte" : ""} qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
       ${renderToolInstruction({ id: "qr_instruction" })}
-      <div class="qr-card" id="qr_card">
-        <div class="qr-question" id="qr_question"></div>
-        <div class="qr-response-slot" id="qr_response_slot"></div>
-        <div class="qr-correction qr-correction--empty" id="qr_correction" aria-hidden="true"></div>
+      <div class="tool-stage tool-panel qr-card" id="qr_card">
+        <div class="tool-question tool-question--large qr-question" id="qr_question"></div>
+        <div class="tool-answer-panel qr-response-slot" id="qr_response_slot"></div>
+        <div class="tool-feedback tool-correction qr-correction qr-correction--empty" id="qr_correction" aria-hidden="true"></div>
       </div>
     </div>
   `;
@@ -151,9 +170,11 @@ async function loadNextQuestion(state, context = {}) {
     renderShell(state);
   }
 
-  renderQuestion(state);
+  await renderQuestion(state);
   syncValidateState(state);
-  focusPrimaryInput(state);
+  if (!state.flash?.enabled) {
+    focusPrimaryInput(state);
+  }
 }
 
 async function ensureQuestionsLoaded(state, settings, context = {}) {
@@ -234,7 +255,7 @@ function pickNextQuestion(state, settings) {
   return nextQuestion || null;
 }
 
-function renderQuestion(state) {
+async function renderQuestion(state) {
   updateInstructionDisplay(state);
   state.root?.classList.remove("qr-root--correct", "qr-root--incorrect", "qr-root--revealed", "qr-root--empty");
   state.root?.classList.toggle("qr-root--boxed", state.showResponseBox);
@@ -245,8 +266,11 @@ function renderQuestion(state) {
     return;
   }
 
-  if (state.questionEl) {
-    state.questionEl.innerHTML = renderSimpleMarkupToHtml(state.currentQuestion.prompt);
+  const questionHtml = `<span class="qr-question-text-inner">${renderSimpleMarkupToHtml(state.currentQuestion.prompt)}</span>`;
+  if (state.questionEl && !state.flash?.enabled) {
+    state.questionEl.innerHTML = questionHtml;
+    applyQrQuestionSizePreset(state);
+    scheduleQrQuestionAutoFit(state);
   }
 
   teardownResponseInputBindings(state);
@@ -266,14 +290,110 @@ function renderQuestion(state) {
     state.pendingValidationValue = "";
     bindResponseEvents(state);
   }
+
+  if (state.flash?.enabled) {
+    await startFlashQuestion(state, questionHtml);
+  }
+}
+
+
+async function startFlashQuestion(state, questionHtml = "") {
+  if (!state.flash?.enabled || !state.questionEl) return;
+
+  resetFlashRuntimeQuestion(state.flash);
+  const sequenceId = state.flash.sequenceId;
+  const answersAfterQuestion = shouldDelayFlashAnswers(state.flash);
+
+  state.questionEl.innerHTML = renderFlashCueMarkup(state.flash.settings);
+  setQrResponseVisible(state, !answersAfterQuestion);
+
+  await wait(getFlashReadyDelayMs(state.flash.settings));
+  if (!isSameFlashSequence(state, sequenceId)) return;
+
+  state.questionEl.innerHTML = renderFlashItemMarkup(questionHtml);
+  applyQrQuestionSizePreset(state);
+  scheduleQrQuestionAutoFit(state);
+  bindFlashReplay(state, sequenceId);
+  setQrResponseVisible(state, !answersAfterQuestion);
+
+  if (!answersAfterQuestion) {
+    focusPrimaryInput(state);
+  }
+
+  state.flash.hideTimer = window.setTimeout(() => {
+    hideFlashItem(state, sequenceId, { allowReplay: true });
+  }, state.flash.settings.flashDisplayMs);
+}
+
+function hideFlashItem(state, sequenceId, { allowReplay = true } = {}) {
+  if (!isSameFlashSequence(state, sequenceId)) return;
+
+  clearFlashRuntimeTimers(state.flash);
+  state.flash.itemHidden = true;
+  setFlashQuestionHidden(state.questionEl, true);
+  setQrResponseVisible(state, true);
+
+  const canReplay = allowReplay
+    && state.flash.settings.flashAllowReplayOnce === true
+    && state.flash.replayUsed !== true
+    && state.answerRevealed !== true;
+  showFlashReplayButton(state.questionEl, canReplay);
+
+  focusPrimaryInput(state);
+  syncValidateState(state);
+}
+
+function bindFlashReplay(state, sequenceId) {
+  const button = state.questionEl?.querySelector?.("[data-flash-replay]");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    if (!isSameFlashSequence(state, sequenceId)) return;
+    if (state.answerRevealed || state.flash.replayUsed) return;
+
+    state.flash.replayUsed = true;
+    showFlashReplayButton(state.questionEl, false);
+    setFlashQuestionHidden(state.questionEl, false);
+    scheduleQrQuestionAutoFit(state);
+
+    state.flash.replayTimer = window.setTimeout(() => {
+      hideFlashItem(state, sequenceId, { allowReplay: false });
+    }, state.flash.settings.flashDisplayMs);
+  });
+}
+
+function finalizeFlashBeforeReveal(state) {
+  if (!state.flash?.enabled) return;
+  clearFlashRuntimeTimers(state.flash);
+  state.flash.itemHidden = true;
+  setFlashQuestionHidden(state.questionEl, true);
+  showFlashReplayButton(state.questionEl, false);
+  setQrResponseVisible(state, true);
+}
+
+function setQrResponseVisible(state, visible) {
+  state.flash.answerVisible = visible !== false;
+  setFlashAnswerVisible(state.responseSlotEl, state.flash.answerVisible);
+  if (state.responseInputEl) {
+    state.responseInputEl.disabled = !state.flash.answerVisible || state.answerRevealed;
+  }
+}
+
+function isFlashAnswerVisible(state) {
+  return !state.flash?.enabled || state.flash.answerVisible !== false;
+}
+
+function isSameFlashSequence(state, sequenceId) {
+  return state.flash?.enabled === true && state.flash.sequenceId === sequenceId;
 }
 
 function renderEmptyQuestion(state) {
+  clearFlashRuntimeTimers(state.flash);
   teardownResponseInputBindings(state);
+  teardownQuestionAutoFit(state.questionEl);
   state.root?.classList.add("qr-root--empty");
   if (state.questionEl) {
     state.questionEl.innerHTML = `
-      <div class="qr-empty-message">
+      <div class="tool-empty-message qr-empty-message">
         Aucune question disponible dans la banque sélectionnée.
       </div>
     `;
@@ -370,6 +490,7 @@ function bindResponseEvents(state) {
 
 function revealAnswer(state) {
   if (!state.currentQuestion) return;
+  finalizeFlashBeforeReveal(state);
 
   const submittedAnswer = getCurrentResponseValue(state);
   state.submittedAnswer = submittedAnswer;
@@ -436,9 +557,9 @@ function renderCorrectionExplanation(state) {
 
 function renderInputMarkup() {
   return `
-    <label class="qr-answer-box qr-answer-box--input" for="qr_response_input">
+    <label class="tool-answer-box qr-answer-box qr-answer-box--input" for="qr_response_input">
       <input
-        class="qr-answer-input"
+        class="tool-answer-input qr-answer-input"
         id="qr_response_input"
         data-qr-response-input
         type="text"
@@ -457,6 +578,7 @@ function renderInputMarkup() {
 
 function renderDisplayBox(value, { correct = false, student = false, free = false } = {}) {
   const classNames = [
+    "tool-answer-box",
     "qr-answer-box",
     "qr-answer-box--display",
     correct ? "is-correct" : "is-incorrect",
@@ -473,21 +595,21 @@ function renderDisplayBox(value, { correct = false, student = false, free = fals
 
 function renderFreePlaceholderMarkup() {
   return `
-    <div class="qr-answer-box qr-answer-box--placeholder">
+    <div class="tool-answer-box qr-answer-box qr-answer-box--placeholder">
       Réponse à trouver
     </div>
   `;
 }
 
 function canSubmitAnswer(state) {
-  if (!state.showResponseBox || !state.responseInputEl || state.answerRevealed || !state.currentQuestion) {
+  if (!state.showResponseBox || !isFlashAnswerVisible(state) || !state.responseInputEl || state.answerRevealed || !state.currentQuestion) {
     return false;
   }
   return getCurrentResponseValue(state).length > 0;
 }
 
 function focusPrimaryInput(state) {
-  if (!state.showResponseBox || !state.responseInputEl) return;
+  if (!state.showResponseBox || !isFlashAnswerVisible(state) || !state.responseInputEl) return;
   queueMicrotask(() => {
     try {
       state.responseInputEl.focus({ preventScroll: true });
@@ -500,6 +622,63 @@ function focusPrimaryInput(state) {
 
 function syncValidateState(state) {
   state.latestContext?.services?.notifyValidationStateChanged?.();
+}
+
+function scheduleQrQuestionAutoFit(state) {
+  if (state.questionEl?.dataset?.qrQuestionSizePreset === "tiny") return;
+  scheduleQuestionAutoFit(state.questionEl, {
+    minFontSize: 34,
+    maxFontSize: 320,
+    mediaMaxWidthRatio: 0.99,
+    mediaMaxHeightRatio: 0.98
+  });
+}
+
+function applyQrQuestionSizePreset(state) {
+  const element = state.questionEl;
+  if (!element) return;
+
+  clearQrQuestionSizePreset(element);
+
+  const text = String(state.currentQuestion?.prompt || "")
+    .replace(/\s+/g, "")
+    .trim();
+  if (!text) return;
+
+  const preset = text.length <= 2
+    ? "tiny"
+    : text.length <= 4
+      ? "short"
+      : "";
+  if (!preset) return;
+
+  const size = preset === "tiny"
+    ? "clamp(160px, 26vmin, 320px)"
+    : "clamp(92px, 14vmin, 180px)";
+  const lineHeight = preset === "tiny" ? "0.95" : "1";
+
+  element.dataset.qrQuestionSizePreset = preset;
+  element.classList.add(`qr-question--fit-${preset}`);
+  element.style.setProperty("--tool-question-font-size", size);
+  element.style.setProperty("font-size", size, "important");
+  element.style.setProperty("line-height", lineHeight, "important");
+  element.querySelectorAll(".qr-question-text-inner, .flash-item-inner .qr-question-text-inner, .simple-markup-strong, .simple-markup-em, .simple-markup-highlight").forEach((target) => {
+    target.style.setProperty("font-size", size, "important");
+    target.style.setProperty("line-height", lineHeight, "important");
+  });
+}
+
+function clearQrQuestionSizePreset(element) {
+  if (!element) return;
+  element.classList.remove("qr-question--fit-tiny", "qr-question--fit-short");
+  delete element.dataset.qrQuestionSizePreset;
+  element.style.removeProperty("font-size");
+  element.style.removeProperty("line-height");
+  element.style.removeProperty("--tool-question-font-size");
+  element.querySelectorAll(".qr-question-text-inner, .flash-item-inner .qr-question-text-inner, .simple-markup-strong, .simple-markup-em, .simple-markup-highlight").forEach((target) => {
+    target.style.removeProperty("font-size");
+    target.style.removeProperty("line-height");
+  });
 }
 
 function updateInstructionDisplay(state) {
@@ -528,7 +707,7 @@ function getCurrentEvaluation(state) {
 }
 
 function isCurrentAnswerCorrect(state) {
-  if (!state.showResponseBox || !state.responseInputEl || !state.currentQuestion) return false;
+  if (!state.showResponseBox || !isFlashAnswerVisible(state) || !state.responseInputEl || !state.currentQuestion) return false;
   return getCurrentEvaluation(state).isCorrect;
 }
 
@@ -585,7 +764,9 @@ function normalizeResponseUi(value) {
 
 
 function teardownState(state, container) {
+  clearFlashRuntimeTimers(state.flash);
   teardownResponseInputBindings(state);
+  teardownQuestionAutoFit(state.questionEl);
   if (container) container.innerHTML = "";
   state.container = null;
   state.root = null;

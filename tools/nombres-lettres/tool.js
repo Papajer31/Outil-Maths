@@ -3,7 +3,7 @@ import { createActivity as createNombresLettresActivity } from "./activity.js";
 import { normalizeSettings } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
-const DEFAULT_INSTRUCTION = "Écris la réponse.";
+const DEFAULT_INSTRUCTION = "Écris ce nombre en lettres.";
 
 export default defineTool("nombres-lettres", "Nombres en lettres", {
   version: "1",

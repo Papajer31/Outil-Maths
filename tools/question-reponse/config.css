@@ -1,10 +1,78 @@
+.qr-config-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .qr-config-root .tv-group,
 .qr-config-root .tv-minmax {
   min-height: 38px;
 }
 
 .qr-config-root .tv-radio-row {
+  position: relative;
+  min-width: 42px;
   min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  justify-content: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.qr-config-root .tv-radio-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.qr-config-root .tv-radio-row:has(.tv-radio:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.qr-config-root .tv-radio-row:has(.tv-radio:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.qr-config-root .tv-radio-row.is-disabled,
+.qr-config-root .tv-radio-row:has(.tv-radio:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.qr-config-root .tv-radio-row .tv-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.qr-config-root .tv-radio-row .tv-radio:disabled {
+  cursor: not-allowed;
+}
+
+.qr-config-root .tv-radio-row span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .qr-config-bank-group {
@@ -54,9 +122,8 @@
 
 
 .qr-config-root .tv-radio-options {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 980px) {
@@ -68,5 +135,9 @@
   .qr-config-bank-select {
     width: 100%;
     min-width: 0;
+  }
+
+  .qr-config-root .tv-radio-options {
+    justify-content: flex-start;
   }
 }

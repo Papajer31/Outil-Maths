@@ -10,26 +10,116 @@
   <main class="ttp-shell">
     <div id="teacherToolsProjectorViewport" class="ttp-viewport">
       <div id="teacherToolsProjectorFitHost" class="ttp-fit-host">
-        <section id="teacherToolsProjectorStage" class="ttp-stage" data-background="space">
+        <section id="teacherToolsProjectorStage" class="ttp-stage" data-background="white">
           <div id="teacherToolsProjectorStarfield" class="ttp-space-starfield" aria-hidden="true"></div>
+          <div id="teacherToolsSnapGrid" class="ttp-snap-grid" aria-hidden="true"></div>
 
           <div id="teacherToolsTopbar" class="ttp-topbar" aria-label="Commandes de la projection">
-            <button id="btnTeacherToolsFullscreen" class="ttp-btn" type="button">
+            <button id="btnTeacherToolsFullscreen" class="ttp-btn" type="button" aria-label="Plein écran" title="Plein écran">
               <span class="ttp-material-icon" aria-hidden="true">fullscreen</span>
-              <span>Plein écran</span>
             </button>
             <button id="btnTeacherToolsSceneLock" class="ttp-btn" type="button" aria-pressed="false" aria-label="Verrouiller la scène">
               <span class="ttp-material-icon" aria-hidden="true">lock_open</span>
             </button>
-            <button id="btnTeacherToolsClose" class="ttp-btn" type="button" aria-label="Fermer la projection">
+            <div id="teacherToolsGridControl" class="ttp-grid-control">
+              <button id="btnTeacherToolsGrid" class="ttp-btn ttp-grid-toggle" type="button" aria-expanded="false" aria-pressed="false" aria-label="Activer la grille magnétique" title="Activer la grille magnétique">
+                <span class="ttp-material-icon" aria-hidden="true">grid_on</span>
+              </button>
+              <div id="teacherToolsGridPopover" class="ttp-grid-popover" hidden>
+                <div class="ttp-grid-popover-head">
+                  <span>Grille</span>
+                  <strong id="teacherToolsGridScaleValue">48 px</strong>
+                </div>
+                <input id="teacherToolsGridScaleRange" class="ttp-grid-scale-range" type="range" min="20" max="120" step="1" value="48" aria-label="Échelle de la grille">
+              </div>
+            </div>
+            <button id="teacherToolsTrashZone" class="ttp-btn ttp-trash-zone" type="button" aria-label="Zone de suppression des étiquettes" aria-pressed="false" title="Glisser une étiquette ici pour la supprimer" hidden>
+              <span class="ttp-material-icon" aria-hidden="true">delete</span>
+            </button>
+            <button id="btnTeacherToolsClose" class="ttp-btn" type="button" aria-label="Fermer la projection" title="Fermer la projection">
               <span class="ttp-material-icon" aria-hidden="true">close</span>
             </button>
             <button id="btnTeacherToolsTopbarToggle" class="ttp-btn ttp-topbar-toggle" type="button" aria-expanded="true" aria-label="Replier les commandes">
+              <span class="ttp-material-icon" aria-hidden="true">keyboard_arrow_right</span>
+            </button>
+          </div>
+
+
+
+          <div id="teacherToolsDrawbar" class="ttp-drawbar" aria-label="Outils de dessin">
+            <button id="btnTeacherToolsDrawSelect" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="true" aria-label="Main / sélection" title="Main / sélection">
+              <span class="ttp-material-icon" aria-hidden="true">pan_tool</span>
+            </button>
+            <button id="btnTeacherToolsDrawPencil" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-label="Crayon" title="Crayon">
+              <span class="ttp-material-icon" aria-hidden="true">edit</span>
+            </button>
+            <button id="btnTeacherToolsDrawHighlighter" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-label="Surligneur" title="Surligneur">
+              <span class="ttp-material-icon" aria-hidden="true">border_color</span>
+            </button>
+            <button id="btnTeacherToolsDrawLine" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-label="Trait" title="Trait">
+              <span class="ttp-material-icon" aria-hidden="true">horizontal_rule</span>
+            </button>
+            <div class="ttp-drawbar-tool-group" data-drawbar-group="rectangle">
+              <button id="btnTeacherToolsDrawRectGroup" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-expanded="false" aria-label="Formes rectangulaires" title="Formes rectangulaires">
+                <span class="ttp-material-icon" aria-hidden="true">crop_square</span>
+              </button>
+              <div class="ttp-drawbar-variant-row" data-drawbar-variants="rectangle" hidden>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="rectangle" aria-label="Rectangle" title="Rectangle"><span class="ttp-draw-shape-icon" data-shape-icon="rectangle" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="square" aria-label="Carré" title="Carré"><span class="ttp-draw-shape-icon" data-shape-icon="square" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="diamond" aria-label="Losange" title="Losange"><span class="ttp-draw-shape-icon" data-shape-icon="diamond" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="parallelogram" aria-label="Parallélogramme" title="Parallélogramme"><span class="ttp-draw-shape-icon" data-shape-icon="parallelogram" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="trapezoid" aria-label="Trapèze" title="Trapèze"><span class="ttp-draw-shape-icon" data-shape-icon="trapezoid" aria-hidden="true"></span></button>
+              </div>
+            </div>
+            <div class="ttp-drawbar-tool-group" data-drawbar-group="triangle">
+              <button id="btnTeacherToolsDrawTriangleGroup" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-expanded="false" aria-label="Triangles" title="Triangles">
+                <span class="ttp-material-icon" aria-hidden="true">change_history</span>
+              </button>
+              <div class="ttp-drawbar-variant-row" data-drawbar-variants="triangle" hidden>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="triangle-free" aria-label="Triangle quelconque" title="Triangle quelconque"><span class="ttp-draw-shape-icon" data-shape-icon="triangle-free" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="triangle-isosceles" aria-label="Triangle isocèle" title="Triangle isocèle"><span class="ttp-draw-shape-icon" data-shape-icon="triangle-isosceles" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="triangle-equilateral" aria-label="Triangle équilatéral" title="Triangle équilatéral"><span class="ttp-draw-shape-icon" data-shape-icon="triangle-equilateral" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="triangle-right" aria-label="Triangle rectangle" title="Triangle rectangle"><span class="ttp-draw-shape-icon" data-shape-icon="triangle-right" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="triangle-right-isosceles" aria-label="Triangle rectangle isocèle" title="Triangle rectangle isocèle"><span class="ttp-draw-shape-icon" data-shape-icon="triangle-right-isosceles" aria-hidden="true"></span></button>
+              </div>
+            </div>
+            <div class="ttp-drawbar-tool-group" data-drawbar-group="round">
+              <button id="btnTeacherToolsDrawRoundGroup" class="ttp-btn ttp-drawbar-tool" type="button" aria-pressed="false" aria-expanded="false" aria-label="Formes rondes" title="Formes rondes">
+                <span class="ttp-material-icon" aria-hidden="true">radio_button_unchecked</span>
+              </button>
+              <div class="ttp-drawbar-variant-row" data-drawbar-variants="round" hidden>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="ellipse" aria-label="Ellipse" title="Ellipse"><span class="ttp-draw-shape-icon" data-shape-icon="ellipse" aria-hidden="true"></span></button>
+                <button class="ttp-btn ttp-drawbar-variant" type="button" data-draw-variant="circle" aria-label="Cercle" title="Cercle"><span class="ttp-draw-shape-icon" data-shape-icon="circle" aria-hidden="true"></span></button>
+              </div>
+            </div>
+            <div id="teacherToolsDrawColorPicker" class="ttp-drawbar-param ttp-drawbar-color-picker"></div>
+            <div id="teacherToolsDrawFillColorPicker" class="ttp-drawbar-param ttp-drawbar-color-picker ttp-drawbar-fill-color is-disabled" aria-disabled="true"></div>
+            <div id="teacherToolsDrawWidthControl" class="ttp-drawbar-param ttp-drawbar-width-control">
+              <button id="btnTeacherToolsDrawWidth" class="ttp-btn ttp-drawbar-width-button" type="button" aria-expanded="false" aria-label="Épaisseur du tracé : 5 px" title="Épaisseur du tracé">
+                <span class="ttp-drawbar-width-preview" aria-hidden="true"></span>
+              </button>
+              <div id="teacherToolsDrawWidthPopover" class="ttp-drawbar-width-popover" hidden>
+                <div class="ttp-drawbar-width-popover-head">
+                  <span>Épaisseur</span>
+                  <strong id="teacherToolsDrawWidthValue">5 px</strong>
+                </div>
+                <input id="teacherToolsDrawWidthRange" class="ttp-drawbar-width-range" type="range" min="1" max="32" step="1" value="5" aria-label="Épaisseur du tracé">
+              </div>
+            </div>
+            <button id="btnTeacherToolsDrawbarToggle" class="ttp-btn ttp-drawbar-toggle" type="button" aria-expanded="true" aria-label="Replier les outils de dessin" title="Replier les outils de dessin">
+              <span class="ttp-material-icon" aria-hidden="true">keyboard_arrow_left</span>
+            </button>
+          </div>
+
+          <div id="teacherToolsWidgetbar" class="ttp-widgetbar" aria-label="Contrôles du widget actif">
+            <div id="teacherToolsWidgetbarContent" class="ttp-widgetbar-content"></div>
+            <button id="btnTeacherToolsWidgetbarToggle" class="ttp-btn ttp-widgetbar-toggle" type="button" aria-expanded="true" aria-label="Masquer la barre du widget actif">
               <span class="ttp-material-icon" aria-hidden="true">keyboard_arrow_down</span>
             </button>
           </div>
 
           <section id="teacherToolsWidgetHost" class="ttp-widget-host" aria-live="polite"></section>
+          <svg id="teacherToolsDrawingCapture" class="ttp-drawing-capture" aria-hidden="true"></svg>
         </section>
       </div>
     </div>

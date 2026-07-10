@@ -1,0 +1,447 @@
+/*
+  Styles communs des runtimes d'outils.
+
+  Règle d'architecture : les outils ajoutent ces classes communes en plus de
+  leurs classes historiques. Le CSS local ne doit garder que le layout propre
+  à l'outil ou des variables d'ajustement.
+*/
+
+.tool-runtime {
+  --tool-ui-text: var(--text, #f5f7fb);
+  --tool-ui-muted-text: rgba(245, 247, 251, .64);
+  --tool-ui-panel-bg: rgba(255, 255, 255, .055);
+  --tool-ui-panel-border: rgba(255, 255, 255, .18);
+  --tool-ui-panel-border-strong: rgba(255, 255, 255, .42);
+  --tool-ui-focus: rgba(255, 255, 255, .78);
+  --tool-ui-accent: rgba(255, 216, 94, .95);
+  --tool-ui-accent-bg: rgba(255, 216, 94, .12);
+  --tool-ui-success: #57d07a;
+  --tool-ui-success-bg: rgba(87, 208, 122, .13);
+  --tool-ui-error: #ef6b73;
+  --tool-ui-error-bg: rgba(239, 107, 115, .13);
+  --tool-ui-radius-sm: 16px;
+  --tool-ui-radius-md: 22px;
+  --tool-ui-radius-lg: 28px;
+  --tool-ui-shadow-soft: 0 18px 42px rgba(0, 0, 0, .18);
+
+  --tool-font-family: "Andika", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --tool-question-font-size: clamp(34px, 3.4vw, 58px);
+  --tool-question-font-weight: 900;
+  --tool-question-line-height: 1.22;
+  --tool-statement-line-height: 1.55;
+
+  --tool-answer-width: 100%;
+  --tool-answer-min-height: 104px;
+  --tool-answer-padding: 14px 34px;
+  --tool-answer-radius: 24px;
+  --tool-answer-border-width: 4px;
+  --tool-answer-border-style: dashed;
+  --tool-answer-border-color: rgba(255, 255, 255, .4);
+  --tool-answer-bg: rgba(255, 255, 255, .04);
+  --tool-answer-color: var(--tool-ui-text);
+  --tool-answer-font-size: clamp(34px, 3.2vw, 54px);
+  --tool-answer-font-weight: 900;
+  --tool-answer-line-height: 1.1;
+  --tool-answer-placeholder-color: rgba(255, 255, 255, .42);
+
+  --tool-choice-min-height: 74px;
+  --tool-choice-padding: 12px 22px;
+  --tool-choice-radius: 24px;
+  --tool-choice-font-size: clamp(24px, 2.2vw, 36px);
+  --tool-choice-font-weight: 900;
+  --tool-choice-line-height: 1.16;
+
+  --tool-feedback-height: 70px;
+  --tool-feedback-padding: 10px 18px;
+  --tool-feedback-radius: 18px;
+  --tool-feedback-font-size: clamp(20px, 1.6vw, 28px);
+  --tool-feedback-font-weight: 700;
+  --tool-feedback-line-height: 1.25;
+
+  color: var(--tool-ui-text);
+  font-family: var(--tool-font-family);
+}
+
+.tool-runtime,
+.tool-runtime * {
+  box-sizing: border-box;
+}
+
+.tool-stage,
+.tool-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.tool-question,
+.tool-statement {
+  color: var(--tool-ui-text);
+  font-family: var(--tool-font-family);
+  font-size: var(--tool-question-font-size);
+  font-weight: var(--tool-question-font-weight);
+  line-height: var(--tool-question-line-height);
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.tool-statement--text {
+  line-height: var(--tool-statement-line-height);
+}
+
+.tool-question--large,
+.tool-statement--large {
+  --tool-question-font-size: clamp(34px, 3.4vw, 58px);
+}
+
+.tool-question--small,
+.tool-statement--small {
+  --tool-question-font-size: clamp(26px, 2.6vw, 42px);
+}
+
+.tool-answer-panel,
+.tool-answer-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-answer-row {
+  gap: var(--tool-answer-row-gap, 18px);
+}
+
+.tool-answer-box {
+  width: var(--tool-answer-width);
+  min-width: 0;
+  min-height: var(--tool-answer-min-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tool-answer-padding);
+  border: var(--tool-answer-border-width) var(--tool-answer-border-style) var(--tool-answer-border-color);
+  border-radius: var(--tool-answer-radius);
+  background: var(--tool-answer-bg);
+  color: var(--tool-answer-color);
+  font-family: var(--tool-font-family);
+  font-size: var(--tool-answer-font-size);
+  font-weight: var(--tool-answer-font-weight);
+  line-height: var(--tool-answer-line-height);
+  text-align: center;
+  overflow-wrap: anywhere;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, outline-color 160ms ease;
+}
+
+.tool-answer-input,
+.tool-answer-display {
+  min-width: 0;
+  color: inherit;
+  font-family: var(--tool-font-family);
+  text-align: center;
+  outline: none;
+}
+
+.tool-answer-input:not(.tool-answer-box),
+.tool-answer-display:not(.tool-answer-box) {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+input.tool-answer-input:not(.tool-answer-box) {
+  border: 0;
+  background: transparent;
+}
+
+.tool-answer-input::placeholder {
+  color: var(--tool-answer-placeholder-color);
+}
+
+.tool-answer-box:focus-within,
+.tool-answer-input.tool-answer-box:focus {
+  border-color: var(--tool-ui-focus);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .08) inset;
+}
+
+.tool-answer-input[readonly],
+.tool-answer-box--display,
+.tool-answer-display {
+  cursor: default;
+  caret-color: transparent;
+}
+
+.tool-answer-input--small,
+.tool-answer-box--small {
+  --tool-answer-font-size: clamp(24px, 2.2vw, 36px);
+  --tool-answer-min-height: 78px;
+  --tool-answer-padding: 10px 18px;
+}
+
+.tool-answer-input--medium,
+.tool-answer-box--medium {
+  --tool-answer-font-size: clamp(34px, 3.2vw, 54px);
+  --tool-answer-min-height: 104px;
+}
+
+.tool-answer-input--large,
+.tool-answer-box--large {
+  --tool-answer-font-size: clamp(58px, 6.4vw, 112px);
+  --tool-answer-min-height: 132px;
+}
+
+.tool-answer-box.is-correct,
+.tool-answer-input.is-correct,
+.tool-answer-display.is-correct,
+.tool-runtime .tool-is-correct {
+  border-style: solid;
+  border-color: var(--tool-ui-success);
+  box-shadow: 0 0 0 2px rgba(87, 208, 122, .16) inset;
+}
+
+.tool-answer-box.is-incorrect,
+.tool-answer-input.is-incorrect,
+.tool-answer-display.is-incorrect,
+.tool-runtime .tool-is-incorrect {
+  border-style: solid;
+  border-color: var(--tool-ui-error);
+  box-shadow: 0 0 0 2px rgba(239, 107, 115, .16) inset;
+}
+
+.tool-choice-grid {
+  min-width: 0;
+  display: grid;
+}
+
+.tool-choice-button {
+  min-width: 0;
+  min-height: var(--tool-choice-min-height);
+  padding: var(--tool-choice-padding);
+  border-radius: var(--tool-choice-radius);
+  border: 4px solid var(--tool-ui-panel-border);
+  background: var(--tool-ui-panel-bg);
+  color: var(--tool-ui-text);
+  font-family: var(--tool-font-family);
+  font-size: var(--tool-choice-font-size);
+  font-weight: var(--tool-choice-font-weight);
+  line-height: var(--tool-choice-line-height);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+
+button.tool-choice-button:hover:not(:disabled) {
+  border-color: var(--tool-ui-panel-border-strong);
+  background: rgba(255, 255, 255, .08);
+}
+
+.tool-choice-button.is-selected,
+button.tool-choice-button.is-selected:hover:not(:disabled) {
+  border-color: var(--tool-ui-accent);
+  background: var(--tool-ui-accent-bg);
+}
+
+.tool-choice-button.is-correct {
+  border-color: var(--tool-ui-success);
+  background: var(--tool-ui-success-bg);
+}
+
+.tool-choice-button.is-incorrect {
+  border-color: var(--tool-ui-error);
+  background: var(--tool-ui-error-bg);
+}
+
+.tool-choice-button:disabled {
+  cursor: default;
+}
+
+.tool-choice-marker {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, .12);
+  color: var(--tool-ui-text);
+  font-size: 25px;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.tool-choice-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-feedback,
+.tool-correction {
+  min-width: 0;
+  min-height: 0;
+  padding: var(--tool-feedback-padding);
+  border-radius: var(--tool-feedback-radius);
+  background: rgba(255, 255, 255, .06);
+  color: var(--tool-ui-text);
+  font-family: var(--tool-font-family);
+  font-size: var(--tool-feedback-font-size);
+  font-weight: var(--tool-feedback-font-weight);
+  line-height: var(--tool-feedback-line-height);
+  text-align: center;
+}
+
+.tool-feedback--success,
+.tool-correction.is-correct {
+  border-color: rgba(87, 208, 122, .58);
+  background: rgba(87, 208, 122, .12);
+}
+
+.tool-feedback--error,
+.tool-correction.is-incorrect {
+  border-color: rgba(239, 107, 115, .58);
+  background: rgba(239, 107, 115, .12);
+}
+
+.tool-feedback--hint {
+  border-color: rgba(255, 216, 94, .58);
+  background: rgba(255, 216, 94, .10);
+}
+
+.tool-feedback--empty,
+.tool-correction--empty {
+  visibility: hidden;
+}
+
+.tool-empty-message {
+  padding: 22px 28px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .06);
+  border: 2px solid rgba(239, 107, 115, .42);
+  color: #ffd2d2;
+  font-family: var(--tool-font-family);
+  font-size: clamp(26px, 2.4vw, 40px);
+  font-weight: 900;
+  line-height: 1.18;
+  text-align: center;
+}
+
+.tool-workspace,
+.tool-dropzone,
+.tool-source-zone,
+.tool-answer-zone {
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--tool-ui-radius-lg);
+}
+
+.tool-workspace--white,
+.tool-card--white {
+  background: rgba(255, 255, 255, .96);
+  color: #182034;
+  box-shadow: var(--tool-ui-shadow-soft);
+}
+
+.tool-card,
+.tool-chip,
+.tool-token {
+  min-width: 0;
+  font-family: var(--tool-font-family);
+}
+
+.tool-draggable {
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.tool-draggable.is-dragging,
+.tool-draggable--dragging {
+  cursor: grabbing;
+}
+
+@media (max-width: 900px) {
+  .tool-runtime {
+    --tool-question-font-size: clamp(28px, 6vw, 42px);
+    --tool-choice-min-height: 62px;
+    --tool-choice-padding: 10px 16px;
+  }
+
+  .tool-choice-marker {
+    width: 40px;
+    height: 40px;
+    font-size: 21px;
+  }
+}
+
+/* Réponse numérique verrouillée : affichage contrôlé + input natif masqué. */
+.tool-numeric-answer {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  touch-action: manipulation;
+  cursor: text;
+  overflow: hidden;
+  margin-inline-start: var(--tool-numeric-answer-shift-x, 0);
+  transform: translateY(var(--tool-numeric-answer-box-shift-y, 0px));
+}
+
+.tool-numeric-answer.tool-answer-box {
+  width: calc(var(--tool-numeric-answer-chars, 4) * 1ch);
+  min-width: calc(var(--tool-numeric-answer-chars, 4) * 1ch);
+  max-width: 100%;
+}
+
+.tool-numeric-answer__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+
+.tool-numeric-answer__native:focus {
+  outline: none;
+}
+
+.tool-numeric-answer__display {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: .58em;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  letter-spacing: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  /*
+    Les métriques de la police Andika placent visuellement les chiffres
+    légèrement trop haut dans la fausse case. Le décalage de la boîte est
+    compensé ici pour que le nombre reste aligné avec l'opération.
+  */
+  transform: translateY(calc(var(--tool-numeric-answer-display-shift-y, .045em) - var(--tool-numeric-answer-box-shift-y, 0px)));
+}
+
+
+
+.tool-numeric-answer.is-empty .tool-numeric-answer__display {
+  opacity: .22;
+}
+
+.tool-numeric-answer--readonly {
+  cursor: default;
+}
+
+

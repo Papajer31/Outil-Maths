@@ -114,14 +114,14 @@ function renderShell(state) {
   syncRuntimeState(state);
 
   container.innerHTML = `
-    <div class="nl-root${state.showResponseBox ? " nl-root--boxed" : " nl-root--free"}">
+    <div class="tool-runtime tool-runtime--nombres-lettres nl-root${state.showResponseBox ? " nl-root--boxed" : " nl-root--free"}">
         ${renderToolInstruction({ id: "nl_instruction" })}
-        <div class="nl-stage" id="nl_stage">
-          <div class="nl-stage-source" id="nl_stage_source"></div>
+        <div class="tool-stage nl-stage" id="nl_stage">
+          <div class="tool-source-zone nl-stage-source" id="nl_stage_source"></div>
           <div class="nl-stage-arrow" id="nl_stage_arrow" aria-hidden="true">→</div>
-          <div class="nl-stage-answer" id="nl_stage_answer"></div>
+          <div class="tool-answer-zone nl-stage-answer" id="nl_stage_answer"></div>
         </div>
-        ${state.showResponseBox ? `<div class="nl-response-shell" id="nl_response_shell"></div>` : ""}
+        ${state.showResponseBox ? `<div class="tool-answer-panel nl-response-shell" id="nl_response_shell"></div>` : ""}
     </div>
   `;
 
@@ -299,7 +299,7 @@ function resolveDisplayedInstruction(state) {
 function renderSourceMarkup(question) {
   if (question.direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER) {
     return renderSeyesDisplayPanel(question.displayPrimary, {
-      panelClassName: "nl-source-panel nl-source-panel--words"
+      panelClassName: "tool-card tool-card--white nl-source-panel nl-source-panel--words"
     });
   }
 
@@ -327,7 +327,7 @@ function renderRevealedResponseMarkup(question, isCorrect) {
   }
 
   return renderSeyesDisplayPanel(question.expectedAnswer, {
-    panelClassName: `nl-answer-panel${isCorrect ? " is-correct" : " is-incorrect"}`
+    panelClassName: `tool-answer-box nl-answer-panel${isCorrect ? " is-correct" : " is-incorrect"}`
   });
 }
 
@@ -341,7 +341,7 @@ function renderStudentResponseMarkup(question, answer, isCorrect) {
   }
 
   return renderSeyesDisplayPanel(displayAnswer, {
-    panelClassName: `nl-answer-panel${isCorrect ? " is-correct" : " is-incorrect"}`
+    panelClassName: `tool-answer-box nl-answer-panel${isCorrect ? " is-correct" : " is-incorrect"}`
   });
 }
 
@@ -354,7 +354,7 @@ function renderFreePlaceholderMarkup(question) {
 
   return renderSeyesDisplayPanel("", {
     empty: true,
-    panelClassName: "nl-answer-panel nl-answer-panel--placeholder"
+    panelClassName: "tool-answer-box nl-answer-panel nl-answer-panel--placeholder"
   });
 }
 
@@ -366,13 +366,13 @@ function renderFreeAnswerMarkup(question) {
   }
 
   return renderSeyesDisplayPanel(question.expectedAnswer, {
-    panelClassName: "nl-answer-panel"
+    panelClassName: "tool-answer-box nl-answer-panel"
   });
 }
 
 function renderNumberCard(value, { className = "" } = {}) {
   return `
-    <div class="nl-number-card ${className}">
+    <div class="tool-card tool-card--white nl-number-card ${className}">
       <div class="nl-number-card-value">${escapeHtml(String(value ?? ""))}</div>
     </div>
   `;
@@ -380,7 +380,7 @@ function renderNumberCard(value, { className = "" } = {}) {
 
 function renderSourceNumber(value) {
   return `
-    <div class="nl-source-number">${escapeHtml(String(value ?? ""))}</div>
+    <div class="tool-question nl-source-number">${escapeHtml(String(value ?? ""))}</div>
   `;
 }
 
@@ -389,15 +389,15 @@ function renderNumberResponseDisplay(value, { className = "" } = {}) {
     ariaLabel: "Réponse affichée en chiffres",
     value,
     readonly: true,
-    className: `nl-number-display ${className}`.trim()
+    className: `tool-answer-box tool-answer-input tool-answer-display nl-number-display ${className}`.trim()
   });
 }
 
 function renderSeyesInputPanel({ inputId, ariaLabel }) {
   return `
-    <label class="nl-seyes-panel nl-seyes-panel--input" for="${escapeHtml(inputId)}">
+    <label class="tool-answer-box nl-seyes-panel nl-seyes-panel--input" for="${escapeHtml(inputId)}">
       <input
-        class="nl-seyes-input"
+        class="tool-answer-input nl-seyes-input"
         id="${escapeHtml(inputId)}"
         data-nl-response-input
         type="text"
@@ -416,11 +416,11 @@ function renderNumberInputPanel({
   ariaLabel = "",
   value = "",
   readonly = false,
-  className = "nl-number-input"
+  className = "tool-answer-box tool-answer-input nl-number-input"
 } = {}) {
   const safeId = String(inputId ?? "").trim();
   const safeValue = String(value ?? "");
-  const safeClassName = String(className || "nl-number-input").trim();
+  const safeClassName = String(className || "tool-answer-box tool-answer-input nl-number-input").trim();
 
   return `
     <input

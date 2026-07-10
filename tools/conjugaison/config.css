@@ -3,20 +3,105 @@
   display: none !important;
 }
 
+.cj-config-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .cj-config-root .tv-group,
 .cj-config-root .tv-minmax {
   min-height: 38px;
 }
 
-.cj-config-root .tv-radio-row,
-.cj-config-root .cj-checkbox-row {
-  min-height: 38px;
+.cj-config-root .tv-group-collapsible {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cj-config-root .tv-group-collapsible .tv-group-toggle {
+  min-height: 36px;
+}
+
+.cj-config-root .tv-group-collapsible:has(.tv-group-toggle[aria-expanded="false"]) {
+  min-height: 64px;
+}
+
+.cj-config-root .tv-group-content.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .cj-config-root .tv-radio-options {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cj-config-root .tv-radio-row {
+  position: relative;
+  min-width: 42px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  justify-content: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.cj-config-root .tv-radio-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.cj-config-root .tv-radio-row:has(.tv-radio:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.cj-config-root .tv-radio-row:has(.tv-radio:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.cj-config-root .tv-radio-row.is-disabled,
+.cj-config-root .tv-radio-row:has(.tv-radio:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.cj-config-root .tv-radio-row .tv-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cj-config-root .tv-radio-row .tv-radio:disabled {
+  cursor: not-allowed;
+}
+
+.cj-config-root .tv-radio-row span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .cj-list-group {
@@ -92,7 +177,6 @@
 }
 
 .cj-material-icon {
-  font-family: "MaterialSymbols";
   font-style: normal;
   font-weight: 400;
   font-size: 22px;
@@ -236,32 +320,80 @@
 .cj-checkbox-grid {
   flex: 0 1 auto;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0 18px;
+  gap: 8px;
   align-items: center;
   min-width: 0;
   min-height: 38px;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 .cj-checkbox-row {
+  position: relative;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 0;
+  justify-content: center;
+  gap: 0;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
   color: var(--text, #f5f7fb);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.cj-checkbox-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.cj-checkbox-row:has(.cj-checkbox:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.cj-checkbox-row:has(.cj-checkbox:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.cj-checkbox-row:has(.cj-checkbox:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .cj-checkbox-row input {
-  width: 20px;
-  height: 20px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cj-checkbox-row input:disabled {
+  cursor: not-allowed;
+}
+
+.cj-checkbox-row span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .cj-list-modal[hidden] {
@@ -427,6 +559,10 @@
 
   .cj-checkbox-grid {
     flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .cj-config-root .tv-radio-options {
     justify-content: flex-start;
   }
 

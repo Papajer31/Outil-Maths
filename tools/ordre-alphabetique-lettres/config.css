@@ -1,0 +1,129 @@
+.oal-config-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.oal-config-root .tv-group {
+  min-height: 38px;
+}
+
+.oal-config-root .tv-group-collapsible {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.oal-config-root .tv-group-collapsible .tv-group-toggle {
+  min-height: 36px;
+}
+
+.oal-config-root .tv-group-collapsible:has(.tv-group-toggle[aria-expanded="false"]) {
+  min-height: 64px;
+}
+
+.oal-config-root .tv-group-content.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oal-config-root .tv-radio-options {
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+[data-tv-radio-group="oal_itemCount"] .tv-radio-options,
+[data-tv-radio-group="oal_caseMode"] .tv-radio-options,
+[data-tv-radio-group="oal_writingMode"] .tv-radio-options {
+  flex-wrap: wrap;
+}
+
+.oal-config-root .tv-radio-row,
+.oal-switch-label {
+  position: relative;
+  min-width: 42px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  justify-content: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.oal-config-root .tv-radio-row:hover,
+.oal-switch-label:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.oal-config-root .tv-radio-row:has(.tv-radio:checked),
+.oal-switch-label:has(.tv-checkbox:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.oal-config-root .tv-radio-row:has(.tv-radio:focus-visible),
+.oal-switch-label:has(.tv-checkbox:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.oal-config-root .tv-radio-row.is-disabled,
+.oal-config-root .tv-radio-row:has(.tv-radio:disabled),
+.oal-switch-label:has(.tv-checkbox:disabled) {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.oal-config-root .tv-radio-row .tv-radio,
+.oal-switch-label .tv-checkbox {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.oal-config-root .tv-radio-row .tv-radio:disabled,
+.oal-switch-label .tv-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.oal-config-root .tv-radio-row span,
+.oal-switch-label span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.oal-toggle-row {
+  min-height: 44px;
+  justify-content: center;
+}
+
+.oal-switch-label {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 980px) {
+  .oal-config-root .tv-radio-options {
+    justify-content: flex-start;
+  }
+}

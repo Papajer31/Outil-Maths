@@ -1,3 +1,5 @@
+import { ensureToolUiStyles } from "./tool-ui/tool-ui.js";
+
 const TOOL_INSTRUCTION_STYLE_DATASET = "toolInstructionStyle";
 
 export const TOOL_INSTRUCTION_CLASS = "tool-instruction";
@@ -5,6 +7,8 @@ const TOOL_INSTRUCTION_RESERVED_SPACE_PREFIX = "\uE000tool-instruction-reserved-
 
 export function ensureToolInstructionStyles() {
   if (typeof document === "undefined") return;
+
+  ensureToolUiStyles();
 
   const href = new URL("./tool-instruction.css", import.meta.url).href;
   if (document.querySelector(`link[data-${toKebabCase(TOOL_INSTRUCTION_STYLE_DATASET)}="${href}"]`)) {

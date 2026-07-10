@@ -77,14 +77,19 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
             <span>Choisir une image</span>
             <input id="ttImageFileInput" type="file" accept="image/*">
           </label>
+          <label class="tt-widget-action-toggle tt-image-proportions-toggle">
+            <input id="ttImagePreserveProportions" type="checkbox" ${state.preserveProportions ? "checked" : ""}>
+            <span class="tt-widget-action-toggle-track" aria-hidden="true"></span>
+            <span>Proportions</span>
+          </label>
           <button id="ttImageZoomOut" class="tt-widget-action-btn" type="button" ${hasImage && canZoomOut ? "" : "disabled"}>
             <span class="dashboard-material-icon" aria-hidden="true">zoom_out</span><span>Zoom -</span>
           </button>
+          <button id="ttImageCenter" class="tt-widget-action-btn" type="button" ${hasImage ? "" : "disabled"}>
+            <span class="dashboard-material-icon" aria-hidden="true">fit_screen</span><span>100 %</span>
+          </button>
           <button id="ttImageZoomIn" class="tt-widget-action-btn" type="button" ${hasImage && canZoomIn ? "" : "disabled"}>
             <span class="dashboard-material-icon" aria-hidden="true">zoom_in</span><span>Zoom +</span>
-          </button>
-          <button id="ttImageCenter" class="tt-widget-action-btn" type="button" ${hasImage ? "" : "disabled"}>
-            <span class="dashboard-material-icon" aria-hidden="true">fit_screen</span><span>Centrer / adapter</span>
           </button>
           ${hasImage ? `
             <button id="ttImageClear" class="tt-widget-action-btn is-danger" type="button">
@@ -92,6 +97,13 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
               <span>Retirer</span>
             </button>
           ` : ""}
+        </div>
+
+        <div class="tt-image-source-grid">
+          <div class="tt-image-url-row">
+            <input id="ttImageUrlInput" type="url" inputmode="url" placeholder="https://…" value="${hasImage && state.sourceKind === "url" ? escapeAttr(state.source) : ""}">
+            <button id="ttImageLoadUrl" class="tt-widget-action-btn is-primary" type="button">Charger</button>
+          </div>
         </div>
 
         ${hasImage ? `
@@ -108,13 +120,6 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
             <span>Choisis une image locale ou colle l’URL directe d’une image.</span>
           </div>
         `}
-
-        <div class="tt-image-source-grid">
-          <div class="tt-image-url-row">
-            <input id="ttImageUrlInput" type="url" inputmode="url" placeholder="https://…" value="${hasImage && state.sourceKind === "url" ? escapeAttr(state.source) : ""}">
-            <button id="ttImageLoadUrl" class="tt-widget-action-btn is-primary" type="button">Charger</button>
-          </div>
-        </div>
       </section>
     `;
 
@@ -126,6 +131,11 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
     host.querySelector("#ttImageLoadUrl")?.addEventListener("click", setImageFromUrl);
     host.querySelector("#ttImageUrlInput")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") setImageFromUrl();
+    });
+    host.querySelector("#ttImagePreserveProportions")?.addEventListener("change", (event) => {
+      commitAction("set-preserve-proportions", {
+        preserveProportions: event.currentTarget.checked === true
+      });
     });
     host.querySelector("#ttImageClear")?.addEventListener("click", () => commitAction("clear-image"));
     host.querySelector("#ttImageZoomOut")?.addEventListener("click", () => commitAction("adjust-zoom", { delta: -IMAGE_ZOOM_STEP }));

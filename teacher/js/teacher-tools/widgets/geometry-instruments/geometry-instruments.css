@@ -1,0 +1,826 @@
+/* ========================================
+   WIDGET TABLEAU — INSTRUMENTS DE GÉOMÉTRIE
+======================================== */
+
+.tt-geometry-control{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.tt-geometry-form{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.tt-geometry-section{
+  min-width:0;
+  border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.045);
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.tt-geometry-section.is-disabled{
+  opacity:.54;
+}
+
+.tt-geometry-section-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#fff;
+  font-size:14px;
+  font-weight:900;
+}
+
+.tt-geometry-tool-row{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+}
+
+.tt-geometry-disabled-tool{
+  opacity:.45;
+}
+
+.tt-geometry-style-row{
+  justify-content:flex-start;
+}
+
+.tt-geometry-style-divider{
+  width:1px;
+  height:30px;
+  background:rgba(255,255,255,.12);
+}
+
+.tt-geometry-type-btn.is-active,
+.tt-geometry-option-btn.is-active{
+  background:rgba(245,158,11,.22);
+  border-color:rgba(245,158,11,.36);
+  color:#fff;
+}
+
+.tt-geometry-range-grid{
+  min-width:0;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:12px;
+}
+
+.tt-geometry-field{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+
+.tt-geometry-field > span{
+  color:rgba(255,255,255,.68);
+  font-size:13px;
+  font-weight:800;
+}
+
+.tt-geometry-range-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  align-items:center;
+  gap:10px;
+}
+
+.tt-geometry-range{
+  width:100%;
+  min-width:0;
+  accent-color:#f59e0b;
+}
+
+.tt-geometry-number{
+  width:100%;
+  min-width:0;
+  height:34px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px;
+  background:rgba(0,0,0,.18);
+  color:#fff;
+  padding:0 10px;
+  font:inherit;
+  font-size:13px;
+  font-weight:800;
+  outline:none;
+}
+
+.tt-geometry-number:focus{
+  border-color:rgba(245,158,11,.52);
+  box-shadow:0 0 0 3px rgba(245,158,11,.12);
+}
+
+.tt-geometry-range-row strong{
+  min-width:58px;
+  color:#fff;
+  font-size:13px;
+  text-align:right;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"]{
+  min-width:0;
+  min-height:0;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  backdrop-filter:none;
+  overflow:visible;
+  pointer-events:none;
+  cursor:default;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-selected,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-chrome-visible,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-selected.is-chrome-visible,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-dragging{
+  border:none;
+  box-shadow:none;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-widget-chrome,
+.ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-widget-bottom-chrome,
+.ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-widget-resize{
+  display:none !important;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-widget-body{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  padding:0;
+  overflow:visible;
+  pointer-events:none;
+}
+
+.ttp-geometry-layer{
+  --ttp-geometry-border-color:var(--ttp-active-draw-color, #111827);
+  position:absolute;
+  inset:0;
+  overflow:visible;
+  pointer-events:none;
+}
+
+.ttp-geo-ruler{
+  --ruler-height:110px;
+  --ruler-width:552px;
+  --ruler-zero-offset:21px;
+  --ruler-slider-width:230px;
+  --ruler-rotation:0deg;
+  position:absolute;
+  left:calc(var(--ruler-x) - var(--ruler-zero-offset));
+  top:var(--ruler-y);
+  width:var(--ruler-width);
+  height:var(--ruler-height);
+  transform:rotate(var(--ruler-rotation));
+  transform-origin:var(--ruler-zero-offset) 0;
+  pointer-events:auto;
+  touch-action:none;
+  cursor:grab;
+  user-select:none;
+  -webkit-user-select:none;
+  filter:none;
+}
+
+.ttp-geo-ruler.is-dragging,
+.ttp-geo-ruler.is-rotating,
+.ttp-geo-ruler.is-resizing-length{
+  cursor:grabbing;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-selected .ttp-geo-ruler::after,
+.ttp-geo-ruler.is-selected::after{
+  content:"";
+  position:absolute;
+  inset:-7px -8px -8px -7px;
+  border:2px solid rgba(245,158,11,.60);
+  border-radius:11px;
+  pointer-events:none;
+  box-shadow:0 0 0 3px rgba(245,158,11,.10);
+  display:none;
+}
+
+.ttp-geo-ruler-svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+  pointer-events:none;
+  shape-rendering:geometricPrecision;
+}
+
+.ttp-geo-ruler-move-hit{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:auto;
+  cursor:grab;
+  background:transparent;
+}
+
+.ttp-geo-ruler.is-dragging .ttp-geo-ruler-move-hit{
+  cursor:grabbing;
+}
+
+.ttp-geo-ruler-body{
+  fill:rgba(255,255,255,.42);
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.42;
+  stroke-width:1.3;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-tick{
+  stroke:#111827;
+  stroke-linecap:square;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-tick.is-major{
+  stroke-width:2.4;
+}
+
+.ttp-geo-ruler-tick.is-medium{
+  stroke-width:1.7;
+}
+
+.ttp-geo-ruler-tick.is-minor{
+  stroke-width:1.05;
+}
+
+.ttp-geo-ruler-number{
+  font-family:"Andika", system-ui, sans-serif;
+  font-size:15px;
+  font-weight:900;
+  fill:#111827;
+  text-anchor:middle;
+  dominant-baseline:middle;
+  pointer-events:none;
+}
+
+.ttp-geo-ruler-simple-back{
+  fill:rgba(255,255,255,.88);
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.38;
+  stroke-width:1.2;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-simple-unit{
+  stroke:rgba(15,23,42,.20);
+  stroke-width:.8;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-simple-unit.is-green{
+  fill:rgba(74,222,128,.68);
+}
+
+.ttp-geo-ruler-simple-unit.is-blue{
+  fill:rgba(96,165,250,.70);
+}
+
+.ttp-geo-ruler-grid-body{
+  fill:rgba(239,246,255,.58);
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.42;
+  stroke-width:1.2;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-grid-line{
+  stroke:rgba(15,23,42,.38);
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-geo-ruler-grid-line.is-half{
+  stroke-width:.75;
+}
+
+.ttp-geo-ruler-grid-line.is-unit{
+  stroke-width:1.45;
+}
+
+.ttp-geo-ruler-grid-number{
+  font-family:"Andika", system-ui, sans-serif;
+  font-size:13px;
+  font-weight:900;
+  fill:rgba(15,23,42,.86);
+  text-anchor:middle;
+  dominant-baseline:middle;
+  pointer-events:none;
+}
+
+.ttp-geo-ruler-degree-pill{
+  position:absolute;
+  left:calc(var(--ruler-zero-offset) + var(--ruler-slider-width) + 10px);
+  bottom:8px;
+  transform:none;
+  min-width:48px;
+  min-height:24px;
+  padding:3px 9px;
+  border-radius:999px;
+  background:rgba(15,23,42,.86);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+  box-shadow:0 8px 20px rgba(0,0,0,.20);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .12s ease;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-selected .ttp-geo-ruler-degree-pill,
+.ttp-geo-ruler.is-selected .ttp-geo-ruler-degree-pill,
+.ttp-geo-ruler.is-rotating .ttp-geo-ruler-degree-pill{
+  opacity:1;
+}
+
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-ruler-unit-slider,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-ruler-length-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-ruler-rotate-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-ruler-degree-pill,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-ruler-nudge-pad{
+  display:none !important;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-ruler-unit-slider,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-ruler-length-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-ruler-rotate-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-ruler-degree-pill,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-ruler-nudge-pad{
+  display:none !important;
+}
+
+.ttp-geo-ruler-unit-slider{
+  position:absolute;
+  left:var(--ruler-zero-offset);
+  bottom:6px;
+  width:var(--ruler-slider-width);
+  height:28px;
+  accent-color:#f59e0b;
+  cursor:pointer;
+  z-index:8;
+  pointer-events:auto;
+  touch-action:auto;
+}
+
+.ttp-geo-ruler-length-handle{
+  position:absolute;
+  right:0;
+  top:0;
+  width:18px;
+  height:100%;
+  border:none;
+  border-left:1px solid rgba(15,23,42,.18);
+  border-radius:0 5px 5px 0;
+  background:rgba(245,158,11,.18);
+  box-shadow:inset 3px 0 0 rgba(245,158,11,.72);
+  cursor:pointer;
+  z-index:5;
+  padding:0;
+}
+
+.ttp-geo-ruler-length-handle:hover,
+.ttp-geo-ruler.is-resizing-length .ttp-geo-ruler-length-handle{
+  background:rgba(245,158,11,.30);
+}
+
+.ttp-geo-ruler-rotate-handle{
+  position:absolute;
+  right:30px;
+  bottom:14px;
+  width:32px;
+  height:32px;
+  border:2px solid rgba(255,255,255,.95);
+  border-radius:999px;
+  background:rgba(15,23,42,.88);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 9px 22px rgba(15,23,42,.30);
+  cursor:grab;
+  z-index:5;
+  padding:0;
+}
+
+.ttp-geo-ruler-rotate-handle:active{
+  cursor:grabbing;
+}
+
+.ttp-geo-ruler-rotate-handle .material-icon-svg,
+.ttp-geo-set-square-rotate-handle .material-icon-svg{
+  fill:#fff;
+}
+
+.ttp-geo-ruler-nudge-pad{
+  position:absolute;
+  left:16px;
+  bottom:16px;
+  width:94px;
+  height:94px;
+  display:grid;
+  grid-template-columns:repeat(3, 30px);
+  grid-template-rows:repeat(3, 30px);
+  gap:2px;
+  z-index:6;
+  transform:none;
+  transform-origin:0 0;
+  pointer-events:auto;
+}
+
+.ttp-geo-ruler-nudge-pad::before,
+.ttp-geo-set-square-nudge-pad::before{
+  position:absolute;
+  left:0;
+  bottom:calc(100% + 7px);
+  min-width:54px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:rgba(15,23,42,.86);
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  line-height:1.25;
+  text-align:center;
+  text-transform:uppercase;
+  letter-spacing:0;
+  box-shadow:0 8px 20px rgba(0,0,0,.20);
+  pointer-events:none;
+  display:none;
+}
+
+.ttp-geometry-layer:has(.ttp-geo-ruler-nudge-pad):has(.ttp-geo-set-square-nudge-pad) .ttp-geo-ruler-nudge-pad::before{
+  content:"règle";
+  display:block;
+}
+
+.ttp-geometry-layer:has(.ttp-geo-ruler-nudge-pad):has(.ttp-geo-set-square-nudge-pad) .ttp-geo-set-square-nudge-pad::before{
+  content:"équerre";
+  display:block;
+}
+
+.ttp-geometry-nudge-btn{
+  width:30px;
+  height:30px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:10px;
+  background:rgba(15,23,42,.86);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);
+  cursor:pointer;
+  padding:0;
+}
+
+.ttp-geometry-nudge-btn:hover{
+  background:rgba(30,41,59,.94);
+}
+
+.ttp-geometry-nudge-btn[data-ruler-nudge-dx="0"][data-ruler-nudge-dy="-1"]{
+  grid-column:2;
+  grid-row:1;
+}
+
+.ttp-geometry-nudge-btn[data-ruler-nudge-dx="-1"][data-ruler-nudge-dy="0"]{
+  grid-column:1;
+  grid-row:2;
+}
+
+.ttp-geometry-nudge-btn[data-ruler-nudge-dx="1"][data-ruler-nudge-dy="0"]{
+  grid-column:3;
+  grid-row:2;
+}
+
+.ttp-geometry-nudge-btn[data-ruler-nudge-dx="0"][data-ruler-nudge-dy="1"]{
+  grid-column:2;
+  grid-row:3;
+}
+
+.ttp-geo-ruler.is-locked{
+  cursor:default;
+}
+
+.ttp-stage.is-draw-active .ttp-widget-host:has(.ttp-widget-frame[data-tool-id="geometry-instruments"]){
+  z-index:180000;
+  pointer-events:none;
+}
+
+.ttp-stage.is-draw-active .ttp-widget-host:has(.ttp-widget-frame[data-tool-id="geometry-instruments"]) .ttp-widget-frame:not([data-tool-id="geometry-instruments"]),
+.ttp-stage.is-draw-active .ttp-widget-host:has(.ttp-widget-frame[data-tool-id="geometry-instruments"]) .ttp-widget-frame:not([data-tool-id="geometry-instruments"]) *{
+  pointer-events:none !important;
+}
+
+.ttp-stage.is-draw-active .ttp-widget-frame[data-tool-id="geometry-instruments"]{
+  pointer-events:none;
+}
+
+.ttp-stage.is-draw-active .ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-geo-ruler{
+  pointer-events:auto;
+}
+
+
+/* Équerre --------------------------------------------------------- */
+.ttp-geo-set-square{
+  --set-square-width:460px;
+  --set-square-height:290px;
+  --set-square-pivot-x:0px;
+  --set-square-pivot-y:0px;
+  --set-square-metal-thickness:68px;
+  --set-square-rotation:0deg;
+  --set-square-counter-rotation:0deg;
+  --set-square-rotate-x:285px;
+  --set-square-rotate-y:27px;
+  --set-square-angle-pill-x:58px;
+  --set-square-angle-pill-y:58px;
+  --set-square-nudge-x:120px;
+  --set-square-nudge-y:90px;
+  --set-square-handle-horizontal-x:460px;
+  --set-square-handle-horizontal-y:0px;
+  --set-square-handle-vertical-x:0px;
+  --set-square-handle-vertical-y:290px;
+  position:absolute;
+  left:calc(var(--set-square-x) - var(--set-square-pivot-x));
+  top:calc(var(--set-square-y) - var(--set-square-pivot-y));
+  width:var(--set-square-width);
+  height:var(--set-square-height);
+  transform:rotate(var(--set-square-rotation));
+  transform-origin:var(--set-square-pivot-x) var(--set-square-pivot-y);
+  pointer-events:none;
+  touch-action:none;
+  cursor:grab;
+  user-select:none;
+  -webkit-user-select:none;
+  filter:none;
+}
+
+.ttp-geo-set-square.is-dragging,
+.ttp-geo-set-square.is-rotating,
+.ttp-geo-set-square.is-resizing-side{
+  cursor:grabbing;
+}
+
+.ttp-geo-set-square-svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+  pointer-events:none;
+  shape-rendering:geometricPrecision;
+}
+
+.ttp-geo-set-square-plastic-body{
+  fill:rgba(255,255,255,.40);
+  stroke:none;
+  pointer-events:visiblePainted;
+  cursor:grab;
+}
+
+.ttp-geo-set-square-plastic-outline{
+  fill:none;
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.46;
+  stroke-width:1.4;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+
+.ttp-geo-set-square-plastic-hole{
+  fill:none;
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.30;
+  stroke-width:1.1;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+
+.ttp-geo-set-square-hypotenuse{
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.38;
+  stroke-width:1.15;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+
+.ttp-geo-set-square-metal-body,
+.ttp-geo-set-square-metal-arm{
+  fill:rgba(226,232,240,.86);
+  stroke:var(--ttp-geometry-border-color);
+  stroke-opacity:.50;
+  stroke-width:1.35;
+  vector-effect:non-scaling-stroke;
+  pointer-events:visiblePainted;
+  cursor:grab;
+}
+
+.ttp-geo-set-square-angle-mark{
+  fill:none;
+  stroke:rgba(245,158,11,.94);
+  stroke-width:2.4;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+
+.ttp-geo-set-square.is-dragging .ttp-geo-set-square-plastic-body,
+.ttp-geo-set-square.is-dragging .ttp-geo-set-square-metal-body,
+.ttp-geo-set-square.is-dragging .ttp-geo-set-square-metal-arm{
+  cursor:grabbing;
+}
+
+.ttp-geo-set-square-degree-pill{
+  position:absolute;
+  left:var(--set-square-angle-pill-x);
+  top:var(--set-square-angle-pill-y);
+  transform:translate(-50%, -50%) rotate(var(--set-square-counter-rotation));
+  transform-origin:50% 50%;
+  min-width:48px;
+  min-height:24px;
+  padding:3px 9px;
+  border-radius:999px;
+  background:rgba(15,23,42,.86);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+  box-shadow:0 8px 20px rgba(0,0,0,.20);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .12s ease;
+  z-index:7;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-selected .ttp-geo-set-square-degree-pill,
+.ttp-geo-set-square.is-selected .ttp-geo-set-square-degree-pill,
+.ttp-geo-set-square.is-rotating .ttp-geo-set-square-degree-pill{
+  opacity:1;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-set-square-size-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-set-square-rotate-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-set-square-degree-pill,
+.ttp-widget-frame[data-tool-id="geometry-instruments"]:not(.is-selected) .ttp-geo-set-square-nudge-pad{
+  display:none !important;
+}
+
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-set-square-size-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-set-square-rotate-handle,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-set-square-degree-pill,
+.ttp-widget-frame[data-tool-id="geometry-instruments"].is-widget-locked .ttp-geo-set-square-nudge-pad{
+  display:none !important;
+}
+
+.ttp-geo-set-square-size-handle{
+  position:absolute;
+  width:24px;
+  height:24px;
+  border:2px solid rgba(255,255,255,.95);
+  border-radius:999px;
+  background:rgba(245,158,11,.92);
+  box-shadow:0 8px 20px rgba(15,23,42,.28);
+  z-index:6;
+  padding:0;
+  pointer-events:auto;
+  touch-action:none;
+}
+
+.ttp-geo-set-square-size-handle.is-horizontal{
+  left:var(--set-square-handle-horizontal-x);
+  top:var(--set-square-handle-horizontal-y);
+  transform:translate(-50%, -50%);
+  cursor:pointer;
+}
+
+.ttp-geo-set-square-size-handle.is-vertical{
+  left:var(--set-square-handle-vertical-x);
+  top:var(--set-square-handle-vertical-y);
+  transform:translate(-50%, -50%);
+  cursor:pointer;
+}
+
+.ttp-geo-set-square-metal .ttp-geo-set-square-size-handle{
+  border:none;
+  border-radius:0;
+  background:rgba(245,158,11,.18);
+  box-shadow:none;
+}
+
+.ttp-geo-set-square-metal .ttp-geo-set-square-size-handle.is-horizontal{
+  width:18px;
+  height:var(--set-square-metal-thickness);
+  border-left:1px solid rgba(15,23,42,.18);
+  border-radius:0 5px 5px 0;
+  box-shadow:inset 3px 0 0 rgba(245,158,11,.72);
+}
+
+.ttp-geo-set-square-metal .ttp-geo-set-square-size-handle.is-vertical{
+  width:var(--set-square-metal-thickness);
+  height:18px;
+  border-top:1px solid rgba(15,23,42,.18);
+  border-radius:0 0 5px 5px;
+  box-shadow:inset 0 3px 0 rgba(245,158,11,.72);
+}
+
+.ttp-geo-set-square-size-handle:hover,
+.ttp-geo-set-square-size-handle.is-active-resize{
+  background:#fbbf24;
+}
+
+.ttp-geo-set-square-rotate-handle{
+  position:absolute;
+  left:var(--set-square-rotate-x);
+  top:var(--set-square-rotate-y);
+  width:32px;
+  height:32px;
+  transform:translate(-50%, -50%);
+  border:2px solid rgba(255,255,255,.95);
+  border-radius:999px;
+  background:rgba(15,23,42,.88);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 9px 22px rgba(15,23,42,.30);
+  cursor:grab;
+  z-index:6;
+  padding:0;
+  pointer-events:auto;
+  touch-action:none;
+}
+
+.ttp-geo-set-square-rotate-handle:active{
+  cursor:grabbing;
+}
+
+.ttp-geo-set-square-nudge-pad{
+  position:absolute;
+  left:16px;
+  bottom:16px;
+  width:94px;
+  height:94px;
+  display:grid;
+  grid-template-columns:repeat(3, 30px);
+  grid-template-rows:repeat(3, 30px);
+  gap:2px;
+  z-index:6;
+  transform:none;
+  transform-origin:0 0;
+  pointer-events:auto;
+}
+
+.ttp-geometry-layer:has(.ttp-geo-ruler-nudge-pad) .ttp-geo-set-square-nudge-pad{
+  left:122px;
+}
+
+.ttp-geo-set-square.is-locked{
+  cursor:default;
+}
+
+.ttp-stage.is-draw-active .ttp-widget-frame[data-tool-id="geometry-instruments"] .ttp-geo-set-square{
+  pointer-events:none;
+}
+
+@media (max-width:900px){
+  .tt-geometry-range-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+.ttp-geometry-nudge-btn[data-set-square-nudge-dx="0"][data-set-square-nudge-dy="-1"]{
+  grid-column:2;
+  grid-row:1;
+}
+
+.ttp-geometry-nudge-btn[data-set-square-nudge-dx="-1"][data-set-square-nudge-dy="0"]{
+  grid-column:1;
+  grid-row:2;
+}
+
+.ttp-geometry-nudge-btn[data-set-square-nudge-dx="1"][data-set-square-nudge-dy="0"]{
+  grid-column:3;
+  grid-row:2;
+}
+
+.ttp-geometry-nudge-btn[data-set-square-nudge-dx="0"][data-set-square-nudge-dy="1"]{
+  grid-column:2;
+  grid-row:3;
+}

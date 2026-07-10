@@ -2,14 +2,14 @@ import {
   renderBasicMinMax,
   bindBasicMinMax,
   readBasicMinMax,
-  renderCheckbox,
-  readCheckbox,
+  renderRadioGroup,
+  bindRadio,
+  readRadio,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
 import {
   getDefaultSettings,
   normalizeSettings,
-  getAvailableQuestionDirections,
   QUESTION_DIRECTIONS,
   NUMBER_LIMITS
 } from "./model.js";
@@ -18,9 +18,9 @@ let stylesInjected = false;
 
 export function renderToolSettings(container, settings) {
   injectStyles();
+  container.classList.add("nl-config-root");
 
   const cfg = normalizeSettings(settings);
-  const directions = new Set(getAvailableQuestionDirections(cfg));
   container.innerHTML = renderToolSettingsStack(
     renderBasicMinMax({
       idPrefix: "nl_range",
@@ -33,31 +33,23 @@ export function renderToolSettings(container, settings) {
       inputMax: NUMBER_LIMITS.max,
       step: 1
     }),
-    `
-      <div class="tv-group tv-group-inline nl-direction-control">
-        <div class="tv-minmax-inline">
-          <div class="tv-group-title tv-minmax-title">Type de questions</div>
-          <div class="tv-radio-options nl-direction-options">
-            ${renderCheckbox({
-              id: "nl_direction_number_to_words",
-              label: "Nombre → Écriture",
-              checked: directions.has(QUESTION_DIRECTIONS.NUMBER_TO_WORDS)
-            })}
-            ${renderCheckbox({
-              id: "nl_direction_words_to_number",
-              label: "Écriture → Nombre",
-              checked: directions.has(QUESTION_DIRECTIONS.WORDS_TO_NUMBER)
-            })}
-          </div>
-        </div>
-      </div>
-    `
+    renderRadioGroup({
+      title: "Type de question",
+      id: "nl_direction",
+      value: cfg.direction,
+      options: [
+        { value: QUESTION_DIRECTIONS.NUMBER_TO_WORDS, label: "Nombre → Écriture" },
+        { value: QUESTION_DIRECTIONS.WORDS_TO_NUMBER, label: "Écriture → Nombre" },
+        { value: QUESTION_DIRECTIONS.MIXED, label: "Les deux" }
+      ]
+    })
   );
 
   bindBasicMinMax(container, "nl_range", {
     inputMin: NUMBER_LIMITS.min,
     inputMax: NUMBER_LIMITS.max
   });
+  bindRadio(container, "nl_direction");
 }
 
 export function readToolSettings(container, settings = {}) {
@@ -67,18 +59,7 @@ export function readToolSettings(container, settings = {}) {
     errorLabel: "Les bornes des nombres"
   });
 
-  const allowNumberToWords = readCheckbox(container, "nl_direction_number_to_words");
-  const allowWordsToNumber = readCheckbox(container, "nl_direction_words_to_number");
-
-  if (!allowNumberToWords && !allowWordsToNumber) {
-    throw new Error("Active au moins un type de questions.");
-  }
-
-  const direction = allowNumberToWords && allowWordsToNumber
-    ? QUESTION_DIRECTIONS.MIXED
-    : allowWordsToNumber
-      ? QUESTION_DIRECTIONS.WORDS_TO_NUMBER
-      : QUESTION_DIRECTIONS.NUMBER_TO_WORDS;
+  const direction = readRadio(container, "nl_direction", QUESTION_DIRECTIONS.NUMBER_TO_WORDS);
 
   return normalizeSettings({
     ...getDefaultSettings(),

@@ -1,0 +1,439 @@
+.monrep-root{
+  width:100%;
+  height:100%;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:18px;
+  padding:12px 28px 22px;
+  font-family:Andika, system-ui, sans-serif;
+  color:#f3f7ff;
+}
+
+.monrep-card{
+  flex:1 1 auto;
+  min-height:0;
+  display:grid;
+  grid-template-rows:minmax(0, 1fr) auto auto;
+  gap:14px;
+  width:100%;
+  max-width:1520px;
+  margin:0 auto;
+}
+
+.monrep-root--read .monrep-card{
+  max-width:1380px;
+}
+
+.monrep-prompt{
+  display:none;
+}
+
+.monrep-stage{
+  position:relative;
+  min-height:0;
+  border:3px solid rgba(255,255,255,.18);
+  border-radius:28px;
+  background:#fff;
+  box-shadow:0 14px 28px rgba(0,0,0,.18);
+  overflow:hidden;
+  padding:22px;
+}
+
+.monrep-root--compose .monrep-stage{
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  overflow:hidden;
+  padding:0;
+}
+
+.monrep-wallet{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:14px;
+  width:100%;
+  height:100%;
+  min-height:220px;
+}
+
+.monrep-wallet--scatter{
+  align-content:center;
+}
+
+.monrep-wallet--scatter .monrep-money{
+  position:absolute;
+  left:50%;
+  top:50%;
+  z-index:var(--money-z, 1);
+  transform:rotate(var(--rot, 0deg));
+  cursor:default;
+  touch-action:none;
+  user-select:none;
+}
+
+.monrep-wallet--scatter .monrep-money--draggable{
+  cursor:grab;
+}
+
+.monrep-wallet--scatter .monrep-money--draggable.is-dragging{
+  cursor:grabbing;
+  z-index:999;
+}
+
+.monrep-money{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:3px solid rgba(79, 55, 18, .42);
+  font-weight:1000;
+  font-size:28px;
+  line-height:1;
+  color:#392306;
+  box-shadow:0 5px 10px rgba(0,0,0,.16);
+  box-sizing:border-box;
+  overflow:hidden;
+}
+
+.monrep-money--coin{
+  width:var(--money-coin-size, 100px);
+  height:var(--money-coin-size, 100px);
+  border-radius:999px;
+  background:radial-gradient(circle at 32% 28%, #fff8c0, #e5b948 60%, #ba8216);
+}
+
+.monrep-money--bill{
+  width:132px;
+  height:70px;
+  border-radius:14px;
+  background:linear-gradient(135deg, #eef9df, #95d49b 60%, #65ad6e);
+  border-color:#36743d;
+}
+
+.monrep-money--bill:has(img){
+  width:var(--money-width, 132px);
+  height:var(--money-height, 70px);
+  min-width:var(--money-width, 132px);
+  min-height:var(--money-height, 70px);
+  border-radius:0;
+}
+
+.monrep-money img{
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+  pointer-events:none;
+}
+
+button.monrep-money{
+  font-family:Andika, system-ui, sans-serif;
+  cursor:pointer;
+}
+
+button.monrep-money:hover,
+button.monrep-money:focus-visible{
+  outline:none;
+  border-color:#f0b400;
+}
+
+button.monrep-money:disabled{
+  opacity:.48;
+  filter:grayscale(.55);
+  cursor:not-allowed;
+}
+
+.monrep-root--simple-assets .monrep-money{
+  border-width:3px;
+  background:#fff7d4;
+}
+
+.monrep-root--simple-assets .monrep-money--coin{
+  background:radial-gradient(circle at 35% 30%, #fffdf1, #ffe294 70%, #d49c24);
+}
+
+.monrep-root--simple-assets .monrep-money--bill{
+  border-radius:16px;
+  background:linear-gradient(135deg, #f5fff0, #caedc9);
+}
+
+.monrep-simple-face{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:100%;
+  padding:.2em;
+  font-size:clamp(18px, .32em + 18px, 34px);
+  text-align:center;
+  line-height:1;
+  color:#2e2415;
+}
+
+.monrep-answer{
+  min-height:82px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.monrep-read-answer-shell{
+  min-height:70px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  padding:8px 22px;
+  border-radius:22px;
+  background:rgba(255,255,255,.08);
+  border:2px solid rgba(255,255,255,.16);
+  font-size:36px;
+  font-weight:950;
+  color:#f4f7fb;
+}
+
+.monrep-input{
+  width:230px;
+  height:62px;
+  border-radius:16px;
+  border:3px solid rgba(255,255,255,.32);
+  background:#fff;
+  color:#10141b;
+  text-align:center;
+  font-family:Andika, system-ui, sans-serif;
+  font-size:34px;
+  font-weight:950;
+  outline:none;
+  box-sizing:border-box;
+}
+
+.monrep-input--small{
+  width:130px;
+}
+
+.monrep-read-answer-shell--euros-only .monrep-input--small{
+  width:170px;
+}
+
+.monrep-input:focus{
+  border-color:#f5b51b;
+  box-shadow:0 0 0 4px rgba(245,181,27,.2);
+}
+
+.monrep-input[readonly]{
+  background:#f7f7f7;
+}
+
+.monrep-feedback{
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:6px 18px;
+  border-radius:18px;
+  color:#ffe7a3;
+  font-size:24px;
+  font-weight:950;
+}
+
+.monrep-feedback[aria-hidden="true"]{
+  visibility:hidden;
+}
+
+.monrep-feedback--final{
+  color:#f4f7fb;
+}
+
+.monrep-root.is-correct .monrep-stage,
+.monrep-compose-panel.is-correct{
+  border-color:#36d17f;
+  box-shadow:0 0 0 5px rgba(54,209,127,.16), 0 14px 28px rgba(0,0,0,.18);
+}
+
+.monrep-root.is-incorrect .monrep-stage,
+.monrep-compose-panel.is-incorrect{
+  border-color:#ff5e6f;
+  box-shadow:0 0 0 5px rgba(255,94,111,.16), 0 14px 28px rgba(0,0,0,.18);
+}
+
+.monrep-root.is-warned .monrep-read-answer-shell,
+.monrep-root.is-warned .monrep-compose-panel{
+  border-color:#f5b51b;
+  box-shadow:0 0 0 5px rgba(245,181,27,.12);
+}
+
+.monrep-compose-builder{
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:grid;
+  grid-template-rows:minmax(0, 1fr) auto;
+  gap:26px;
+}
+
+.monrep-compose-main{
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(160px, .55fr) auto minmax(440px, 1fr);
+  align-items:center;
+  gap:28px;
+}
+
+.monrep-compose-number{
+  justify-self:end;
+  min-width:150px;
+  max-width:420px;
+  color:#f4f8ff;
+  font-size:70px;
+  font-weight:950;
+  line-height:1.05;
+  text-align:center;
+  word-break:break-word;
+}
+
+.monrep-compose-arrow{
+  color:#f4f8ff;
+  font-size:58px;
+  font-weight:900;
+}
+
+.monrep-compose-panel{
+  min-width:0;
+  width:100%;
+  max-width:760px;
+  height:min(520px, 100%);
+  min-height:320px;
+  align-self:center;
+  justify-self:start;
+  border-radius:28px;
+  background:#fff;
+  border:3px solid rgba(255,255,255,.7);
+  overflow:hidden;
+  box-shadow:0 14px 28px rgba(0,0,0,.16);
+}
+
+.monrep-compose-workspace{
+  position:relative;
+  width:100%;
+  height:100%;
+}
+
+.monrep-compose-cue{
+  position:absolute;
+  left:50%;
+  bottom:38px;
+  transform:translateX(-50%);
+  width:40%;
+  height:74px;
+  border:4px dashed rgba(20,25,34,.45);
+  border-radius:22px;
+  pointer-events:none;
+}
+
+.monrep-compose-cue.is-hidden{
+  display:none;
+}
+
+.monrep-compose-items{
+  position:absolute;
+  inset:0;
+}
+
+.monrep-compose-piece{
+  position:absolute;
+  z-index:var(--money-z, 1);
+  touch-action:none;
+  user-select:none;
+  cursor:grab;
+}
+
+.monrep-compose-piece.is-dragging{
+  cursor:grabbing;
+  z-index:999;
+}
+
+.monrep-compose-piece--correction{
+  border-color:#f0b400;
+  box-shadow:0 0 0 4px rgba(240,180,0,.2), 0 5px 10px rgba(0,0,0,.16);
+}
+
+.monrep-compose-library{
+  justify-self:center;
+  width:min(1220px, 88%);
+  min-height:118px;
+  border-radius:24px;
+  border:3px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.13);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px 28px;
+  box-sizing:border-box;
+}
+
+.monrep-compose-library-items{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:14px 20px;
+}
+
+.monrep-compose-palette-money{
+  flex:0 0 auto;
+}
+
+.monrep-empty{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#202634;
+  font-size:28px;
+  font-weight:950;
+  text-align:center;
+}
+
+@media (max-width:1050px){
+  .monrep-root{
+    padding:10px 16px 16px;
+  }
+
+  .monrep-compose-main{
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+
+  .monrep-compose-number,
+  .monrep-compose-panel{
+    justify-self:center;
+  }
+
+  .monrep-compose-arrow{
+    display:none;
+  }
+
+  .monrep-compose-number{
+    font-size:46px;
+  }
+
+  .monrep-compose-panel{
+    max-width:760px;
+    height:360px;
+  }
+
+  .monrep-read-answer-shell{
+    flex-wrap:wrap;
+    font-size:28px;
+  }
+}

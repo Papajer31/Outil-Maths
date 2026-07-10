@@ -2,31 +2,152 @@ import { studentState } from "../student-state.js";
 import {
   goBackToActivities,
   getSelectedParticipantsForCurrentMode,
-  getSelectedParticipantsValidationIssue
+  getSelectedParticipantsValidationIssue,
+  applyExplorationProgressLevelToSelectedConfig
 } from "../student-actions.js";
 import {
   normalizeAccessCode,
-  loadPublicActivityConfig
+  loadPublicActivityConfig,
+  recordPublicStudentActivitySession
 } from "../student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../../shared/activity-modes.js";
 import { normalizePassationProfile } from "../../shared/activity-config.js";
+import {
+  buildCatalogActivityConfig,
+  findCatalogActivity,
+  normalizeCatalogRuntimeContext,
+  normalizeCatalogDifficultyLevel
+} from "../../shared/catalogue.js";
 import { createSessionEngine } from "../../shared/student-core.js";
 import { createProjectedSessionLink } from "../../shared/projected-session-link.js";
 import { renderMaterialIcon, setMaterialIcon } from "../../shared/material-icons-svg.js";
+import { requestAppFullscreen } from "../../shared/dom-helpers.js";
 
 const rocketOffUrl = new URL("../../shared/ui-assets/rocket-off.svg", import.meta.url).href;
 const rocketOnUrl = new URL("../../shared/ui-assets/rocket-on.svg", import.meta.url).href;
 const GAUGE_EPSILON = 1e-6;
 
+function getFirstSequenceItem(configJson) {
+  return Array.isArray(configJson?.sequence) && configJson.sequence.length
+    ? configJson.sequence[0]
+    : null;
+}
+
+function getCatalogActivityIdCandidate(remote, configJson, configName) {
+  const firstItem = getFirstSequenceItem(configJson);
+  return String(
+    studentState.selectedConfig?.catalog_activity_id
+    || studentState.selectedConfig?.catalogActivityId
+    || studentState.selectedConfig?.progression_context?.catalogActivityId
+    || remote?.catalog_activity_id
+    || remote?.catalogActivityId
+    || remote?.config_name_normalized
+    || configJson?.catalog_activity_id
+    || configJson?.catalogActivityId
+    || firstItem?.catalog_activity_id
+    || firstItem?.catalogActivityId
+    || configName
+    || ""
+  ).trim();
+}
+
+function shouldUseExplorationAdaptiveCatalog(passationProfile, isProjectedTeacherMode = false, catalogContext = "exploration") {
+  if (normalizeCatalogRuntimeContext(catalogContext) !== "exploration") return false;
+
+  const entry = String(
+    studentState.activityEntry
+    || studentState.selectedConfig?.progression_context?.context
+    || ""
+  ).trim().toLowerCase();
+
+  return !isProjectedTeacherMode
+    && passationProfile?.activityMode === "individual"
+    && entry === "exploration";
+}
+
+function rebuildExplorationCatalogRuntimeConfig(remote, passationProfile, configName, isProjectedTeacherMode = false, catalogContext = "exploration") {
+  const configJson = remote?.config_json;
+  if (!configJson || typeof configJson !== "object" || !Array.isArray(configJson.sequence)) {
+    return configJson;
+  }
+
+  const runtimeContext = normalizeCatalogRuntimeContext(catalogContext ?? configJson.catalog_context);
+
+  const activityIdCandidate = getCatalogActivityIdCandidate(remote, configJson, configName);
+  const catalogActivity = findCatalogActivity(activityIdCandidate, studentState.activities)
+    || findCatalogActivity(configName, studentState.activities);
+
+  if (!catalogActivity) {
+    return configJson;
+  }
+
+  const firstItem = getFirstSequenceItem(configJson);
+  const progressionContext = studentState.selectedConfig?.progression_context || {};
+  const difficultyLevel = normalizeCatalogDifficultyLevel(
+    studentState.selectedConfig?.catalog_difficulty_level
+    ?? studentState.selectedConfig?.catalogDifficultyLevel
+    ?? firstItem?.catalog_difficulty_level
+    ?? firstItem?.catalogDifficultyLevel
+    ?? configJson?.catalog_difficulty_level
+    ?? configJson?.catalogDifficultyLevel
+    ?? progressionContext.startedLevel
+    ?? 3
+  );
+
+  const rebuilt = buildCatalogActivityConfig(catalogActivity, {
+    activityMode: passationProfile.activityMode,
+    responseUi: passationProfile.responseUi,
+    progressMode: passationProfile.progressMode,
+    difficultyLevel,
+    context: runtimeContext,
+    adaptive: shouldUseExplorationAdaptiveCatalog(passationProfile, isProjectedTeacherMode, runtimeContext),
+    catalogActivities: studentState.activities
+  });
+
+  const rebuiltFirstItem = getFirstSequenceItem(rebuilt);
+  if (!rebuiltFirstItem) {
+    return configJson;
+  }
+
+
+  return {
+    ...configJson,
+    catalog_activity_id: catalogActivity.id,
+    catalog_difficulty_level: rebuilt.catalog_difficulty_level,
+    catalog_context: rebuilt.catalog_context,
+    activity_mode: rebuilt.activity_mode,
+    response_ui: rebuilt.response_ui,
+    progress_mode: rebuilt.progress_mode,
+    globals: rebuilt.globals ?? configJson.globals ?? {},
+    sequence: rebuilt.sequence
+  };
+}
+
 export function renderSessionView(root){
   const isProjectedTeacherMode = studentState.sessionMode === "projected-teacher";
   const isSharedSessionEntry = studentState.sharedSessionEntry === true;
   const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
-  const hasIndividualSidebar = !isProjectedTeacherMode && currentMode === "individual";
+  const catalogRuntimeContext = normalizeCatalogRuntimeContext(
+    studentState.selectedConfig?.catalog_context
+      ?? studentState.selectedConfig?.catalogContext
+      ?? studentState.projectedSession?.catalogRuntimeContext
+      ?? ""
+  );
+  const catalogDifficultyLevel = normalizeCatalogDifficultyLevel(
+    studentState.selectedConfig?.catalog_difficulty_level
+      ?? studentState.selectedConfig?.catalogDifficultyLevel
+      ?? studentState.projectedSession?.catalogDifficultyLevel
+      ?? 3
+  );
+  const isCatalogTestMode = catalogRuntimeContext === "test";
+  const catalogTestCloseHandler = typeof studentState.selectedConfig?.catalogTestClose === "function"
+    ? studentState.selectedConfig.catalogTestClose
+    : null;
+  const hasIndividualSidebar = !isProjectedTeacherMode && !isCatalogTestMode && currentMode === "individual";
 
   root.innerHTML = `
     <div
-      class="session-page ${isProjectedTeacherMode ? "session-page-projected" : ""} ${hasIndividualSidebar ? "session-page-has-sidebar" : "session-page-no-sidebar"}"
+      class="session-page ${isProjectedTeacherMode ? "session-page-projected" : ""} ${hasIndividualSidebar ? "session-page-has-sidebar" : "session-page-no-sidebar"} ${isCatalogTestMode ? "session-page-catalog-test" : ""}"
       id="sessionPage"
       data-activity-mode="${currentMode}"
     >
@@ -36,7 +157,7 @@ export function renderSessionView(root){
             <div id="sessionScene" class="session-scene ${hasIndividualSidebar ? "session-scene-has-sidebar" : "session-scene-centered"}">
               <div class="session-chrome-top">
                 <div class="session-top-slot session-top-slot-left">
-                  ${isSharedSessionEntry ? "" : `
+                  ${isSharedSessionEntry || isCatalogTestMode ? "" : `
                     <button
                       class="student-nav-btn student-nav-back student-session-back"
                       id="btnBackToActivities"
@@ -56,16 +177,18 @@ export function renderSessionView(root){
                 </div>
 
                 <div class="session-top-slot session-top-slot-right">
-                  <button
-                    class="student-nav-btn student-nav-action student-session-pause"
-                    id="btnPause"
-                    title="Pause"
-                    type="button"
-                    aria-label="Pause"
-                    data-skip-autofs="true"
-                  >
-                    ${renderMaterialIcon("pause", { className: "student-icon", id: "btnPauseIcon" })}
-                  </button>
+                  ${isCatalogTestMode ? "" : `
+                    <button
+                      class="student-nav-btn student-nav-action student-session-pause"
+                      id="btnPause"
+                      title="Pause"
+                      type="button"
+                      aria-label="Pause"
+                      data-skip-autofs="true"
+                    >
+                      ${renderMaterialIcon("pause", { className: "student-icon", id: "btnPauseIcon" })}
+                    </button>
+                  `}
                 </div>
               </div>
 
@@ -217,6 +340,7 @@ export function renderSessionView(root){
   const SESSION_CONTENT_BASE_HEIGHT = 930;
   const SESSION_CONTENT_MAX_HEIGHT = 1296;
   const supportsCssZoom = typeof document?.documentElement?.style?.zoom !== "undefined";
+  const shouldUseCssZoomForFit = supportsCssZoom && !isCatalogTestMode;
 
   const els = {
     page: root.querySelector("#sessionPage"),
@@ -285,7 +409,17 @@ export function renderSessionView(root){
     }
 
     try {
-      const remote = await loadPublicActivityConfig(accessCode, configName);
+      const localConfigJson = studentState.selectedConfig?.config_json;
+      const remote = localConfigJson && typeof localConfigJson === "object" && Array.isArray(localConfigJson.sequence)
+        ? {
+          module_key: studentState.selectedConfig?.module_key || "tools",
+          config_json: localConfigJson,
+          activity_mode: localConfigJson.activity_mode
+        }
+        : await loadPublicActivityConfig(accessCode, configName, {
+          context: catalogRuntimeContext,
+          difficultyLevel: catalogDifficultyLevel
+        });
       if (disposed) return;
 
       if (!Array.isArray(remote?.config_json?.sequence)){
@@ -318,13 +452,21 @@ export function renderSessionView(root){
         remote.config_json.response_ui = loadedPassationProfile.responseUi;
       }
 
+      const runtimeConfigJson = rebuildExplorationCatalogRuntimeConfig(
+        remote,
+        loadedPassationProfile,
+        configName,
+        isProjectedTeacherMode,
+        catalogRuntimeContext
+      );
+
       engine = createSessionEngine({
         els,
         accessCode,
         configName,
         moduleKey,
-        globals: remote.config_json.globals ?? {},
-        sequence: remote.config_json.sequence,
+        globals: runtimeConfigJson.globals ?? {},
+        sequence: runtimeConfigJson.sequence,
         activityMode: loadedPassationProfile.activityMode,
         responseUi: loadedPassationProfile.responseUi,
         progressMode: loadedPassationProfile.progressMode,
@@ -334,10 +476,18 @@ export function renderSessionView(root){
             return;
           }
 
+          if (isCatalogTestMode && catalogTestCloseHandler) {
+            catalogTestCloseHandler();
+            return;
+          }
+
           goBackToActivities();
         },
         onFatalError: (message) => {
           showFatalError(message);
+        },
+        onSessionFinished: (summary) => {
+          void recordFinishedExplorationSession(summary);
         },
         onStateChange: () => {
           syncPauseButton();
@@ -362,7 +512,7 @@ export function renderSessionView(root){
 
       const meta = engine.getSessionMeta?.() ?? { requiresStudent: false, allowedStudentIds: [] };
 
-      if (meta.requiresStudent && !isProjectedTeacherMode) {
+      if (meta.requiresStudent && !isProjectedTeacherMode && !isCatalogTestMode) {
         const selectionIssue = getSelectedParticipantsValidationIssue(meta);
         if (selectionIssue) {
           showFatalError(selectionIssue);
@@ -487,6 +637,7 @@ export function renderSessionView(root){
 
     root.addEventListener("click", (event) => {
       if (event.target.closest("[data-skip-autofs='true']")) return;
+      if (isCatalogTestMode) return;
       enterFullscreenIfPossible();
     }, { signal });
 
@@ -523,6 +674,7 @@ export function renderSessionView(root){
       if (!isProjectedTeacherMode) return;
 
       if (key === " ") {
+        if (isEditableEventTarget(e.target)) return;
         e.preventDefault();
         if (engine.isPaused?.()) {
           engine.resumeAfterPause?.();
@@ -734,6 +886,47 @@ export function renderSessionView(root){
     }
   }
 
+  async function recordFinishedExplorationSession(summary){
+    const context = studentState.selectedConfig?.progression_context;
+    if (!context || isProjectedTeacherMode || isSharedSessionEntry) return;
+    if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return;
+    if (String(context.context || "").trim() !== "exploration") return;
+
+    const item = (Array.isArray(summary?.items) ? summary.items : [])
+      .find((entry) => String(entry?.catalogActivityId || "") === String(context.catalogActivityId || ""));
+
+    if (!item || !item.catalogActivityId || Math.max(0, Number(item.questionsCount) || 0) <= 0) return;
+
+    const endedLevel = item.endedLevel ?? item.startedLevel ?? context.startedLevel ?? 3;
+
+    // On met à jour immédiatement la config locale : si l’élève relance depuis l’écran
+    // de départ sans repasser par la liste, il ne repart pas avec l’ancienne config.
+    void applyExplorationProgressLevelToSelectedConfig(endedLevel);
+
+    try {
+      const savedProgress = await recordPublicStudentActivitySession({
+        accessCode: studentState.accessCode,
+        studentId: context.studentId,
+        studentCode: studentState.studentCode,
+        catalogActivityId: item.catalogActivityId,
+        context: "exploration",
+        startedLevel: item.startedLevel ?? context.startedLevel ?? 3,
+        endedLevel,
+        questionsCount: item.questionsCount,
+        correctCount: item.correctCount,
+        wrongCount: item.wrongCount,
+        durationMs: item.durationMs ?? summary?.durationMs ?? 0
+      });
+
+      if (savedProgress?.current_level != null) {
+        void applyExplorationProgressLevelToSelectedConfig(savedProgress.current_level);
+      }
+    } catch (err) {
+      console.warn("Impossible d’enregistrer la progression de l’élève.", err);
+    }
+  }
+
+
   function syncPauseButton(){
     const paused = !!engine?.isPaused?.();
     const running = !!engine?.isRunning?.();
@@ -859,6 +1052,11 @@ export function renderSessionView(root){
   function leaveSessionImmediately(){
     if (isProjectedTeacherMode) {
       closeProjectedWindow();
+      return;
+    }
+
+    if (isCatalogTestMode && catalogTestCloseHandler) {
+      catalogTestCloseHandler();
       return;
     }
 
@@ -992,7 +1190,7 @@ export function renderSessionView(root){
     scene.style.height = `${sceneHeight}px`;
     scene.style.transformOrigin = "top left";
 
-    if (supportsCssZoom) {
+    if (shouldUseCssZoomForFit) {
       scene.style.zoom = String(safeScale);
       scene.style.transform = "";
     } else {
@@ -1001,7 +1199,8 @@ export function renderSessionView(root){
     }
 
     page?.classList.toggle("session-page-fit-active", safeScale < 0.999);
-    page?.classList.toggle("session-page-fit-fallback", !supportsCssZoom);
+    page?.classList.toggle("session-page-fit-fallback", !shouldUseCssZoomForFit);
+    page?.classList.toggle("session-page-transform-fit", !shouldUseCssZoomForFit);
   }
 
   function clampNumber(value, min, max){
@@ -1294,7 +1493,9 @@ export function renderSessionView(root){
   }
 
   function showFatalError(message){
-    const buttonLabel = isProjectedTeacherMode ? "Fermer la projection" : "Retour aux activités";
+    const buttonLabel = isProjectedTeacherMode
+      ? "Fermer la projection"
+      : (isCatalogTestMode ? "Fermer le test" : "Retour aux activités");
     hideToolCountdownPill();
 
     els.workArea.innerHTML = `
@@ -1321,12 +1522,7 @@ export function renderSessionView(root){
 
 function enterFullscreenIfPossible(){
   try {
-    if (!document.fullscreenElement){
-      const result = document.documentElement.requestFullscreen?.();
-      if (result?.catch){
-        result.catch(() => {});
-      }
-    }
+    requestAppFullscreen();
   } catch {}
 }
 

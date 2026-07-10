@@ -8,11 +8,17 @@ import {
   normalizeActivityMode
 } from "../shared/activity-modes.js";
 import { normalizePassationProfile } from "../shared/activity-config.js";
+import {
+  normalizeCatalogDifficultyLevel,
+  normalizeCatalogRuntimeContext
+} from "../shared/catalogue.js";
 import { createSessionEngine } from "../shared/student-core.js";
 
 export async function ensureSelectedActivityMeta({ runMode = studentState.sessionMode || "student" } = {}) {
   const accessCode = normalizeAccessCode(studentState.accessCode);
   const configName = String(studentState.selectedConfig?.config_name || "").trim();
+  const catalogRuntimeContext = getSelectedCatalogRuntimeContext();
+  const catalogDifficultyLevel = getSelectedCatalogDifficultyLevel();
 
   if (!accessCode || !configName) {
     return emptyMeta();
@@ -23,12 +29,25 @@ export async function ensureSelectedActivityMeta({ runMode = studentState.sessio
     cached &&
     cached.accessCode === accessCode &&
     cached.configName === configName &&
+    cached.catalogRuntimeContext === catalogRuntimeContext &&
+    cached.catalogDifficultyLevel === catalogDifficultyLevel &&
     cached.runMode === runMode
   ) {
     return cloneMeta(cached);
   }
 
-  const remote = await loadPublicActivityConfig(accessCode, configName);
+  const localConfigJson = studentState.selectedConfig?.config_json;
+  const remote = localConfigJson && typeof localConfigJson === "object" && Array.isArray(localConfigJson.sequence)
+    ? {
+      module_key: studentState.selectedConfig?.module_key || "tools",
+      config_json: localConfigJson,
+      activity_mode: localConfigJson.activity_mode
+    }
+    : await loadPublicActivityConfig(accessCode, configName, {
+      context: catalogRuntimeContext,
+      difficultyLevel: catalogDifficultyLevel
+    });
+
   if (!Array.isArray(remote?.config_json?.sequence)) {
     throw new Error("Configuration introuvable ou invalide.");
   }
@@ -74,6 +93,8 @@ export async function ensureSelectedActivityMeta({ runMode = studentState.sessio
     const meta = {
       accessCode,
       configName,
+      catalogRuntimeContext,
+      catalogDifficultyLevel,
       runMode,
       requiresStudent: !!rawMeta.requiresStudent,
       allowedStudentIds: Array.isArray(rawMeta.allowedStudentIds)
@@ -99,6 +120,8 @@ function emptyMeta() {
   return {
     accessCode: "",
     configName: "",
+    catalogRuntimeContext: "exploration",
+    catalogDifficultyLevel: 3,
     runMode: "student",
     requiresStudent: false,
     allowedStudentIds: [],
@@ -110,6 +133,8 @@ function cloneMeta(meta) {
   return {
     accessCode: String(meta?.accessCode || ""),
     configName: String(meta?.configName || ""),
+    catalogRuntimeContext: normalizeCatalogRuntimeContext(meta?.catalogRuntimeContext),
+    catalogDifficultyLevel: normalizeCatalogDifficultyLevel(meta?.catalogDifficultyLevel ?? 3),
     runMode: String(meta?.runMode || "student"),
     requiresStudent: !!meta?.requiresStudent,
     allowedStudentIds: Array.isArray(meta?.allowedStudentIds)
@@ -117,4 +142,22 @@ function cloneMeta(meta) {
       : [],
     blockingMessage: String(meta?.blockingMessage || "")
   };
+}
+
+function getSelectedCatalogDifficultyLevel() {
+  return normalizeCatalogDifficultyLevel(
+    studentState.selectedConfig?.catalog_difficulty_level
+      ?? studentState.selectedConfig?.catalogDifficultyLevel
+      ?? studentState.projectedSession?.catalogDifficultyLevel
+      ?? 3
+  );
+}
+
+function getSelectedCatalogRuntimeContext() {
+  return normalizeCatalogRuntimeContext(
+    studentState.selectedConfig?.catalog_context
+      ?? studentState.selectedConfig?.catalogContext
+      ?? studentState.projectedSession?.catalogRuntimeContext
+      ?? ""
+  );
 }

@@ -1,0 +1,319 @@
+.gg-root {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(.45rem, 1.2vh, .8rem);
+}
+
+.gg-root .tool-instruction {
+  margin-bottom: 0;
+}
+
+.gg-panel {
+  min-height: 0;
+  height: 100%;
+  padding: clamp(.6rem, 1.4vw, 1.1rem);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.gg-board {
+  --gg-side-offset: clamp(17rem, 36vmin, 30rem);
+  --gg-feedback-offset: clamp(24rem, 52vmin, 39rem);
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.gg-pad {
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-self: stretch;
+  align-self: stretch;
+  position: relative;
+  overflow: visible;
+  border-radius: 1.25rem;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.gg-svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(100%, clamp(16rem, 31vw, 35rem));
+  max-height: 100%;
+  aspect-ratio: 210 / 297;
+  transform: translate(-50%, -50%);
+  display: block;
+  overflow: visible;
+}
+
+.gg-model-path {
+  fill: none;
+  stroke: rgba(255,255,255,.20);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.gg-animation-path {
+  fill: none;
+  stroke: rgb(226, 232, 240);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 1;
+}
+
+.gg-start-dot {
+  fill: #ffd454;
+  stroke: rgba(8,13,28,.92);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gg-pulse 1.05s ease-in-out infinite;
+}
+
+.gg-user-path {
+  fill: none;
+  stroke: rgba(50, 150, 255, .9);
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.gg-root--revealed .gg-user-path {
+  stroke: rgba(250, 204, 21, .92);
+}
+
+.gg-root--correct .gg-user-path {
+  stroke: rgba(34, 197, 94, .94);
+}
+
+.gg-root--incorrect .gg-user-path {
+  stroke: rgba(239, 68, 68, .94);
+}
+
+.gg-pad[data-model-visibility="visible"] .gg-model-path {
+  opacity: 0;
+}
+
+.gg-pad[data-model-visibility="visible"] .gg-animation-path {
+  stroke: rgb(226, 232, 240);
+}
+
+.gg-pad[data-model-visibility="trace"] .gg-model-path,
+.gg-pad[data-model-visibility="pale"] .gg-model-path {
+  stroke: rgba(255,255,255,.11);
+  opacity: 1;
+}
+
+.gg-pad[data-model-visibility="trace"] .gg-animation-path,
+.gg-pad[data-model-visibility="pale"] .gg-animation-path,
+.gg-pad[data-model-visibility="hidden"] .gg-animation-path {
+  opacity: 0;
+}
+
+.gg-pad[data-model-visibility="hidden"] .gg-model-path {
+  opacity: 0;
+}
+
+.gg-pad[data-animation-enabled="false"] .gg-model-path {
+  stroke: rgb(226, 232, 240);
+  opacity: 1;
+}
+
+.gg-pad[data-animation-enabled="false"] .gg-animation-path {
+  display: none;
+}
+
+.gg-pad[data-start-point="hidden"] .gg-start-dot {
+  display: none !important;
+}
+
+
+.gg-pad:not(.is-ready) .gg-start-dot {
+  display: none;
+}
+
+.gg-reset-button {
+  position: absolute;
+  z-index: 6;
+  left: calc(50% - var(--gg-side-offset));
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(2.35rem, 3.8vw, 3.25rem);
+  aspect-ratio: 1;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(248, 113, 113, .62);
+  border-radius: .95rem;
+  background: rgba(127, 29, 29, .18);
+  color: #ef4444;
+  box-shadow: 0 8px 18px rgba(127, 29, 29, .16);
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.gg-reset-button:hover,
+.gg-reset-button:focus-visible {
+  transform: translate(-50%, calc(-50% - 1px));
+  background: rgba(127, 29, 29, .28);
+  border-color: rgba(248, 113, 113, .9);
+  outline: none;
+}
+
+.gg-reset-button svg {
+  width: 62%;
+  height: 62%;
+  display: block;
+  fill: currentColor;
+}
+
+.gg-root--revealed .gg-reset-button,
+.gg-reset-button[disabled] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.gg-root--revealed .gg-model-path {
+  opacity: 1 !important;
+  stroke: rgba(255,255,255,.18);
+}
+
+.gg-root--revealed .gg-animation-path {
+  opacity: 0 !important;
+}
+
+.gg-status {
+  --gg-cover-scale: 1;
+  --gg-threshold-position: 76%;
+  position: absolute;
+  z-index: 6;
+  left: calc(50% + var(--gg-feedback-offset));
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(12.6rem, 22vw, 18rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  justify-items: stretch;
+  gap: clamp(.55rem, 1.05vh, .85rem);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.gg-status[hidden] {
+  display: none !important;
+}
+
+.gg-feedback-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(.45rem, .9vw, .7rem);
+}
+
+.gg-feedback-heading--direction {
+  margin-top: clamp(1.5rem, 4vh, 2.7rem);
+}
+
+.gg-feedback-icon {
+  width: clamp(2.15rem, 4.4vw, 3.35rem);
+  aspect-ratio: 1;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,.22));
+}
+
+.gg-feedback-label {
+  color: rgba(255,255,255,.9);
+  font-size: clamp(1.02rem, 1.85vw, 1.45rem);
+  font-weight: 750;
+  line-height: 1.05;
+  text-shadow: 0 2px 8px rgba(0,0,0,.35);
+  white-space: nowrap;
+}
+
+.gg-score-gauge {
+  position: relative;
+  width: 100%;
+  height: clamp(1.55rem, 3.1vh, 2.25rem);
+  overflow: visible;
+  border-radius: 999px;
+  background: linear-gradient(to right, #ef4444 0%, #f59e0b 52%, #22c55e 100%);
+  border: 2px solid rgba(255,255,255,.96);
+  box-shadow: 0 6px 14px rgba(0,0,0,.20), inset 0 0 0 1px rgba(255,255,255,.22);
+}
+
+.gg-score-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 0 999px 999px 0;
+  background: rgba(8,13,28,.88);
+  transform-origin: right;
+  transform: scaleX(var(--gg-cover-scale));
+  transition: transform 960ms cubic-bezier(.2,.75,.18,1);
+}
+
+.gg-score-threshold {
+  position: absolute;
+  z-index: 2;
+  left: var(--gg-threshold-position);
+  top: -.45rem;
+  bottom: -.45rem;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 0 0 1px rgba(8,13,28,.28), 0 3px 8px rgba(0,0,0,.28);
+}
+
+.gg-direction-result {
+  justify-self: center;
+  width: clamp(3.3rem, 6.8vw, 5.4rem);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  margin-top: clamp(-.18rem, -.3vh, 0rem);
+}
+
+.gg-thumb {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 12px rgba(0,0,0,.24));
+  opacity: 0;
+  transform: scale(.86);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.gg-status--direction-ok .gg-thumb--up,
+.gg-status--direction-ko .gg-thumb--down {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes gg-pulse {
+  0%, 100% { transform: scale(1); opacity: .86; }
+  50% { transform: scale(1.42); opacity: 1; }
+}

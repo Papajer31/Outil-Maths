@@ -5,47 +5,170 @@ const ROOT_TOOLS_META = Object.freeze({
 
 const ACTIVE_TOOLS_REGISTRY = Object.freeze([
   {
-    id: "operations",
-    label: "Opérations",
-    entry: "../tools/operations/tool.js",
-    description: "Opérations paramétrables avec saisie clavier.",
-    tags: ["maths", "calcul", "clavier", "projection"]
+    id: "addition",
+    label: "Addition",
+    entry: "../tools/addition/tool.js",
+    description: "Travailler les additions avec une réponse numérique simple.",
+    tags: ["maths", "calcul", "addition", "clavier", "projection"]
+  },
+
+  {
+    id: "soustraction",
+    label: "Soustraction",
+    entry: "../tools/soustraction/tool.js",
+    description: "Travailler les soustractions avec une réponse numérique simple.",
+    tags: ["maths", "calcul", "soustraction", "clavier", "projection"]
   },
   {
-    id: "nombre-cible",
-    label: "Nombre cible",
-    entry: "../tools/nombre-cible/tool.js",
-    description: "Composer un nombre cible à partir de boites à jetons.",
-    tags: ["maths", "calcul", "décomposition", "nombre-cible", "jetons", "projection"]
+    id: "multiplication-posee",
+    label: "Multiplication posée",
+    entry: "../tools/multiplication-posee/tool.js",
+    description: "Travailler les multiplications posées avec une réponse numérique simple.",
+    tags: ["maths", "calcul", "multiplication", "multiplication-posée", "clavier", "projection"]
   },
   {
-    id: "monnaie",
-    label: "Monnaie",
-    entry: "../tools/monnaie/tool.js",
-    description: "Lire, composer et comparer des sommes avec des pièces et billets manipulables.",
-    tags: ["maths", "monnaie", "argent", "manipulation", "projection"]
+    id: "addition-trous",
+    label: "Addition à trous",
+    entry: "../tools/addition-trous/tool.js",
+    description: "Retrouver un terme manquant dans une addition à deux termes.",
+    tags: ["maths", "calcul", "addition", "trou", "clavier", "projection"]
   },
   {
-    id: "operations-trous",
-    label: "Opérations à trous",
-    entry: "../tools/operations-trous/tool.js",
-    description: "Retrouver le terme manquant dans une opération.",
-    tags: ["maths", "calcul", "operation", "trou", "clavier", "projection"]
+    id: "soustraction-trous",
+    label: "Soustraction à trous",
+    entry: "../tools/soustraction-trous/tool.js",
+    description: "Retrouver un terme manquant dans une soustraction.",
+    tags: ["maths", "calcul", "soustraction", "trou", "clavier", "projection"]
   },
   {
-    id: "representation-decimale",
-    label: "Représentation décimale",
-    entry: "../tools/representation-decimale/tool.js",
-    description: "Représentations décimales dynamiques en SVG.",
-    tags: ["maths", "nombres", "svg", "representation", "projection"]
+    id: "multiplication-trous",
+    label: "Multiplication à trous",
+    entry: "../tools/multiplication-trous/tool.js",
+    description: "Retrouver un facteur manquant dans une multiplication.",
+    tags: ["maths", "calcul", "multiplication", "trou", "clavier", "projection"]
   },
   {
-    id: "ordre-alphabetique",
-    label: "Ordre alphabétique",
-    entry: "../tools/ordre-alphabetique/tool.js",
-    description: "Classer des lettres ou des mots dans l’ordre alphabétique par manipulation.",
-    tags: ["vocabulaire", "alphabet", "glisser-deposer", "projection"]
+    id: "tables-multiplication",
+    label: "Tables de multiplication",
+    entry: "../tools/tables-multiplication/tool.js",
+    description: "Travailler les tables de multiplication avec une réponse numérique simple.",
+    tags: ["maths", "calcul", "tables", "multiplication", "clavier", "projection"]
   },
+  {
+    id: "boites-jetons",
+    label: "Boites à jetons",
+    entry: "../tools/boites-jetons/tool.js",
+    description: "Composer une cible en cliquant sur des boites de jetons.",
+    tags: ["maths", "calcul", "décomposition", "jetons", "manipulation", "projection"]
+  },
+  {
+    id: "plus-moins-autant",
+    label: "Plus, moins, autant",
+    entry: "../tools/plus-moins-autant/tool.js",
+    description: "Comparer deux collections par correspondance terme à terme avec objets manipulables.",
+    tags: ["maths", "nombres", "comparaison", "collections", "plus-moins-autant", "manipulation", "drag-drop", "projection"]
+  },
+  {
+    id: "comparaison",
+    label: "Comparaison",
+    entry: "../tools/comparaison/tool.js",
+    description: "Comparer deux collections terme à terme pour trouver la différence.",
+    tags: ["maths", "nombres", "comparaison", "collections", "difference", "jetons", "trace", "projection"]
+  },
+  {
+    id: "collection",
+    label: "Collection",
+    entry: "../tools/collection/tool.js",
+    description: "Comparer un nombre et une collection homogène d’objets en répondant oui ou non.",
+    tags: ["maths", "nombres", "quantite", "collections", "oui-non", "projection"]
+  },
+  {
+    id: "calcul-cible",
+    label: "Calcul ciblé",
+    entry: "../tools/calcul-cible/tool.js",
+    description: "Atteindre une cible en utilisant tous les nombres proposés.",
+    tags: ["maths", "calcul", "nombre-cible", "manipulation", "projection"]
+  },
+  {
+    id: "compte-est-bon",
+    label: "Compte est bon",
+    entry: "../tools/compte-est-bon/tool.js",
+    description: "Atteindre une cible avec six nombres proposés.",
+    tags: ["maths", "calcul", "nombre-cible", "compte-est-bon", "projection"]
+  },
+
+  {
+    id: "frise-picbille",
+    label: "Frise Picbille",
+    entry: "../tools/frise-picbille/tool.js",
+    description: "Lire ou placer un nombre sur une frise Picbille.",
+    tags: ["maths", "nombres", "picbille", "frise", "repérage", "projection"]
+  },
+  {
+    id: "droite-numerique-simple",
+    label: "Repérage sur droite simple",
+    entry: "../tools/droite-numerique-simple/tool.js",
+    description: "Lire ou placer un nombre sur une droite graduée simple.",
+    tags: ["maths", "nombres", "droite-graduée", "repérage", "projection"]
+  },
+  {
+    id: "droite-numerique-complete",
+    label: "Repérage sur droite complète",
+    entry: "../tools/droite-numerique-complete/tool.js",
+    description: "Lire ou placer un nombre sur une droite graduée complète.",
+    tags: ["maths", "nombres", "droite-graduée", "repérage", "projection"]
+  },
+  {
+    id: "ordre-alphabetique-lettres",
+    label: "Ordre alphabétique — Lettres",
+    entry: "../tools/ordre-alphabetique-lettres/tool.js",
+    description: "Ranger des lettres dans l’ordre alphabétique par manipulation.",
+    tags: ["vocabulaire", "alphabet", "lettres", "glisser-deposer", "projection"]
+  },
+  {
+    id: "ordre-alphabetique-mots",
+    label: "Ordre alphabétique — Mots",
+    entry: "../tools/ordre-alphabetique-mots/tool.js",
+    description: "Ranger des mots dans l’ordre alphabétique par manipulation.",
+    tags: ["vocabulaire", "alphabet", "mots", "glisser-deposer", "projection"]
+  },
+  {
+    id: "representation-picbille",
+    label: "Représentation décimale — Picbille",
+    entry: "../tools/representation-picbille/tool.js",
+    description: "Lire ou construire une représentation décimale avec le support Picbille.",
+    tags: ["maths", "nombres", "représentation", "picbille", "projection"]
+  },
+  {
+    id: "representation-dede",
+    label: "Représentation décimale — Dédé",
+    entry: "../tools/representation-dede/tool.js",
+    description: "Lire ou construire une représentation décimale avec le support Dédé.",
+    tags: ["maths", "nombres", "représentation", "dédé", "projection"]
+  },
+  {
+    id: "representation-carres",
+    label: "Représentation décimale — Carrés",
+    entry: "../tools/representation-carres/tool.js",
+    description: "Lire ou construire une représentation décimale avec des carrés de base 10.",
+    tags: ["maths", "nombres", "représentation", "base10", "projection"]
+  },
+  {
+    id: "representation-tuiles",
+    label: "Représentation décimale — Tuiles",
+    entry: "../tools/representation-tuiles/tool.js",
+    description: "Lire ou construire une représentation décimale avec des tuiles centaines/dizaines/unités.",
+    tags: ["maths", "nombres", "représentation", "tuiles", "projection"]
+  },
+
+  {
+    id: "monnaie-representation",
+    label: "Monnaie — Représentation",
+    entry: "../tools/monnaie-representation/tool.js",
+    description: "Lire ou composer une somme avec des pièces et billets manipulables.",
+    tags: ["maths", "monnaie", "argent", "grandeurs", "mesures", "manipulation", "projection"]
+  },
+
   {
     id: "encodage",
     label: "Encodage",
@@ -54,18 +177,18 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["phonologie", "encodage", "graphèmes", "drag-drop", "projection"]
   },
   {
+    id: "geste-graphique",
+    label: "Geste graphique",
+    entry: "../tools/geste-graphique/tool.js",
+    description: "Travailler le geste graphique des chiffres en repassant le tracé sur tablette.",
+    tags: ["graphisme", "écriture", "chiffres", "tracé", "tablette", "projection"]
+  },
+  {
     id: "nombres-lettres",
     label: "Nombres en lettres",
     entry: "../tools/nombres-lettres/tool.js",
     description: "Lire et écrire les nombres en toutes lettres ou en chiffres, avec rendu Seyès dynamique.",
     tags: ["maths", "nombres", "ecriture", "seyes", "projection"]
-  },
-  {
-    id: "reperage-numerique",
-    label: "Repérage numérique",
-    entry: "../tools/reperage-numerique/tool.js",
-    description: "Lire et placer des nombres sur une frise Picbille ou une droite graduée.",
-    tags: ["maths", "nombres", "droite-graduee", "picbille", "projection"]
   },
   {
     id: "conjugaison",
@@ -89,6 +212,20 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["qcm", "question", "choix", "banque", "projection"]
   },
   {
+    id: "flash-texte",
+    label: "Flash-Texte",
+    entry: "../tools/flash-texte/tool.js",
+    description: "Question/Réponse en mode flash avec item affiché brièvement puis masqué.",
+    tags: ["flash", "question", "reponse", "texte", "banque", "projection"]
+  },
+  {
+    id: "flash-qcm",
+    label: "Flash-QCM",
+    entry: "../tools/flash-qcm/tool.js",
+    description: "QCM en mode flash avec item affiché brièvement puis masqué.",
+    tags: ["flash", "qcm", "question", "choix", "banque", "projection"]
+  },
+  {
     id: "selection",
     label: "Sélection",
     entry: "../tools/selection/tool.js",
@@ -97,10 +234,16 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
   }
 ]);
 
+const LEGACY_TOOLS_REGISTRY = Object.freeze([]);
+
 export function getToolRegistryMeta() {
   return ROOT_TOOLS_META;
 }
 
 export function getActiveToolsRegistry() {
   return [...ACTIVE_TOOLS_REGISTRY];
+}
+
+export function getLegacyToolsRegistry() {
+  return [...LEGACY_TOOLS_REGISTRY];
 }

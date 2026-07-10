@@ -52,7 +52,8 @@ export function createStudentDashboardController({
   setCachedActivityFolders,
   getCollapsedActivityFolderIds,
   getKnownActivityFolderIds,
-  studentNotesDrafts = new Map()
+  studentNotesDrafts = new Map(),
+  showToast
 } = {}){
   let primaryModalMode = "create-space";
   let pendingStudent = null;
@@ -62,7 +63,9 @@ export function createStudentDashboardController({
   let rightPanelMode = "activities";
 
   function buildStudentSubtitle(student){
-    return String(student?.grade_level || "").trim();
+    const level = String(student?.grade_level || "").trim();
+    const code = String(student?.student_code || "").trim();
+    return [level, code ? `code ${code}` : ""].filter(Boolean).join(" · ");
   }
 
   function closeAccessCodeModal(){
@@ -542,7 +545,7 @@ export function createStudentDashboardController({
       await saveStudentOrderForTeacherSpace?.(currentTeacherSpace.id, remainingIds);
     } catch (err) {
       setCurrentStudents?.(previousStudents);
-      alert(err?.message || "Impossible d’enregistrer l’ordre des élèves.");
+      showToast?.(err?.message || "Impossible d’enregistrer l’ordre des élèves.", { isError: true });
     } finally {
       isSavingStudentOrder = false;
       draggedStudentId = null;
@@ -566,14 +569,9 @@ export function createStudentDashboardController({
 
         <input id="newStudentName" class="modal-text-input" placeholder="Prénom">
 
-        <select id="newStudentLevel" class="student-select">
-          <option value="">Classe</option>
-          <option>CP</option>
-          <option>CE1</option>
-          <option>CE2</option>
-          <option>CM1</option>
-          <option>CM2</option>
-        </select>
+        <input id="newStudentLevel" class="modal-text-input" placeholder="Classe (ex : CPA, CE1 n°2)">
+
+        <input id="newStudentCode" class="modal-text-input" placeholder="Code élève de trois caractères (ex : M2J)" maxlength="3">
 
         <div class="modal-actions">
           <div id="studentOverlayMessage" class="modal-message"></div>
@@ -587,6 +585,7 @@ export function createStudentDashboardController({
 
     const nameInput = overlay.querySelector("#newStudentName");
     const levelInput = overlay.querySelector("#newStudentLevel");
+    const codeInput = overlay.querySelector("#newStudentCode");
     const message = overlay.querySelector("#studentOverlayMessage");
     const cancelButton = overlay.querySelector("#cancelAddStudent");
     const confirmButton = overlay.querySelector("#confirmAddStudent");
@@ -611,6 +610,7 @@ export function createStudentDashboardController({
     confirmButton?.addEventListener("click", async () => {
       const name = String(nameInput?.value || "").trim();
       const level = String(levelInput?.value || "");
+      const studentCode = String(codeInput?.value || "").trim().toUpperCase();
 
       if (!name){
         message.textContent = "Entre un prénom.";
@@ -621,7 +621,8 @@ export function createStudentDashboardController({
       try {
         const createdStudent = await createStudentForTeacherSpace?.(currentTeacherSpace.id, {
           first_name: name,
-          grade_level: level
+          grade_level: level,
+          student_code: studentCode
         });
 
         if (!createdStudent) return;
@@ -656,14 +657,9 @@ export function createStudentDashboardController({
 
         <input id="editStudentName" class="modal-text-input" value="${escapeAttr(student.first_name || "")}" placeholder="Prénom">
 
-        <select id="editStudentLevel" class="student-select">
-          <option value="" ${!student.grade_level ? "selected" : ""}>Classe</option>
-          <option ${student.grade_level === "CP" ? "selected" : ""}>CP</option>
-          <option ${student.grade_level === "CE1" ? "selected" : ""}>CE1</option>
-          <option ${student.grade_level === "CE2" ? "selected" : ""}>CE2</option>
-          <option ${student.grade_level === "CM1" ? "selected" : ""}>CM1</option>
-          <option ${student.grade_level === "CM2" ? "selected" : ""}>CM2</option>
-        </select>
+        <input id="editStudentLevel" class="modal-text-input" value="${escapeAttr(student.grade_level || "")}" placeholder="Classe (ex : CPA, CE1 n°2)">
+
+        <input id="editStudentCode" class="modal-text-input" value="${escapeAttr(student.student_code || "")}" placeholder="Code élève de trois caractères (ex : M2J)" maxlength="3">
 
         <div class="modal-actions">
           <div id="editStudentMessage" class="modal-message"></div>
@@ -677,6 +673,7 @@ export function createStudentDashboardController({
 
     const editInput = overlay.querySelector("#editStudentName");
     const levelInput = overlay.querySelector("#editStudentLevel");
+    const codeInput = overlay.querySelector("#editStudentCode");
     const message = overlay.querySelector("#editStudentMessage");
     const cancelButton = overlay.querySelector("#cancelEditStudent");
     const saveButton = overlay.querySelector("#saveStudent");
@@ -702,6 +699,7 @@ export function createStudentDashboardController({
     saveButton?.addEventListener("click", async () => {
       const firstName = String(editInput?.value || "").trim();
       const gradeLevel = String(levelInput?.value || "");
+      const studentCode = String(codeInput?.value || "").trim().toUpperCase();
 
       if (!firstName){
         message.textContent = "Entre un prénom.";
@@ -712,7 +710,8 @@ export function createStudentDashboardController({
       try {
         const updatedStudent = await updateStudent?.(student.id, {
           first_name: firstName,
-          grade_level: gradeLevel
+          grade_level: gradeLevel,
+          student_code: studentCode
         });
 
         if (!updatedStudent) return;

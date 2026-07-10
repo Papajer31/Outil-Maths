@@ -6,7 +6,7 @@ import {
   tokenizeSelectionText
 } from "../../shared/selection-text.js";
 
-export const DEFAULT_DRAW_MODE = "in_order";
+export const DEFAULT_DRAW_MODE = "random";
 export const DEFAULT_SELECTION_MODE = "disjoint";
 
 export function getDefaultSettings() {
@@ -33,7 +33,9 @@ export function normalizeSettings(settings = {}) {
 }
 
 export function normalizeDrawMode(value) {
-  return String(value || "").trim().toLowerCase() === "random" ? "random" : DEFAULT_DRAW_MODE;
+  const safeValue = String(value || "").trim().toLowerCase();
+  if (safeValue === "in_order" || safeValue === "random") return safeValue;
+  return DEFAULT_DRAW_MODE;
 }
 
 function normalizeRawIndexes(value) {

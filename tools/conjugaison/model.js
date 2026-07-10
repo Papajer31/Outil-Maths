@@ -12,8 +12,8 @@ const DEFAULT_DRAW_MODE = "random";
 const DRAW_MODES = new Set(["in_order", "random"]);
 const DEFAULT_QUESTION_FORMAT = "pronoun";
 const QUESTION_FORMATS = new Set(["pronoun", "grammar"]);
-const DEFAULT_ANSWER_FORMAT = "with_pronoun";
-const ANSWER_FORMATS = new Set(["form_only", "with_pronoun"]);
+const DEFAULT_ANSWER_FORMAT = "flexible";
+const ANSWER_FORMATS = new Set(["flexible", "form_only", "with_pronoun"]);
 const DEFAULT_COMPOUND_AUXILIARY = "avoir";
 const COMPOUND_AUXILIARIES = new Set(["avoir", "etre", "both"]);
 const COMPOUND_TENSE_IDS = new Set(["passe_compose", "plus_que_parfait"]);
@@ -433,12 +433,17 @@ export function buildQuestion({ verb, tenseId, personId, settings, index = 0, ag
   if (!safeVerb || !tense || !person || !formDetails.displayForm) return null;
 
   const displayInfinitive = getVerbDisplayInfinitive(safeVerb);
-  const expectedAnswer = cfg.answerFormat === "form_only"
-    ? formDetails.displayForm
-    : buildDisplayAnswerWithPronoun(person.pronoun, formDetails.displayForms);
+  const formOnlyAnswer = formDetails.displayForm;
+  const pronounAnswer = buildDisplayAnswerWithPronoun(person.pronoun, formDetails.displayForms);
+  const expectedAnswer = cfg.answerFormat === "form_only" ? formOnlyAnswer : pronounAnswer;
   const acceptedAnswers = cfg.answerFormat === "form_only"
     ? formDetails.acceptedForms
-    : formDetails.acceptedForms.map((form) => buildAnswerWithPronoun(person.pronoun, form));
+    : cfg.answerFormat === "flexible"
+      ? [
+          ...formDetails.acceptedForms,
+          ...formDetails.acceptedForms.map((form) => buildAnswerWithPronoun(person.pronoun, form))
+        ]
+      : formDetails.acceptedForms.map((form) => buildAnswerWithPronoun(person.pronoun, form));
   const prompt = buildPrompt({
     infinitive: displayInfinitive,
     tense,

@@ -62,7 +62,7 @@ export function renderStudentSelectionCards(students, selectedIds = []) {
         <div class="student-selection-initial" aria-hidden="true">
           ${
             initialLetter
-              ? `<img class="student-selection-initial-img" src="./student/lettres/${escapeAttr(initialLetter)}.webp" alt="">`
+              ? `<img class="student-selection-initial-img" src="./shared/ui-assets/lettres/${escapeAttr(initialLetter)}.webp" alt="">`
               : `<span class="student-selection-initial-fallback">?</span>`
           }
         </div>

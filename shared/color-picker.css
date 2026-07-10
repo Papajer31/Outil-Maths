@@ -67,24 +67,22 @@
 }
 
 .ui-color-picker-trigger-icon{
-  font-family:"MaterialSymbols";
   font-size:20px;
   line-height:1;
   font-style:normal;
   font-weight:400;
-  font-variation-settings:
-    "FILL" 0,
-    "wght" 500,
-    "GRAD" 0,
-    "opsz" 24;
 }
 
 .ui-color-picker-popover{
-  position:absolute;
+  position:fixed;
   left:0;
-  top:calc(100% + 8px);
+  top:0;
   z-index:80;
   width:min(520px, calc(100vw - 32px));
+  max-height:calc(100vh - 24px);
+  overflow:auto;
+  overscroll-behavior:contain;
+  box-sizing:border-box;
 }
 
 .ui-color-picker-body{

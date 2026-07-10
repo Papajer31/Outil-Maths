@@ -1,0 +1,257 @@
+.pma-root {
+  align-self: stretch;
+  justify-self: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  --pma-red: #ef4444;
+  --pma-red-dark: #991b1b;
+  --pma-blue: #3b82f6;
+  --pma-blue-dark: #1e40af;
+}
+
+.pma-stage {
+  width: min(1560px, calc(100% - 44px));
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(280px, 1fr) minmax(118px, auto);
+  gap: 18px;
+  align-items: stretch;
+  justify-items: center;
+  overflow: hidden;
+}
+
+.pma-instruction-keyword {
+  color: #f59e0b;
+}
+
+.pma-instruction-line {
+  display: inline;
+}
+
+.pma-workspace {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .96);
+  color: #111827;
+}
+
+.pma-items-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.pma-object {
+  --pma-object-size: clamp(81px, 8.7vw, 120px);
+  position: absolute;
+  width: var(--pma-object-size);
+  height: var(--pma-object-size);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 18px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  cursor: grab;
+  transition: transform 140ms ease;
+}
+
+.pma-object--dragging {
+  cursor: grabbing;
+}
+
+.pma-object--correcting {
+  cursor: default;
+  transform-origin: top left;
+  transition:
+    left 2000ms cubic-bezier(.2, .9, .24, 1),
+    top 2000ms cubic-bezier(.2, .9, .24, 1),
+    width 2000ms cubic-bezier(.2, .9, .24, 1),
+    height 2000ms cubic-bezier(.2, .9, .24, 1);
+}
+
+.pma-object--leftover {
+  outline: 5px solid rgba(255, 216, 94, .88);
+  outline-offset: 4px;
+}
+
+.pma-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.pma-object--tokens {
+  border-radius: 999px;
+}
+
+.pma-object--emojis {
+  border-radius: 0;
+  background: transparent;
+}
+
+.pma-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: calc(var(--pma-object-size) * .56);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.pma-responses {
+  width: min(1120px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(22px, 4vw, 60px);
+  align-self: center;
+}
+
+.pma-response {
+  min-height: 118px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.pma-response-object {
+  --pma-object-size: clamp(87px, 7.6vw, 120px);
+  width: var(--pma-object-size);
+  height: var(--pma-object-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.pma-response-object--tokens {
+  border-radius: 999px;
+}
+
+.pma-response-object--emojis {
+  border-radius: 0;
+  background: transparent;
+}
+
+.pma-response-equal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 1.5vw, 18px);
+  pointer-events: none;
+}
+
+.pma-response-equal strong {
+  color: #fff;
+  font-size: clamp(30px, 3vw, 44px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.pma-empty-message {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(760px, calc(100% - 48px));
+  transform: translate(-50%, -50%);
+}
+
+.pma-root--revealed .pma-object {
+  pointer-events: none;
+}
+
+.pma-root--free .pma-response {
+  cursor: default;
+}
+
+@media (max-width: 1050px) {
+  .pma-stage {
+    width: calc(100% - 32px);
+    grid-template-rows: minmax(240px, 1fr) minmax(106px, auto);
+    gap: 14px;
+  }
+
+  .pma-responses {
+    gap: 18px;
+  }
+
+  .pma-response {
+    min-height: 96px;
+    padding: 10px 14px;
+  }
+
+  .pma-response-object {
+    --pma-object-size: clamp(78px, 9.8vw, 104px);
+  }
+}
+
+@media (max-width: 680px) {
+  .pma-stage {
+    width: calc(100% - 24px);
+    grid-template-rows: minmax(220px, 1fr) auto;
+    gap: 12px;
+  }
+
+  .pma-responses {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .pma-response {
+    min-height: 82px;
+    padding: 10px 12px;
+  }
+
+  .pma-response-object {
+    --pma-object-size: clamp(62px, 16.8vw, 87px);
+  }
+
+  .pma-response-equal {
+    gap: 7px;
+  }
+}
+
+@media (max-height: 720px) {
+  .pma-root {
+    gap: 12px;
+  }
+
+  .pma-stage {
+    grid-template-rows: minmax(210px, 1fr) minmax(92px, auto);
+    gap: 12px;
+  }
+
+  .pma-object {
+    --pma-object-size: clamp(73px, 7vw, 104px);
+  }
+
+  .pma-response {
+    min-height: 86px;
+  }
+
+  .pma-response-object {
+    --pma-object-size: clamp(70px, 7vw, 95px);
+  }
+}

@@ -175,35 +175,10 @@ export async function deleteTeacherConjugationList(teacherSpaceId, listId) {
 }
 
 export async function listTeacherConjugationListUsages(teacherSpaceId, listId) {
-  const spaceId = normalizeSpaceId(teacherSpaceId);
-  const id = normalizeListId(listId);
-  if (!spaceId || !id) return [];
-
-  const [{ data: activityRows, error: activityError }, { data: folderRows, error: folderError }] = await Promise.all([
-    supabase
-      .from(ACTIVITY_TABLE_NAME)
-      .select("id, config_name, config_json")
-      .eq("teacher_space_id", spaceId),
-    supabase
-      .from(FOLDER_TABLE_NAME)
-      .select("id, parent_id, name")
-      .eq("teacher_space_id", spaceId)
-  ]);
-
-  if (activityError) throw activityError;
-  if (folderError) throw folderError;
-
-  const folders = Array.isArray(folderRows) ? folderRows : [];
-  const folderById = new Map(folders.map((folder) => [String(folder.id), folder]));
-  const activities = Array.isArray(activityRows) ? activityRows : [];
-
-  return activities
-    .filter((activity) => activityUsesPersonalConjugationList(activity?.config_json, id))
-    .map((activity) => ({
-      id: String(activity.id || ""),
-      name: String(activity.config_name || "Activité sans nom").trim() || "Activité sans nom",
-      path: buildFolderPath(activity?.config_json?.dashboard?.folder_id, folderById)
-    }));
+  // Le nouveau modèle ne stocke plus de configurations d’activités personnelles
+  // dans activity_configs. Les listes personnelles restent modifiables ; le
+  // contrôle d’usage sera réintroduit plus tard avec les activités dérivées.
+  return [];
 }
 
 function activityUsesPersonalConjugationList(configJson = {}, listId = "") {

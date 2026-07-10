@@ -1,7 +1,7 @@
 const { createClient } = window.supabase;
 
-const SUPABASE_URL = "https://uxmcwiyfhtvyekllpuze.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9uJrGqzpAz7vNbxK9fI3PA_8CE9yuRG";
+const SUPABASE_URL = "https://diksadcyyvxatovwhyei.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_LjK5bP952ZRjuPh3Sp_x7Q_j83o_ZCQ";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {

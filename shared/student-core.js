@@ -19,6 +19,7 @@ import {
   getToolRunProfile as getContractToolRunProfile,
   getToolRuntimeCapabilities
 } from "./tool-contract.js";
+import { getCatalogLevelConfig, normalizeCatalogDifficultyLevel } from "./catalogue.js";
 
 export function createSessionEngine({
   els,
@@ -30,6 +31,7 @@ export function createSessionEngine({
   onExitToActivities,
   onFatalError,
   onStateChange,
+  onSessionFinished,
   manualControlsEnabled = true,
   runMode = "student",
   activityMode = DEFAULT_ACTIVITY_MODE,
@@ -76,6 +78,7 @@ export function createSessionEngine({
   let finalChallengeTicker = null;
   let toolMaxTimeTicker = null;
   let toolMaxTimeAdvancePending = false;
+  let sessionFinishedNotified = false;
 
   const GAUGE_EPSILON = 1e-6;
   const GAUGE_PROGRESS_PRECISION = 1000;
@@ -84,6 +87,10 @@ export function createSessionEngine({
     ...DEFAULT_ACTIVITY_GLOBALS,
     ...normalizeActivityGlobals(globals)
   };
+  const isCatalogTestSession = isCatalogTestSequence(sequence);
+  if (isCatalogTestSession) {
+    activityGlobals.activityTotalTimeEnabled = false;
+  }
   const sessionActivityMode = normalizeActivityMode(activityMode, DEFAULT_ACTIVITY_MODE);
   const sessionResponseUi = normalizeResponseUi(responseUi, "boxed");
   const sessionProgressMode = normalizeProgressMode(progressMode, "evaluated");
@@ -101,6 +108,12 @@ export function createSessionEngine({
     return new Promise((resolve) => {
       window.setTimeout(resolve, Math.max(0, Math.floor(Number(ms) || 0)));
     });
+  }
+
+  function isCatalogTestSequence(value) {
+    return (Array.isArray(value) ? value : []).some((item) => (
+      String(item?.catalog_context ?? item?.catalogContext ?? "").trim().toLowerCase() === "test"
+    ));
   }
 
   function normalizeGaugeProgress(value) {
@@ -125,6 +138,7 @@ export function createSessionEngine({
     goToNextQuestionNow,
     applyLiveConfig,
     getUiState,
+    getSessionSummary,
     toggleShellAnswerDisplay,
     isRunning,
     isPaused,
@@ -386,11 +400,49 @@ export function createSessionEngine({
       }
     }
 
+    applyCatalogTestRuntimeSettings(item);
+
     if (isFinalChallengeItem(item)) {
       item.questionFlowMode = "unlimited";
       item.evaluationGauge = null;
     }
   }
+
+  function getSessionSummary() {
+    return buildSessionSummary();
+  }
+
+  function buildSessionSummary() {
+    return {
+      context: String(sequence?.[0]?.catalog_context || "").trim() || "",
+      durationMs: Math.max(0, Math.round(getActivityElapsedMs())),
+      items: session.map((item) => {
+        const stats = item?.progressSessionStats || { questions: 0, correct: 0 };
+        const questionsCount = Math.max(0, Math.floor(Number(stats.questions) || 0));
+        const correctCount = Math.max(0, Math.min(questionsCount, Math.floor(Number(stats.correct) || 0)));
+        return {
+          catalogActivityId: String(item?.catalogActivityId || "").trim(),
+          context: String(item?.catalogContext || "").trim() || "exploration",
+          startedLevel: normalizeCatalogDifficultyLevel(item?.catalogStartedLevel ?? 3),
+          endedLevel: normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3),
+          questionsCount,
+          correctCount,
+          wrongCount: Math.max(0, questionsCount - correctCount),
+          durationMs: Math.max(0, Math.round(getActivityElapsedMs()))
+        };
+      })
+    };
+  }
+
+  function notifySessionFinishedOnce(summary) {
+    if (sessionFinishedNotified) return;
+    sessionFinishedNotified = true;
+    if (typeof onSessionFinished !== "function") return;
+    try {
+      onSessionFinished(summary);
+    } catch {}
+  }
+
 
   function getUiState() {
     const item = session[currentToolIndex] ?? null;
@@ -668,6 +720,7 @@ export function createSessionEngine({
   }
 
   async function startSession() {
+    sessionFinishedNotified = false;
     if (sessionBlockingMessage) {
       onFatalError?.(sessionBlockingMessage);
       return;
@@ -942,8 +995,15 @@ export function createSessionEngine({
     clearSessionStage();
     hideManualAction();
 
+    if (generateQuestion) {
+      syncCatalogAdaptiveLevelConfig(item);
+      refreshComputedSessionValuesWithTool(item, activeTool);
+      durationMs = item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : item.timePerQ * 1000;
+    }
+
     const remainingMs = clampPhaseDuration(durationMs);
     const ctx = getToolContext(item);
+
 
     if (generateQuestion) {
       const runProfile = getToolRunProfile(activeTool, item);
@@ -1031,8 +1091,6 @@ export function createSessionEngine({
     hideManualAction();
 
     const remainingMs = clampPhaseDuration(durationMs);
-    commitCurrentQuestionOutcomeOnce(item);
-
     if (showAnswerNow) {
       const showCtx = getToolContext(item);
       const maybePromise = activeRuntime?.showAnswer?.(els.workArea, showCtx);
@@ -1265,6 +1323,16 @@ export function createSessionEngine({
         ? getToolDefaultSettings(tool)
         : cloneData(normalizedDraft.settings);
 
+      const catalogActivityId = String(item.catalog_activity_id || item.catalogActivityId || "").trim();
+      const catalogContext = String(item.catalog_context || item.catalogContext || "").trim() || "exploration";
+      const catalogAdaptive = item.catalog_adaptive === true
+        || (
+          !!catalogActivityId
+          && sessionActivityMode === "individual"
+          && catalogContext === "exploration"
+          && runMode !== "projected-teacher"
+        );
+
       const sessionItem = {
         id: item.toolId,
         instanceId: item.instanceId,
@@ -1296,6 +1364,14 @@ export function createSessionEngine({
         defaultInstruction: instructionMeta.defaultInstruction,
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
         settings,
+        catalogActivityId,
+        catalogContext,
+        catalogLevels: item.catalog_levels && typeof item.catalog_levels === "object" && !Array.isArray(item.catalog_levels) ? cloneData(item.catalog_levels) : null,
+        catalogAdaptive,
+        catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? 3),
+        catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? 3),
+        catalogDefaults: item.catalog_defaults && typeof item.catalog_defaults === "object" && !Array.isArray(item.catalog_defaults) ? cloneData(item.catalog_defaults) : {},
+        progressSessionStats: { questions: 0, correct: 0 },
         currentQuestionResolvedCorrectly: false,
         currentQuestionOutcomeCommitted: false,
         lastQuestionOutcome: "pending"
@@ -1321,7 +1397,8 @@ export function createSessionEngine({
 
       const runtimeCapabilities = getToolRuntimeCapabilities(tool, baseToolContext);
 
-      sessionItem.hasAnswerPhase = runtimeCapabilities.answerPhase !== "unsupported";
+      sessionItem.hasAnswerPhase = runtimeCapabilities.answerPhase !== "unsupported"
+        && (sessionItem.infiniteAnswerTime === true || Number(sessionItem.answerTime) > 0);
       sessionItem.usesCustomQuestionFlow = runtimeCapabilities.transitionPhase !== "required";
       sessionItem.supportsCommonFlowSettings = runtimeCapabilities.supportsCommonFlowSettings !== false;
       sessionItem.runtimeCapabilities = runtimeCapabilities;
@@ -1379,7 +1456,8 @@ export function createSessionEngine({
   }
 
   function isActivityTotalTimeEnabled() {
-    return activityGlobals.activityTotalTimeEnabled === true
+    return !isCatalogTestSession
+      && activityGlobals.activityTotalTimeEnabled === true
       && Math.floor(Number(activityGlobals.activityTotalTimeSec) || 0) > 0;
   }
 
@@ -1659,6 +1737,8 @@ export function createSessionEngine({
 
   function finishSession({ title = null } = {}) {
     const finalTitle = title || (sessionProgressMode === "practice" ? "Entrainement terminé." : "Bravo, la séance est terminée.");
+    const finishedSummary = buildSessionSummary();
+    notifySessionFinishedOnce(finishedSummary);
     stopAllTimers();
     resetToolClock();
     stopFinalChallengeTicker();
@@ -1730,6 +1810,8 @@ export function createSessionEngine({
       item.currentQuestionResolvedCorrectly = false;
       item.currentQuestionOutcomeCommitted = false;
       item.lastQuestionOutcome = "pending";
+      item.catalogCurrentLevel = normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? item.catalogCurrentLevel ?? 3);
+      item.progressSessionStats = { questions: 0, correct: 0 };
     });
   }
 
@@ -1788,6 +1870,8 @@ export function createSessionEngine({
     if (isFinalChallengeItem(item) && isCorrect) {
       incrementFinalChallengeCorrectCount(item);
     }
+
+    recordCatalogProgressQuestionOutcome(item, isCorrect);
 
     if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
       if (item) item.currentQuestionResolvedCorrectly = false;
@@ -1854,6 +1938,65 @@ export function createSessionEngine({
     }
 
     return false;
+  }
+
+
+  function recordCatalogProgressQuestionOutcome(item, isCorrect) {
+    if (!item || runMode === "projected-teacher") return;
+    if (!item.catalogActivityId) return;
+
+    const stats = item.progressSessionStats || { questions: 0, correct: 0 };
+    stats.questions = Math.max(0, Math.floor(Number(stats.questions) || 0)) + 1;
+    if (isCorrect === true) {
+      stats.correct = Math.max(0, Math.floor(Number(stats.correct) || 0)) + 1;
+    }
+    item.progressSessionStats = stats;
+
+    if (item.catalogAdaptive === true) {
+      applyCatalogAdaptiveLevelAfterOutcome(item, isCorrect);
+    }
+  }
+
+  function applyCatalogAdaptiveLevelAfterOutcome(item, isCorrect) {
+    if (!item?.catalogLevels) return;
+
+    const currentLevel = normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3);
+    const nextLevel = normalizeCatalogDifficultyLevel(currentLevel + (isCorrect === true ? 1 : -1));
+
+    item.catalogCurrentLevel = nextLevel;
+    syncCatalogAdaptiveLevelConfig(item);
+  }
+
+  function syncCatalogAdaptiveLevelConfig(item) {
+    if (!item?.catalogLevels) return;
+
+    const currentLevel = normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3);
+    item.catalogCurrentLevel = currentLevel;
+
+    const levelConfig = getCatalogLevelConfig(item.catalogLevels, currentLevel);
+    const fallbackTimePerQ = Math.max(1, Math.trunc(Number(item.catalogDefaults?.timePerQ ?? item.draftTimePerQ ?? item.timePerQ) || 40));
+    const nextSettings = levelConfig.settings && typeof levelConfig.settings === "object" && !Array.isArray(levelConfig.settings)
+      ? cloneData(levelConfig.settings)
+      : {};
+
+    item.settings = nextSettings;
+    item.draftTimePerQ = levelConfig.timePerQ == null ? fallbackTimePerQ : Math.max(1, Math.trunc(Number(levelConfig.timePerQ) || fallbackTimePerQ));
+    item.timePerQ = item.draftTimePerQ;
+    item.draftInfiniteTimePerQ = levelConfig.infiniteTimePerQ == null
+      ? item.catalogDefaults?.infiniteTimePerQ === true
+      : levelConfig.infiniteTimePerQ === true;
+    item.infiniteTimePerQ = item.draftInfiniteTimePerQ === true;
+
+    applyCatalogTestRuntimeSettings(item);
+  }
+
+  function applyCatalogTestRuntimeSettings(item) {
+    if (!item || String(item.catalogContext || "").trim().toLowerCase() !== "test") return;
+
+    item.draftQuestionFlowMode = "unlimited";
+    item.questionFlowMode = "unlimited";
+    item.draftToolMaxTimeInfinite = true;
+    item.toolMaxTimeInfinite = true;
   }
 
 
@@ -1971,6 +2114,12 @@ export function createSessionEngine({
       supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
       globals: cloneData(activityGlobals),
       questionFlowMode: item.questionFlowMode || "fixed",
+      catalogActivityId: item.catalogActivityId || "",
+      catalogContext: item.catalogContext || "",
+      catalogAdaptive: item.catalogAdaptive === true,
+      catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3),
+      catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
+      catalogDifficultyLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
       isFinalInfiniteSequenceItem: isFinalChallengeItem(item),
       finalInfiniteSequenceItem: isFinalChallengeItem(item),
       services: {

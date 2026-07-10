@@ -3,7 +3,7 @@ import { createActivity as createSelectionActivity } from "./activity.js";
 import { normalizeSettings } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
-const DEFAULT_INSTRUCTION = "Sélectionne les mots demandés.";
+const DEFAULT_INSTRUCTION = "Clique pour sélectionner la bonne réponse.";
 
 export default defineTool("selection", "Sélection", {
   version: "1",

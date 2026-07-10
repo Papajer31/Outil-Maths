@@ -3,19 +3,16 @@ import {
   cleanDisplayName,
   normalizeAccessCode,
   normalizeConfigName,
-  mergeActivityDashboardMeta,
-  mergePreservedActivityMeta,
   normalizeFolderRecord,
-  sortActivitiesByDashboardMeta,
-  sortFoldersByMeta,
-  sanitizeActivityConfigJson,
-  withActivityDashboardMeta
+  sortFoldersByMeta
 } from "../../shared/api-common.js";
 import {
-  DEFAULT_ACTIVITY_MODE,
-  isStudentFacingActivityMode,
-  normalizeActivityMode
-} from "../../shared/activity-modes.js";
+  applyCatalogVisibility,
+  getCatalogActivities,
+  getCatalogFolders,
+  normalizeCatalogActivity,
+  sortCatalogActivities
+} from "../../shared/catalogue.js";
 
 export { normalizeAccessCode, normalizeConfigName };
 
@@ -32,6 +29,30 @@ export async function signInUser(email, password) {
   });
   if (error) throw error;
   return data.user ?? null;
+}
+
+export async function signUpUser(email, password, metadata = {}) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: metadata && typeof metadata === "object" ? metadata : {}
+    }
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function accessCodeExists(accessCode) {
+  const code = normalizeAccessCode(accessCode);
+  if (!code) return false;
+
+  const { data, error } = await supabase.rpc("access_code_exists", {
+    p_access_code: code
+  });
+
+  if (error) throw error;
+  return data === true;
 }
 
 export async function signOutUser() {
@@ -313,441 +334,10 @@ export async function deleteTeacherPhonologyPreset(teacherSpaceId, presetId, { t
   return await listTeacherPhonologyPresets(spaceId, { toolKey });
 }
 
-export async function getMyActivitiesForSpace(teacherSpaceId) {
-  const { data, error } = await supabase
-    .from("activity_configs")
-    .select(`
-      id,
-      teacher_space_id,
-      module_key,
-      config_name,
-      config_name_normalized,
-      config_json,
-      created_at,
-      updated_at
-    `)
-    .eq("teacher_space_id", teacherSpaceId)
-    .order("config_name", { ascending: true });
-
-  if (error) throw error;
-
-  const normalizedActivities = (data ?? []).map((activity, index) => withActivityDashboardMeta({
-    ...activity,
-    config_json: sanitizeActivityConfigJson(activity.config_json)
-  }, index));
-  return sortActivitiesByDashboardMeta(normalizedActivities);
-}
-
-export async function getMyActivityFoldersForSpace(teacherSpaceId) {
-  const { data, error } = await supabase
-    .from("activity_folders")
-    .select(`
-      id,
-      teacher_space_id,
-      parent_id,
-      name,
-      display_order,
-      created_at,
-      updated_at
-    `)
-    .eq("teacher_space_id", teacherSpaceId)
-    .order("display_order", { ascending: true })
-    .order("name", { ascending: true });
-
-  if (error) throw error;
-
-  const normalizedFolders = (data ?? []).map((folder, index) => normalizeFolderRecord(folder, index));
-  return sortFoldersByMeta(normalizedFolders);
-}
-
-export async function createActivityFolderForSpace(teacherSpaceId, { name, parent_id = null } = {}) {
-  const displayName = cleanDisplayName(name);
-  if (!displayName) {
-    throw new Error("Nom de dossier vide.");
-  }
-
-  const safeParentId = String(parent_id ?? "").trim() || null;
-  const [folders, activities] = await Promise.all([
-    getMyActivityFoldersForSpace(teacherSpaceId),
-    getMyActivitiesForSpace(teacherSpaceId)
-  ]);
-
-  const siblingFolders = folders.filter((folder) => String(folder.parent_id ?? "") === String(safeParentId ?? ""));
-  const siblingActivities = activities.filter((activity) => String(activity.folder_id ?? "") === String(safeParentId ?? ""));
-  const nextOrder = [...siblingFolders, ...siblingActivities]
-    .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
-
-  const { data, error } = await supabase
-    .from("activity_folders")
-    .insert({
-      teacher_space_id: teacherSpaceId,
-      parent_id: safeParentId,
-      name: displayName,
-      display_order: nextOrder,
-      updated_at: new Date().toISOString()
-    })
-    .select(`
-      id,
-      teacher_space_id,
-      parent_id,
-      name,
-      display_order,
-      created_at,
-      updated_at
-    `)
-    .single();
-
-  if (error) throw error;
-  return normalizeFolderRecord(data, nextOrder);
-}
-
-export async function updateActivityFolder(folderId, updates = {}) {
-  if (!folderId) {
-    throw new Error("Dossier introuvable.");
-  }
-
-  const payload = {
-    updated_at: new Date().toISOString()
-  };
-
-  if ("name" in updates) {
-    const displayName = cleanDisplayName(updates.name);
-    if (!displayName) {
-      throw new Error("Nom de dossier vide.");
-    }
-    payload.name = displayName;
-  }
-
-  if ("parent_id" in updates) {
-    payload.parent_id = String(updates.parent_id ?? "").trim() || null;
-  }
-
-  if ("display_order" in updates) {
-    const displayOrder = Number(updates.display_order);
-    if (!Number.isFinite(displayOrder)) {
-      throw new Error("Ordre de dossier invalide.");
-    }
-    payload.display_order = Math.max(0, Math.trunc(displayOrder));
-  }
-
-  const { data, error } = await supabase
-    .from("activity_folders")
-    .update(payload)
-    .eq("id", folderId)
-    .select(`
-      id,
-      teacher_space_id,
-      parent_id,
-      name,
-      display_order,
-      created_at,
-      updated_at
-    `)
-    .single();
-
-  if (error) throw error;
-  return normalizeFolderRecord(data);
-}
-
-export async function deleteActivityFolder(folderId) {
-  if (!folderId) {
-    throw new Error("Dossier introuvable.");
-  }
-
-  const { error } = await supabase
-    .from("activity_folders")
-    .delete()
-    .eq("id", folderId);
-
-  if (error) throw error;
-}
-
-export async function getMyActivityByName(teacherSpaceId, configName) {
-  const normalizedConfigName = normalizeConfigName(configName);
-  if (!normalizedConfigName) return null;
-
-  const { data, error } = await supabase
-    .from("activity_configs")
-    .select(`
-      id,
-      teacher_space_id,
-      module_key,
-      config_name,
-      config_name_normalized,
-      config_json,
-      created_at,
-      updated_at
-    `)
-    .eq("teacher_space_id", teacherSpaceId)
-    .eq("config_name_normalized", normalizedConfigName)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data ? withActivityDashboardMeta({
-    ...data,
-    config_json: sanitizeActivityConfigJson(data.config_json)
-  }) : null;
-}
-
-export async function saveActivityConfig(params) {
-  const {
-    accessCode,
-    moduleKey,
-    configName,
-    configJson,
-    desiredFolderId = null,
-    existingConfigName = ""
-  } = params || {};
-
-  const teacherSpace = await getMyTeacherSpace();
-  if (!teacherSpace) {
-    throw new Error("Aucun espace enseignant trouvé.");
-  }
-
-  const normalizedAccessCode = normalizeAccessCode(accessCode);
-  const displayConfigName = cleanDisplayName(configName);
-  const normalizedConfigName = normalizeConfigName(configName);
-  const normalizedExistingConfigName = normalizeConfigName(existingConfigName);
-  const cleanedModuleKey = cleanDisplayName(moduleKey);
-
-  if (!normalizedAccessCode) {
-    throw new Error("Code de connexion vide.");
-  }
-
-  if (teacherSpace.access_code !== normalizedAccessCode) {
-    throw new Error("Le code de connexion ne correspond pas à ton espace enseignant.");
-  }
-
-  if (!displayConfigName) {
-    throw new Error("Nom d’activité vide.");
-  }
-
-  if (!normalizedConfigName) {
-    throw new Error("Nom d’activité invalide.");
-  }
-
-  if (!cleanedModuleKey) {
-    throw new Error("Clé d’outil vide.");
-  }
-
-  if (!configJson || typeof configJson !== "object" || Array.isArray(configJson)) {
-    throw new Error("Configuration absente.");
-  }
-
-  const safeConfigJson = sanitizeActivityConfigJson(configJson);
-  if (!Array.isArray(safeConfigJson.sequence)) {
-    throw new Error("La configuration doit contenir une séquence valide.");
-  }
-
-  let existingActivity = null;
-  if (normalizedExistingConfigName) {
-    existingActivity = await getMyActivityByName(teacherSpace.id, existingConfigName);
-  }
-  if (!existingActivity) {
-    existingActivity = await getMyActivityByName(teacherSpace.id, displayConfigName);
-  }
-
-  if (
-    existingActivity
-    && String(existingActivity.config_name_normalized || "") !== String(normalizedConfigName)
-  ) {
-    const conflictingActivity = await getMyActivityByName(teacherSpace.id, displayConfigName);
-    if (conflictingActivity && String(conflictingActivity.id) !== String(existingActivity.id)) {
-      throw new Error("Une activité porte déjà ce nom.");
-    }
-  }
-
-  let preservedDashboard = existingActivity?.config_json?.dashboard ?? null;
-  const preservedActivityMode = normalizeActivityMode(
-    existingActivity?.config_json?.activity_mode,
-    DEFAULT_ACTIVITY_MODE
-  );
-
-  if (!preservedDashboard) {
-    const [existingActivities, existingFolders] = await Promise.all([
-      getMyActivitiesForSpace(teacherSpace.id),
-      getMyActivityFoldersForSpace(teacherSpace.id)
-    ]);
-
-    const safeDesiredFolderId = existingFolders.some((folder) => String(folder.id) === String(desiredFolderId ?? ""))
-      ? String(desiredFolderId)
-      : null;
-    const siblingActivities = existingActivities.filter((activity) => String(activity.folder_id ?? "") === String(safeDesiredFolderId ?? ""));
-    const siblingFolders = existingFolders.filter((folder) => String(folder.parent_id ?? "") === String(safeDesiredFolderId ?? ""));
-    const nextOrder = [...siblingActivities, ...siblingFolders]
-      .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
-
-    preservedDashboard = {
-      display_order: nextOrder,
-      folder_id: safeDesiredFolderId,
-      is_visible: true,
-      is_highlighted: false
-    };
-  }
-
-  const payload = {
-    teacher_space_id: teacherSpace.id,
-    module_key: cleanedModuleKey,
-    config_name: displayConfigName,
-    config_name_normalized: normalizedConfigName,
-    config_json: mergePreservedActivityMeta(safeConfigJson, {
-      dashboard: preservedDashboard,
-      activity_mode: preservedActivityMode
-    }),
-    updated_at: new Date().toISOString()
-  };
-
-  const activityWriteQuery = existingActivity?.id
-    ? supabase
-      .from("activity_configs")
-      .update(payload)
-      .eq("id", existingActivity.id)
-    : supabase
-      .from("activity_configs")
-      .insert(payload);
-
-  const { data, error } = await activityWriteQuery
-    .select(`
-      id,
-      teacher_space_id,
-      module_key,
-      config_name,
-      config_name_normalized,
-      config_json,
-      created_at,
-      updated_at
-    `)
-    .single();
-
-  if (error) throw error;
-
-  return {
-    teacher_space: teacherSpace,
-    activity: withActivityDashboardMeta({
-      ...data,
-      config_json: sanitizeActivityConfigJson(data.config_json)
-    })
-  };
-}
-
-export async function deleteMyActivity(teacherSpaceId, configName) {
-  const normalizedConfigName = normalizeConfigName(configName);
-  if (!normalizedConfigName) {
-    throw new Error("Nom d’activité vide.");
-  }
-
-  const { error } = await supabase
-    .from("activity_configs")
-    .delete()
-    .eq("teacher_space_id", teacherSpaceId)
-    .eq("config_name_normalized", normalizedConfigName);
-
-  if (error) throw error;
-}
-
-export async function updateActivityDashboardMeta(activityId, metaUpdates = {}) {
-  if (!activityId) {
-    throw new Error("Activité introuvable.");
-  }
-
-  const { data: existing, error: readError } = await supabase
-    .from("activity_configs")
-    .select("id, config_json")
-    .eq("id", activityId)
-    .single();
-
-  if (readError) throw readError;
-
-  const nextConfigJson = mergeActivityDashboardMeta(existing?.config_json, metaUpdates);
-
-  const { data, error } = await supabase
-    .from("activity_configs")
-    .update({
-      config_json: nextConfigJson,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", activityId)
-    .select(`
-      id,
-      teacher_space_id,
-      module_key,
-      config_name,
-      config_name_normalized,
-      config_json,
-      created_at,
-      updated_at
-    `)
-    .single();
-
-  if (error) throw error;
-  return withActivityDashboardMeta({
-    ...data,
-    config_json: sanitizeActivityConfigJson(data.config_json)
-  });
-}
-
-export async function saveActivityOrderForTeacherSpace(teacherSpaceId, orderedActivityIds = []) {
-  if (!Array.isArray(orderedActivityIds)) {
-    throw new Error("Ordre d’activités invalide.");
-  }
-
-  const activities = await getMyActivitiesForSpace(teacherSpaceId);
-  const currentIds = activities.map((activity) => String(activity.id));
-  const currentIdSet = new Set(currentIds);
-
-  const seen = new Set();
-  const normalizedOrderedIds = orderedActivityIds
-    .map((id) => String(id))
-    .filter((id) => currentIdSet.has(id))
-    .filter((id) => {
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-
-  const missingIds = currentIds.filter((id) => !seen.has(id));
-  const finalIds = [...normalizedOrderedIds, ...missingIds];
-
-  await Promise.all(finalIds.map((activityId, index) => updateActivityDashboardMeta(activityId, { display_order: index })));
-
-  return finalIds;
-}
-
-export async function setHighlightedActivityForTeacherSpace(teacherSpaceId, highlightedActivityId = null, activityMode = null) {
-  const activities = await getMyActivitiesForSpace(teacherSpaceId);
-  const targetId = highlightedActivityId == null ? null : String(highlightedActivityId);
-  const targetActivity = targetId
-    ? activities.find((activity) => String(activity.id) === targetId) || null
-    : null;
-  const targetMode = normalizeActivityMode(targetActivity?.activity_mode ?? activityMode, DEFAULT_ACTIVITY_MODE);
-
-  if (!isStudentFacingActivityMode(targetMode)) {
-    return null;
-  }
-
-  const updates = activities
-    .filter((activity) => normalizeActivityMode(activity?.activity_mode, DEFAULT_ACTIVITY_MODE) === targetMode)
-    .filter((activity) => {
-      const shouldHighlight = targetId !== null
-        && String(activity.id) === targetId
-        && activity.is_visible !== false;
-      return activity.is_highlighted !== shouldHighlight;
-    })
-    .map((activity) => updateActivityDashboardMeta(activity.id, {
-      is_highlighted: targetId !== null
-        && String(activity.id) === targetId
-        && activity.is_visible !== false
-    }));
-
-  await Promise.all(updates);
-
-  return targetId;
-}
-
 export async function listStudentsForClass(teacherClassId) {
   const { data, error } = await supabase
     .from("students")
-    .select("id, teacher_class_id, first_name, grade_level, display_order, updated_at")
+    .select("id, teacher_class_id, first_name, grade_level, student_code, display_order, updated_at")
     .eq("teacher_class_id", teacherClassId)
     .order("display_order", { ascending: true });
 
@@ -776,7 +366,7 @@ export async function listStudentsForTeacherSpace(teacherSpaceId) {
 
   const { data, error } = await supabase
     .from("students")
-    .select("id, teacher_class_id, first_name, grade_level, display_order, updated_at")
+    .select("id, teacher_class_id, first_name, grade_level, student_code, display_order, updated_at")
     .in("teacher_class_id", storageContainerIds)
     .order("display_order", { ascending: true });
 
@@ -809,10 +399,11 @@ export async function createStudent(teacherClassId, student = {}) {
       teacher_class_id: teacherClassId,
       first_name: firstName,
       grade_level: gradeLevel,
+      student_code: normalizeStudentCode(student.student_code),
       display_order: nextOrder,
       updated_at: new Date().toISOString()
     })
-    .select("id, teacher_class_id, first_name, grade_level, display_order, updated_at")
+    .select("id, teacher_class_id, first_name, grade_level, student_code, display_order, updated_at")
     .single();
 
   if (error) throw error;
@@ -841,6 +432,10 @@ export async function updateStudent(studentId, updates = {}) {
     payload.grade_level = String(updates.grade_level || "").trim() || null;
   }
 
+  if ("student_code" in updates) {
+    payload.student_code = normalizeStudentCode(updates.student_code);
+  }
+
   if ("display_order" in updates) {
     const displayOrder = Number(updates.display_order);
     if (!Number.isFinite(displayOrder)) {
@@ -853,7 +448,7 @@ export async function updateStudent(studentId, updates = {}) {
     .from("students")
     .update(payload)
     .eq("id", studentId)
-    .select("id, teacher_class_id, first_name, grade_level, display_order, updated_at")
+    .select("id, teacher_class_id, first_name, grade_level, student_code, display_order, updated_at")
     .single();
 
   if (error) throw error;
@@ -1585,4 +1180,561 @@ export async function copyQuestionBankToSpace(sourceBankId, teacherSpaceId, { ti
     bank: updatedBank,
     items: await listQuestionBankItems(createdBank.id)
   };
+}
+
+
+function normalizeStudentCode(value) {
+  const safe = String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+  return safe || null;
+}
+
+export function listCatalogFolders() {
+  return getCatalogFolders();
+}
+
+async function listPublishedCatalogActivities() {
+  try {
+    const { data, error } = await supabase
+      .from("catalog_activities")
+      .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+      .eq("status", "published")
+      .order("category_id", { ascending: true })
+      .order("display_order", { ascending: true })
+      .order("title", { ascending: true });
+
+    if (error) throw error;
+    return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
+  } catch (err) {
+    // Mode secours : utile hors Supabase ou avant application de la migration super-admin.
+    console.warn("Catalogue système en base indisponible, utilisation du catalogue de secours.", err);
+    return getCatalogActivities();
+  }
+}
+
+export async function listCatalogActivitiesForTeacherSpace(teacherSpaceId) {
+  const catalogActivities = await listPublishedCatalogActivities();
+  const { data, error } = await supabase
+    .from("catalog_activity_visibility")
+    .select("catalog_activity_id, is_visible, updated_at")
+    .eq("teacher_space_id", teacherSpaceId);
+
+  if (error) throw error;
+  return sortCatalogActivities(applyCatalogVisibility(catalogActivities, Array.isArray(data) ? data : []));
+}
+
+export async function setCatalogActivityVisibility(teacherSpaceId, catalogActivityId, isVisible) {
+  const payload = {
+    teacher_space_id: teacherSpaceId,
+    catalog_activity_id: String(catalogActivityId || "").trim(),
+    is_visible: isVisible !== false,
+    updated_at: new Date().toISOString()
+  };
+
+  if (!payload.teacher_space_id || !payload.catalog_activity_id) {
+    throw new Error("Activité de catalogue introuvable.");
+  }
+
+  const { error } = await supabase
+    .from("catalog_activity_visibility")
+    .upsert(payload, { onConflict: "teacher_space_id,catalog_activity_id" });
+
+  if (error) throw error;
+  return await listCatalogActivitiesForTeacherSpace(teacherSpaceId);
+}
+
+export async function listMissionFoldersForSpace(teacherSpaceId) {
+  const { data, error } = await supabase
+    .from("mission_folders")
+    .select("id, teacher_space_id, parent_id, name, display_order, created_at, updated_at")
+    .eq("teacher_space_id", teacherSpaceId)
+    .order("display_order", { ascending: true })
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function createMissionFolderForSpace(teacherSpaceId, { name, parent_id = null } = {}) {
+  const cleanName = cleanDisplayName(name);
+  if (!cleanName) throw new Error("Nom de dossier vide.");
+  const folders = await listMissionFoldersForSpace(teacherSpaceId);
+  const safeParentId = String(parent_id || "").trim() || null;
+  const nextOrder = folders.filter((folder) => String(folder.parent_id || "") === String(safeParentId || ""))
+    .reduce((max, folder) => Math.max(max, Number(folder.display_order) || 0), -1) + 1;
+  const { data, error } = await supabase.from("mission_folders").insert({
+    teacher_space_id: teacherSpaceId,
+    parent_id: safeParentId,
+    name: cleanName,
+    display_order: nextOrder
+  }).select("id, teacher_space_id, parent_id, name, display_order, created_at, updated_at").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMissionFolder(folderId, updates = {}) {
+  const payload = {};
+  if ("name" in updates) payload.name = cleanDisplayName(updates.name);
+  if ("parent_id" in updates) payload.parent_id = String(updates.parent_id || "").trim() || null;
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  const { data, error } = await supabase.from("mission_folders").update(payload).eq("id", folderId)
+    .select("id, teacher_space_id, parent_id, name, display_order, created_at, updated_at").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMissionFolder(folderId) {
+  const { error } = await supabase.from("mission_folders").delete().eq("id", folderId);
+  if (error) throw error;
+}
+
+export async function listMissionsForSpace(teacherSpaceId) {
+  const { data, error } = await supabase
+    .from("missions")
+    .select("id, teacher_space_id, folder_id, title, title_normalized, description, status, answer_mode, intent_mode, question_count, question_time_seconds, answer_display_seconds, transition_seconds, mission_time_seconds, instructions, display_order, created_at, updated_at")
+    .eq("teacher_space_id", teacherSpaceId)
+    .neq("status", "archived")
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function listMissionSteps(missionId) {
+  const { data, error } = await supabase
+    .from("mission_steps")
+    .select("id, mission_id, catalog_activity_id, position, difficulty_mode, difficulty_level, step_options_json, created_at, updated_at")
+    .eq("mission_id", missionId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function listMissionAssignments(missionId) {
+  const { data, error } = await supabase
+    .from("mission_assignments")
+    .select("id, mission_id, target_type, teacher_class_id, student_id, created_at")
+    .eq("mission_id", missionId);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function saveMissionForSpace(teacherSpaceId, mission = {}, steps = [], assignments = []) {
+  const title = cleanDisplayName(mission.title);
+  if (!title) throw new Error("Titre de mission vide.");
+  const payload = {
+    teacher_space_id: teacherSpaceId,
+    folder_id: String(mission.folder_id || "").trim() || null,
+    title,
+    title_normalized: normalizeConfigName(title),
+    description: String(mission.description || "").trim(),
+    status: String(mission.status || "draft").trim() === "active" ? "active" : "draft",
+    answer_mode: String(mission.answer_mode || "student_input").trim() === "manual_validation" ? "manual_validation" : "student_input",
+    intent_mode: String(mission.intent_mode || "practice").trim() === "evaluation" ? "evaluation" : "practice",
+    question_count: Math.max(1, Math.trunc(Number(mission.question_count) || 5)),
+    question_time_seconds: mission.question_time_seconds == null || mission.question_time_seconds === "" ? null : Math.max(0, Math.trunc(Number(mission.question_time_seconds) || 0)),
+    answer_display_seconds: mission.answer_display_seconds == null || mission.answer_display_seconds === "" ? null : Math.max(0, Math.trunc(Number(mission.answer_display_seconds) || 0)),
+    transition_seconds: Math.max(0, Math.trunc(Number(mission.transition_seconds) || 0)),
+    mission_time_seconds: mission.mission_time_seconds == null || mission.mission_time_seconds === "" ? null : Math.max(0, Math.trunc(Number(mission.mission_time_seconds) || 0)),
+    instructions: String(mission.instructions || "").trim() || null,
+    display_order: Math.max(0, Math.trunc(Number(mission.display_order) || 0))
+  };
+
+  let savedMission;
+  if (mission.id) {
+    const { data, error } = await supabase.from("missions").update(payload).eq("id", mission.id).select("*").single();
+    if (error) throw error;
+    savedMission = data;
+  } else {
+    const existing = await listMissionsForSpace(teacherSpaceId);
+    payload.display_order = existing.reduce((max, item) => Math.max(max, Number(item.display_order) || 0), -1) + 1;
+    const { data, error } = await supabase.from("missions").insert(payload).select("*").single();
+    if (error) throw error;
+    savedMission = data;
+  }
+
+  const missionId = savedMission.id;
+  await supabase.from("mission_steps").delete().eq("mission_id", missionId);
+  const cleanSteps = (Array.isArray(steps) ? steps : []).map((step, index) => ({
+    mission_id: missionId,
+    catalog_activity_id: String(step.catalog_activity_id || step.id || "").trim(),
+    position: index,
+    difficulty_mode: String(step.difficulty_mode || "normal").trim() || "normal",
+    difficulty_level: Math.max(1, Math.min(5, Math.trunc(Number(step.difficulty_level) || 3))),
+    step_options_json: step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {}
+  })).filter((step) => step.catalog_activity_id);
+  if (cleanSteps.length) {
+    const { error } = await supabase.from("mission_steps").insert(cleanSteps);
+    if (error) throw error;
+  }
+
+  await supabase.from("mission_assignments").delete().eq("mission_id", missionId);
+  const cleanAssignments = (Array.isArray(assignments) ? assignments : []).map((assignment) => {
+    const targetType = String(assignment.target_type || "").trim();
+    if (targetType === "class") {
+      const classId = Number(assignment.teacher_class_id);
+      return Number.isFinite(classId) && classId > 0 ? { mission_id: missionId, target_type: "class", teacher_class_id: classId } : null;
+    }
+    if (targetType === "student") {
+      const studentId = Number(assignment.student_id);
+      return Number.isFinite(studentId) && studentId > 0 ? { mission_id: missionId, target_type: "student", student_id: studentId } : null;
+    }
+    return null;
+  }).filter(Boolean);
+  if (cleanAssignments.length) {
+    const { error } = await supabase.from("mission_assignments").insert(cleanAssignments);
+    if (error) throw error;
+  }
+
+  return savedMission;
+}
+
+export async function deleteMission(missionId) {
+  const { error } = await supabase.from("missions").update({ status: "archived" }).eq("id", missionId);
+  if (error) throw error;
+}
+
+export async function isCurrentUserSuperAdmin() {
+  const { data, error } = await supabase.rpc("is_super_admin");
+  if (error) {
+    console.warn("Vérification super-admin impossible.", error);
+    return false;
+  }
+  return data === true;
+}
+
+export async function listCatalogActivitiesForAdmin() {
+  const { data, error } = await supabase
+    .from("catalog_activities")
+    .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .neq("status", "archived")
+    .order("category_id", { ascending: true })
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
+
+  if (error) throw error;
+  return sortCatalogActivities(Array.isArray(data) ? data.map(normalizeCatalogActivity) : []);
+}
+
+export async function saveCatalogActivityAsAdmin(activity = {}) {
+  const id = String(activity.id || "").trim().toLowerCase();
+  const title = cleanDisplayName(activity.title || activity.config_name);
+  const categoryId = String(activity.category_id || activity.folder_id || "").trim();
+  const toolId = String(activity.tool_id || "").trim();
+  if (!id) throw new Error("Identifiant d’activité vide.");
+  if (!/^[a-z0-9][a-z0-9._-]{1,160}$/.test(id)) {
+    throw new Error("Identifiant invalide. Utilise minuscules, chiffres, points, tirets ou underscores.");
+  }
+  if (!title) throw new Error("Titre d’activité vide.");
+  if (!categoryId) throw new Error("Catégorie obligatoire.");
+  if (!toolId) throw new Error("Outil obligatoire.");
+
+  const payload = {
+    id,
+    category_id: categoryId,
+    tool_id: toolId,
+    title,
+    description: String(activity.description || "").trim(),
+    display_order: Math.max(0, Math.trunc(Number(activity.display_order) || 0)),
+    status: String(activity.status || "draft").trim() === "published" ? "published" : "draft",
+    default_visible: activity.default_visible !== false,
+    levels_json: activity.levels_json && typeof activity.levels_json === "object" && !Array.isArray(activity.levels_json)
+      ? activity.levels_json
+      : { "1": { settings: {} }, "2": { settings: {} }, "3": { settings: {} }, "4": { settings: {} }, "5": { settings: {} } },
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from("catalog_activities")
+    .upsert(payload, { onConflict: "id" })
+    .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .single();
+
+  if (error) throw error;
+  return normalizeCatalogActivity(data);
+}
+
+export async function getCatalogActivityUsageAsAdmin(activityId) {
+  const id = String(activityId || "").trim().toLowerCase();
+  if (!id) throw new Error("Activité introuvable.");
+  const { data, error } = await supabase.rpc("get_catalog_activity_usage_as_admin", {
+    p_activity_id: id
+  });
+  if (error) throw error;
+  return Array.isArray(data) && data.length ? data[0] : {
+    catalog_activity_id: id,
+    mission_steps_count: 0,
+    missions_count: 0,
+    progress_count: 0,
+    sessions_count: 0,
+    visibility_count: 0
+  };
+}
+
+export async function deleteCatalogActivityAsAdmin(activityId) {
+  const id = String(activityId || "").trim().toLowerCase();
+  if (!id) throw new Error("Activité introuvable.");
+  const { error } = await supabase.rpc("delete_catalog_activity_cascade", {
+    p_activity_id: id
+  });
+  if (error) throw error;
+}
+
+function makeVocabularyExactKey(value) {
+  // Pour le vocabulaire, on ne normalise pas les accents ni la casse :
+  // "marche" et "marché" sont deux mots différents.
+  return cleanDisplayName(value);
+}
+
+function normalizeVocabularyDictionaryPage(value) {
+  if (value == null || value === "") return null;
+  const page = Number(value);
+  return Number.isFinite(page) && page > 0 ? Math.trunc(page) : null;
+}
+
+async function ensureDefaultVocabularyExactKeys() {
+  const { data, error } = await supabase
+    .from("vocabulary_default_words")
+    .select("id, word, word_normalized");
+  if (error) throw error;
+
+  const rows = Array.isArray(data) ? data : [];
+  for (const row of rows) {
+    const exactKey = makeVocabularyExactKey(row?.word);
+    if (!row?.id || !exactKey || row.word_normalized === exactKey) continue;
+    const { error: updateError } = await supabase
+      .from("vocabulary_default_words")
+      .update({ word_normalized: exactKey, updated_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (updateError) throw updateError;
+  }
+}
+
+function normalizeSystemSlug(value, fallback = "item") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || fallback;
+}
+
+export async function listDefaultVocabularyWordsAsAdmin() {
+  const { data, error } = await supabase
+    .from("vocabulary_default_words")
+    .select("id, word, word_normalized, dictionary_page, created_at, updated_at")
+    .order("word_normalized", { ascending: true })
+    .order("word", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function saveDefaultVocabularyWordAsAdmin(item = {}) {
+  const word = cleanDisplayName(item.word);
+  if (!word) throw new Error("Mot vide.");
+  await ensureDefaultVocabularyExactKeys();
+  const payload = {
+    word,
+    word_normalized: makeVocabularyExactKey(word),
+    dictionary_page: normalizeVocabularyDictionaryPage(item.dictionary_page),
+    updated_at: new Date().toISOString()
+  };
+  let query;
+  if (item.id) {
+    query = supabase.from("vocabulary_default_words").update(payload).eq("id", item.id);
+  } else {
+    query = supabase.from("vocabulary_default_words").upsert(payload, { onConflict: "word_normalized" });
+  }
+  const { data, error } = await query
+    .select("id, word, word_normalized, dictionary_page, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertDefaultVocabularyWordsAsAdmin(items = []) {
+  if (!Array.isArray(items)) throw new Error("Import vocabulaire invalide.");
+  await ensureDefaultVocabularyExactKeys();
+
+  const now = new Date().toISOString();
+  const payloads = items
+    .map((item) => {
+      const word = cleanDisplayName(item?.word);
+      if (!word) return null;
+      return {
+        word,
+        word_normalized: makeVocabularyExactKey(word),
+        dictionary_page: normalizeVocabularyDictionaryPage(item?.dictionary_page),
+        updated_at: now
+      };
+    })
+    .filter(Boolean);
+
+  if (!payloads.length) throw new Error("Aucun mot valide à importer.");
+
+  const chunkSize = 400;
+  for (let index = 0; index < payloads.length; index += chunkSize) {
+    const chunk = payloads.slice(index, index + chunkSize);
+    const { error } = await supabase
+      .from("vocabulary_default_words")
+      .upsert(chunk, { onConflict: "word_normalized" });
+    if (error) throw error;
+  }
+
+  return await listDefaultVocabularyWordsAsAdmin();
+}
+
+export async function deleteDefaultVocabularyWordAsAdmin(wordId) {
+  const id = Number(wordId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error("Mot introuvable.");
+  const { error } = await supabase.from("vocabulary_default_words").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listEncodingResourcesAsAdmin() {
+  const [assetsResult, wordsResult] = await Promise.all([
+    supabase.from("image_assets").select("slug, storage_path, tags, notes, is_active, created_at, updated_at").order("slug", { ascending: true }),
+    supabase.from("phonology_words").select("slug, word, units, is_active, created_at, updated_at").order("slug", { ascending: true })
+  ]);
+  if (assetsResult.error) throw assetsResult.error;
+  if (wordsResult.error) throw wordsResult.error;
+  return {
+    assets: Array.isArray(assetsResult.data) ? assetsResult.data : [],
+    words: Array.isArray(wordsResult.data) ? wordsResult.data : []
+  };
+}
+
+export async function saveImageAssetAsAdmin(asset = {}) {
+  const slug = normalizeSystemSlug(asset.slug || asset.word || asset.storage_path, "asset");
+  const storagePath = String(asset.storage_path || "").trim();
+  if (!slug) throw new Error("Slug d’asset vide.");
+  if (!storagePath) throw new Error("Chemin Storage vide.");
+  const tags = Array.isArray(asset.tags)
+    ? asset.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
+    : String(asset.tags || "").split(/[;,]/g).map((tag) => tag.trim()).filter(Boolean);
+  const payload = {
+    slug,
+    storage_path: storagePath,
+    tags,
+    notes: String(asset.notes || "").trim(),
+    is_active: asset.is_active !== false,
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await supabase
+    .from("image_assets")
+    .upsert(payload, { onConflict: "slug" })
+    .select("slug, storage_path, tags, notes, is_active, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteImageAssetAsAdmin(slug) {
+  const id = normalizeSystemSlug(slug, "");
+  if (!id) throw new Error("Asset introuvable.");
+  const { error } = await supabase.from("image_assets").delete().eq("slug", id);
+  if (error) throw error;
+}
+
+export async function savePhonologyWordAsAdmin(entry = {}) {
+  const slug = normalizeSystemSlug(entry.slug || entry.word, "mot");
+  const word = cleanDisplayName(entry.word);
+  if (!slug) throw new Error("Slug du mot vide.");
+  if (!word) throw new Error("Mot Encodage vide.");
+  const units = normalizePhonologyUnitsForAdmin(entry.units ?? entry.correction ?? entry.units_text);
+  const payload = {
+    slug,
+    word,
+    units,
+    is_active: entry.is_active !== false,
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await supabase
+    .from("phonology_words")
+    .upsert(payload, { onConflict: "slug" })
+    .select("slug, word, units, is_active, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePhonologyWordAsAdmin(slug) {
+  const id = normalizeSystemSlug(slug, "");
+  if (!id) throw new Error("Mot Encodage introuvable.");
+  const { error } = await supabase.from("phonology_words").delete().eq("slug", id);
+  if (error) throw error;
+}
+
+function normalizePhonologyUnitsForAdmin(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizePhonologyUnit).filter(Boolean);
+  }
+  const text = String(value || "").trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed.map(normalizePhonologyUnit).filter(Boolean);
+  } catch {}
+  return text.split(/\s+/g).map((token) => {
+    const clean = String(token || "").trim();
+    if (!clean) return null;
+    const silent = clean.endsWith("*") || clean.endsWith("°");
+    return { graph: silent ? clean.slice(0, -1) : clean, isSilent: silent };
+  }).filter((unit) => unit?.graph);
+}
+
+function normalizePhonologyUnit(unit) {
+  if (!unit || typeof unit !== "object") return null;
+  const graph = String(unit.graph || unit.value || "").trim();
+  if (!graph) return null;
+  return {
+    graph,
+    isSilent: unit.isSilent === true || unit.silent === true
+  };
+}
+
+export async function listSystemQuestionBanksAsAdmin() {
+  const { data, error } = await supabase
+    .from("question_banks")
+    .select(QUESTION_BANK_FIELDS)
+    .eq("is_system", true)
+    .order("bank_type", { ascending: true })
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
+  if (error) throw error;
+  return sortQuestionBanksByMeta((Array.isArray(data) ? data : []).map(normalizeQuestionBankRecord).filter(Boolean));
+}
+
+export async function createSystemQuestionBankAsAdmin(bank = {}) {
+  const title = cleanDisplayName(bank.title) || "Nouvelle banque système";
+  const existing = await listSystemQuestionBanksAsAdmin();
+  const nextOrder = existing
+    .filter((item) => normalizeQuestionBankType(item.bank_type) === normalizeQuestionBankType(bank.bank_type))
+    .reduce((max, item) => Math.max(max, Number(item.display_order) || 0), -1) + 1;
+  const now = new Date().toISOString();
+  const payload = {
+    teacher_space_id: null,
+    source_bank_id: null,
+    folder_id: null,
+    bank_type: normalizeQuestionBankType(bank.bank_type),
+    title,
+    title_normalized: normalizeQuestionBankTitle(title),
+    description: String(bank.description || "").trim(),
+    subject: String(bank.subject || "").trim(),
+    grade_level: String(bank.grade_level || "").trim(),
+    tags: normalizeQuestionBankTags(bank.tags),
+    is_system: true,
+    display_order: nextOrder,
+    created_at: now,
+    updated_at: now
+  };
+  const { data, error } = await supabase
+    .from("question_banks")
+    .insert(payload)
+    .select(QUESTION_BANK_FIELDS)
+    .single();
+  if (error) throw error;
+  return normalizeQuestionBankRecord(data, nextOrder);
 }

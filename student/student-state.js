@@ -4,10 +4,15 @@ export const studentState = {
   accessCode: "",
   homeCode: "",
   homeMessage: "",
+  homeLaunchPhase: "",
   isCheckingAccessCode: false,
 
   activities: [],
   activityFolders: [],
+  missions: [],
+  missionsMessage: "",
+  activityEntry: "",
+  studentCode: "",
   activitiesMessage: "",
   isLoadingActivities: false,
   activitiesMode: DEFAULT_ACTIVITY_MODE,
@@ -18,6 +23,7 @@ export const studentState = {
 
   selectedConfig: null,
   selectedConfigMeta: null,
+  selectedMission: null,
   selectedStudent: null,
   selectedStudents: [],
   sharedSessionEntry: false,

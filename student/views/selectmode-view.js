@@ -32,7 +32,7 @@ export function renderSelectModeView(root) {
               <div class="selectmode-card-visual" aria-hidden="true">
                 <img
                   class="selectmode-card-img"
-                  src="./student/assets/astro-seul.webp"
+                  src="./shared/ui-assets/astro-seul.webp"
                   alt=""
                 >
               </div>
@@ -47,7 +47,7 @@ export function renderSelectModeView(root) {
               <div class="selectmode-card-visual" aria-hidden="true">
                 <img
                   class="selectmode-card-img"
-                  src="./student/assets/astro-group.webp"
+                  src="./shared/ui-assets/astro-group.webp"
                   alt=""
                 >
               </div>

@@ -1,6 +1,7 @@
 export const NAME_SCALE_MIN = 0.7;
 export const NAME_SCALE_MAX = 1.6;
 export const NAME_SCALE_STEP = 0.1;
+export const NAME_SCALE_DEFAULT = NAME_SCALE_MIN;
 
 export function normalizeStudent(student){
   const id = String(student?.id || "").trim();
@@ -36,7 +37,7 @@ export function uniqueStrings(values){
 
 export function normalizeNameScale(value){
   const number = Number(value);
-  if (!Number.isFinite(number)) return 1;
+  if (!Number.isFinite(number)) return NAME_SCALE_DEFAULT;
   const stepped = Math.round(number / NAME_SCALE_STEP) * NAME_SCALE_STEP;
   return Math.max(NAME_SCALE_MIN, Math.min(NAME_SCALE_MAX, Number(stepped.toFixed(2))));
 }

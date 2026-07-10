@@ -4,6 +4,11 @@ import {
   formatConstraintPreview,
   normalizeValueList
 } from "./value-constraints.js";
+import {
+  formatIntegerForDisplay,
+  parseIntegerLike,
+  stripIntegerSeparators
+} from "./tool-ui/number-format.js";
 
 export function renderSection(title, innerHtml, { collapsible = false, expanded = true, idPrefix = "" } = {}){
   if (!collapsible) {
@@ -105,7 +110,7 @@ export function renderMinMax({
   });
 
   const isExpanded = constraint.mode !== VALUE_CONSTRAINT_MODES.SIMPLE;
-  const preview = formatConstraintPreview(constraint.allowedValues);
+  const preview = formatConstraintPreview(constraint);
   const listValue = constraint.values.join(", ");
 
   const block = `
@@ -322,10 +327,12 @@ export function bindMinMax(container, idPrefix, {
   };
 
   const onMinInput = () => {
+    if (isHumanStepperEditing(minEl)) return;
     syncPair(minEl);
     updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
   };
   const onMaxInput = () => {
+    if (isHumanStepperEditing(maxEl)) return;
     syncPair(maxEl);
     updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
   };
@@ -336,9 +343,15 @@ export function bindMinMax(container, idPrefix, {
   maxEl.addEventListener("input", onMaxInput);
   maxEl.addEventListener("change", onMaxInput);
 
-  startEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  startEl.addEventListener("input", () => {
+    if (isHumanStepperEditing(startEl)) return;
+    updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
+  });
   startEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
-  stepEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
+  stepEl.addEventListener("input", () => {
+    if (isHumanStepperEditing(stepEl)) return;
+    updateMinMaxPreview(container, idPrefix, { inputMin, inputMax });
+  });
   stepEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
   valuesEl.addEventListener("input", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
   valuesEl.addEventListener("change", () => updateMinMaxPreview(container, idPrefix, { inputMin, inputMax }));
@@ -389,8 +402,14 @@ export function bindBasicMinMax(container, idPrefix, {
     syncStepperUI(maxEl, { inputMin, inputMax });
   };
 
-  const onMinInput = () => syncPair(minEl);
-  const onMaxInput = () => syncPair(maxEl);
+  const onMinInput = () => {
+    if (isHumanStepperEditing(minEl)) return;
+    syncPair(minEl);
+  };
+  const onMaxInput = () => {
+    if (isHumanStepperEditing(maxEl)) return;
+    syncPair(maxEl);
+  };
 
   minEl.addEventListener("input", onMinInput);
   minEl.addEventListener("change", onMinInput);
@@ -411,11 +430,11 @@ export function readMinMax(container, idPrefix, {
     throw new Error(`${errorLabel} sont invalides.`);
   }
 
-  if (constraint.mode === VALUE_CONSTRAINT_MODES.ADVANCED && constraint.allowedValues.length === 0) {
+  if (constraint.mode === VALUE_CONSTRAINT_MODES.ADVANCED && constraint.valueCount === 0) {
     throw new Error(`${errorLabel} avancées ne produisent aucune valeur.`);
   }
 
-  if (constraint.mode === VALUE_CONSTRAINT_MODES.LIST && constraint.allowedValues.length === 0) {
+  if (constraint.mode === VALUE_CONSTRAINT_MODES.LIST && constraint.valueCount === 0) {
     throw new Error("La liste de valeurs ne contient aucune valeur valide.");
   }
 
@@ -878,6 +897,10 @@ export function readSelect(container, id, {
   return parse(el?.value ?? "");
 }
 
+function isHumanStepperEditing(input) {
+  return input?.dataset?.tvStepperEditing === "true" && input?.dataset?.tvStepperSyntheticInput !== "true";
+}
+
 function getCheckedMinMaxMode(modeEls) {
   const checked = modeEls.find((el) => el.checked);
   return checked?.value || VALUE_CONSTRAINT_MODES.SIMPLE;
@@ -939,7 +962,7 @@ function updateMinMaxPreview(container, idPrefix, {
   if (!previewEl) return;
 
   const constraint = getMinMaxConstraintState(container, idPrefix, { inputMin, inputMax });
-  previewEl.textContent = formatConstraintPreview(constraint.allowedValues);
+  previewEl.textContent = formatConstraintPreview(constraint);
 }
 
 function resolveMinMaxConstraintBounds(container, idPrefix, {
@@ -957,8 +980,8 @@ function resolveMinMaxConstraintBounds(container, idPrefix, {
 }
 
 export function clampInt(v, min, max){
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
+  const parsed = typeof v === "string" ? parseIntegerLike(v) : Math.floor(Number(v));
+  const n = Number.isFinite(parsed) ? parsed : min;
   return Math.min(max, Math.max(min, n));
 }
 
@@ -973,9 +996,11 @@ function renderStepperControl({
   labelId = null
 }){
   const effectiveLabelId = labelId || `${id}_label`;
+  const inputChars = getStepperInputDisplayChars({ inputMin, inputMax });
+  const displayValue = formatIntegerForDisplay(value);
 
   return `
-    <div class="tv-stepper${showInlineLabel ? "" : " tv-stepper-no-inline-label"}" role="group" aria-label="${escapeHtml(label)}">
+    <div class="tv-stepper${showInlineLabel ? "" : " tv-stepper-no-inline-label"}" style="--tv-stepper-input-ch:${inputChars}ch" role="group" aria-label="${escapeHtml(label)}">
       ${showInlineLabel ? `<span class="tv-label tv-stepper-label" id="${effectiveLabelId}">${escapeHtml(label)} :</span>` : ""}
 
       <button
@@ -990,13 +1015,17 @@ function renderStepperControl({
 
       <input
         class="tv-input tv-input-stepper"
-        type="number"
+        type="text"
         id="${id}"
         min="${inputMin}"
         max="${inputMax}"
         step="${step}"
-        value="${value}"
+        value="${escapeHtml(displayValue)}"
         inputmode="numeric"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
         aria-labelledby="${effectiveLabelId}"
       >
 
@@ -1013,6 +1042,34 @@ function renderStepperControl({
   `;
 }
 
+
+function getStepperInputDisplayChars({ inputMin = 0, inputMax = 99 } = {}) {
+  const candidates = [inputMin, inputMax]
+    .map((candidate) => formatIntegerForDisplay(candidate).length || 1);
+  return Math.max(2, ...candidates);
+}
+
+function getStepperParsedValue(input, fallback = 0) {
+  const parsed = parseIntegerLike(input?.value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function setStepperDisplayValue(input, value) {
+  if (!input) return;
+  input.value = formatIntegerForDisplay(value);
+}
+
+function updateStepperInputWidth(input, bounds = null) {
+  const wrap = input?.closest?.(".tv-stepper");
+  if (!wrap) return;
+
+  const resolved = bounds || resolveStepperBounds(input);
+  wrap.style.setProperty("--tv-stepper-input-ch", `${getStepperInputDisplayChars({
+    inputMin: resolved.min,
+    inputMax: resolved.max
+  })}ch`);
+}
+
 function bindStepper(input, {
   inputMin = 0,
   inputMax = 99,
@@ -1027,21 +1084,26 @@ function bindStepper(input, {
   const holdDelayMs = 350;
   const holdIntervalMs = 60;
 
-  function applyStep(direction){
-    const bounds = resolveStepperBounds(input, { inputMin, inputMax });
-    const current = clampInt(Number(input.value), bounds.min, bounds.max);
-    const next = clampInt(current + (direction * stepValue), bounds.min, bounds.max);
-
-    if (next === current){
-      syncStepperUI(input, { inputMin, inputMax });
-      return false;
-    }
-
-    input.value = String(next);
-    syncStepperUI(input, { inputMin, inputMax });
+  function emitInputValue(value){
     input.dataset.tvStepperSyntheticInput = "true";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     delete input.dataset.tvStepperSyntheticInput;
+    onChange?.(value);
+  }
+
+  function applyStep(direction){
+    const bounds = resolveStepperBounds(input, { inputMin, inputMax });
+    const current = clampInt(input.value, bounds.min, bounds.max);
+    const next = clampInt(current + (direction * stepValue), bounds.min, bounds.max);
+
+    if (next === current){
+      syncStepperUI(input, { inputMin, inputMax, formatValue: true });
+      return false;
+    }
+
+    setStepperDisplayValue(input, next);
+    syncStepperUI(input, { inputMin, inputMax, formatValue: false });
+    emitInputValue(next);
     return true;
   }
 
@@ -1107,33 +1169,73 @@ function bindStepper(input, {
   bindStepperButtonHold(minusBtn, -1);
   bindStepperButtonHold(plusBtn, 1);
 
-  input.addEventListener("input", () => {
+  const commitUserInput = () => {
     const bounds = resolveStepperBounds(input, { inputMin, inputMax });
-    syncStepperUI(input, { inputMin, inputMax });
-    onChange?.(clampInt(input.value, bounds.min, bounds.max));
+    const value = clampInt(input.value, bounds.min, bounds.max);
+    delete input.dataset.tvStepperEditing;
+    setStepperDisplayValue(input, value);
+    syncStepperUI(input, { inputMin, inputMax, formatValue: false });
+    onChange?.(value);
+    return value;
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (/^\d$/.test(event.key)) return;
+    if (["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End", "Tab"].includes(event.key)) return;
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitUserInput();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    event.preventDefault();
+  });
+
+  input.addEventListener("input", () => {
+    if (input.dataset.tvStepperSyntheticInput === "true") return;
+
+    const stripped = stripIntegerSeparators(input.value).replace(/[^\d-]+/g, "");
+    const normalized = stripped.startsWith("-")
+      ? `-${stripped.slice(1).replace(/-/g, "")}`
+      : stripped.replace(/-/g, "");
+
+    input.dataset.tvStepperEditing = "true";
+    input.value = normalized === "-" ? normalized : normalized.replace(/^(-?)0+(?=\d)/, "$1");
+    syncStepperUI(input, { inputMin, inputMax, formatValue: false });
   });
 
   input.addEventListener("change", () => {
-    const bounds = resolveStepperBounds(input, { inputMin, inputMax });
-    input.value = String(clampInt(input.value, bounds.min, bounds.max));
-    syncStepperUI(input, { inputMin, inputMax });
-    onChange?.(clampInt(input.value, bounds.min, bounds.max));
+    commitUserInput();
   });
 
-  syncStepperUI(input, { inputMin, inputMax });
+  input.addEventListener("blur", () => {
+    commitUserInput();
+  });
+
+  syncStepperUI(input, { inputMin, inputMax, formatValue: true });
 }
 
 function syncStepperUI(input, {
   inputMin = 0,
-  inputMax = 99
+  inputMax = 99,
+  formatValue = true
 } = {}){
   const wrap = input.closest(".tv-stepper");
   if (!wrap) return;
 
   const bounds = resolveStepperBounds(input, { inputMin, inputMax });
+  updateStepperInputWidth(input, bounds);
+
   const value = clampInt(input.value, bounds.min, bounds.max);
   const minusBtn = wrap.querySelector('[data-stepper-direction="-1"]');
   const plusBtn = wrap.querySelector('[data-stepper-direction="1"]');
+
+  if (formatValue) {
+    setStepperDisplayValue(input, value);
+  }
 
   if (input.disabled) {
     if (minusBtn) minusBtn.disabled = true;

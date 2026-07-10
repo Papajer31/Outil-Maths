@@ -1,0 +1,84 @@
+.tool-runtime--flash .tool-flash-item-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-runtime--flash .tool-flash-item-content {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .12s ease;
+}
+
+.tool-runtime--flash .tool-flash-item-content.is-flash-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.tool-runtime--flash .tool-flash-answer-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tool-flash-cue {
+  width: 100%;
+  min-height: min(180px, 28vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-flash-cue-ring {
+  width: clamp(72px, 10vw, 136px);
+  height: clamp(72px, 10vw, 136px);
+  border-radius: 999px;
+  border: clamp(6px, .8vw, 10px) solid rgba(255, 255, 255, .78);
+  box-shadow:
+    0 0 0 0 rgba(255, 255, 255, .22),
+    inset 0 0 18px rgba(255, 255, 255, .08);
+  animation-name: toolFlashCuePulse;
+  animation-duration: 1s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: var(--tool-flash-cue-pulse-count, 5);
+  animation-fill-mode: both;
+}
+
+.tool-flash-replay-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: clamp(18px, 1.35vw, 25px);
+  font-weight: 900;
+  z-index: 2;
+}
+
+@keyframes toolFlashCuePulse {
+  0% {
+    transform: scale(.82);
+    opacity: .28;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, .18);
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: .96;
+    box-shadow: 0 0 0 22px rgba(255, 255, 255, .05);
+  }
+  100% {
+    transform: scale(.82);
+    opacity: .28;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, .18);
+  }
+}

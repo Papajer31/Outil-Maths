@@ -1,6 +1,8 @@
 import {
   renderRadioGroup,
   renderSelectControl,
+  renderSection,
+  bindCollapsibleSection,
   bindRadio,
   bindSelect,
   readRadio,
@@ -40,7 +42,7 @@ export function renderToolSettings(container, settings, context = {}) {
       <textarea id="selection_bankSnapshot" hidden>${escapeHtml(JSON.stringify(initialSnapshot))}</textarea>
     `,
     renderRadioGroup({
-      title: "Tirage",
+      title: "Tirage des questions dans la banque",
       id: "selection_drawMode",
       value: cfg.drawMode,
       options: [
@@ -48,7 +50,7 @@ export function renderToolSettings(container, settings, context = {}) {
         { value: "random", label: "Aléatoire" }
       ]
     }),
-    renderRadioGroup({
+    renderSection("Réglages avancés", renderRadioGroup({
       title: "Sélection",
       id: "selection_selectionMode",
       value: cfg.selectionMode,
@@ -56,10 +58,11 @@ export function renderToolSettings(container, settings, context = {}) {
         { value: "disjoint", label: "Disjointe" },
         { value: "continuous", label: "Continue" }
       ]
-    })
+    }), { collapsible: true, expanded: false, idPrefix: "selection_advanced" })
   );
 
   bindRadio(container, "selection_drawMode");
+  bindCollapsibleSection(container, "selection_advanced");
   bindRadio(container, "selection_selectionMode");
   setupBankSelect(container, cfg, context).catch((err) => {
     const host = container.querySelector("#selection_bankWidgetHost");

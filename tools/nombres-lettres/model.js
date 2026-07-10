@@ -160,7 +160,7 @@ function buildQuestionCandidate(cfg) {
     return {
       value,
       direction,
-      prompt: "Écris ce nombre en chiffres.",
+      prompt: "Donne l’écriture chiffrée de ce nombre.",
       displayPrimary: words,
       displaySecondary: String(value),
       expectedAnswer: String(value),

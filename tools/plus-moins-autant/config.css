@@ -1,0 +1,117 @@
+.pma-config-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pma-config-root .tv-group {
+  min-height: 38px;
+}
+
+.pma-config-root .tv-radio-options {
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.pma-config-root .tv-radio-row,
+.pma-config-pill {
+  position: relative;
+  min-width: 42px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.pma-config-root .tv-radio-row:hover,
+.pma-config-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.pma-config-root .tv-radio-row:has(.tv-radio:checked),
+.pma-config-pill:has(.pma-config-pill-input:checked) {
+  background: rgba(255, 216, 94, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 94, 0.72);
+}
+
+.pma-config-root .tv-radio-row:has(.tv-radio:focus-visible),
+.pma-config-pill:has(.pma-config-pill-input:focus-visible) {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 94, 0.82),
+    0 0 0 3px rgba(255, 216, 94, 0.12);
+}
+
+.pma-config-root .tv-radio-row .tv-radio,
+.pma-config-pill-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pma-config-root .tv-radio-row span,
+.pma-config-pill span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pma-config-choice-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.pma-config-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pma-config-status {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(239, 107, 115, 0.12);
+  color: #ffd2d2;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.pma-config-status[hidden] {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .pma-config-root .tv-radio-options,
+  .pma-config-pill-row {
+    justify-content: flex-start;
+  }
+
+  .pma-config-choice-group {
+    grid-template-columns: 1fr;
+  }
+}

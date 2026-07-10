@@ -1,0 +1,535 @@
+/* ========================================
+   WIDGET TABLEAU - HORLOGE
+======================================== */
+
+.tt-clock-control{
+  gap:14px;
+}
+
+.tt-clock-heading-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.tt-clock-current-time{
+  flex:0 0 auto;
+  border:1px solid rgba(245,158,11,.30);
+  border-radius:999px;
+  background:rgba(245,158,11,.14);
+  color:#fff;
+  padding:4px 10px;
+  font-size:14px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+}
+
+.tt-clock-mode-bar{
+  flex-wrap:wrap;
+}
+
+.tt-clock-theme-btn.is-active,
+.tt-clock-mode-btn.is-active,
+.tt-clock-step-btn.is-active,
+.tt-clock-display-btn.is-active{
+  border-color:rgba(245,158,11,.42);
+  background:rgba(245,158,11,.20);
+  color:#fff;
+}
+
+.tt-clock-options-grid{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) max-content max-content;
+  align-items:stretch;
+  gap:12px;
+  overflow-x:auto;
+  scrollbar-width:thin;
+}
+
+.tt-clock-option-card{
+  min-width:0;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+  background:rgba(255,255,255,.05);
+  padding:12px;
+}
+
+.tt-clock-option-card h4{
+  margin:0 0 9px;
+  color:rgba(255,255,255,.78);
+  font-size:13px;
+  font-weight:900;
+}
+
+.tt-clock-nudge-grid{
+  width:100%;
+  display:grid;
+  grid-template-columns:repeat(8, minmax(82px, 1fr));
+  align-items:center;
+  gap:8px;
+}
+
+.tt-clock-adjust-card{
+  overflow-x:auto;
+  scrollbar-width:thin;
+}
+
+.tt-clock-step-group,
+.tt-clock-theme-group{
+  display:flex;
+  flex-wrap:nowrap;
+  gap:8px;
+}
+
+.tt-clock-nudge-grid .tt-widget-action-btn,
+.tt-clock-step-group .tt-widget-action-btn{
+  min-height:46px;
+  padding:0 14px;
+}
+
+.tt-clock-nudge-grid .tt-widget-action-btn{
+  width:100%;
+  min-width:0;
+}
+
+.tt-clock-theme-group{
+  flex:0 0 auto;
+  align-items:center;
+  flex-wrap:nowrap;
+}
+
+.tt-clock-display-button-grid{
+  flex:0 0 auto;
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:max-content;
+  gap:8px;
+}
+
+.tt-clock-display-btn{
+  justify-content:flex-start;
+}
+
+.tt-clock-display-btn:disabled{
+  opacity:.48;
+  cursor:not-allowed;
+}
+
+.tt-clock-display-panel-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:max-content max-content;
+  align-items:center;
+  gap:10px;
+  overflow-x:auto;
+  scrollbar-width:thin;
+}
+
+.tt-clock-color-grid{
+  flex:0 0 auto;
+  min-width:0;
+  margin-top:0;
+  display:grid;
+  grid-template-columns:repeat(2, 132px);
+  gap:8px;
+}
+
+.tt-clock-color-picker-slot,
+.tt-clock-color-picker-slot .ui-color-picker-control{
+  width:100%;
+  min-width:0;
+}
+
+.tt-clock-color-picker-slot .ui-color-picker-trigger{
+  width:100%;
+  min-height:46px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:0 14px;
+  font-size:16px;
+  font-weight:600;
+}
+
+.tt-clock-color-picker-slot .ui-color-picker-popover{
+  width:min(520px, calc(100vw - 32px));
+}
+
+.ttp-widget-frame[data-tool-id="clock"]{
+  --ttp-clock-widget-bg:#fff;
+  --ttp-clock-chrome-bg:#fff;
+  --ttp-clock-ink:#1f2937;
+  --ttp-clock-face-fill:#fff;
+  --ttp-clock-face-stroke:#111827;
+  --ttp-clock-tick-color:#111827;
+  --ttp-clock-hour-tick-color:#111827;
+  --ttp-clock-side-btn-bg:#f3f4f6;
+  --ttp-clock-side-btn-bg-hover:#e5e7eb;
+  --ttp-clock-side-btn-border:rgba(17,24,39,.14);
+  --ttp-clock-side-btn-color:#111827;
+  --ttp-clock-active-border:rgba(217,119,6,.54);
+  --ttp-clock-active-bg:rgba(245,158,11,.16);
+  --ttp-clock-chrome-btn-bg:rgba(17,24,39,.04);
+  --ttp-clock-chrome-btn-bg-hover:rgba(17,24,39,.08);
+  --ttp-clock-chrome-btn-border:rgba(17,24,39,.12);
+  --ttp-clock-digital-bg:#fff;
+  --ttp-clock-digital-border:rgba(17,24,39,.14);
+  --ttp-clock-digital-color:#111827;
+  --ttp-clock-center-fill:#1f2937;
+  --ttp-clock-center-stroke:#fff;
+  --ttp-widget-surface:#fff;
+  --ttp-widget-border-color:rgba(17,24,39,.18);
+  --ttp-widget-active-border-color:rgba(217,119,6,.58);
+  --ttp-widget-shadow:0 24px 70px rgba(15,23,42,.22);
+  color:var(--ttp-clock-ink);
+}
+
+.ttp-widget-frame[data-tool-id="clock"][data-clock-theme="dark"]{
+  --ttp-clock-widget-bg:rgba(10,14,24,.96);
+  --ttp-clock-chrome-bg:rgba(10,14,24,.96);
+  --ttp-clock-ink:#f8fafc;
+  --ttp-clock-face-fill:rgba(15,23,42,.92);
+  --ttp-clock-face-stroke:rgba(248,250,252,.82);
+  --ttp-clock-tick-color:rgba(248,250,252,.68);
+  --ttp-clock-hour-tick-color:rgba(248,250,252,.92);
+  --ttp-clock-side-btn-bg:rgba(255,255,255,.08);
+  --ttp-clock-side-btn-bg-hover:rgba(255,255,255,.13);
+  --ttp-clock-side-btn-border:rgba(255,255,255,.14);
+  --ttp-clock-side-btn-color:#f8fafc;
+  --ttp-clock-active-border:rgba(245,158,11,.54);
+  --ttp-clock-active-bg:rgba(245,158,11,.22);
+  --ttp-clock-chrome-btn-bg:rgba(255,255,255,.08);
+  --ttp-clock-chrome-btn-bg-hover:rgba(255,255,255,.13);
+  --ttp-clock-chrome-btn-border:rgba(255,255,255,.14);
+  --ttp-clock-digital-bg:rgba(255,255,255,.08);
+  --ttp-clock-digital-border:rgba(255,255,255,.14);
+  --ttp-clock-digital-color:#f8fafc;
+  --ttp-clock-center-fill:#f59e0b;
+  --ttp-clock-center-stroke:#0f172a;
+  --ttp-widget-surface:rgba(10,14,24,.96);
+  --ttp-widget-border-color:rgba(255,255,255,.14);
+  --ttp-widget-active-border-color:rgba(245,158,11,.62);
+  --ttp-widget-shadow:0 24px 82px rgba(0,0,0,.32);
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-widget-chrome,
+.ttp-widget-frame[data-tool-id="clock"] .ttp-widget-bottom-chrome{
+  background:var(--ttp-clock-chrome-bg);
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-widget-body{
+  container-type:size;
+  padding:10px;
+  background:var(--ttp-clock-widget-bg);
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-widget-chrome-actions,
+.ttp-widget-frame[data-tool-id="clock"] .ttp-widget-bottom-actions{
+  gap:5px;
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-clock-chrome-btn{
+  min-height:30px;
+  border-color:var(--ttp-clock-chrome-btn-border);
+  background:var(--ttp-clock-chrome-btn-bg);
+  color:inherit;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:0 8px;
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-clock-chrome-btn:hover:not(:disabled){
+  background:var(--ttp-clock-chrome-btn-bg-hover);
+}
+
+.ttp-widget-frame[data-tool-id="clock"] .ttp-clock-chrome-btn[aria-pressed="true"]{
+  border-color:var(--ttp-clock-active-border);
+  background:var(--ttp-clock-active-bg);
+}
+
+.ttp-clock-chrome-btn .ttp-material-icon{
+  font-size:17px;
+  line-height:1;
+}
+
+.ttp-clock{
+  --ttp-clock-side-column-width:62px;
+  --ttp-clock-side-column-width:clamp(62px, 17%, 126px);
+  --ttp-clock-grid-gap:clamp(6px, 1.2%, 14px);
+  container-type:size;
+  position:relative;
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:grid;
+  grid-template-columns:var(--ttp-clock-side-column-width) minmax(0, 1fr) var(--ttp-clock-side-column-width);
+  align-items:stretch;
+  justify-items:stretch;
+  gap:6px;
+  gap:var(--ttp-clock-grid-gap);
+  user-select:none;
+  touch-action:none;
+}
+
+.ttp-widget-frame[data-tool-id="clock"].is-stage-maximized .ttp-clock{
+  --ttp-clock-side-column-width:clamp(76px, 13cqw, 126px);
+  --ttp-clock-grid-gap:clamp(8px, 1.1cqw, 16px);
+  width:min(100%, 126cqh);
+  margin-inline:auto;
+}
+
+.ttp-clock-main{
+  min-width:0;
+  min-height:0;
+  display:grid;
+  grid-template-rows:minmax(0, 10fr) minmax(0, 90fr);
+  align-items:center;
+  justify-items:center;
+  gap:0;
+  padding:0;
+}
+
+.ttp-clock-face-wrap{
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+
+.ttp-clock-svg{
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  display:block;
+  overflow:hidden;
+  touch-action:none;
+}
+
+.ttp-clock-side-controls{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:5px;
+  gap:clamp(5px, 1.2cqh, 14px);
+  opacity:0;
+  visibility:hidden;
+  overflow:auto;
+  padding:2px 0;
+  pointer-events:none;
+  scrollbar-width:thin;
+  transition:opacity .12s ease;
+}
+
+.ttp-widget-frame[data-tool-id="clock"].is-chrome-visible .ttp-clock-side-controls{
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+}
+
+.ttp-clock-side-btn{
+  min-width:0;
+  width:100%;
+  min-height:36px;
+  min-height:clamp(36px, 10.5cqh, 86px);
+  border:1px solid var(--ttp-clock-side-btn-border);
+  border-radius:7px;
+  border-radius:clamp(7px, 1.4cqw, 14px);
+  background:var(--ttp-clock-side-btn-bg);
+  color:var(--ttp-clock-side-btn-color);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:3px 4px;
+  padding:clamp(3px, .8cqh, 8px) clamp(4px, 1.2cqw, 10px);
+  font:inherit;
+  font-size:11px;
+  font-size:clamp(12px, 2.5cqw, 24px);
+  font-weight:900;
+  line-height:1.08;
+  text-align:center;
+  white-space:nowrap;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+
+.ttp-clock-side-btn:hover,
+.ttp-clock-side-btn:focus-visible{
+  background:var(--ttp-clock-side-btn-bg-hover);
+}
+
+.ttp-clock-side-btn[aria-pressed="true"]{
+  border-color:var(--ttp-clock-active-border);
+  background:var(--ttp-clock-active-bg);
+}
+
+.ttp-clock-side-btn.is-primary{
+  border-color:rgba(22,101,52,.24);
+  background:rgba(22,163,74,.12);
+}
+
+.ttp-clock-face{
+  fill:var(--ttp-clock-face-fill);
+  stroke:var(--ttp-clock-face-stroke);
+  stroke-width:1.4;
+}
+
+.ttp-clock-tick{
+  stroke:var(--ttp-clock-tick-color);
+  stroke-width:1.2;
+  stroke-linecap:round;
+  opacity:.62;
+}
+
+.ttp-clock-tick.is-hour{
+  stroke:var(--ttp-clock-hour-tick-color);
+  stroke-width:2.7;
+  opacity:.92;
+}
+
+.ttp-clock-hour-number,
+.ttp-clock-minute-number{
+  text-anchor:middle;
+  dominant-baseline:central;
+  font-family:"Andika", system-ui, sans-serif;
+  font-weight:900;
+  pointer-events:none;
+}
+
+.ttp-clock-hour-number{
+  fill:var(--ttp-clock-hour-color, #1f2937);
+  font-size:20px;
+}
+
+.ttp-clock-hour-number.is-afternoon{
+  font-size:18px;
+}
+
+.ttp-clock-minute-number{
+  fill:var(--ttp-clock-minute-color, #111827);
+  font-size:8.5px;
+  opacity:.82;
+}
+
+.ttp-clock-minute-numbers.is-hidden{
+  visibility:hidden;
+}
+
+.ttp-clock-hand-group{
+  cursor:grab;
+}
+
+.ttp-clock-hand-group:active,
+.ttp-clock.is-dragging-hand .ttp-clock-hand-group{
+  cursor:grabbing;
+}
+
+.ttp-clock-hand{
+  stroke-linecap:round;
+  pointer-events:none;
+}
+
+.ttp-clock-hour-hand{
+  stroke:var(--ttp-clock-hour-color, #1f2937);
+  stroke-width:4;
+}
+
+.ttp-clock-hour-extension-hand{
+  stroke:var(--ttp-clock-hour-color, #1f2937);
+  stroke-width:2.5;
+  stroke-dasharray:4 5;
+  opacity:.72;
+  pointer-events:none;
+}
+
+.ttp-clock-hour-extension.is-hidden{
+  display:none;
+}
+
+.ttp-clock-minute-hand{
+  stroke:var(--ttp-clock-minute-color, #111827);
+  stroke-width:4;
+}
+
+.ttp-clock-second-hand{
+  stroke:#dc2626;
+  stroke-width:2.1;
+}
+
+.ttp-clock-hand-group.is-second.is-hidden{
+  display:none;
+}
+
+.ttp-clock-hand-hotzone{
+  stroke:transparent;
+  stroke-width:22;
+  stroke-linecap:round;
+  pointer-events:stroke;
+}
+
+.ttp-clock-center{
+  fill:var(--ttp-clock-center-fill);
+  stroke:var(--ttp-clock-center-stroke);
+  stroke-width:2;
+}
+
+.ttp-clock-digital{
+  align-self:center;
+  justify-self:center;
+  min-width:clamp(58px, 30cqw, 230px);
+  max-width:100%;
+  height:clamp(28px, 8.5cqh, 72px);
+  min-height:0;
+  border:1px solid var(--ttp-clock-digital-border);
+  border-radius:999px;
+  background:var(--ttp-clock-digital-bg);
+  color:var(--ttp-clock-digital-color);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 clamp(10px, 2.2cqw, 24px);
+  font:inherit;
+  font-size:clamp(18px, 5cqw, 46px);
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+  box-shadow:0 6px 18px rgba(15,23,42,.08);
+  cursor:pointer;
+  white-space:nowrap;
+  touch-action:manipulation;
+}
+
+.ttp-clock-digital.is-hidden{
+  opacity:.78;
+}
+
+.ttp-clock-digital .ttp-material-icon{
+  font-size:clamp(18px, 4.6cqw, 42px);
+  line-height:1;
+}
+
+.ttp-widgetbar-separator{
+  width:1px;
+  height:34px;
+  background:rgba(255,255,255,.18);
+  border-radius:999px;
+  flex:0 0 auto;
+}
+
+.ttp-widgetbar-specific-actions{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+@media (max-width: 980px){
+  .tt-clock-display-panel-row{
+    align-items:flex-end;
+  }
+}

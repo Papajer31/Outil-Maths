@@ -1328,3 +1328,73 @@ input.dashboard-bank-cell{
 .dashboard-banks-view .hidden{
   display:none !important;
 }
+
+/* Éditeur de banque : donne toute la place utile au titre dans l'en-tête. */
+.dashboard-banks-editor-header{
+  grid-template-columns:minmax(0, 1.2fr) minmax(220px, .8fr) auto;
+}
+
+.dashboard-banks-editor-header-main{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.dashboard-banks-editor-header .cfg-header-identity{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+.dashboard-banks-editor-header .cfg-config-name-wrap{
+  width:100%;
+  min-width:0;
+  display:grid;
+  grid-template-columns:auto minmax(220px, 1fr) auto auto;
+  align-items:center;
+  column-gap:10px;
+}
+
+.dashboard-banks-editor-header .cfg-config-name-display{
+  max-width:none;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+@media (max-width:1100px){
+  .dashboard-banks-editor-header{
+    grid-template-columns:1fr;
+  }
+
+  .dashboard-banks-editor-header .cfg-config-name-wrap{
+    grid-template-columns:auto minmax(0, 1fr) auto auto;
+  }
+}
+
+.dashboard-bank-insert-asset-btn{
+  border-color:rgba(255,197,74,.36);
+}
+
+.dashboard-bank-insert-asset-btn:not(:disabled){
+  color:#fff3cf;
+}
+
+.dashboard-bank-insert-asset-btn:not(:disabled):hover{
+  border-color:rgba(255,197,74,.68);
+  background:rgba(255,197,74,.12);
+}
+
+.dashboard-bank-cell.is-bank-cell-active{
+  background:rgba(255,197,74,.18);
+  border-color:rgba(255,197,74,.82);
+  box-shadow:inset 0 0 0 2px rgba(255,197,74,.72), 0 0 0 3px rgba(255,197,74,.14);
+  color:#fff7dd;
+}
+
+.dashboard-bank-cell.is-bank-cell-active:focus{
+  background:rgba(255,197,74,.20);
+  border-color:rgba(255,197,74,.92);
+  box-shadow:inset 0 0 0 2px rgba(255,197,74,.78), 0 0 0 4px rgba(255,197,74,.18);
+}

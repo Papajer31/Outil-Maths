@@ -4,14 +4,19 @@ import {
   normalizeAccessCode,
   normalizeConfigName,
   normalizeModuleKey,
-  normalizeActivityConfigMeta,
-  normalizeFolderRecord,
-  sortActivitiesByDashboardMeta,
-  sortFoldersByMeta,
-  sanitizeActivityConfigJson,
-  withActivityDashboardMeta
+  normalizeFolderRecord
 } from "./api-common.js";
-import { isStudentFacingActivityMode } from "./activity-modes.js";
+import {
+  applyCatalogVisibility,
+  buildCatalogActivityConfig,
+  findCatalogActivity,
+  getCatalogActivities,
+  getCatalogFolders,
+  normalizeCatalogDifficultyLevel,
+  normalizeCatalogRuntimeContext,
+  normalizeCatalogActivity,
+  sortCatalogActivities
+} from "./catalogue.js";
 
 export {
   cleanDisplayName,
@@ -34,39 +39,43 @@ export async function accessCodeExists(accessCode) {
 
 export async function listPublicActivitiesForSpace(accessCode) {
   const code = normalizeAccessCode(accessCode);
-  if (!code) return [];
+  const catalogActivities = await listPublishedCatalogActivities();
+  if (!code) return catalogActivities;
 
-  const { data, error } = await supabase.rpc("get_space_activities", {
-    p_access_code: code
-  });
+  let visibilityRows = [];
+  try {
+    const { data, error } = await supabase.rpc("get_catalog_visibility_for_space", {
+      p_access_code: code
+    });
+    if (error) throw error;
+    visibilityRows = Array.isArray(data) ? data : [];
+  } catch {
+    visibilityRows = [];
+  }
 
-  if (error) throw error;
+  return sortCatalogActivities(applyCatalogVisibility(catalogActivities, visibilityRows))
+    .filter((activity) => activity?.is_visible !== false);
+}
 
-  const baseActivities = Array.isArray(data) ? data : [];
-  const hydratedActivities = await Promise.all(baseActivities.map(async (activity, index) => {
-    if (activity?.config_json && typeof activity.config_json === "object") {
-      return withActivityDashboardMeta({
-        ...activity,
-        config_json: sanitizeActivityConfigJson(activity.config_json)
-      }, index);
-    }
+export async function listPublicCatalogActivities() {
+  return await listPublishedCatalogActivities();
+}
 
-    try {
-      const remote = await loadPublicActivityConfig(code, activity?.config_name || "");
-      return withActivityDashboardMeta({
-        ...activity,
-        config_json: remote?.config_json ?? null
-      }, index);
-    } catch {
-      return withActivityDashboardMeta(activity, index);
-    }
-  }));
+async function listPublishedCatalogActivities() {
+  try {
+    const { data, error } = await supabase
+      .from("catalog_activities")
+      .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+      .eq("status", "published")
+      .order("category_id", { ascending: true })
+      .order("display_order", { ascending: true })
+      .order("title", { ascending: true });
 
-  const visibleActivities = hydratedActivities.filter((activity) => (
-    activity?.is_visible !== false && isStudentFacingActivityMode(activity?.activity_mode)
-  ));
-
-  return sortActivitiesByDashboardMeta(visibleActivities);
+    if (error) throw error;
+    return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
+  } catch {
+    return getCatalogActivities();
+  }
 }
 
 function normalizeImageAssetSlug(value) {
@@ -157,17 +166,7 @@ export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
 }
 
 export async function listPublicActivityFoldersForSpace(accessCode) {
-  const code = normalizeAccessCode(accessCode);
-  if (!code) return [];
-
-  const { data, error } = await supabase.rpc("get_space_activity_folders", {
-    p_access_code: code
-  });
-
-  if (error) throw error;
-
-  const folders = Array.isArray(data) ? data : [];
-  return sortFoldersByMeta(folders.map((folder, index) => normalizeFolderRecord(folder, index)));
+  return getCatalogFolders().map((folder, index) => normalizeFolderRecord(folder, index));
 }
 
 export async function listPublicClassesForSpace(accessCode) {
@@ -206,35 +205,161 @@ export async function listPublicVocabularyWordsForSpace(accessCode) {
   return Array.isArray(data) ? data : [];
 }
 
-export async function loadPublicActivityConfig(accessCode, configName) {
+export async function listPublicDefaultVocabularyWords() {
+  const { data, error } = await supabase
+    .from("vocabulary_default_words")
+    .select("word, dictionary_page")
+    .order("word_normalized", { ascending: true })
+    .order("word", { ascending: true });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function loadPublicActivityConfig(accessCode, configName, options = {}) {
   const code = normalizeAccessCode(accessCode);
-  const normalizedConfigName = normalizeConfigName(configName);
+  const requested = String(configName || "").trim();
+  const catalogContext = normalizeCatalogRuntimeContext(options.context ?? options.catalogContext);
+  const difficultyLevel = normalizeCatalogDifficultyLevel(options.difficultyLevel ?? options.catalogDifficultyLevel ?? options.catalogLevel ?? 3);
 
-  if (!code || !normalizedConfigName) return null;
+  const catalogActivities = await listPublishedCatalogActivities();
+  const catalogActivity = findCatalogActivity(requested, catalogActivities);
+  if (catalogActivity) {
+    const configJson = buildCatalogActivityConfig(catalogActivity, {
+      activityMode: "individual",
+      progressMode: "practice",
+      context: catalogContext,
+      difficultyLevel,
+      catalogActivities
+    });
 
-  const { data, error } = await supabase.rpc("get_activity_config", {
+    return {
+      access_code: code,
+      config_name: catalogActivity.config_name,
+      config_name_normalized: catalogActivity.id,
+      catalog_activity_id: catalogActivity.id,
+      module_key: "tools",
+      config_json: configJson,
+      activity_mode: configJson.activity_mode
+    };
+  }
+
+  // Pas de rétrocompatibilité active : une activité élève doit venir du Catalogue
+  // ou d’une Mission qui référence le Catalogue. L’ancien modèle
+  // activity_configs/get_activity_config reste en quarantaine côté code enseignant.
+  return null;
+}
+
+export async function verifyPublicStudentCode(accessCode, studentId, studentCode) {
+  const code = normalizeAccessCode(accessCode);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  const id = Number(studentId);
+  if (!code || !Number.isFinite(id) || id <= 0 || !cleanStudentCode) return false;
+
+  const { data, error } = await supabase.rpc("verify_student_code", {
     p_access_code: code,
-    p_config_name: normalizedConfigName
+    p_student_id: id,
+    p_student_code: cleanStudentCode
   });
 
   if (error) throw error;
-  if (!data) return null;
+  return data === true;
+}
 
+
+export async function getPublicStudentActivityProgress(accessCode, studentId, studentCode, catalogActivityId) {
+  const code = normalizeAccessCode(accessCode);
+  const id = Number(studentId);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  const activityId = String(catalogActivityId || "").trim();
+
+  if (!code || !Number.isFinite(id) || id <= 0 || !cleanStudentCode || !activityId) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc("get_student_activity_progress", {
+    p_access_code: code,
+    p_student_id: id,
+    p_student_code: cleanStudentCode,
+    p_catalog_activity_id: activityId
+  });
+
+  if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row) return null;
+  return row || null;
+}
 
-  const configJson = row.config_json && typeof row.config_json === "object"
-    ? await hydratePublicConjugationPersonalLists(code, sanitizeActivityConfigJson(row.config_json))
-    : row.config_json ?? null;
+export async function recordPublicStudentActivitySession({
+  accessCode,
+  studentId,
+  studentCode,
+  catalogActivityId,
+  context = "exploration",
+  startedLevel = 3,
+  endedLevel = 3,
+  questionsCount = 0,
+  correctCount = 0,
+  wrongCount = 0,
+  durationMs = 0
+} = {}) {
+  const code = normalizeAccessCode(accessCode);
+  const id = Number(studentId);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  const activityId = String(catalogActivityId || "").trim();
 
-  return {
-    access_code: code,
-    config_name: cleanDisplayName(configName),
-    config_name_normalized: normalizedConfigName,
-    module_key: normalizeModuleKey(row.module_key || "tools") || "tools",
-    config_json: configJson,
-    activity_mode: normalizeActivityConfigMeta(configJson).activity_mode
-  };
+  if (!code || !Number.isFinite(id) || id <= 0 || !cleanStudentCode || !activityId) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc("record_student_activity_session", {
+    p_access_code: code,
+    p_student_id: id,
+    p_student_code: cleanStudentCode,
+    p_catalog_activity_id: activityId,
+    p_context: String(context || "exploration").trim() || "exploration",
+    p_started_level: Math.max(1, Math.min(5, Math.trunc(Number(startedLevel) || 3))),
+    p_ended_level: Math.max(1, Math.min(5, Math.trunc(Number(endedLevel) || 3))),
+    p_questions_count: Math.max(0, Math.trunc(Number(questionsCount) || 0)),
+    p_correct_count: Math.max(0, Math.trunc(Number(correctCount) || 0)),
+    p_wrong_count: Math.max(0, Math.trunc(Number(wrongCount) || 0)),
+    p_duration_ms: Math.max(0, Math.trunc(Number(durationMs) || 0))
+  });
+
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row || null;
+}
+
+export async function listPublicMissionsForSpace(accessCode, studentIds = [], isGroup = false) {
+  const code = normalizeAccessCode(accessCode);
+  if (!code) return [];
+  const ids = (Array.isArray(studentIds) ? studentIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  if (!ids.length) return [];
+
+  const { data, error } = await supabase.rpc("get_space_missions", {
+    p_access_code: code,
+    p_student_ids: ids,
+    p_is_group: isGroup === true
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function loadPublicMissionSteps(accessCode, missionId) {
+  const code = normalizeAccessCode(accessCode);
+  const id = String(missionId || "").trim();
+  if (!code || !id) return [];
+
+  const { data, error } = await supabase.rpc("get_space_mission_steps", {
+    p_access_code: code,
+    p_mission_id: id
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
 }
 
 function normalizePublicQuestionBankType(value) {

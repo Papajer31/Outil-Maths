@@ -1,0 +1,5202 @@
+{
+  "version": 1,
+  "description": "Bibliothèque locale d'assets système utilisables par les outils.",
+  "generatedAt": "2026-07-08T19:06:30.033Z",
+  "assets": [
+    {
+      "id": "images-emojis-alimentation-ail",
+      "type": "image",
+      "src": "images/emojis/alimentation/ail.webp",
+      "label": "ail",
+      "alt": "ail",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-ananas",
+      "type": "image",
+      "src": "images/emojis/alimentation/ananas.webp",
+      "label": "ananas",
+      "alt": "ananas",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-aubergine",
+      "type": "image",
+      "src": "images/emojis/alimentation/aubergine.webp",
+      "label": "aubergine",
+      "alt": "aubergine",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-avocat",
+      "type": "image",
+      "src": "images/emojis/alimentation/avocat.webp",
+      "label": "avocat",
+      "alt": "avocat",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-banane",
+      "type": "image",
+      "src": "images/emojis/alimentation/banane.webp",
+      "label": "banane",
+      "alt": "banane",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-bento",
+      "type": "image",
+      "src": "images/emojis/alimentation/bento.webp",
+      "label": "bento",
+      "alt": "bento",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-bonbon",
+      "type": "image",
+      "src": "images/emojis/alimentation/bonbon.webp",
+      "label": "bonbon",
+      "alt": "bonbon",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-bretzel",
+      "type": "image",
+      "src": "images/emojis/alimentation/bretzel.webp",
+      "label": "bretzel",
+      "alt": "bretzel",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-carotte",
+      "type": "image",
+      "src": "images/emojis/alimentation/carotte.webp",
+      "label": "carotte",
+      "alt": "carotte",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-cerise",
+      "type": "image",
+      "src": "images/emojis/alimentation/cerise.webp",
+      "label": "cerise",
+      "alt": "cerise",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-champignon",
+      "type": "image",
+      "src": "images/emojis/alimentation/champignon.webp",
+      "label": "champignon",
+      "alt": "champignon",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-chocolat",
+      "type": "image",
+      "src": "images/emojis/alimentation/chocolat.webp",
+      "label": "chocolat",
+      "alt": "chocolat",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-citron",
+      "type": "image",
+      "src": "images/emojis/alimentation/citron.webp",
+      "label": "citron",
+      "alt": "citron",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-citron-vert",
+      "type": "image",
+      "src": "images/emojis/alimentation/citron_vert.webp",
+      "label": "citron vert",
+      "alt": "citron vert",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-coco",
+      "type": "image",
+      "src": "images/emojis/alimentation/coco.webp",
+      "label": "coco",
+      "alt": "coco",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-concombre",
+      "type": "image",
+      "src": "images/emojis/alimentation/concombre.webp",
+      "label": "concombre",
+      "alt": "concombre",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-cookie",
+      "type": "image",
+      "src": "images/emojis/alimentation/cookie.webp",
+      "label": "cookie",
+      "alt": "cookie",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-couteau",
+      "type": "image",
+      "src": "images/emojis/alimentation/couteau.webp",
+      "label": "couteau",
+      "alt": "couteau",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-couverts",
+      "type": "image",
+      "src": "images/emojis/alimentation/couverts.webp",
+      "label": "couverts",
+      "alt": "couverts",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-cuillere",
+      "type": "image",
+      "src": "images/emojis/alimentation/cuillere.webp",
+      "label": "cuillere",
+      "alt": "cuillere",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-donut",
+      "type": "image",
+      "src": "images/emojis/alimentation/donut.webp",
+      "label": "donut",
+      "alt": "donut",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-fraise",
+      "type": "image",
+      "src": "images/emojis/alimentation/fraise.webp",
+      "label": "fraise",
+      "alt": "fraise",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-frites",
+      "type": "image",
+      "src": "images/emojis/alimentation/frites.webp",
+      "label": "frites",
+      "alt": "frites",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-fromage",
+      "type": "image",
+      "src": "images/emojis/alimentation/fromage.webp",
+      "label": "fromage",
+      "alt": "fromage",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-gateau",
+      "type": "image",
+      "src": "images/emojis/alimentation/gateau.webp",
+      "label": "gateau",
+      "alt": "gateau",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-gaufre",
+      "type": "image",
+      "src": "images/emojis/alimentation/gaufre.webp",
+      "label": "gaufre",
+      "alt": "gaufre",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-glace",
+      "type": "image",
+      "src": "images/emojis/alimentation/glace.webp",
+      "label": "glace",
+      "alt": "glace",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-hamburger",
+      "type": "image",
+      "src": "images/emojis/alimentation/hamburger.webp",
+      "label": "hamburger",
+      "alt": "hamburger",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-hotdog",
+      "type": "image",
+      "src": "images/emojis/alimentation/hotdog.webp",
+      "label": "hotdog",
+      "alt": "hotdog",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-kiwi",
+      "type": "image",
+      "src": "images/emojis/alimentation/kiwi.webp",
+      "label": "kiwi",
+      "alt": "kiwi",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-mais",
+      "type": "image",
+      "src": "images/emojis/alimentation/mais.webp",
+      "label": "mais",
+      "alt": "mais",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-miel",
+      "type": "image",
+      "src": "images/emojis/alimentation/miel.webp",
+      "label": "miel",
+      "alt": "miel",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-myrtilles",
+      "type": "image",
+      "src": "images/emojis/alimentation/myrtilles.webp",
+      "label": "myrtilles",
+      "alt": "myrtilles",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-oeuf",
+      "type": "image",
+      "src": "images/emojis/alimentation/oeuf.webp",
+      "label": "oeuf",
+      "alt": "oeuf",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-onigiri",
+      "type": "image",
+      "src": "images/emojis/alimentation/onigiri.webp",
+      "label": "onigiri",
+      "alt": "onigiri",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-onion",
+      "type": "image",
+      "src": "images/emojis/alimentation/onion.webp",
+      "label": "onion",
+      "alt": "onion",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-orange",
+      "type": "image",
+      "src": "images/emojis/alimentation/orange.webp",
+      "label": "orange",
+      "alt": "orange",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pain",
+      "type": "image",
+      "src": "images/emojis/alimentation/pain.webp",
+      "label": "pain",
+      "alt": "pain",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pain-de-mie",
+      "type": "image",
+      "src": "images/emojis/alimentation/pain_de_mie.webp",
+      "label": "pain de mie",
+      "alt": "pain de mie",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pancakes",
+      "type": "image",
+      "src": "images/emojis/alimentation/pancakes.webp",
+      "label": "pancakes",
+      "alt": "pancakes",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pasteque",
+      "type": "image",
+      "src": "images/emojis/alimentation/pasteque.webp",
+      "label": "pasteque",
+      "alt": "pasteque",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-patate",
+      "type": "image",
+      "src": "images/emojis/alimentation/patate.webp",
+      "label": "patate",
+      "alt": "patate",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-peche",
+      "type": "image",
+      "src": "images/emojis/alimentation/peche.webp",
+      "label": "peche",
+      "alt": "peche",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-piment",
+      "type": "image",
+      "src": "images/emojis/alimentation/piment.webp",
+      "label": "piment",
+      "alt": "piment",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pizza",
+      "type": "image",
+      "src": "images/emojis/alimentation/pizza.webp",
+      "label": "pizza",
+      "alt": "pizza",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-poire",
+      "type": "image",
+      "src": "images/emojis/alimentation/poire.webp",
+      "label": "poire",
+      "alt": "poire",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-poivron",
+      "type": "image",
+      "src": "images/emojis/alimentation/poivron.webp",
+      "label": "poivron",
+      "alt": "poivron",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-pomme",
+      "type": "image",
+      "src": "images/emojis/alimentation/pomme.webp",
+      "label": "pomme",
+      "alt": "pomme",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-popcorn",
+      "type": "image",
+      "src": "images/emojis/alimentation/popcorn.webp",
+      "label": "popcorn",
+      "alt": "popcorn",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-poulet",
+      "type": "image",
+      "src": "images/emojis/alimentation/poulet.webp",
+      "label": "poulet",
+      "alt": "poulet",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-radis",
+      "type": "image",
+      "src": "images/emojis/alimentation/radis.webp",
+      "label": "radis",
+      "alt": "radis",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-raisin",
+      "type": "image",
+      "src": "images/emojis/alimentation/raisin.webp",
+      "label": "raisin",
+      "alt": "raisin",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-ramen",
+      "type": "image",
+      "src": "images/emojis/alimentation/ramen.webp",
+      "label": "ramen",
+      "alt": "ramen",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-sandwich",
+      "type": "image",
+      "src": "images/emojis/alimentation/sandwich.webp",
+      "label": "sandwich",
+      "alt": "sandwich",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-sel",
+      "type": "image",
+      "src": "images/emojis/alimentation/sel.webp",
+      "label": "sel",
+      "alt": "sel",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-sucette",
+      "type": "image",
+      "src": "images/emojis/alimentation/sucette.webp",
+      "label": "sucette",
+      "alt": "sucette",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-sushi",
+      "type": "image",
+      "src": "images/emojis/alimentation/sushi.webp",
+      "label": "sushi",
+      "alt": "sushi",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-tomate",
+      "type": "image",
+      "src": "images/emojis/alimentation/tomate.webp",
+      "label": "tomate",
+      "alt": "tomate",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-alimentation-viande",
+      "type": "image",
+      "src": "images/emojis/alimentation/viande.webp",
+      "label": "viande",
+      "alt": "viande",
+      "category": "emojis / alimentation",
+      "tags": [
+        "emojis",
+        "alimentation"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-abeille",
+      "type": "image",
+      "src": "images/emojis/animaux/abeille.webp",
+      "label": "abeille",
+      "alt": "abeille",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-aigle",
+      "type": "image",
+      "src": "images/emojis/animaux/aigle.webp",
+      "label": "aigle",
+      "alt": "aigle",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-araignee",
+      "type": "image",
+      "src": "images/emojis/animaux/araignee.webp",
+      "label": "araignee",
+      "alt": "araignee",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-baleine",
+      "type": "image",
+      "src": "images/emojis/animaux/baleine.webp",
+      "label": "baleine",
+      "alt": "baleine",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-cafard",
+      "type": "image",
+      "src": "images/emojis/animaux/cafard.webp",
+      "label": "cafard",
+      "alt": "cafard",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-calamar",
+      "type": "image",
+      "src": "images/emojis/animaux/calamar.webp",
+      "label": "calamar",
+      "alt": "calamar",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-canard",
+      "type": "image",
+      "src": "images/emojis/animaux/canard.webp",
+      "label": "canard",
+      "alt": "canard",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-cerf",
+      "type": "image",
+      "src": "images/emojis/animaux/cerf.webp",
+      "label": "cerf",
+      "alt": "cerf",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-chameau",
+      "type": "image",
+      "src": "images/emojis/animaux/chameau.webp",
+      "label": "chameau",
+      "alt": "chameau",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-chat",
+      "type": "image",
+      "src": "images/emojis/animaux/chat.webp",
+      "label": "chat",
+      "alt": "chat",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-chauvesouris",
+      "type": "image",
+      "src": "images/emojis/animaux/chauvesouris.webp",
+      "label": "chauvesouris",
+      "alt": "chauvesouris",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-cheval",
+      "type": "image",
+      "src": "images/emojis/animaux/cheval.webp",
+      "label": "cheval",
+      "alt": "cheval",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-chien",
+      "type": "image",
+      "src": "images/emojis/animaux/chien.webp",
+      "label": "chien",
+      "alt": "chien",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-coccinelle",
+      "type": "image",
+      "src": "images/emojis/animaux/coccinelle.webp",
+      "label": "coccinelle",
+      "alt": "coccinelle",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-cochon",
+      "type": "image",
+      "src": "images/emojis/animaux/cochon.webp",
+      "label": "cochon",
+      "alt": "cochon",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-coq",
+      "type": "image",
+      "src": "images/emojis/animaux/coq.webp",
+      "label": "coq",
+      "alt": "coq",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-coquillage",
+      "type": "image",
+      "src": "images/emojis/animaux/coquillage.webp",
+      "label": "coquillage",
+      "alt": "coquillage",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-corail",
+      "type": "image",
+      "src": "images/emojis/animaux/corail.webp",
+      "label": "corail",
+      "alt": "corail",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-crabe",
+      "type": "image",
+      "src": "images/emojis/animaux/crabe.webp",
+      "label": "crabe",
+      "alt": "crabe",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-crevette",
+      "type": "image",
+      "src": "images/emojis/animaux/crevette.webp",
+      "label": "crevette",
+      "alt": "crevette",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-crocodile",
+      "type": "image",
+      "src": "images/emojis/animaux/crocodile.webp",
+      "label": "crocodile",
+      "alt": "crocodile",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-cygne",
+      "type": "image",
+      "src": "images/emojis/animaux/cygne.webp",
+      "label": "cygne",
+      "alt": "cygne",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-dauphin",
+      "type": "image",
+      "src": "images/emojis/animaux/dauphin.webp",
+      "label": "dauphin",
+      "alt": "dauphin",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-dinosaure",
+      "type": "image",
+      "src": "images/emojis/animaux/dinosaure.webp",
+      "label": "dinosaure",
+      "alt": "dinosaure",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-dragon",
+      "type": "image",
+      "src": "images/emojis/animaux/dragon.webp",
+      "label": "dragon",
+      "alt": "dragon",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-ecureuil",
+      "type": "image",
+      "src": "images/emojis/animaux/ecureuil.webp",
+      "label": "ecureuil",
+      "alt": "ecureuil",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-elephant",
+      "type": "image",
+      "src": "images/emojis/animaux/elephant.webp",
+      "label": "elephant",
+      "alt": "elephant",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-escargot",
+      "type": "image",
+      "src": "images/emojis/animaux/escargot.webp",
+      "label": "escargot",
+      "alt": "escargot",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-flamant-rose",
+      "type": "image",
+      "src": "images/emojis/animaux/flamant_rose.webp",
+      "label": "flamant rose",
+      "alt": "flamant rose",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-fourmi",
+      "type": "image",
+      "src": "images/emojis/animaux/fourmi.webp",
+      "label": "fourmi",
+      "alt": "fourmi",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-girafe",
+      "type": "image",
+      "src": "images/emojis/animaux/girafe.webp",
+      "label": "girafe",
+      "alt": "girafe",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-herisson",
+      "type": "image",
+      "src": "images/emojis/animaux/herisson.webp",
+      "label": "herisson",
+      "alt": "herisson",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-hibou",
+      "type": "image",
+      "src": "images/emojis/animaux/hibou.webp",
+      "label": "hibou",
+      "alt": "hibou",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-kangourou",
+      "type": "image",
+      "src": "images/emojis/animaux/kangourou.webp",
+      "label": "kangourou",
+      "alt": "kangourou",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-lezard",
+      "type": "image",
+      "src": "images/emojis/animaux/lezard.webp",
+      "label": "lezard",
+      "alt": "lezard",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-meduse",
+      "type": "image",
+      "src": "images/emojis/animaux/meduse.webp",
+      "label": "meduse",
+      "alt": "meduse",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-microbe-1",
+      "type": "image",
+      "src": "images/emojis/animaux/microbe_1.webp",
+      "label": "microbe 1",
+      "alt": "microbe 1",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-microbe-2",
+      "type": "image",
+      "src": "images/emojis/animaux/microbe_2.webp",
+      "label": "microbe 2",
+      "alt": "microbe 2",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-microbe-3",
+      "type": "image",
+      "src": "images/emojis/animaux/microbe_3.webp",
+      "label": "microbe 3",
+      "alt": "microbe 3",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-mouche",
+      "type": "image",
+      "src": "images/emojis/animaux/mouche.webp",
+      "label": "mouche",
+      "alt": "mouche",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-mouton",
+      "type": "image",
+      "src": "images/emojis/animaux/mouton.webp",
+      "label": "mouton",
+      "alt": "mouton",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-nid",
+      "type": "image",
+      "src": "images/emojis/animaux/nid.webp",
+      "label": "nid",
+      "alt": "nid",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-oiseau",
+      "type": "image",
+      "src": "images/emojis/animaux/oiseau.webp",
+      "label": "oiseau",
+      "alt": "oiseau",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-orque",
+      "type": "image",
+      "src": "images/emojis/animaux/orque.webp",
+      "label": "orque",
+      "alt": "orque",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-pain",
+      "type": "image",
+      "src": "images/emojis/animaux/pain.webp",
+      "label": "pain",
+      "alt": "pain",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-papillon",
+      "type": "image",
+      "src": "images/emojis/animaux/papillon.webp",
+      "label": "papillon",
+      "alt": "papillon",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-perroquet",
+      "type": "image",
+      "src": "images/emojis/animaux/perroquet.webp",
+      "label": "perroquet",
+      "alt": "perroquet",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-phoenix",
+      "type": "image",
+      "src": "images/emojis/animaux/phoenix.webp",
+      "label": "phoenix",
+      "alt": "phoenix",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-phoque",
+      "type": "image",
+      "src": "images/emojis/animaux/phoque.webp",
+      "label": "phoque",
+      "alt": "phoque",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-pingouin",
+      "type": "image",
+      "src": "images/emojis/animaux/pingouin.webp",
+      "label": "pingouin",
+      "alt": "pingouin",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-plume",
+      "type": "image",
+      "src": "images/emojis/animaux/plume.webp",
+      "label": "plume",
+      "alt": "plume",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-poisson",
+      "type": "image",
+      "src": "images/emojis/animaux/poisson.webp",
+      "label": "poisson",
+      "alt": "poisson",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-poisson-lune",
+      "type": "image",
+      "src": "images/emojis/animaux/poisson_lune.webp",
+      "label": "poisson lune",
+      "alt": "poisson lune",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-poisson-tropical",
+      "type": "image",
+      "src": "images/emojis/animaux/poisson_tropical.webp",
+      "label": "poisson tropical",
+      "alt": "poisson tropical",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-poussin",
+      "type": "image",
+      "src": "images/emojis/animaux/poussin.webp",
+      "label": "poussin",
+      "alt": "poussin",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-requin",
+      "type": "image",
+      "src": "images/emojis/animaux/requin.webp",
+      "label": "requin",
+      "alt": "requin",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-sauterelle",
+      "type": "image",
+      "src": "images/emojis/animaux/sauterelle.webp",
+      "label": "sauterelle",
+      "alt": "sauterelle",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-scarabee",
+      "type": "image",
+      "src": "images/emojis/animaux/scarabee.webp",
+      "label": "scarabee",
+      "alt": "scarabee",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-scorpion",
+      "type": "image",
+      "src": "images/emojis/animaux/scorpion.webp",
+      "label": "scorpion",
+      "alt": "scorpion",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-serpent",
+      "type": "image",
+      "src": "images/emojis/animaux/serpent.webp",
+      "label": "serpent",
+      "alt": "serpent",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-singe",
+      "type": "image",
+      "src": "images/emojis/animaux/singe.webp",
+      "label": "singe",
+      "alt": "singe",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-souris-animal",
+      "type": "image",
+      "src": "images/emojis/animaux/souris_animal.webp",
+      "label": "souris animal",
+      "alt": "souris animal",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-tigre",
+      "type": "image",
+      "src": "images/emojis/animaux/tigre.webp",
+      "label": "tigre",
+      "alt": "tigre",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-toile-araignee",
+      "type": "image",
+      "src": "images/emojis/animaux/toile_araignee.webp",
+      "label": "toile araignee",
+      "alt": "toile araignee",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-tortue",
+      "type": "image",
+      "src": "images/emojis/animaux/tortue.webp",
+      "label": "tortue",
+      "alt": "tortue",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-tyrannosaure",
+      "type": "image",
+      "src": "images/emojis/animaux/tyrannosaure.webp",
+      "label": "tyrannosaure",
+      "alt": "tyrannosaure",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-vache",
+      "type": "image",
+      "src": "images/emojis/animaux/vache.webp",
+      "label": "vache",
+      "alt": "vache",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-ver-de-terre",
+      "type": "image",
+      "src": "images/emojis/animaux/ver_de_terre.webp",
+      "label": "ver de terre",
+      "alt": "ver de terre",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-animaux-zebre",
+      "type": "image",
+      "src": "images/emojis/animaux/zebre.webp",
+      "label": "zebre",
+      "alt": "zebre",
+      "category": "emojis / animaux",
+      "tags": [
+        "emojis",
+        "animaux"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-boulier",
+      "type": "image",
+      "src": "images/emojis/argent_temps/boulier.webp",
+      "label": "boulier",
+      "alt": "boulier",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-chronometre",
+      "type": "image",
+      "src": "images/emojis/argent_temps/chronometre.webp",
+      "label": "chronometre",
+      "alt": "chronometre",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-euros",
+      "type": "image",
+      "src": "images/emojis/argent_temps/euros.webp",
+      "label": "euros",
+      "alt": "euros",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-montre",
+      "type": "image",
+      "src": "images/emojis/argent_temps/montre.webp",
+      "label": "montre",
+      "alt": "montre",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-piece",
+      "type": "image",
+      "src": "images/emojis/argent_temps/piece.webp",
+      "label": "piece",
+      "alt": "piece",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-reveil",
+      "type": "image",
+      "src": "images/emojis/argent_temps/reveil.webp",
+      "label": "reveil",
+      "alt": "reveil",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-sablier",
+      "type": "image",
+      "src": "images/emojis/argent_temps/sablier.webp",
+      "label": "sablier",
+      "alt": "sablier",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-argent-temps-sac-argent",
+      "type": "image",
+      "src": "images/emojis/argent_temps/sac_argent.webp",
+      "label": "sac argent",
+      "alt": "sac argent",
+      "category": "emojis / argent_temps",
+      "tags": [
+        "emojis",
+        "argent_temps"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-ciseaux",
+      "type": "image",
+      "src": "images/emojis/bureau/ciseaux.webp",
+      "label": "ciseaux",
+      "alt": "ciseaux",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-clavier",
+      "type": "image",
+      "src": "images/emojis/bureau/clavier.webp",
+      "label": "clavier",
+      "alt": "clavier",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-colis",
+      "type": "image",
+      "src": "images/emojis/bureau/colis.webp",
+      "label": "colis",
+      "alt": "colis",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-crayon",
+      "type": "image",
+      "src": "images/emojis/bureau/crayon.webp",
+      "label": "crayon",
+      "alt": "crayon",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-crayon-couleur",
+      "type": "image",
+      "src": "images/emojis/bureau/crayon_couleur.webp",
+      "label": "crayon couleur",
+      "alt": "crayon couleur",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-enveloppe",
+      "type": "image",
+      "src": "images/emojis/bureau/enveloppe.webp",
+      "label": "enveloppe",
+      "alt": "enveloppe",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-equerre",
+      "type": "image",
+      "src": "images/emojis/bureau/equerre.webp",
+      "label": "equerre",
+      "alt": "equerre",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-journal",
+      "type": "image",
+      "src": "images/emojis/bureau/journal.webp",
+      "label": "journal",
+      "alt": "journal",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-livre",
+      "type": "image",
+      "src": "images/emojis/bureau/livre.webp",
+      "label": "livre",
+      "alt": "livre",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-livre-ouvert",
+      "type": "image",
+      "src": "images/emojis/bureau/livre_ouvert.webp",
+      "label": "livre ouvert",
+      "alt": "livre ouvert",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-pinceau",
+      "type": "image",
+      "src": "images/emojis/bureau/pinceau.webp",
+      "label": "pinceau",
+      "alt": "pinceau",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-punaise",
+      "type": "image",
+      "src": "images/emojis/bureau/punaise.webp",
+      "label": "punaise",
+      "alt": "punaise",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-regle",
+      "type": "image",
+      "src": "images/emojis/bureau/regle.webp",
+      "label": "regle",
+      "alt": "regle",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-serviette",
+      "type": "image",
+      "src": "images/emojis/bureau/serviette.webp",
+      "label": "serviette",
+      "alt": "serviette",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-smartphone",
+      "type": "image",
+      "src": "images/emojis/bureau/smartphone.webp",
+      "label": "smartphone",
+      "alt": "smartphone",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-bureau-trombone",
+      "type": "image",
+      "src": "images/emojis/bureau/trombone.webp",
+      "label": "trombone",
+      "alt": "trombone",
+      "category": "emojis / bureau",
+      "tags": [
+        "emojis",
+        "bureau"
+      ]
+    },
+    {
+      "id": "images-emojis-celebrations-ballon-baudruche",
+      "type": "image",
+      "src": "images/emojis/celebrations/ballon_baudruche.webp",
+      "label": "ballon baudruche",
+      "alt": "ballon baudruche",
+      "category": "emojis / celebrations",
+      "tags": [
+        "emojis",
+        "celebrations"
+      ]
+    },
+    {
+      "id": "images-emojis-celebrations-cadeau",
+      "type": "image",
+      "src": "images/emojis/celebrations/cadeau.webp",
+      "label": "cadeau",
+      "alt": "cadeau",
+      "category": "emojis / celebrations",
+      "tags": [
+        "emojis",
+        "celebrations"
+      ]
+    },
+    {
+      "id": "images-emojis-celebrations-lanterne",
+      "type": "image",
+      "src": "images/emojis/celebrations/lanterne.webp",
+      "label": "lanterne",
+      "alt": "lanterne",
+      "category": "emojis / celebrations",
+      "tags": [
+        "emojis",
+        "celebrations"
+      ]
+    },
+    {
+      "id": "images-emojis-celebrations-petard",
+      "type": "image",
+      "src": "images/emojis/celebrations/petard.webp",
+      "label": "petard",
+      "alt": "petard",
+      "category": "emojis / celebrations",
+      "tags": [
+        "emojis",
+        "celebrations"
+      ]
+    },
+    {
+      "id": "images-emojis-drapeaux-drapeau-damier",
+      "type": "image",
+      "src": "images/emojis/drapeaux/drapeau_damier.webp",
+      "label": "drapeau damier",
+      "alt": "drapeau damier",
+      "category": "emojis / drapeaux",
+      "tags": [
+        "emojis",
+        "drapeaux"
+      ]
+    },
+    {
+      "id": "images-emojis-drapeaux-drapeau-france",
+      "type": "image",
+      "src": "images/emojis/drapeaux/drapeau_france.webp",
+      "label": "drapeau france",
+      "alt": "drapeau france",
+      "category": "emojis / drapeaux",
+      "tags": [
+        "emojis",
+        "drapeaux"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-baguette-magique",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/baguette_magique.webp",
+      "label": "baguette magique",
+      "alt": "baguette magique",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-boule-cristal",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/boule_cristal.webp",
+      "label": "boule cristal",
+      "alt": "boule cristal",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-cerf-volant",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/cerf_volant.webp",
+      "label": "cerf volant",
+      "alt": "cerf volant",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-de",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/de.webp",
+      "label": "de",
+      "alt": "de",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-peinture",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/peinture.webp",
+      "label": "peinture",
+      "alt": "peinture",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-pion",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/pion.webp",
+      "label": "pion",
+      "alt": "pion",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-puzzle",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/puzzle.webp",
+      "label": "puzzle",
+      "alt": "puzzle",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-tableau",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/tableau.webp",
+      "label": "tableau",
+      "alt": "tableau",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-jeux-culture-yoyo",
+      "type": "image",
+      "src": "images/emojis/jeux_culture/yoyo.webp",
+      "label": "yoyo",
+      "alt": "yoyo",
+      "category": "emojis / jeux_culture",
+      "tags": [
+        "emojis",
+        "jeux_culture"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-arc-en-ciel",
+      "type": "image",
+      "src": "images/emojis/meteo/arc_en_ciel.webp",
+      "label": "arc en ciel",
+      "alt": "arc en ciel",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-comete",
+      "type": "image",
+      "src": "images/emojis/meteo/comete.webp",
+      "label": "comete",
+      "alt": "comete",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-eclair",
+      "type": "image",
+      "src": "images/emojis/meteo/eclair.webp",
+      "label": "eclair",
+      "alt": "eclair",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-etoile",
+      "type": "image",
+      "src": "images/emojis/meteo/etoile.webp",
+      "label": "etoile",
+      "alt": "etoile",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-feu",
+      "type": "image",
+      "src": "images/emojis/meteo/feu.webp",
+      "label": "feu",
+      "alt": "feu",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-flocon-neige",
+      "type": "image",
+      "src": "images/emojis/meteo/flocon_neige.webp",
+      "label": "flocon neige",
+      "alt": "flocon neige",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-goutte",
+      "type": "image",
+      "src": "images/emojis/meteo/goutte.webp",
+      "label": "goutte",
+      "alt": "goutte",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-lune-croissant",
+      "type": "image",
+      "src": "images/emojis/meteo/lune_croissant.webp",
+      "label": "lune croissant",
+      "alt": "lune croissant",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-lune-pleine",
+      "type": "image",
+      "src": "images/emojis/meteo/lune_pleine.webp",
+      "label": "lune pleine",
+      "alt": "lune pleine",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-parapluie",
+      "type": "image",
+      "src": "images/emojis/meteo/parapluie.webp",
+      "label": "parapluie",
+      "alt": "parapluie",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-planete",
+      "type": "image",
+      "src": "images/emojis/meteo/planete.webp",
+      "label": "planete",
+      "alt": "planete",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-meteo-soleil",
+      "type": "image",
+      "src": "images/emojis/meteo/soleil.webp",
+      "label": "soleil",
+      "alt": "soleil",
+      "category": "emojis / meteo",
+      "tags": [
+        "emojis",
+        "meteo"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-casque-audio",
+      "type": "image",
+      "src": "images/emojis/musique_son/casque_audio.webp",
+      "label": "casque audio",
+      "alt": "casque audio",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-cloche",
+      "type": "image",
+      "src": "images/emojis/musique_son/cloche.webp",
+      "label": "cloche",
+      "alt": "cloche",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-guitare",
+      "type": "image",
+      "src": "images/emojis/musique_son/guitare.webp",
+      "label": "guitare",
+      "alt": "guitare",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-harpe",
+      "type": "image",
+      "src": "images/emojis/musique_son/harpe.webp",
+      "label": "harpe",
+      "alt": "harpe",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-megaphone",
+      "type": "image",
+      "src": "images/emojis/musique_son/megaphone.webp",
+      "label": "megaphone",
+      "alt": "megaphone",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-micro",
+      "type": "image",
+      "src": "images/emojis/musique_son/micro.webp",
+      "label": "micro",
+      "alt": "micro",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-notes",
+      "type": "image",
+      "src": "images/emojis/musique_son/notes.webp",
+      "label": "notes",
+      "alt": "notes",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-saxophone",
+      "type": "image",
+      "src": "images/emojis/musique_son/saxophone.webp",
+      "label": "saxophone",
+      "alt": "saxophone",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-trompette",
+      "type": "image",
+      "src": "images/emojis/musique_son/trompette.webp",
+      "label": "trompette",
+      "alt": "trompette",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-musique-son-violon",
+      "type": "image",
+      "src": "images/emojis/musique_son/violon.webp",
+      "label": "violon",
+      "alt": "violon",
+      "category": "emojis / musique_son",
+      "tags": [
+        "emojis",
+        "musique_son"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-arbre",
+      "type": "image",
+      "src": "images/emojis/nature/arbre.webp",
+      "label": "arbre",
+      "alt": "arbre",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-bouquet",
+      "type": "image",
+      "src": "images/emojis/nature/bouquet.webp",
+      "label": "bouquet",
+      "alt": "bouquet",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-cactus",
+      "type": "image",
+      "src": "images/emojis/nature/cactus.webp",
+      "label": "cactus",
+      "alt": "cactus",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-caillou",
+      "type": "image",
+      "src": "images/emojis/nature/caillou.webp",
+      "label": "caillou",
+      "alt": "caillou",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-herbe",
+      "type": "image",
+      "src": "images/emojis/nature/herbe.webp",
+      "label": "herbe",
+      "alt": "herbe",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-palmier",
+      "type": "image",
+      "src": "images/emojis/nature/palmier.webp",
+      "label": "palmier",
+      "alt": "palmier",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-plante",
+      "type": "image",
+      "src": "images/emojis/nature/plante.webp",
+      "label": "plante",
+      "alt": "plante",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-rose",
+      "type": "image",
+      "src": "images/emojis/nature/rose.webp",
+      "label": "rose",
+      "alt": "rose",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-sapin",
+      "type": "image",
+      "src": "images/emojis/nature/sapin.webp",
+      "label": "sapin",
+      "alt": "sapin",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-trefle",
+      "type": "image",
+      "src": "images/emojis/nature/trefle.webp",
+      "label": "trefle",
+      "alt": "trefle",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-tronc",
+      "type": "image",
+      "src": "images/emojis/nature/tronc.webp",
+      "label": "tronc",
+      "alt": "tronc",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-nature-tulipe",
+      "type": "image",
+      "src": "images/emojis/nature/tulipe.webp",
+      "label": "tulipe",
+      "alt": "tulipe",
+      "category": "emojis / nature",
+      "tags": [
+        "emojis",
+        "nature"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-aimant",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/aimant.webp",
+      "label": "aimant",
+      "alt": "aimant",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-ampoule",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/ampoule.webp",
+      "label": "ampoule",
+      "alt": "ampoule",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-antenne",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/antenne.webp",
+      "label": "antenne",
+      "alt": "antenne",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-arc",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/arc.webp",
+      "label": "arc",
+      "alt": "arc",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-balai",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/balai.webp",
+      "label": "balai",
+      "alt": "balai",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-bombe",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/bombe.webp",
+      "label": "bombe",
+      "alt": "bombe",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-bouclier",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/bouclier.webp",
+      "label": "bouclier",
+      "alt": "bouclier",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-bougie",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/bougie.webp",
+      "label": "bougie",
+      "alt": "bougie",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-brosse-dent",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/brosse_dent.webp",
+      "label": "brosse dent",
+      "alt": "brosse dent",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-bulles",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/bulles.webp",
+      "label": "bulles",
+      "alt": "bulles",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-cadenas",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/cadenas.webp",
+      "label": "cadenas",
+      "alt": "cadenas",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-chaise",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/chaise.webp",
+      "label": "chaise",
+      "alt": "chaise",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-cle",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/cle.webp",
+      "label": "cle",
+      "alt": "cle",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-cle-molette",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/cle_molette.webp",
+      "label": "cle molette",
+      "alt": "cle molette",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-cle-vieille",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/cle_vieille.webp",
+      "label": "cle vieille",
+      "alt": "cle vieille",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-dague",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/dague.webp",
+      "label": "dague",
+      "alt": "dague",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-echelle",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/echelle.webp",
+      "label": "echelle",
+      "alt": "echelle",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-eponge",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/eponge.webp",
+      "label": "eponge",
+      "alt": "eponge",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-extincteur",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/extincteur.webp",
+      "label": "extincteur",
+      "alt": "extincteur",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-fenetre",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/fenetre.webp",
+      "label": "fenetre",
+      "alt": "fenetre",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-hache",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/hache.webp",
+      "label": "hache",
+      "alt": "hache",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-lampe-poche",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/lampe_poche.webp",
+      "label": "lampe poche",
+      "alt": "lampe poche",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-lit",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/lit.webp",
+      "label": "lit",
+      "alt": "lit",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-loupe",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/loupe.webp",
+      "label": "loupe",
+      "alt": "loupe",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-nounours",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/nounours.webp",
+      "label": "nounours",
+      "alt": "nounours",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-pelle",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/pelle.webp",
+      "label": "pelle",
+      "alt": "pelle",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-porte",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/porte.webp",
+      "label": "porte",
+      "alt": "porte",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-rouage",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/rouage.webp",
+      "label": "rouage",
+      "alt": "rouage",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-savon",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/savon.webp",
+      "label": "savon",
+      "alt": "savon",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-scie",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/scie.webp",
+      "label": "scie",
+      "alt": "scie",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-seau",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/seau.webp",
+      "label": "seau",
+      "alt": "seau",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-seringue",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/seringue.webp",
+      "label": "seringue",
+      "alt": "seringue",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-telescope",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/telescope.webp",
+      "label": "telescope",
+      "alt": "telescope",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-thermometre",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/thermometre.webp",
+      "label": "thermometre",
+      "alt": "thermometre",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-tournevis",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/tournevis.webp",
+      "label": "tournevis",
+      "alt": "tournevis",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-tube-essai",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/tube_essai.webp",
+      "label": "tube essai",
+      "alt": "tube essai",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-valise",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/valise.webp",
+      "label": "valise",
+      "alt": "valise",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-outils-objets-divers-ventouse",
+      "type": "image",
+      "src": "images/emojis/outils_objets_divers/ventouse.webp",
+      "label": "ventouse",
+      "alt": "ventouse",
+      "category": "emojis / outils_objets_divers",
+      "tags": [
+        "emojis",
+        "outils_objets_divers"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-balle-baseball",
+      "type": "image",
+      "src": "images/emojis/sports/balle_baseball.webp",
+      "label": "balle baseball",
+      "alt": "balle baseball",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-balle-tennis",
+      "type": "image",
+      "src": "images/emojis/sports/balle_tennis.webp",
+      "label": "balle tennis",
+      "alt": "balle tennis",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-ballon-basket",
+      "type": "image",
+      "src": "images/emojis/sports/ballon_basket.webp",
+      "label": "ballon basket",
+      "alt": "ballon basket",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-ballon-foot",
+      "type": "image",
+      "src": "images/emojis/sports/ballon_foot.webp",
+      "label": "ballon foot",
+      "alt": "ballon foot",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-bowling",
+      "type": "image",
+      "src": "images/emojis/sports/bowling.webp",
+      "label": "bowling",
+      "alt": "bowling",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-cible",
+      "type": "image",
+      "src": "images/emojis/sports/cible.webp",
+      "label": "cible",
+      "alt": "cible",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-coupe",
+      "type": "image",
+      "src": "images/emojis/sports/coupe.webp",
+      "label": "coupe",
+      "alt": "coupe",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-frisbee",
+      "type": "image",
+      "src": "images/emojis/sports/frisbee.webp",
+      "label": "frisbee",
+      "alt": "frisbee",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-gant-boxe",
+      "type": "image",
+      "src": "images/emojis/sports/gant_boxe.webp",
+      "label": "gant boxe",
+      "alt": "gant boxe",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-golf",
+      "type": "image",
+      "src": "images/emojis/sports/golf.webp",
+      "label": "golf",
+      "alt": "golf",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-medaille",
+      "type": "image",
+      "src": "images/emojis/sports/medaille.webp",
+      "label": "medaille",
+      "alt": "medaille",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-medaille-etoile",
+      "type": "image",
+      "src": "images/emojis/sports/medaille_etoile.webp",
+      "label": "medaille etoile",
+      "alt": "medaille etoile",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-sports-pingpong",
+      "type": "image",
+      "src": "images/emojis/sports/pingpong.webp",
+      "label": "pingpong",
+      "alt": "pingpong",
+      "category": "emojis / sports",
+      "tags": [
+        "emojis",
+        "sports"
+      ]
+    },
+    {
+      "id": "images-emojis-symboles-coeur",
+      "type": "image",
+      "src": "images/emojis/symboles/coeur.webp",
+      "label": "coeur",
+      "alt": "coeur",
+      "category": "emojis / symboles",
+      "tags": [
+        "emojis",
+        "symboles"
+      ]
+    },
+    {
+      "id": "images-emojis-symboles-explosion",
+      "type": "image",
+      "src": "images/emojis/symboles/explosion.webp",
+      "label": "explosion",
+      "alt": "explosion",
+      "category": "emojis / symboles",
+      "tags": [
+        "emojis",
+        "symboles"
+      ]
+    },
+    {
+      "id": "images-emojis-symboles-tache",
+      "type": "image",
+      "src": "images/emojis/symboles/tache.webp",
+      "label": "tache",
+      "alt": "tache",
+      "category": "emojis / symboles",
+      "tags": [
+        "emojis",
+        "symboles"
+      ]
+    },
+    {
+      "id": "images-emojis-technologie-appareil-photo",
+      "type": "image",
+      "src": "images/emojis/technologie/appareil_photo.webp",
+      "label": "appareil photo",
+      "alt": "appareil photo",
+      "category": "emojis / technologie",
+      "tags": [
+        "emojis",
+        "technologie"
+      ]
+    },
+    {
+      "id": "images-emojis-technologie-cd",
+      "type": "image",
+      "src": "images/emojis/technologie/cd.webp",
+      "label": "cd",
+      "alt": "cd",
+      "category": "emojis / technologie",
+      "tags": [
+        "emojis",
+        "technologie"
+      ]
+    },
+    {
+      "id": "images-emojis-technologie-ecran",
+      "type": "image",
+      "src": "images/emojis/technologie/ecran.webp",
+      "label": "ecran",
+      "alt": "ecran",
+      "category": "emojis / technologie",
+      "tags": [
+        "emojis",
+        "technologie"
+      ]
+    },
+    {
+      "id": "images-emojis-technologie-ordi-portable",
+      "type": "image",
+      "src": "images/emojis/technologie/ordi_portable.webp",
+      "label": "ordi portable",
+      "alt": "ordi portable",
+      "category": "emojis / technologie",
+      "tags": [
+        "emojis",
+        "technologie"
+      ]
+    },
+    {
+      "id": "images-emojis-technologie-souris",
+      "type": "image",
+      "src": "images/emojis/technologie/souris.webp",
+      "label": "souris",
+      "alt": "souris",
+      "category": "emojis / technologie",
+      "tags": [
+        "emojis",
+        "technologie"
+      ]
+    },
+    {
+      "id": "images-emojis-tetes-mort",
+      "type": "image",
+      "src": "images/emojis/tetes/mort.webp",
+      "label": "mort",
+      "alt": "mort",
+      "category": "emojis / tetes",
+      "tags": [
+        "emojis",
+        "tetes"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-bague",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/bague.webp",
+      "label": "bague",
+      "alt": "bague",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-casquette",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/casquette.webp",
+      "label": "casquette",
+      "alt": "casquette",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-chapeau-haut",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/chapeau_haut.webp",
+      "label": "chapeau haut",
+      "alt": "chapeau haut",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-couronne",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/couronne.webp",
+      "label": "couronne",
+      "alt": "couronne",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-diamant",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/diamant.webp",
+      "label": "diamant",
+      "alt": "diamant",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-eventail",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/eventail.webp",
+      "label": "eventail",
+      "alt": "eventail",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-vetements-accessoires-ruban",
+      "type": "image",
+      "src": "images/emojis/vetements_accessoires/ruban.webp",
+      "label": "ruban",
+      "alt": "ruban",
+      "category": "emojis / vetements_accessoires",
+      "tags": [
+        "emojis",
+        "vetements_accessoires"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-avion",
+      "type": "image",
+      "src": "images/emojis/voyage/avion.webp",
+      "label": "avion",
+      "alt": "avion",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-boussole",
+      "type": "image",
+      "src": "images/emojis/voyage/boussole.webp",
+      "label": "boussole",
+      "alt": "boussole",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-camion",
+      "type": "image",
+      "src": "images/emojis/voyage/camion.webp",
+      "label": "camion",
+      "alt": "camion",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-chateau",
+      "type": "image",
+      "src": "images/emojis/voyage/chateau.webp",
+      "label": "chateau",
+      "alt": "chateau",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-helicoptere",
+      "type": "image",
+      "src": "images/emojis/voyage/helicoptere.webp",
+      "label": "helicoptere",
+      "alt": "helicoptere",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-ile",
+      "type": "image",
+      "src": "images/emojis/voyage/ile.webp",
+      "label": "ile",
+      "alt": "ile",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-maison",
+      "type": "image",
+      "src": "images/emojis/voyage/maison.webp",
+      "label": "maison",
+      "alt": "maison",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-moai",
+      "type": "image",
+      "src": "images/emojis/voyage/moai.webp",
+      "label": "moai",
+      "alt": "moai",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-montagne",
+      "type": "image",
+      "src": "images/emojis/voyage/montagne.webp",
+      "label": "montagne",
+      "alt": "montagne",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-moto",
+      "type": "image",
+      "src": "images/emojis/voyage/moto.webp",
+      "label": "moto",
+      "alt": "moto",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-satellite",
+      "type": "image",
+      "src": "images/emojis/voyage/satellite.webp",
+      "label": "satellite",
+      "alt": "satellite",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-skateboard",
+      "type": "image",
+      "src": "images/emojis/voyage/skateboard.webp",
+      "label": "skateboard",
+      "alt": "skateboard",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-soucoupe-volante",
+      "type": "image",
+      "src": "images/emojis/voyage/soucoupe_volante.webp",
+      "label": "soucoupe volante",
+      "alt": "soucoupe volante",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-temple",
+      "type": "image",
+      "src": "images/emojis/voyage/temple.webp",
+      "label": "temple",
+      "alt": "temple",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-tente",
+      "type": "image",
+      "src": "images/emojis/voyage/tente.webp",
+      "label": "tente",
+      "alt": "tente",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-terre",
+      "type": "image",
+      "src": "images/emojis/voyage/terre.webp",
+      "label": "terre",
+      "alt": "terre",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-toboggan",
+      "type": "image",
+      "src": "images/emojis/voyage/toboggan.webp",
+      "label": "toboggan",
+      "alt": "toboggan",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-tori",
+      "type": "image",
+      "src": "images/emojis/voyage/tori.webp",
+      "label": "tori",
+      "alt": "tori",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-tracteur",
+      "type": "image",
+      "src": "images/emojis/voyage/tracteur.webp",
+      "label": "tracteur",
+      "alt": "tracteur",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-velo",
+      "type": "image",
+      "src": "images/emojis/voyage/velo.webp",
+      "label": "velo",
+      "alt": "velo",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-voilier",
+      "type": "image",
+      "src": "images/emojis/voyage/voilier.webp",
+      "label": "voilier",
+      "alt": "voilier",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-voiture",
+      "type": "image",
+      "src": "images/emojis/voyage/voiture.webp",
+      "label": "voiture",
+      "alt": "voiture",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-emojis-voyage-volcan",
+      "type": "image",
+      "src": "images/emojis/voyage/volcan.webp",
+      "label": "volcan",
+      "alt": "volcan",
+      "category": "emojis / voyage",
+      "tags": [
+        "emojis",
+        "voyage"
+      ]
+    },
+    {
+      "id": "images-graphs-a",
+      "type": "image",
+      "src": "images/graphs/a.webp",
+      "label": "a",
+      "alt": "a",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ai",
+      "type": "image",
+      "src": "images/graphs/ai.webp",
+      "label": "ai",
+      "alt": "ai",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ain",
+      "type": "image",
+      "src": "images/graphs/ain.webp",
+      "label": "ain",
+      "alt": "ain",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-am",
+      "type": "image",
+      "src": "images/graphs/am.webp",
+      "label": "am",
+      "alt": "am",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-an",
+      "type": "image",
+      "src": "images/graphs/an.webp",
+      "label": "an",
+      "alt": "an",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-au",
+      "type": "image",
+      "src": "images/graphs/au.webp",
+      "label": "au",
+      "alt": "au",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-b",
+      "type": "image",
+      "src": "images/graphs/b.webp",
+      "label": "b",
+      "alt": "b",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-c-cedille",
+      "type": "image",
+      "src": "images/graphs/c_cedille.webp",
+      "label": "c cedille",
+      "alt": "c cedille",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-c-k",
+      "type": "image",
+      "src": "images/graphs/c_k.webp",
+      "label": "c k",
+      "alt": "c k",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-c-s",
+      "type": "image",
+      "src": "images/graphs/c_s.webp",
+      "label": "c s",
+      "alt": "c s",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ch",
+      "type": "image",
+      "src": "images/graphs/ch.webp",
+      "label": "ch",
+      "alt": "ch",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-d",
+      "type": "image",
+      "src": "images/graphs/d.webp",
+      "label": "d",
+      "alt": "d",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-e",
+      "type": "image",
+      "src": "images/graphs/e.webp",
+      "label": "e",
+      "alt": "e",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-e-aigu",
+      "type": "image",
+      "src": "images/graphs/e_aigu.webp",
+      "label": "e aigu",
+      "alt": "e aigu",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-e-circonflexe",
+      "type": "image",
+      "src": "images/graphs/e_circonflexe.webp",
+      "label": "e circonflexe",
+      "alt": "e circonflexe",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-e-grave",
+      "type": "image",
+      "src": "images/graphs/e_grave.webp",
+      "label": "e grave",
+      "alt": "e grave",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-eau",
+      "type": "image",
+      "src": "images/graphs/eau.webp",
+      "label": "eau",
+      "alt": "eau",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ec-cons",
+      "type": "image",
+      "src": "images/graphs/ec_cons.webp",
+      "label": "ec cons",
+      "alt": "ec cons",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ef-cons",
+      "type": "image",
+      "src": "images/graphs/ef_cons.webp",
+      "label": "ef cons",
+      "alt": "ef cons",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ei",
+      "type": "image",
+      "src": "images/graphs/ei.webp",
+      "label": "ei",
+      "alt": "ei",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ein",
+      "type": "image",
+      "src": "images/graphs/ein.webp",
+      "label": "ein",
+      "alt": "ein",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-el-cons",
+      "type": "image",
+      "src": "images/graphs/el_cons.webp",
+      "label": "el cons",
+      "alt": "el cons",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-elle",
+      "type": "image",
+      "src": "images/graphs/elle.webp",
+      "label": "elle",
+      "alt": "elle",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-em",
+      "type": "image",
+      "src": "images/graphs/em.webp",
+      "label": "em",
+      "alt": "em",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-en",
+      "type": "image",
+      "src": "images/graphs/en.webp",
+      "label": "en",
+      "alt": "en",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-enne",
+      "type": "image",
+      "src": "images/graphs/enne.webp",
+      "label": "enne",
+      "alt": "enne",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-er",
+      "type": "image",
+      "src": "images/graphs/er.webp",
+      "label": "er",
+      "alt": "er",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-er-cons",
+      "type": "image",
+      "src": "images/graphs/er_cons.webp",
+      "label": "er cons",
+      "alt": "er cons",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-erre",
+      "type": "image",
+      "src": "images/graphs/erre.webp",
+      "label": "erre",
+      "alt": "erre",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-es",
+      "type": "image",
+      "src": "images/graphs/es.webp",
+      "label": "es",
+      "alt": "es",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-es-cons",
+      "type": "image",
+      "src": "images/graphs/es_cons.webp",
+      "label": "es cons",
+      "alt": "es cons",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-esse",
+      "type": "image",
+      "src": "images/graphs/esse.webp",
+      "label": "esse",
+      "alt": "esse",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-et",
+      "type": "image",
+      "src": "images/graphs/et.webp",
+      "label": "et",
+      "alt": "et",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ette",
+      "type": "image",
+      "src": "images/graphs/ette.webp",
+      "label": "ette",
+      "alt": "ette",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-eu",
+      "type": "image",
+      "src": "images/graphs/eu.webp",
+      "label": "eu",
+      "alt": "eu",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ez",
+      "type": "image",
+      "src": "images/graphs/ez.webp",
+      "label": "ez",
+      "alt": "ez",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-f",
+      "type": "image",
+      "src": "images/graphs/f.webp",
+      "label": "f",
+      "alt": "f",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-g-g",
+      "type": "image",
+      "src": "images/graphs/g_g.webp",
+      "label": "g g",
+      "alt": "g g",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-g-j",
+      "type": "image",
+      "src": "images/graphs/g_j.webp",
+      "label": "g j",
+      "alt": "g j",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ge",
+      "type": "image",
+      "src": "images/graphs/ge.webp",
+      "label": "ge",
+      "alt": "ge",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-gn",
+      "type": "image",
+      "src": "images/graphs/gn.webp",
+      "label": "gn",
+      "alt": "gn",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-gu",
+      "type": "image",
+      "src": "images/graphs/gu.webp",
+      "label": "gu",
+      "alt": "gu",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-h",
+      "type": "image",
+      "src": "images/graphs/h.webp",
+      "label": "h",
+      "alt": "h",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-i",
+      "type": "image",
+      "src": "images/graphs/i.webp",
+      "label": "i",
+      "alt": "i",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ill",
+      "type": "image",
+      "src": "images/graphs/ill.webp",
+      "label": "ill",
+      "alt": "ill",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-im",
+      "type": "image",
+      "src": "images/graphs/im.webp",
+      "label": "im",
+      "alt": "im",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-in",
+      "type": "image",
+      "src": "images/graphs/in.webp",
+      "label": "in",
+      "alt": "in",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-j",
+      "type": "image",
+      "src": "images/graphs/j.webp",
+      "label": "j",
+      "alt": "j",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-k",
+      "type": "image",
+      "src": "images/graphs/k.webp",
+      "label": "k",
+      "alt": "k",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-l",
+      "type": "image",
+      "src": "images/graphs/l.webp",
+      "label": "l",
+      "alt": "l",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-m",
+      "type": "image",
+      "src": "images/graphs/m.webp",
+      "label": "m",
+      "alt": "m",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-n",
+      "type": "image",
+      "src": "images/graphs/n.webp",
+      "label": "n",
+      "alt": "n",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-o",
+      "type": "image",
+      "src": "images/graphs/o.webp",
+      "label": "o",
+      "alt": "o",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-o-circonflexe",
+      "type": "image",
+      "src": "images/graphs/o_circonflexe.webp",
+      "label": "o circonflexe",
+      "alt": "o circonflexe",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-oeu",
+      "type": "image",
+      "src": "images/graphs/oeu.webp",
+      "label": "oeu",
+      "alt": "oeu",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-oi",
+      "type": "image",
+      "src": "images/graphs/oi.webp",
+      "label": "oi",
+      "alt": "oi",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-om",
+      "type": "image",
+      "src": "images/graphs/om.webp",
+      "label": "om",
+      "alt": "om",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-on",
+      "type": "image",
+      "src": "images/graphs/on.webp",
+      "label": "on",
+      "alt": "on",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ou",
+      "type": "image",
+      "src": "images/graphs/ou.webp",
+      "label": "ou",
+      "alt": "ou",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-p",
+      "type": "image",
+      "src": "images/graphs/p.webp",
+      "label": "p",
+      "alt": "p",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ph",
+      "type": "image",
+      "src": "images/graphs/ph.webp",
+      "label": "ph",
+      "alt": "ph",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-q",
+      "type": "image",
+      "src": "images/graphs/q.webp",
+      "label": "q",
+      "alt": "q",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-qu",
+      "type": "image",
+      "src": "images/graphs/qu.webp",
+      "label": "qu",
+      "alt": "qu",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-r",
+      "type": "image",
+      "src": "images/graphs/r.webp",
+      "label": "r",
+      "alt": "r",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-s-s",
+      "type": "image",
+      "src": "images/graphs/s_s.webp",
+      "label": "s s",
+      "alt": "s s",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-s-z",
+      "type": "image",
+      "src": "images/graphs/s_z.webp",
+      "label": "s z",
+      "alt": "s z",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-sc",
+      "type": "image",
+      "src": "images/graphs/sc.webp",
+      "label": "sc",
+      "alt": "sc",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-ss",
+      "type": "image",
+      "src": "images/graphs/ss.webp",
+      "label": "ss",
+      "alt": "ss",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-t",
+      "type": "image",
+      "src": "images/graphs/t.webp",
+      "label": "t",
+      "alt": "t",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-u",
+      "type": "image",
+      "src": "images/graphs/u.webp",
+      "label": "u",
+      "alt": "u",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-v",
+      "type": "image",
+      "src": "images/graphs/v.webp",
+      "label": "v",
+      "alt": "v",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-y-i",
+      "type": "image",
+      "src": "images/graphs/y_i.webp",
+      "label": "y i",
+      "alt": "y i",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-graphs-z",
+      "type": "image",
+      "src": "images/graphs/z.webp",
+      "label": "z",
+      "alt": "z",
+      "category": "graphs",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "images-comparaison-maxibille",
+      "type": "image",
+      "src": "images/comparaison/Maxibille.webp",
+      "label": "Maxibille",
+      "alt": "Maxibille",
+      "category": "comparaison",
+      "tags": [
+        "comparaison"
+      ]
+    },
+    {
+      "id": "images-comparaison-minibille",
+      "type": "image",
+      "src": "images/comparaison/Minibille.webp",
+      "label": "Minibille",
+      "alt": "Minibille",
+      "category": "comparaison",
+      "tags": [
+        "comparaison"
+      ]
+    },
+    {
+      "id": "images-monnaie-c1",
+      "type": "image",
+      "src": "images/monnaie/c1.webp",
+      "label": "c1",
+      "alt": "c1",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-c10",
+      "type": "image",
+      "src": "images/monnaie/c10.webp",
+      "label": "c10",
+      "alt": "c10",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-c2",
+      "type": "image",
+      "src": "images/monnaie/c2.webp",
+      "label": "c2",
+      "alt": "c2",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-c20",
+      "type": "image",
+      "src": "images/monnaie/c20.webp",
+      "label": "c20",
+      "alt": "c20",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-c5",
+      "type": "image",
+      "src": "images/monnaie/c5.webp",
+      "label": "c5",
+      "alt": "c5",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-c50",
+      "type": "image",
+      "src": "images/monnaie/c50.webp",
+      "label": "c50",
+      "alt": "c50",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e1",
+      "type": "image",
+      "src": "images/monnaie/e1.webp",
+      "label": "e1",
+      "alt": "e1",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e10",
+      "type": "image",
+      "src": "images/monnaie/e10.webp",
+      "label": "e10",
+      "alt": "e10",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e100",
+      "type": "image",
+      "src": "images/monnaie/e100.webp",
+      "label": "e100",
+      "alt": "e100",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e2",
+      "type": "image",
+      "src": "images/monnaie/e2.webp",
+      "label": "e2",
+      "alt": "e2",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e20",
+      "type": "image",
+      "src": "images/monnaie/e20.webp",
+      "label": "e20",
+      "alt": "e20",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e200",
+      "type": "image",
+      "src": "images/monnaie/e200.webp",
+      "label": "e200",
+      "alt": "e200",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e5",
+      "type": "image",
+      "src": "images/monnaie/e5.webp",
+      "label": "e5",
+      "alt": "e5",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e50",
+      "type": "image",
+      "src": "images/monnaie/e50.webp",
+      "label": "e50",
+      "alt": "e50",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-monnaie-e500",
+      "type": "image",
+      "src": "images/monnaie/e500.webp",
+      "label": "e500",
+      "alt": "e500",
+      "category": "monnaie",
+      "tags": [
+        "monnaie"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-1",
+      "type": "image",
+      "src": "images/nombres/mains/main_1.webp",
+      "label": "main 1",
+      "alt": "main 1",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-10",
+      "type": "image",
+      "src": "images/nombres/mains/main_10.webp",
+      "label": "main 10",
+      "alt": "main 10",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-2",
+      "type": "image",
+      "src": "images/nombres/mains/main_2.webp",
+      "label": "main 2",
+      "alt": "main 2",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-3",
+      "type": "image",
+      "src": "images/nombres/mains/main_3.webp",
+      "label": "main 3",
+      "alt": "main 3",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-4",
+      "type": "image",
+      "src": "images/nombres/mains/main_4.webp",
+      "label": "main 4",
+      "alt": "main 4",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-5",
+      "type": "image",
+      "src": "images/nombres/mains/main_5.webp",
+      "label": "main 5",
+      "alt": "main 5",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-6",
+      "type": "image",
+      "src": "images/nombres/mains/main_6.webp",
+      "label": "main 6",
+      "alt": "main 6",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-7",
+      "type": "image",
+      "src": "images/nombres/mains/main_7.webp",
+      "label": "main 7",
+      "alt": "main 7",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-8",
+      "type": "image",
+      "src": "images/nombres/mains/main_8.webp",
+      "label": "main 8",
+      "alt": "main 8",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-mains-main-9",
+      "type": "image",
+      "src": "images/nombres/mains/main_9.webp",
+      "label": "main 9",
+      "alt": "main 9",
+      "category": "nombres / mains",
+      "tags": [
+        "nombres",
+        "mains"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-1",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_1.webp",
+      "label": "boite 1",
+      "alt": "boite 1",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-10",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_10.webp",
+      "label": "boite 10",
+      "alt": "boite 10",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-2",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_2.webp",
+      "label": "boite 2",
+      "alt": "boite 2",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-3",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_3.webp",
+      "label": "boite 3",
+      "alt": "boite 3",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-4",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_4.webp",
+      "label": "boite 4",
+      "alt": "boite 4",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-5",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_5.webp",
+      "label": "boite 5",
+      "alt": "boite 5",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-6",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_6.webp",
+      "label": "boite 6",
+      "alt": "boite 6",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-7",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_7.webp",
+      "label": "boite 7",
+      "alt": "boite 7",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-8",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_8.webp",
+      "label": "boite 8",
+      "alt": "boite 8",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-boite-9",
+      "type": "image",
+      "src": "images/nombres/picbille/boite_9.webp",
+      "label": "boite 9",
+      "alt": "boite 9",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-1",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_1.webp",
+      "label": "dede 1",
+      "alt": "dede 1",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-10",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_10.webp",
+      "label": "dede 10",
+      "alt": "dede 10",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-2",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_2.webp",
+      "label": "dede 2",
+      "alt": "dede 2",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-3",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_3.webp",
+      "label": "dede 3",
+      "alt": "dede 3",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-4",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_4.webp",
+      "label": "dede 4",
+      "alt": "dede 4",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-5",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_5.webp",
+      "label": "dede 5",
+      "alt": "dede 5",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-6",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_6.webp",
+      "label": "dede 6",
+      "alt": "dede 6",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-7",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_7.webp",
+      "label": "dede 7",
+      "alt": "dede 7",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-8",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_8.webp",
+      "label": "dede 8",
+      "alt": "dede 8",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-dede-9",
+      "type": "image",
+      "src": "images/nombres/picbille/dede_9.webp",
+      "label": "dede 9",
+      "alt": "dede 9",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-1",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_1.webp",
+      "label": "patti 1",
+      "alt": "patti 1",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-10",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_10.webp",
+      "label": "patti 10",
+      "alt": "patti 10",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-2",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_2.webp",
+      "label": "patti 2",
+      "alt": "patti 2",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-3",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_3.webp",
+      "label": "patti 3",
+      "alt": "patti 3",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-4",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_4.webp",
+      "label": "patti 4",
+      "alt": "patti 4",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-5",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_5.webp",
+      "label": "patti 5",
+      "alt": "patti 5",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-6",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_6.webp",
+      "label": "patti 6",
+      "alt": "patti 6",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-7",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_7.webp",
+      "label": "patti 7",
+      "alt": "patti 7",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-8",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_8.webp",
+      "label": "patti 8",
+      "alt": "patti 8",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-patti-9",
+      "type": "image",
+      "src": "images/nombres/picbille/patti_9.webp",
+      "label": "patti 9",
+      "alt": "patti 9",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-0",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_0.webp",
+      "label": "picbille 0",
+      "alt": "picbille 0",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-1",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_1.webp",
+      "label": "picbille 1",
+      "alt": "picbille 1",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-10",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_10.webp",
+      "label": "picbille 10",
+      "alt": "picbille 10",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-2",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_2.webp",
+      "label": "picbille 2",
+      "alt": "picbille 2",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-3",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_3.webp",
+      "label": "picbille 3",
+      "alt": "picbille 3",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-4",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_4.webp",
+      "label": "picbille 4",
+      "alt": "picbille 4",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-5",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_5.webp",
+      "label": "picbille 5",
+      "alt": "picbille 5",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-6",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_6.webp",
+      "label": "picbille 6",
+      "alt": "picbille 6",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-7",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_7.webp",
+      "label": "picbille 7",
+      "alt": "picbille 7",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-8",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_8.webp",
+      "label": "picbille 8",
+      "alt": "picbille 8",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-nombres-picbille-picbille-9",
+      "type": "image",
+      "src": "images/nombres/picbille/picbille_9.webp",
+      "label": "picbille 9",
+      "alt": "picbille 9",
+      "category": "nombres / picbille",
+      "tags": [
+        "nombres",
+        "picbille"
+      ]
+    },
+    {
+      "id": "images-representation-blue-squares",
+      "type": "image",
+      "src": "images/representation/blue_squares.webp",
+      "label": "blue squares",
+      "alt": "blue squares",
+      "category": "representation",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "images-representation-dede",
+      "type": "image",
+      "src": "images/representation/dede.webp",
+      "label": "dede",
+      "alt": "dede",
+      "category": "representation",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "images-representation-picbille",
+      "type": "image",
+      "src": "images/representation/picbille.webp",
+      "label": "picbille",
+      "alt": "picbille",
+      "category": "representation",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "images-representation-tuiles",
+      "type": "image",
+      "src": "images/representation/tuiles.webp",
+      "label": "tuiles",
+      "alt": "tuiles",
+      "category": "representation",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "images-personnages-mathea",
+      "type": "image",
+      "src": "images/personnages/Mathea.webp",
+      "label": "Mathea",
+      "alt": "Mathea",
+      "category": "personnages",
+      "tags": [
+        "personnages"
+      ]
+    },
+    {
+      "id": "images-personnages-mathieu",
+      "type": "image",
+      "src": "images/personnages/Mathieu.webp",
+      "label": "Mathieu",
+      "alt": "Mathieu",
+      "category": "personnages",
+      "tags": [
+        "personnages"
+      ]
+    },
+    {
+      "id": "images-personnages-mathilde",
+      "type": "image",
+      "src": "images/personnages/Mathilde.webp",
+      "label": "Mathilde",
+      "alt": "Mathilde",
+      "category": "personnages",
+      "tags": [
+        "personnages"
+      ]
+    },
+    {
+      "id": "images-personnages-mathis",
+      "type": "image",
+      "src": "images/personnages/Mathis.webp",
+      "label": "Mathis",
+      "alt": "Mathis",
+      "category": "personnages",
+      "tags": [
+        "personnages"
+      ]
+    },
+    {
+      "id": "images-representation-cent",
+      "type": "image",
+      "src": "images/representation/cent.webp",
+      "label": "centaine Picbille",
+      "alt": "centaine Picbille",
+      "category": "representation",
+      "tags": [
+        "representation",
+        "picbille",
+        "centaine"
+      ]
+    }
+  ]
+}

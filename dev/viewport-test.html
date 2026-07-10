@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banc de test viewport — Runtime élève</title>
+  <link rel="stylesheet" href="./viewport-test.css">
+</head>
+<body>
+  <main class="vp-shell">
+    <aside class="vp-panel" aria-label="Réglages du banc de test">
+      <header class="vp-header">
+        <p class="vp-eyebrow">Développement</p>
+        <h1>Banc de test viewport</h1>
+        <p>Affiche le vrai runtime élève dans une iframe à taille fixe, sans scale ni fullscreen réel.</p>
+      </header>
+
+      <section class="vp-section" aria-labelledby="vpPresetTitle">
+        <h2 id="vpPresetTitle">Résolutions utiles</h2>
+        <div class="vp-presets" id="presetButtons"></div>
+      </section>
+
+      <section class="vp-section" aria-labelledby="vpCustomTitle">
+        <h2 id="vpCustomTitle">Taille personnalisée</h2>
+        <div class="vp-custom-grid">
+          <label>
+            <span>Largeur</span>
+            <input id="customWidth" type="number" min="320" max="3840" step="1" value="1280" inputmode="numeric">
+          </label>
+          <label>
+            <span>Hauteur</span>
+            <input id="customHeight" type="number" min="320" max="2160" step="1" value="1024" inputmode="numeric">
+          </label>
+        </div>
+        <button class="vp-btn vp-btn-primary" type="button" id="applyCustomBtn">Appliquer</button>
+      </section>
+
+      <section class="vp-section" aria-labelledby="vpRouteTitle">
+        <h2 id="vpRouteTitle">Route testée</h2>
+        <label class="vp-route-field">
+          <span>Hash élève</span>
+          <input id="routeInput" type="text" value="#/home" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="vp-actions-row">
+          <button class="vp-btn" type="button" id="reloadBtn">Recharger</button>
+          <button class="vp-btn" type="button" id="resetRouteBtn">Accueil</button>
+        </div>
+      </section>
+
+      <section class="vp-section vp-note" aria-label="Notes de test">
+        <p><strong>Mode interactif :</strong> l’iframe n’est jamais réduite avec <code>scale</code> ou <code>zoom</code>. Les outils avec drag doivent donc conserver des coordonnées fiables.</p>
+        <p><strong>Fullscreen :</strong> le runtime reçoit <code>devViewport=1</code>, ce qui neutralise les demandes de plein écran réel.</p>
+      </section>
+    </aside>
+
+    <section class="vp-workbench" aria-label="Runtime élève simulé">
+      <div class="vp-toolbar">
+        <div>
+          <strong id="currentLabel">1280×1024</strong>
+          <span id="currentMeta">— Ordi fond de classe</span>
+        </div>
+        <div class="vp-toolbar-actions">
+          <span id="iframeSizeBadge" class="vp-badge">1280 × 1024</span>
+        </div>
+      </div>
+      <div class="vp-scroll" id="viewportScroll">
+        <div class="vp-frame-shell" id="frameShell" style="width:1280px;height:1024px;">
+          <div class="vp-frame-ruler" id="frameRuler">1280 × 1024</div>
+          <iframe id="runtimeFrame" title="Runtime élève en viewport contrôlé" src="../index.html?devViewport=1#/home"></iframe>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./viewport-test.js"></script>
+</body>
+</html>

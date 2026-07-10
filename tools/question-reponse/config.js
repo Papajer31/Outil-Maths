@@ -39,7 +39,7 @@ export function renderToolSettings(container, settings, context = {}) {
       <textarea id="qr_bankSnapshot" hidden>${escapeHtml(JSON.stringify(initialSnapshot))}</textarea>
     `,
     renderRadioGroup({
-      title: "Tirage",
+      title: "Tirage des questions dans la banque",
       id: "qr_drawMode",
       value: cfg.drawMode,
       options: [

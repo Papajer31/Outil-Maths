@@ -133,11 +133,11 @@ function renderShell(state) {
   teardownSelectionLayer(state);
 
   container.innerHTML = `
-    <div class="selection-root${state.showSelectionAsResponse ? " selection-root--boxed" : " selection-root--free"}">
+    <div class="tool-runtime tool-runtime--selection selection-root${state.showSelectionAsResponse ? " selection-root--boxed" : " selection-root--free"}">
       ${renderToolInstruction({ id: "selection_instruction" })}
-      <div class="selection-card" id="selection_card">
-        <div class="selection-statement" id="selection_statement"></div>
-        <div class="selection-correction selection-correction--empty" id="selection_correction" aria-hidden="true"></div>
+      <div class="tool-stage tool-panel selection-card" id="selection_card">
+        <div class="tool-statement tool-statement--large tool-statement--text selection-statement" id="selection_statement"></div>
+        <div class="tool-feedback tool-correction selection-correction selection-correction--empty" id="selection_correction" aria-hidden="true"></div>
       </div>
     </div>
   `;
@@ -276,7 +276,7 @@ function renderEmptyQuestion(state) {
   if (state.statementEl) {
     state.statementEl.classList.remove("selection-statement--continuous", "selection-statement--interactive");
     state.statementEl.innerHTML = `
-      <div class="selection-empty-message">
+      <div class="tool-empty-message selection-empty-message">
         Aucun item disponible dans la banque sélectionnée.
       </div>
     `;

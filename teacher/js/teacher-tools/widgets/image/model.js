@@ -1,6 +1,7 @@
 export const IMAGE_ZOOM_MIN = 1;
 export const IMAGE_ZOOM_MAX = 4;
 export const IMAGE_ZOOM_STEP = 0.15;
+export const IMAGE_EMPTY_LAYOUT_ASPECT_RATIO = 2;
 
 const ownedImageObjectUrls = new Map();
 
@@ -79,6 +80,7 @@ export function normalizeImageState(rawState = {}){
     zoom: hasImage ? zoom : 1,
     offsetX: hasImage ? normalizeImageOffset(rawState.offsetX, zoom) : 0,
     offsetY: hasImage ? normalizeImageOffset(rawState.offsetY, zoom) : 0,
+    preserveProportions: rawState.preserveProportions !== false,
     loadError: String(rawState.loadError || "").trim(),
     updatedAt: Math.max(0, Math.trunc(Number(rawState.updatedAt) || 0))
   };
@@ -87,6 +89,8 @@ export function normalizeImageState(rawState = {}){
 
 export function getImageAspectRatio(rawState = {}){
   const state = normalizeImageState(rawState);
+  if (!state.source) return IMAGE_EMPTY_LAYOUT_ASPECT_RATIO;
+  if (!state.preserveProportions) return 0;
   if (state.naturalWidth <= 0 || state.naturalHeight <= 0) return 0;
   const ratio = state.naturalWidth / state.naturalHeight;
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 0;
@@ -141,6 +145,7 @@ export function applyImageAction({ action, payload = {}, state } = {}){
           zoom: 1,
           offsetX: 0,
           offsetY: 0,
+          preserveProportions: currentState.preserveProportions,
           loadError: "",
           updatedAt: Date.now()
         })
@@ -159,6 +164,20 @@ export function applyImageAction({ action, payload = {}, state } = {}){
         state: normalizeImageState({
           ...currentState,
           loadError: String(payload?.message || "Impossible de charger l’image.").trim(),
+          updatedAt: Date.now()
+        })
+      }
+    };
+  }
+
+  if (safeAction === "set-preserve-proportions") {
+    return {
+      patch: {
+        state: normalizeImageState({
+          ...currentState,
+          preserveProportions: payload?.preserveProportions !== false,
+          offsetX: 0,
+          offsetY: 0,
           updatedAt: Date.now()
         })
       }

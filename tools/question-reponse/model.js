@@ -1,4 +1,4 @@
-const DEFAULT_DRAW_MODE = "in_order";
+const DEFAULT_DRAW_MODE = "random";
 const DRAW_MODES = new Set(["in_order", "random"]);
 const DEFAULT_BANK_TYPE = "text_answer";
 

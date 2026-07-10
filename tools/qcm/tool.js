@@ -6,9 +6,9 @@ import { defineTool } from "../../shared/tool-contract.js";
 const DEFAULT_INSTRUCTION = "Choisis la bonne réponse.";
 
 export default defineTool("qcm", "QCM", {
-  version: "1",
-  description: "Questionnaires à choix unique issus d’une banque QCM.",
-  tags: ["qcm", "question", "banque", "choix", "projection"],
+  version: "2",
+  description: "Questionnaires à choix unique issus d’une banque QCM, avec contenus texte ou image et layouts configurables.",
+  tags: ["qcm", "question", "banque", "choix", "image", "multimédia", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
   supportsCustomInstruction: true,
   workAreaLayout: "stretch",

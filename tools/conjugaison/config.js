@@ -1,6 +1,8 @@
 import {
   renderRadioGroup,
   renderSelectControl,
+  renderSection,
+  bindCollapsibleSection,
   bindRadio,
   bindSelect,
   readRadio,
@@ -42,18 +44,24 @@ let personalListsState = createPersonalListsState();
 export function renderToolSettings(container, settings, context = {}) {
   injectStyles();
   container.classList.add("cj-config-root");
+  const personalListsAvailable = arePersonalListsAvailable(context);
   const cfg = normalizeSettings(settings);
+  const uiCfg = normalizeSettings({
+    ...cfg,
+    sourceMode: !personalListsAvailable && cfg.sourceMode === "personal" ? DEFAULT_SOURCE_MODE : cfg.sourceMode
+  });
+  const sourceModeOptions = [
+    { value: "preset", label: "Liste prédéfinie" },
+    ...(personalListsAvailable ? [{ value: "personal", label: "Liste personnelle" }] : []),
+    { value: "custom", label: "Liste fixe" }
+  ];
 
   container.innerHTML = `${renderToolSettingsStack(
     renderRadioGroup({
       title: "Verbes",
       id: "cj_sourceMode",
-      value: cfg.sourceMode,
-      options: [
-        { value: "preset", label: "Liste prédéfinie" },
-        { value: "personal", label: "Liste personnelle" },
-        { value: "custom", label: "Liste fixe" }
-      ]
+      value: uiCfg.sourceMode,
+      options: sourceModeOptions
     }),
     `
       <div class="cj-source-panel" id="cj_presetPanel">
@@ -64,7 +72,7 @@ export function renderToolSettings(container, settings, context = {}) {
               <div class="tv-select-inline-control cj-list-select-control">
                 ${renderSelectControl({
                   id: "cj_presetId",
-                  value: cfg.presetId,
+                  value: uiCfg.presetId,
                   options: getPresetOptions(),
                   rootClassName: "tv-select-inline-input cj-preset-select"
                 })}
@@ -83,7 +91,7 @@ export function renderToolSettings(container, settings, context = {}) {
         </div>
       </div>
 
-      <div class="cj-source-panel" id="cj_personalPanel">
+      ${personalListsAvailable ? `<div class="cj-source-panel" id="cj_personalPanel">
         <div class="tv-group cj-personal-group">
           <div class="cj-personal-header">
             <div class="cj-personal-title-row">
@@ -94,7 +102,7 @@ export function renderToolSettings(container, settings, context = {}) {
           </div>
           <div class="cj-personal-row">
             <div class="tv-select-inline-control cj-personal-select-control" id="cj_personalSelectHost">
-              ${renderPersonalListSelect(cfg)}
+              ${renderPersonalListSelect(uiCfg)}
             </div>
             <button type="button" class="cj-personal-action" id="cj_personalCreate">Créer</button>
             <button type="button" class="cj-personal-action" id="cj_personalRename">Renommer</button>
@@ -107,9 +115,9 @@ export function renderToolSettings(container, settings, context = {}) {
             rows="5"
             spellcheck="false"
             placeholder="Contenu de la liste personnelle sélectionnée."
-          >${escapeHtml(cfg.personalListVerbsText)}</textarea>
+          >${escapeHtml(uiCfg.personalListVerbsText)}</textarea>
         </div>
-      </div>
+      </div>` : ""}
       <div class="cj-source-panel" id="cj_customPanel">
         <div class="tv-group cj-custom-group">
           <div class="cj-custom-header">
@@ -126,89 +134,95 @@ export function renderToolSettings(container, settings, context = {}) {
             spellcheck="false"
             placeholder="Un verbe par ligne, ou séparés par des virgules.
 Ex. : chanter, finir, prendre, aller"
-          >${escapeHtml(cfg.customVerbsText)}</textarea>
+          >${escapeHtml(uiCfg.customVerbsText)}</textarea>
         </div>
       </div>
     `,
     renderCheckboxGroup({
       title: "Temps",
       idPrefix: "cj_tense",
-      values: cfg.tenses,
+      values: uiCfg.tenses,
       options: getTenseOptions()
     }),
-    `
+    renderCheckboxGroup({
+      title: "Personnes",
+      idPrefix: "cj_person",
+      values: uiCfg.persons,
+      options: getPersonOptions()
+    }),
+    renderSection("Réglages avancés", `
       <div class="cj-compound-auxiliary-panel" id="cj_compoundAuxiliaryPanel">
         ${renderRadioGroup({
           title: "Auxiliaire des temps composés",
           id: "cj_compoundAuxiliary",
-          value: cfg.compoundAuxiliary,
+          value: uiCfg.compoundAuxiliary,
           options: getCompoundAuxiliaryOptions()
         })}
       </div>
-    `,
-    renderCheckboxGroup({
-      title: "Personnes",
-      idPrefix: "cj_person",
-      values: cfg.persons,
-      options: getPersonOptions()
-    }),
-    renderRadioGroup({
-      title: "Affichage de la question",
-      id: "cj_questionFormat",
-      value: cfg.questionFormat,
-      options: [
-        { value: "pronoun", label: "verbe + temps + pronom" },
-        { value: "grammar", label: "personne grammaticale" }
-      ]
-    }),
-    renderRadioGroup({
-      title: "Réponse attendue",
-      id: "cj_answerFormat",
-      value: cfg.answerFormat,
-      options: [
-        { value: "form_only", label: "forme verbale seule" },
-        { value: "with_pronoun", label: "pronom + forme verbale" }
-      ]
-    }),
-    renderRadioGroup({
-      title: "Tirage",
-      id: "cj_drawMode",
-      value: cfg.drawMode,
-      options: [
-        { value: "random", label: "Aléatoire" },
-        { value: "in_order", label: "Dans l’ordre" }
-      ]
-    })
+      ${renderRadioGroup({
+        title: "Affichage de la question",
+        id: "cj_questionFormat",
+        value: uiCfg.questionFormat,
+        options: [
+          { value: "pronoun", label: "verbe + temps + pronom" },
+          { value: "grammar", label: "personne grammaticale" }
+        ]
+      })}
+      ${renderRadioGroup({
+        title: "Réponse attendue",
+        id: "cj_answerFormat",
+        value: uiCfg.answerFormat,
+        options: [
+          { value: "flexible", label: "avec ou sans pronom" },
+          { value: "form_only", label: "forme verbale seule" },
+          { value: "with_pronoun", label: "pronom + forme verbale" }
+        ]
+      })}
+      ${renderRadioGroup({
+        title: "Ordre des questions",
+        id: "cj_drawMode",
+        value: uiCfg.drawMode,
+        options: [
+          { value: "random", label: "Aléatoire" },
+          { value: "in_order", label: "Respecter l’ordre des personnes" }
+        ]
+      })}
+    `, { collapsible: true, expanded: false, idPrefix: "cj_advanced" })
   )}${renderListModal()}`;
 
   bindRadio(container, "cj_sourceMode", { onChange: () => updateDynamicUi(container) });
+  bindCollapsibleSection(container, "cj_advanced");
   bindRadio(container, "cj_questionFormat");
   bindRadio(container, "cj_answerFormat");
   bindRadio(container, "cj_compoundAuxiliary", { onChange: () => updateDynamicUi(container) });
   bindRadio(container, "cj_drawMode");
   bindSelect(container, "cj_presetId", { onChange: () => updateDynamicUi(container) });
-  bindPersonalListSelect(container);
+  if (personalListsAvailable) bindPersonalListSelect(container);
   bindCheckboxUpdates(container, "cj_tense", () => updateDynamicUi(container));
   bindCheckboxUpdates(container, "cj_person", () => updateDynamicUi(container));
 
   const personalText = container.querySelector("#cj_personalVerbsText");
   personalText?.addEventListener("input", () => updateDynamicUi(container));
-  bindPersonalListActions(container, context);
+  if (personalListsAvailable) bindPersonalListActions(container, context);
 
   const customText = container.querySelector("#cj_customVerbsText");
   customText?.addEventListener("input", () => updateDynamicUi(container));
 
   bindCustomVerbBlocks(container);
   bindListModal(container);
-  updateDynamicUi(container);
-  void ensurePersonalListsLoaded(container, context, cfg.personalListId);
+  updateDynamicUi(container, { personalListsAvailable });
+  if (personalListsAvailable) {
+    void ensurePersonalListsLoaded(container, context, uiCfg.personalListId);
+  }
 }
 
-export function readToolSettings(container, settings = {}) {
+export function readToolSettings(container, settings = {}, context = {}) {
   const previous = normalizeSettings(settings);
+  const personalListsAvailable = arePersonalListsAvailable(context);
+  const sourceMode = readRadio(container, "cj_sourceMode", DEFAULT_SOURCE_MODE);
   const nextSettings = normalizeSettings({
     ...previous,
-    sourceMode: readRadio(container, "cj_sourceMode", DEFAULT_SOURCE_MODE),
+    sourceMode: !personalListsAvailable && sourceMode === "personal" ? DEFAULT_SOURCE_MODE : sourceMode,
     presetId: readSelect(container, "cj_presetId", { parse: (value) => value }) || DEFAULT_PRESET_ID,
     personalListId: readSelect(container, "cj_personalListId", { parse: (value) => String(value || "").trim() }),
     personalListName: getSelectedPersonalList(container)?.name || "",
@@ -259,8 +273,9 @@ export function readToolSettings(container, settings = {}) {
 
 export { getDefaultSettings };
 
-function updateDynamicUi(container) {
-  const sourceMode = readRadio(container, "cj_sourceMode", DEFAULT_SOURCE_MODE);
+function updateDynamicUi(container, { personalListsAvailable = true } = {}) {
+  const rawSourceMode = readRadio(container, "cj_sourceMode", DEFAULT_SOURCE_MODE);
+  const sourceMode = !personalListsAvailable && rawSourceMode === "personal" ? DEFAULT_SOURCE_MODE : rawSourceMode;
   const presetPanel = container.querySelector("#cj_presetPanel");
   const personalPanel = container.querySelector("#cj_personalPanel");
   const customPanel = container.querySelector("#cj_customPanel");
@@ -279,6 +294,21 @@ function updateDynamicUi(container) {
   updateOpenModalStats(container);
 }
 
+
+function arePersonalListsAvailable(context = {}) {
+  // Dans le Catalogue/Admin, les activités système doivent rester autonomes :
+  // elles peuvent utiliser une liste prédéfinie ou une liste fixe, mais pas une
+  // liste personnelle appartenant à un enseignant. Le code des listes personnelles
+  // reste conservé pour un futur contexte dédié.
+  if (context?.isCatalogAdmin === true || context?.catalogAdmin === true) return false;
+  const catalogContextMarkers = [
+    context?.catalogActivityId,
+    context?.catalog_activity_id,
+    context?.catalogContext,
+    context?.catalog_context
+  ];
+  return !catalogContextMarkers.some((value) => value != null && String(value).trim() !== "");
+}
 
 function createPersonalListsState() {
   return {

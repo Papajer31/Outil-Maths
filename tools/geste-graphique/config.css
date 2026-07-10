@@ -1,0 +1,32 @@
+.gg-config-digits-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.gg-digit-pill {
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.045);
+  border-radius: .75rem;
+  min-height: 2.55rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+.gg-digit-pill:has(input:checked) {
+  border-color: rgba(255, 210, 84, .8);
+  background: rgba(255, 210, 84, .16);
+}
+
+.gg-digit-pill input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gg-model-visibility-widget[hidden] {
+  display: none !important;
+}

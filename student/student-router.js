@@ -43,7 +43,7 @@ function renderCurrentRoute(){
   const route = parseCurrentRoute();
   const routeName = route.name || "home";
   const routeChanged = routeName !== currentRouteName;
-  const isDirectSessionEntry = route.isSharedSessionEntry || route.isProjectedTeacherEntry;
+  const isDirectSessionEntry = route.isSharedSessionEntry || route.isProjectedTeacherEntry || route.isCatalogTestEntry;
 
   if (routeName !== "home" && !studentState.accessCode){
     window.location.hash = "#/home";
@@ -129,7 +129,8 @@ function parseCurrentRoute(){
     name,
     search: rawQuery ? `?${rawQuery}` : "",
     isSharedSessionEntry: params.get("shared") === "1",
-    isProjectedTeacherEntry: params.get("projected") === "1"
+    isProjectedTeacherEntry: params.get("projected") === "1",
+    isCatalogTestEntry: params.get("catalogTest") === "1" || params.get("catalogContext") === "test"
   };
 }
 

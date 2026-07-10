@@ -8,12 +8,13 @@
   <link rel="stylesheet" href="../css/ui.css">
   <link rel="stylesheet" href="./css/common.css">
   <link rel="stylesheet" href="./css/dashboard.css">
-  <link rel="stylesheet" href="./css/config-editor.css">
   <link rel="stylesheet" href="./css/config-widgets.css">
   <link rel="stylesheet" href="../shared/color-picker.css">
   <link rel="stylesheet" href="../shared/simple-markup.css">
   <link rel="stylesheet" href="../shared/selection-text.css">
+  <link rel="stylesheet" href="../shared/tool-assets/asset-picker.css">
   <link rel="stylesheet" href="../shared/help-popover.css">
+  <link rel="stylesheet" href="../student/css/student-core.css">
   <link rel="stylesheet" href="./css/question-banks.css">
   <link rel="stylesheet" href="./css/teacher-tools.css">
 </head>
@@ -64,7 +65,12 @@
                 </button>
 
                 <button id="btnNavActivities" class="dashboard-nav-main dashboard-nav-main--header is-active" type="button">
-                  <span class="dashboard-nav-label">Activités</span>
+                  <span class="dashboard-nav-label">Catalogue</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavMissions" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Missions</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
@@ -75,6 +81,11 @@
 
                 <button id="btnNavTeacherTools" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Tableau</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavSuperAdmin" class="dashboard-nav-main dashboard-nav-main--header hidden" type="button">
+                  <span class="dashboard-nav-label">Admin</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
               </div>
@@ -142,6 +153,24 @@
 
               <div id="configsList" class="dashboard-content-scroll dashboard-config-list">
                 <div style="color:var(--muted);">Chargement…</div>
+              </div>
+            </div>
+
+
+
+            <div id="missionsView" class="dashboard-content-view hidden">
+              <div id="missionsHeader" class="dashboard-config-header"></div>
+
+              <div id="missionsList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
+              </div>
+            </div>
+
+            <div id="superAdminView" class="dashboard-content-view hidden">
+              <div id="superAdminHeader" class="dashboard-config-header"></div>
+
+              <div id="superAdminList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
               </div>
             </div>
 
@@ -278,282 +307,6 @@
               </div>
             </div>
 
-            <div id="editorView" class="dashboard-content-view dashboard-editor-view hidden">
-              <div class="cfg-page cfg-page-embedded" data-editor-host="dashboard">
-                <header class="panel cfg-header">
-                  <div class="cfg-header-row cfg-header-row-top">
-                    <div class="cfg-header-left">
-                      <button class="btn cfg-back-btn" id="btnBackDashboard" type="button" aria-label="Retour au tableau de bord">↩</button>
-
-                      <div class="cfg-header-identity">
-                        <div class="cfg-config-name-wrap">
-                          <div class="cfg-field-label">Titre de l'activité :</div>
-                          <div id="configNameDisplay" class="cfg-config-name-display">Activité sans nom</div>
-                          <button
-                            class="dashboard-icon-btn cfg-name-rename-btn"
-                            id="btnRenameConfig"
-                            type="button"
-                            aria-label="Renommer l’activité"
-                            title="Renommer l’activité"
-                            >
-                              <span class="dashboard-material-icon cfg-name-rename-icon" aria-hidden="true">drive_file_rename_outline</span>
-                            </button>
-                        </div>
-
-                      </div>
-                    </div>
-
-                    <div id="editorMessage" class="cfg-editor-message"></div>
-
-                    <div class="cfg-header-actions">
-                      <button class="btn cfg-save-btn" id="btnSaveConfig" type="button">Enregistrer</button>
-
-                      <div class="cfg-share-wrap">
-                        <button class="btn cfg-share-btn" id="btnShareActivity" type="button" aria-label="Partager l’activité" aria-haspopup="menu" aria-expanded="false" title="Partager l’activité" disabled>
-                          <span class="cfg-material-icon" aria-hidden="true">share</span>
-                        </button>
-
-                        <div class="panel cfg-share-popup hidden" id="sharePopup" role="menu" aria-label="Partager l’activité">
-                          <div id="sharePopupStudentActions">
-                            <button class="btn cfg-share-action" id="btnShareCopyLink" type="button" role="menuitem">
-                              <span class="cfg-material-icon" aria-hidden="true">link_2</span>
-                              <span>Copier le lien</span>
-                            </button>
-
-                            <button class="btn cfg-share-action" id="btnShareOpenLink" type="button" role="menuitem">
-                              <span class="cfg-material-icon" aria-hidden="true">open_in_new</span>
-                              <span>Ouvrir le lien</span>
-                            </button>
-
-                            <button class="btn cfg-share-action" id="btnShareDownloadQr" type="button" role="menuitem">
-                              <span class="cfg-material-icon" aria-hidden="true">qr_code_2</span>
-                              <span>Télécharger le QR code</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        class="btn cfg-share-btn cfg-project-launch-btn"
-                        id="btnProjectConfig"
-                        type="button"
-                        aria-label="Projeter l’activité"
-                        title="Projeter l’activité"
-                        hidden
-                      >
-                        <span class="cfg-material-icon" aria-hidden="true">slideshow</span>
-                      </button>
-                    </div>
-                  </div>
-                </header>
-
-                <section id="projectedControlPanel" class="panel cfg-projection-panel hidden">
-                  <div class="cfg-projection-panel-main">
-                    <div class="cfg-projection-title"><span>Projection</span><span>en cours</span></div>
-                  </div>
-
-                  <div class="cfg-projection-actions">
-                    <button class="btn cfg-projection-btn" id="btnProjectedTogglePopupControls" type="button">
-                      <span class="cfg-material-icon" id="projectedTogglePopupControlsIcon" aria-hidden="true">visibility_off</span>
-                      <span id="projectedTogglePopupControlsLabel">Masquer boutons</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn is-danger" id="btnProjectedQuit" type="button">
-                      <span class="cfg-material-icon" aria-hidden="true">close</span>
-                      <span>Quitter</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn" id="btnProjectedPrevTool" type="button">
-                      <span class="cfg-material-icon" aria-hidden="true">skip_previous</span>
-                      <span>Outil −</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn" id="btnProjectedShowAnswer" type="button">
-                      <span class="cfg-material-icon" aria-hidden="true">visibility</span>
-                      <span>Réponse</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn cfg-projection-btn-accent" id="btnProjectedNextQuestion" type="button">
-                      <span class="cfg-material-icon" aria-hidden="true">arrow_forward</span>
-                      <span id="projectedNextQuestionLabel">Question —/—</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn" id="btnProjectedNextTool" type="button">
-                      <span class="cfg-material-icon" aria-hidden="true">skip_next</span>
-                      <span>Outil +</span>
-                    </button>
-
-                    <button class="btn cfg-projection-btn" id="btnProjectedPause" type="button">
-                      <span class="cfg-material-icon" id="projectedPauseIcon" aria-hidden="true">pause</span>
-                      <span id="projectedPauseLabel">Pause</span>
-                    </button>
-                  </div>
-                </section>
-
-                <section class="panel cfg-main">
-                  <aside class="cfg-tools-panel">
-                    <div class="cfg-tools-header">
-                      <div class="cfg-tools-header-main">
-                        <div class="cfg-panel-title">Séquence d’outils</div>
-                      </div>
-                    </div>
-
-                    <div class="cfg-passation-card" id="passationModeControl">
-                      <button
-                        class="btn cfg-passation-summary"
-                        id="passationModeToggleButton"
-                        type="button"
-                        aria-label="Déplier les réglages du mode de passation général"
-                        aria-expanded="false"
-                        aria-controls="passationModePanel"
-                        title="Déplier les réglages du mode de passation général"
-                      >
-                        <span class="cfg-passation-summary-main">
-                          <span class="cfg-passation-summary-title">Mode de passation général</span>
-                          <span id="passationModeSummary" class="cfg-passation-summary-text">Individuel - Avec réponse - Évaluation</span>
-                        </span>
-                        <span class="cfg-material-icon cfg-passation-chevron" id="passationModeChevron" aria-hidden="true">expand_more</span>
-                      </button>
-
-                      <div class="cfg-passation-panel" id="passationModePanel" hidden>
-                        <div class="cfg-passation-help-row">
-                          <div
-                            id="activityModeBadge"
-                            class="cfg-passation-segmented"
-                            data-passation-kind="activity-mode"
-                            data-activity-mode="individual"
-                            role="group"
-                            aria-label="Mode social de l’activité"
-                          >
-                            <button class="cfg-passation-segment" type="button" data-passation-value="individual">Activité individuelle</button>
-                            <button class="cfg-passation-segment" type="button" data-passation-value="group">Activité collective</button>
-                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
-                          </div>
-                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-mode" aria-label="Aide : activité individuelle ou collective" aria-expanded="false">?</button>
-                        </div>
-
-                        <div class="cfg-passation-help-row">
-                          <div
-                            id="responseUiPreviewToggle"
-                            class="cfg-passation-segmented"
-                            data-passation-kind="response-ui"
-                            data-response-ui="boxed"
-                            role="group"
-                            aria-label="Interface de réponse"
-                          >
-                            <button class="cfg-passation-segment" type="button" data-passation-value="boxed">Réponse saisie</button>
-                            <button class="cfg-passation-segment" type="button" data-passation-value="free">Réponse non saisie</button>
-                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
-                          </div>
-                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-response-ui" aria-label="Aide : réponse saisie ou non saisie" aria-expanded="false">?</button>
-                        </div>
-
-                        <div class="cfg-passation-help-row">
-                          <div
-                            id="progressModePreviewToggle"
-                            class="cfg-passation-segmented"
-                            data-passation-kind="progress-mode"
-                            data-progress-mode="evaluated"
-                            role="group"
-                            aria-label="Progression de la situation"
-                          >
-                            <button class="cfg-passation-segment" type="button" data-passation-value="evaluated">Situation d’évaluation</button>
-                            <button class="cfg-passation-segment" type="button" data-passation-value="practice">Situation d’entrainement</button>
-                            <span class="cfg-passation-segment-marker" aria-hidden="true"></span>
-                          </div>
-                          <button class="help-popover-trigger cfg-passation-help-btn" type="button" data-help-icon data-help-id="passation-progress-mode" aria-label="Aide : évaluation ou entrainement" aria-expanded="false">?</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="cfg-duration-card" id="activityTotalTimeControl">
-                      <button
-                        class="btn cfg-duration-summary"
-                        id="activityTotalTimeToggleButton"
-                        type="button"
-                        aria-label="Déplier les réglages de durée"
-                        aria-expanded="false"
-                        aria-controls="activityTotalTimePanel"
-                        title="Déplier les réglages de durée"
-                      >
-                        <span class="cfg-material-icon cfg-duration-icon" aria-hidden="true">timer</span>
-                        <span id="activityDurationEstimate" class="cfg-duration-summary-text">Durée : — (estimation)</span>
-                        <span class="cfg-material-icon cfg-duration-chevron" id="activityTotalTimeChevron" aria-hidden="true">expand_more</span>
-                      </button>
-
-                      <div class="cfg-duration-panel" id="activityTotalTimePanel" hidden>
-                        <label class="cfg-duration-fixed-toggle" for="activityTotalTimeFixedCheckbox">
-                          <input class="tv-checkbox cfg-duration-fixed-checkbox" id="activityTotalTimeFixedCheckbox" type="checkbox">
-                          <span>Durée fixe :</span>
-                        </label>
-
-                        <div class="tv-stepper tv-stepper-no-inline-label cfg-total-time-stepper" role="group" aria-label="Durée totale en minutes">
-                          <button
-                            class="tv-stepper-btn"
-                            type="button"
-                            data-stepper-target="activityTotalTimeMinutesInput"
-                            data-stepper-direction="-1"
-                            aria-label="Diminuer la durée fixe"
-                          >
-                            <span class="tv-stepper-icon" aria-hidden="true">remove</span>
-                          </button>
-
-                          <input
-                            id="activityTotalTimeMinutesInput"
-                            class="tv-input tv-input-stepper cfg-total-time-input"
-                            type="number"
-                            min="1"
-                            max="120"
-                            step="1"
-                            inputmode="numeric"
-                            aria-label="Durée fixe en minutes"
-                          >
-
-                          <button
-                            class="tv-stepper-btn"
-                            type="button"
-                            data-stepper-target="activityTotalTimeMinutesInput"
-                            data-stepper-direction="1"
-                            aria-label="Augmenter la durée fixe"
-                          >
-                            <span class="tv-stepper-icon" aria-hidden="true">add</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div id="sequenceWarnings" class="cfg-sequence-warnings" hidden></div>
-                    <div id="configRows" class="cfg-tools-list"></div>
-                  </aside>
-
-                  <section class="cfg-settings-panel">
-                    <div class="cfg-settings-header">
-                      <div class="cfg-panel-title" id="toolConfigTitle">Configuration de l’outil</div>
-                    </div>
-
-                    <div id="toolConfigHost" class="cfg-tool-config-host">
-                      <div class="cfg-empty-state">
-                        Sélectionne un outil dans la séquence.
-                      </div>
-                    </div>
-                  </section>
-                </section>
-
-                <div id="toolPickerOverlay" class="cfg-modal hidden" aria-hidden="true">
-                  <div class="cfg-modal-backdrop" data-close-tool-picker="true"></div>
-                  <div class="panel cfg-modal-card" role="dialog" aria-modal="true" aria-labelledby="toolPickerTitle">
-                    <div class="cfg-modal-header">
-                      <div>
-                        <div id="toolPickerTitle" class="cfg-modal-title">Ajouter un outil</div>
-                        <div class="cfg-modal-subtitle">Choisis un outil pour l’ajouter à la séquence.</div>
-                      </div>
-                      <button class="btn cfg-modal-close" id="btnCloseToolPicker" type="button" aria-label="Fermer">✕</button>
-                    </div>
-
-                    <div id="toolPickerTiles" class="cfg-tool-picker-grid"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </section>
         </div>
       </div>
@@ -597,33 +350,7 @@
     </div>
   </div>
 
-  <div id="deleteActivityModal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-title">Supprimer l’activité</div>
 
-      <div id="deleteActivityText" class="dashboard-message"></div>
-
-      <div class="modal-actions">
-        <div id="deleteActivityMessage" class="modal-message"></div>
-        <button id="btnDeleteActivityCancel" class="btn" type="button">Annuler</button>
-        <button id="btnDeleteActivityConfirm" class="btn dashboard-danger-btn" type="button">Supprimer</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="leaveEditorModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-content modal-content-wide" role="dialog" aria-modal="true" aria-labelledby="leaveEditorModalTitle">
-      <div id="leaveEditorModalTitle" class="modal-title">Quitter l’activité ?</div>
-
-      <div id="leaveEditorModalText" class="dashboard-message modal-body-text"></div>
-
-      <div class="modal-actions">
-        <div class="modal-message"></div>
-        <button id="btnLeaveEditorCancel" class="btn" type="button">Continuer l’édition</button>
-        <button id="btnLeaveEditorConfirm" class="btn dashboard-danger-btn" type="button">Quitter sans enregistrer</button>
-      </div>
-    </div>
-  </div>
 
   <div id="profileOverlay" class="modal hidden">
     <div class="modal-content dashboard-profile-placeholder-modal">
@@ -665,24 +392,6 @@
     </div>
   </div>
 
-  <div id="renameActivityModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-content modal-content-wide" role="dialog" aria-modal="true" aria-labelledby="renameActivityModalTitle">
-      <div id="renameActivityModalTitle" class="modal-title">Renommer l’activité</div>
-
-      <input
-        id="renameActivityInput"
-        type="text"
-        placeholder="Nom de l’activité"
-        class="modal-text-input"
-      >
-
-      <div class="modal-actions">
-        <div id="renameActivityModalMessage" class="modal-message"></div>
-        <button id="btnRenameActivityCancel" class="btn" type="button">Annuler</button>
-        <button id="btnRenameActivityConfirm" class="btn primary" type="button">Renommer</button>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>

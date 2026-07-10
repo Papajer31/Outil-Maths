@@ -16,7 +16,7 @@ export const imageTeacherTool = defineTeacherTool({
   icon: "image",
   description: "Afficher une image flottante, sans bordure, zoomable et redimensionnable.",
 
-  defaultLayout: { x: 0.22, y: 0.16, width: 0.46, height: 0.48 },
+  defaultLayout: { x: 0.22, y: 0.16, width: 0.30, height: 0.27 },
   minLayout: { width: 0.12, height: 0.12 },
   interaction: {
     moveMode: "body",

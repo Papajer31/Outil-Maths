@@ -175,13 +175,16 @@ function renderColorPickerMarkup(headerLabel = ""){
   `;
 }
 
-export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleur", headerLabel = "", popup = false, onChange } = {}){
+export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleur", headerLabel = "", popup = false, popupPosition = "fixed", onChange } = {}){
   if (!host) {
     return { destroy(){} };
   }
 
   let state = createState(value);
   let activePointerId = null;
+  let popoverPositionFrame = null;
+  let floatingListenersBound = false;
+  const useLocalPopover = popupPosition === "local";
 
   host.innerHTML = popup
     ? `
@@ -190,7 +193,7 @@ export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleu
           <span>${escapeHtml(label)}</span>
           <span class="ui-color-picker-trigger-icon" aria-hidden="true">expand_more</span>
         </button>
-        <div class="ui-color-picker-popover" hidden>
+        <div class="ui-color-picker-popover${useLocalPopover ? " is-local" : ""}" hidden>
           ${renderColorPickerMarkup(headerLabel)}
         </div>
       </div>
@@ -207,6 +210,102 @@ export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleu
   const alphaThumb = alphaStrip?.querySelector(".ui-color-picker-strip-thumb");
   const hueStrip = host.querySelector(".ui-color-picker-hue");
   const hueThumb = hueStrip?.querySelector(".ui-color-picker-strip-thumb");
+
+  function requestFrame(callback){
+    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(callback);
+    return window.setTimeout(callback, 0);
+  }
+
+  function cancelFrame(frameId){
+    if (frameId == null) return;
+    if (typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(frameId);
+      return;
+    }
+    window.clearTimeout(frameId);
+  }
+
+  function isPopoverOpen(){
+    return popup && popover && popover.hidden === false;
+  }
+
+  function updatePopoverPosition(){
+    if (useLocalPopover) return;
+    if (!isPopoverOpen() || !trigger || !popover) return;
+    const viewportWidth = Math.max(1, window.innerWidth || document.documentElement?.clientWidth || 1);
+    const viewportHeight = Math.max(1, window.innerHeight || document.documentElement?.clientHeight || 1);
+    const margin = 12;
+    const gap = 8;
+    const triggerRect = trigger.getBoundingClientRect();
+    const availableWidth = Math.max(1, viewportWidth - (margin * 2));
+    const width = Math.min(520, availableWidth);
+
+    popover.style.width = `${width}px`;
+    popover.style.maxHeight = "";
+    popover.style.left = "0px";
+    popover.style.top = "0px";
+
+    const measuredRect = popover.getBoundingClientRect();
+    const popoverHeight = Math.max(1, measuredRect.height || 1);
+    const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - gap - margin);
+    const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
+    const openAbove = spaceBelow < popoverHeight && spaceAbove > spaceBelow;
+    const chosenSpace = openAbove ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(1, Math.min(viewportHeight - (margin * 2), Math.max(1, chosenSpace)));
+    const visibleHeight = Math.min(popoverHeight, maxHeight);
+    const left = clamp(triggerRect.left, margin, Math.max(margin, viewportWidth - width - margin));
+    const naturalTop = openAbove
+      ? triggerRect.top - gap - visibleHeight
+      : triggerRect.bottom + gap;
+    const top = clamp(naturalTop, margin, Math.max(margin, viewportHeight - visibleHeight - margin));
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    popover.style.maxHeight = `${Math.floor(maxHeight)}px`;
+  }
+
+  function schedulePopoverPosition(){
+    if (!isPopoverOpen() || popoverPositionFrame != null) return;
+    popoverPositionFrame = requestFrame(() => {
+      popoverPositionFrame = null;
+      updatePopoverPosition();
+    });
+  }
+
+  function bindFloatingListeners(){
+    if (floatingListenersBound || !popup || useLocalPopover) return;
+    floatingListenersBound = true;
+    window.addEventListener("resize", schedulePopoverPosition);
+    document.addEventListener("scroll", schedulePopoverPosition, true);
+  }
+
+  function unbindFloatingListeners(){
+    if (!floatingListenersBound) return;
+    floatingListenersBound = false;
+    window.removeEventListener("resize", schedulePopoverPosition);
+    document.removeEventListener("scroll", schedulePopoverPosition, true);
+    if (popoverPositionFrame != null) {
+      cancelFrame(popoverPositionFrame);
+      popoverPositionFrame = null;
+    }
+  }
+
+  function openPopover(){
+    if (!popover || !trigger) return;
+    popover.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    if (!useLocalPopover) {
+      updatePopoverPosition();
+      bindFloatingListeners();
+    }
+  }
+
+  function closePopover(){
+    if (!popover || !trigger) return;
+    popover.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    unbindFloatingListeners();
+  }
 
   function emit(){
     onChange?.(formatColorPickerValue(state));
@@ -285,24 +384,21 @@ export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleu
   bindDrag(hueStrip, updateHue);
 
   trigger?.addEventListener("click", () => {
-    const isOpen = popover?.hidden === false;
-    if (popover) popover.hidden = isOpen;
-    trigger.setAttribute("aria-expanded", isOpen ? "false" : "true");
+    if (isPopoverOpen()) closePopover();
+    else openPopover();
   });
 
   control?.addEventListener("focusout", () => {
     window.setTimeout(() => {
       if (!control.contains(document.activeElement)) {
-        if (popover) popover.hidden = true;
-        trigger?.setAttribute("aria-expanded", "false");
+        closePopover();
       }
     }, 0);
   });
 
   control?.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (popover) popover.hidden = true;
-    trigger?.setAttribute("aria-expanded", "false");
+    closePopover();
     trigger?.focus();
   });
 
@@ -310,6 +406,7 @@ export function createColorPicker({ host, value = DEFAULT_COLOR, label = "Couleu
 
   return {
     destroy(){
+      unbindFloatingListeners();
       host.innerHTML = "";
     }
   };

@@ -4,24 +4,19 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 22px;
   overflow: hidden;
-  font-family: "Andika", system-ui, sans-serif;
-  color: var(--text, #f5f7fb);
 }
 
 .selection-card {
   width: min(1480px, calc(100% - 48px));
-  --selection-correction-height: 76px;
+  --tool-feedback-height: 76px;
   flex: 1 1 auto;
-  min-height: 0;
-  box-sizing: border-box;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) var(--selection-correction-height) 34px;
+  grid-template-rows: minmax(0, 1fr) var(--tool-feedback-height) 34px;
   align-items: center;
   justify-items: center;
   gap: 18px;
@@ -33,18 +28,9 @@
 .selection-statement {
   grid-row: 1;
   width: min(1280px, 100%);
-  min-height: 0;
-  display: block;
   position: relative;
   align-self: center;
   justify-self: center;
-  text-align: center;
-  font-size: clamp(34px, 3.3vw, 56px);
-  font-weight: 900;
-  line-height: 1.55;
-  color: var(--text, #f5f7fb);
-  overflow-wrap: anywhere;
-  white-space: normal;
 }
 
 .selection-selection-layer {
@@ -125,43 +111,15 @@
 .selection-correction {
   grid-row: 2;
   width: min(900px, 100%);
-  height: var(--selection-correction-height);
-  min-height: 0;
-  box-sizing: border-box;
-  padding: 10px 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text, #f5f7fb);
-  font-size: clamp(20px, 1.6vw, 28px);
-  font-weight: 700;
-  line-height: 1.25;
-  text-align: center;
+  height: var(--tool-feedback-height);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
 
-.selection-correction--empty {
-  visibility: hidden;
-}
-
-.selection-empty-message {
-  padding: 22px 28px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(239, 107, 115, 0.42);
-  color: #ffd2d2;
-  font-size: clamp(26px, 2.4vw, 40px);
-  font-weight: 900;
-}
-
 @media (max-width: 900px) {
   .selection-card {
     width: calc(100% - 32px);
-  }
-
-  .selection-statement {
-    font-size: clamp(28px, 6vw, 42px);
   }
 }

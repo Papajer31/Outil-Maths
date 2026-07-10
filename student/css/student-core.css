@@ -32,7 +32,7 @@ body.student-route-activities .student-app{
 }
 
 .student-app.student-route-fade-in{
-  animation:studentRouteFadeIn .5s ease-out both;
+  animation:studentRouteFadeIn .42s ease-out both;
 }
 
 .student-screen-shell,
@@ -61,11 +61,69 @@ body.student-route-activities .student-app{
 }
 
 .student-home-content{
-  width:min(520px, 100%);
+  width:100%;
+  position:relative;
+  z-index:1;
 }
 
-.student-home-content .center-card{
-  width:100%;
+.student-home-content .home-form{
+  width:min(520px, 100%);
+  margin-inline:auto;
+}
+
+.student-home-shell-leaving .student-home-content{
+  animation:studentHomeContentFadeOut .26s ease-in both;
+}
+
+.student-home-launch{
+  position:fixed;
+  inset:0;
+  z-index:4;
+  overflow:hidden;
+  pointer-events:none;
+}
+
+.student-home-launch-rocket{
+  position:absolute;
+  top:50%;
+  left:0;
+  width:clamp(520px, 68vw, 1120px);
+  max-width:none;
+  height:auto;
+  display:block;
+  filter:drop-shadow(0 28px 36px rgba(0, 0, 0, .32));
+  transform-origin:center;
+  animation:studentHomeRocketFlyby 1.65s cubic-bezier(.18, .78, .24, 1) infinite;
+  will-change:transform, opacity;
+}
+
+@keyframes studentHomeRocketFlyby{
+  0%{
+    opacity:0;
+    transform:translate3d(-125%, 34%, 0) rotate(-10deg) scale(.9);
+  }
+  8%{
+    opacity:1;
+  }
+  48%{
+    opacity:1;
+    transform:translate3d(28vw, -54%, 0) rotate(-8deg) scale(1.08);
+  }
+  100%{
+    opacity:0;
+    transform:translate3d(138vw, -126%, 0) rotate(-7deg) scale(1.22);
+  }
+}
+
+@keyframes studentHomeContentFadeOut{
+  from{
+    opacity:1;
+    transform:translateY(0);
+  }
+  to{
+    opacity:0;
+    transform:translateY(8px);
+  }
 }
 
 .student-stars-shell{
@@ -207,6 +265,7 @@ body.student-route-activities .student-app{
 
 .session-answer-toggle-btn{
   box-sizing:border-box;
+  display:inline-flex;
   height:calc(1.1em + 30px);
   width:336px;
   gap:10px;
@@ -215,19 +274,23 @@ body.student-route-activities .student-app{
   min-height:calc(1.1em + 30px);
   min-width:336px;
   flex:0 0 336px;
-  justify-content:flex-start;
-  text-align:left;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  overflow:visible;
   white-space:nowrap;
 }
 
 .projected-session-btn#btnAnswerDisplayToggle{
   box-sizing:border-box;
+  display:inline-flex;
   width:336px;
   max-width:336px;
   min-width:336px;
   flex:0 0 336px;
-  justify-content:flex-start;
-  text-align:left;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
 }
 
 .session-shell-btn-icon{
@@ -235,7 +298,11 @@ body.student-route-activities .student-app{
 }
 
 .session-shell-btn-label{
-  display:block;
+  display:inline-block;
+  min-width:0;
+  color:inherit;
+  opacity:1;
+  white-space:nowrap;
 }
 
 .student-icon,
@@ -1822,6 +1889,41 @@ body.student-route-selectstudents .student-selection-class{
   }
 }
 
+.session-page .student-icon,
+.session-page .icon{
+  width:1em;
+  height:1em;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  font-size:42px;
+  line-height:1;
+}
+
+.session-page .student-nav-btn{
+  width:72px;
+  height:72px;
+}
+
+.session-page .projected-session-controls{
+  gap:10px;
+  flex-wrap:nowrap;
+}
+
+.session-page .projected-session-btn{
+  min-height:58px;
+  padding:10px 16px;
+}
+
+.session-page .projected-session-btn-icon{
+  font-size:28px;
+}
+
+.session-page .projected-session-btn-label{
+  font-size:22px;
+}
+
 /* Défi final : panneau latéral de fin de séquence infinie */
 .session-page .session-sidebar-reserve-right{
   position:relative;
@@ -2142,12 +2244,15 @@ body.student-orientation-blocked{
   }
 
   body.student-route-home .student-home-content{
+    width:100%;
+  }
+
+  body.student-route-home .student-home-content .home-form{
     width:min(430px, 100%);
   }
 
-  body.student-route-home .center-card{
-    padding:20px 24px;
-    border-radius:22px;
+  body.student-route-home .student-home-launch-rocket{
+    width:clamp(360px, 68vw, 680px);
   }
 
   body.student-route-home .stack-lg{
@@ -2350,4 +2455,49 @@ body.student-orientation-blocked{
     width:28px;
     height:28px;
   }
+}
+
+/* =========================
+   STUDENT INTERACTION GUARDS
+   ========================= */
+
+.student-app,
+.student-app *{
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+}
+
+.student-app input,
+.student-app textarea,
+.student-app select,
+.student-app [contenteditable="true"],
+.student-app [data-allow-text-selection="true"],
+.student-app .allow-text-selection{
+  -webkit-touch-callout:default;
+  -webkit-user-select:text;
+  user-select:text;
+}
+
+/* Centrage robuste des icônes SVG hors plein écran / en mode test intégré. */
+.student-nav-btn,
+.projected-session-btn,
+.student-manual-btn{
+  line-height:1;
+}
+
+.student-nav-btn .student-icon,
+.student-nav-btn .material-icon-svg,
+.projected-session-btn-icon,
+.session-shell-btn-icon,
+.student-icon{
+  display:grid;
+  place-items:center;
+}
+
+.student-nav-btn .material-icon-svg,
+.projected-session-btn-icon .material-icon-svg,
+.session-shell-btn-icon .material-icon-svg,
+.student-icon .material-icon-svg{
+  display:block;
 }

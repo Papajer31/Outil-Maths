@@ -97,7 +97,7 @@ export function getGraphFilename(id) {
 export function getGraphImageUrl(id) {
   const asset = getGraphAsset(id);
   if (!asset) return "";
-  return new URL(`./assets/graphs/${asset}`, import.meta.url).href;
+  return new URL(`../../shared/tool-assets/images/graphs/${asset}`, import.meta.url).href;
 }
 
 export function visibleTextOfGraph(id) {
@@ -666,7 +666,7 @@ export function getLetterAsset(letter) {
 export function getLetterImageUrl(letter) {
   const asset = getLetterAsset(letter);
   if (!asset) return "";
-  return new URL(`../../student/lettres/${asset}`, import.meta.url).href;
+  return new URL(`../../shared/ui-assets/lettres/${asset}`, import.meta.url).href;
 }
 
 export function getAcceptedFallbackGraph(graph) {

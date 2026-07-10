@@ -14,33 +14,32 @@
   <div class="page-shell">
     <main class="page-main">
       <div id="studentApp" class="student-app">
-        <section class="center-card" aria-labelledby="student-home-title">
-          <div class="stack-lg text-center">
-            <header class="stack-sm">
-              <h1 id="student-home-title" class="title-xl">Entre le code de ta classe</h1>
-            </header>
+        <div class="student-home-content stack-lg text-center" role="region" aria-labelledby="student-home-title">
+          <header class="stack-sm">
+            <h1 id="student-home-title" class="title-xl">Tu dois d'abord écrire le code de ta classe.</h1>
+          </header>
 
-            <form id="studentHomeForm" class="home-form stack-md" novalidate>
-              <label class="visually-hidden" for="classCode">Code de la classe</label>
-              <input
-                id="classCode"
-                name="classCode"
-                class="input-text"
-                type="text"
-                inputmode="text"
-                autocomplete="off"
-                autocapitalize="characters"
-                spellcheck="false"
-                maxlength="12"
-                placeholder="ABC123"
-              >
+          <form id="studentHomeForm" class="home-form stack-md" novalidate>
+            <label class="visually-hidden" for="classCode">Code de la classe</label>
+            <input
+              id="classCode"
+              name="classCode"
+              class="input-text"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              maxlength="12"
+              placeholder="ABC123"
+              autofocus
+            >
 
-              <button type="submit" class="btn btn-primary">Connexion</button>
+            <button type="submit" class="btn btn-primary">Connexion</button>
 
-              <div id="homeMessage" class="home-message" aria-live="polite"></div>
-            </form>
-          </div>
-        </section>
+            <div id="homeMessage" class="home-message" aria-live="polite"></div>
+          </form>
+        </div>
       </div>
     </main>
 

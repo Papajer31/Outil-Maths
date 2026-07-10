@@ -1,7 +1,7 @@
 export const TOOL_LIMITS = Object.freeze({
   timePerQ: { min: 5, max: 999, step: 5 },
   questionCount: { min: 1, max: 200, step: 1 },
-  answerTime: { min: 1, max: 30, step: 1 },
+  answerTime: { min: 0, max: 30, step: 1 },
   successGoalSafetyMilestones: { min: 0, max: 12, step: 1 },
   successGoalCorrectCount: { min: 1, max: 999, step: 1 },
   questionTransitionSec: { min: 0, max: 30, step: 1 },
@@ -287,11 +287,63 @@ export function normalizeSequenceItem(item, { fallbackToolId = "", fallbackGloba
   const safeDraft = normalizeToolDraft(item?.draft, { fallbackGlobals });
   safeDraft.enabled = true;
 
-  return {
+  const normalized = {
     instanceId: normalizeInstanceId(item?.instanceId, safeToolId),
     toolId: safeToolId,
     draft: safeDraft
   };
+
+  // Les activités du Catalogue transportent des métadonnées qui ne font pas
+  // partie du brouillon outil strict, mais dont le runtime élève a besoin :
+  // activité source, niveaux adaptatifs, niveau de départ, contexte, etc.
+  // On les conserve ici pour éviter que normalizeActivitySequence() transforme
+  // une activité Exploration adaptative en simple outil figé au niveau initial.
+  preserveSequenceMetadata(item, normalized);
+
+  return normalized;
+}
+
+function preserveSequenceMetadata(source, target) {
+  if (!source || !target) return target;
+
+  const catalogActivityId = String(source.catalog_activity_id ?? source.catalogActivityId ?? "").trim();
+  if (catalogActivityId) {
+    target.catalog_activity_id = catalogActivityId;
+  }
+
+  const catalogContext = String(source.catalog_context ?? source.catalogContext ?? "").trim();
+  if (catalogContext) {
+    target.catalog_context = catalogContext;
+  }
+
+  const rawLevel = source.catalog_difficulty_level ?? source.catalogDifficultyLevel;
+  if (rawLevel != null) {
+    const level = Math.floor(Number(rawLevel));
+    if (Number.isFinite(level)) {
+      target.catalog_difficulty_level = Math.min(5, Math.max(1, level));
+    }
+  }
+
+  const catalogLevels = source.catalog_levels ?? source.catalogLevels;
+  if (catalogLevels && typeof catalogLevels === "object" && !Array.isArray(catalogLevels)) {
+    target.catalog_levels = cloneData(catalogLevels);
+  }
+
+  const catalogDefaults = source.catalog_defaults ?? source.catalogDefaults;
+  if (catalogDefaults && typeof catalogDefaults === "object" && !Array.isArray(catalogDefaults)) {
+    target.catalog_defaults = cloneData(catalogDefaults);
+  }
+
+  if (source.catalog_adaptive != null || source.catalogAdaptive != null) {
+    target.catalog_adaptive = (source.catalog_adaptive ?? source.catalogAdaptive) === true;
+  }
+
+  const missionStepId = String(source.mission_step_id ?? source.missionStepId ?? "").trim();
+  if (missionStepId) {
+    target.mission_step_id = missionStepId;
+  }
+
+  return target;
 }
 
 export function normalizeActivitySequence(sequence, {
@@ -319,10 +371,14 @@ export function normalizeActivitySequence(sequence, {
     }
 
     usedInstanceIds.add(instanceId);
+
+    // Important : normalizeSequenceItem() a déjà conservé les métadonnées
+    // Catalogue/Mission utiles au runtime (catalog_activity_id, catalog_levels,
+    // catalog_adaptive, etc.). Ne pas reconstruire un objet minimal ici, sinon
+    // l’Exploration adaptative redevient une activité figée au niveau initial.
     out.push({
-      instanceId,
-      toolId: safeItem.toolId,
-      draft: safeItem.draft
+      ...safeItem,
+      instanceId
     });
   };
 
