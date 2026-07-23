@@ -41,7 +41,7 @@ Chaque activité peut comporter cinq niveaux fonctionnels : grande difficulté, 
 
 Le fichier `shared/catalogue.js` contient un catalogue de secours local (`CATALOG_ACTIVITIES`). Il ne remplace pas Supabase : il sert de réserve si la table `catalog_activities` n’est pas encore disponible ou pour un usage hors Supabase.
 
-État au 2026-07-05 : 22 activités locales pour 29 outils actifs. Les outils `nombres-lettres`, `conjugaison`, `question-reponse`, `qcm`, `flash-texte`, `flash-qcm` et `selection` sont actifs dans `tools/registry.js`, mais ne sont pas représentés dans ce catalogue de secours.
+État au 2026-07-05 : 22 activités locales pour 29 outils actifs. Les outils `nombres-lettres`, `conjugaison`, `question-reponse`, `qcm`, `flash-question-reponse`, `flash-qcm` et `selection` sont actifs dans `tools/registry.js`, mais ne sont pas représentés dans ce catalogue de secours.
 
 ## Exploration
 

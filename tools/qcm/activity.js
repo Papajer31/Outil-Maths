@@ -305,7 +305,7 @@ async function renderQuestion(state) {
   const questionHtml = renderQcmContent(state.currentQuestion.promptContent, state, { role: "question" });
   if (state.questionEl && !state.flash?.enabled) {
     state.questionEl.innerHTML = questionHtml;
-    applyQcmQuestionSizePreset(state);
+    clearQcmQuestionSizePreset(state.questionEl);
   }
 
   if (state.correctionEl) {
@@ -338,7 +338,7 @@ async function startFlashQuestion(state, questionHtml = "") {
   if (!isSameFlashSequence(state, sequenceId)) return;
 
   state.questionEl.innerHTML = renderFlashItemMarkup(questionHtml);
-  applyQcmQuestionSizePreset(state);
+  clearQcmQuestionSizePreset(state.questionEl);
   scheduleQcmQuestionAutoFit(state);
   bindFlashReplay(state, sequenceId);
   setQcmChoicesVisible(state, !answersAfterQuestion);
@@ -700,44 +700,12 @@ function syncValidateState(state) {
 }
 
 function scheduleQcmQuestionAutoFit(state) {
-  if (state.questionEl?.dataset?.qcmQuestionSizePreset === "tiny") return;
   scheduleQuestionAutoFit(state.questionEl, {
-    minFontSize: 30,
-    maxFontSize: 320,
+    minFontSize: 12,
+    step: 2,
     mediaMaxWidthRatio: 0.99,
     mediaMaxHeightRatio: 0.98
   });
-}
-
-function applyQcmQuestionSizePreset(state) {
-  const element = state.questionEl;
-  if (!element) return;
-
-  clearQcmQuestionSizePreset(element);
-
-  const content = state.currentQuestion?.promptContent;
-  if (qcmContentHasImage(content)) return;
-
-  const text = getQcmContentPlainText(content, { fallbackToAssetId: false })
-    .replace(/\s+/g, "")
-    .trim();
-  if (!text) return;
-
-  const preset = text.length <= 2
-    ? "tiny"
-    : text.length <= 4
-      ? "short"
-      : "";
-  if (!preset) return;
-
-  const size = preset === "tiny"
-    ? "clamp(160px, 26vmin, 320px)"
-    : "clamp(92px, 14vmin, 180px)";
-  const lineHeight = preset === "tiny" ? "0.95" : "1";
-
-  element.dataset.qcmQuestionSizePreset = preset;
-  element.classList.add(`qcm-question--fit-${preset}`);
-  applyForcedQcmQuestionFontSize(element, size, lineHeight);
 }
 
 function clearQcmQuestionSizePreset(element) {
@@ -750,16 +718,6 @@ function clearQcmQuestionSizePreset(element) {
   getQcmQuestionFontTargets(element).forEach((target) => {
     target.style.removeProperty("font-size");
     target.style.removeProperty("line-height");
-  });
-}
-
-function applyForcedQcmQuestionFontSize(element, size, lineHeight) {
-  element.style.setProperty("--tool-question-font-size", size);
-  element.style.setProperty("font-size", size, "important");
-  element.style.setProperty("line-height", lineHeight, "important");
-  getQcmQuestionFontTargets(element).forEach((target) => {
-    target.style.setProperty("font-size", size, "important");
-    target.style.setProperty("line-height", lineHeight, "important");
   });
 }
 
@@ -785,7 +743,8 @@ function getQcmQuestionFontTargets(element) {
 }
 
 function updateInstructionDisplay(state) {
-  const fallback = state.currentQuestion?.prompt ? "Choisis la bonne réponse." : "";
+  const settings = normalizeSettings(state.latestContext?.settings || {});
+  const fallback = settings.bankInstruction || (state.currentQuestion?.prompt ? "Choisis la bonne réponse." : "");
   const text = resolveQuestionInstructionText(state.latestContext, fallback);
   setToolInstructionText(state.instructionEl, text);
 }

@@ -42,13 +42,13 @@ Le registre actif contient 29 outils.
 | `conjugaison` | Conjugaison | non |
 | `question-reponse` | Question/Réponse | non |
 | `qcm` | QCM | non |
-| `flash-texte` | Flash-Texte | non |
+| `flash-question-reponse` | Flash-Questions/Réponses | non |
 | `flash-qcm` | Flash-QCM | non |
 | `selection` | Sélection | non |
 
-### Flash-Texte et Flash-QCM
+### Flash-Questions/Réponses et Flash-QCM
 
-`flash-texte` et `flash-qcm` sont deux outils dédiés au mode flash. Ils ne créent pas de nouveau type de banque : `flash-texte` utilise les banques Texte existantes et `flash-qcm` utilise les banques QCM existantes.
+`flash-question-reponse` et `flash-qcm` sont deux outils dédiés au mode flash. Ils ne créent pas de nouveau type de banque : `flash-question-reponse` utilise les banques Texte existantes et `flash-qcm` utilise les banques QCM existantes.
 
 Le runtime reprend le layout de Question/Réponse ou QCM sans déplacer les zones : seul le contenu de l’item/question est affiché brièvement puis masqué, comme un carton que l’on retourne.
 

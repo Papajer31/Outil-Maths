@@ -1,17 +1,31 @@
 import {
   renderRadioGroup,
-  renderSelectControl,
   bindRadio,
-  bindSelect,
   readRadio,
   readSelect,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
 import {
+  renderQuestionBankPickerWidget,
+  setupQuestionBankPicker
+} from "../../shared/tool-commons/general-tools/question-bank-picker.js";
+import {
+  bindQuestionSelectionWidget,
+  readQuestionSelection,
+  renderQuestionSelectionWidget,
+  updateQuestionSelectionUi
+} from "../../shared/tool-commons/general-tools/question-selection-widget.js";
+import {
   getDefaultSettings,
+  getQuestionItemSelectionKey,
+  filterQuestionItemsBySelection,
+  isStrictNumericAnswer,
   normalizeQuestionItems,
   normalizeSettings,
-  DEFAULT_DRAW_MODE
+  ANSWER_TYPES,
+  DEFAULT_ANSWER_TYPE,
+  DEFAULT_DRAW_MODE,
+  DEFAULT_QUESTION_SELECTION_MODE
 } from "./model.js";
 
 let stylesInjected = false;
@@ -37,7 +51,28 @@ export function renderToolSettings(container, settings, context = {}) {
         })}
       </div>
       <textarea id="qr_bankSnapshot" hidden>${escapeHtml(JSON.stringify(initialSnapshot))}</textarea>
+      <div id="qr_questionSelectionHost">
+        ${renderQuestionSelectionWidget({
+          idPrefix: "qr",
+          items: initialSnapshot,
+          selection: cfg.questionSelection,
+          itemKeyGetter: getQuestionItemSelectionKey,
+          renderRow: renderQuestionResponseSelectionRow,
+          itemSingular: "question",
+          itemPlural: "questions",
+          emptyMessage: "Aucune question à afficher."
+        })}
+      </div>
     `,
+    renderRadioGroup({
+      title: "Type de réponse",
+      id: "qr_answerType",
+      value: cfg.answerType,
+      options: [
+        { value: ANSWER_TYPES.TEXT, label: "Texte" },
+        { value: ANSWER_TYPES.NUMBER, label: "Nombre" }
+      ]
+    }),
     renderRadioGroup({
       title: "Tirage des questions dans la banque",
       id: "qr_drawMode",
@@ -49,7 +84,9 @@ export function renderToolSettings(container, settings, context = {}) {
     })
   );
 
+  bindRadio(container, "qr_answerType");
   bindRadio(container, "qr_drawMode");
+  refreshQuestionSelectionWidget(container, initialSnapshot, cfg.questionSelection);
   setupBankSelect(container, cfg, context).catch((err) => {
     const host = container.querySelector("#qr_bankWidgetHost");
     if (!host) return;
@@ -69,8 +106,13 @@ export function readToolSettings(container, settings = {}) {
   const snapshotEl = container.querySelector("#qr_bankSnapshot");
   const bankId = String(readSelect(container, "qr_bankSelect", { parse: (value) => value }) || "").trim();
   const bankTitle = String(select?.dataset?.bankTitle || previous.bankTitle || "").trim();
+  const bankInstruction = String(select?.dataset?.bankInstruction || previous.bankInstruction || "").trim();
+  const answerType = readRadio(container, "qr_answerType", DEFAULT_ANSWER_TYPE);
   const drawMode = readRadio(container, "qr_drawMode", DEFAULT_DRAW_MODE);
   const snapshot = readSnapshot(snapshotEl?.value || "[]");
+  const questionSelection = readQuestionSelection(container, {
+    idPrefix: "qr"
+  });
 
   if (!bankId || bankId === LOADING_OPTION_VALUE) {
     throw new Error("Sélectionne une banque de questions.");
@@ -82,11 +124,22 @@ export function readToolSettings(container, settings = {}) {
       : "Les questions de la banque ne sont pas encore chargées.");
   }
 
+  if (questionSelection.mode === "custom" && !questionSelection.questionKeys.length) {
+    throw new Error("Sélectionne au moins une question pour ce niveau.");
+  }
+
+  if (answerType === ANSWER_TYPES.NUMBER) {
+    validateNumericQuestionSelection(snapshot, questionSelection);
+  }
+
   return normalizeSettings({
     ...previous,
     bankId,
     bankTitle,
+    bankInstruction,
     drawMode,
+    answerType,
+    questionSelection,
     bankItemsSnapshot: snapshot
   });
 }
@@ -94,103 +147,119 @@ export function readToolSettings(container, settings = {}) {
 export { getDefaultSettings };
 
 async function setupBankSelect(container, cfg, context = {}) {
-  const host = container.querySelector("#qr_bankWidgetHost");
-  const snapshotEl = container.querySelector("#qr_bankSnapshot");
+  await setupQuestionBankPicker({
+    container,
+    context,
+    selectId: "qr_bankSelect",
+    countId: "qr_bankCount",
+    snapshotId: "qr_bankSnapshot",
+    bankType: TEXT_ANSWER_TYPE,
+    bankTypeLabel: "Texte",
+    selectedBankId: cfg.bankId,
+    bankItemsSnapshot: cfg.bankItemsSnapshot,
+    normalizeItems: normalizeQuestionItems,
+    countFormatter: renderQuestionCount,
+    loadingBanksMessage: "Chargement des banques…",
+    loadingItemsMessage: "Chargement des questions…",
+    noBankMessage: "Crée d’abord une banque de type “Texte” dans l’onglet Banques.",
+    emptyBankMessage: "Cette banque ne contient aucune question exploitable.",
+    loadErrorMessage: "Impossible de charger les questions de cette banque.",
+    noSpaceMessage: "Impossible de lister les banques sans espace enseignant.",
+    setEditorStatus: (message, isError = false) => setEditorStatus(context, message, isError),
+    clearEditorStatus: () => clearEditorStatus(context),
+    onLoadStart: () => setQuestionSelectionLoading(container),
+    onItemsLoaded: (normalizedItems, bankId) => {
+      refreshQuestionSelectionWidget(container, normalizedItems, getSelectionForLoadedBank(container, cfg, bankId));
+    }
+  });
+}
+
+function refreshQuestionSelectionWidget(container, items = [], selection = null) {
+  const host = container.querySelector("#qr_questionSelectionHost");
   if (!host) return;
+  const normalizedItems = normalizeQuestionItems(items);
+  const safeSelection = selection || readQuestionSelection(container, {
+    idPrefix: "qr",
+    fallback: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    allowEmpty: true
+  });
+  host.innerHTML = renderQuestionSelectionWidget({
+    idPrefix: "qr",
+    items: normalizedItems,
+    selection: safeSelection,
+    itemKeyGetter: getQuestionItemSelectionKey,
+    renderRow: renderQuestionResponseSelectionRow,
+    itemSingular: "question",
+    itemPlural: "questions",
+    emptyMessage: "Aucune question à afficher."
+  });
+  bindQuestionSelectionWidget(host, { idPrefix: "qr" });
+  updateQuestionSelectionUi(host, { idPrefix: "qr" });
+}
 
-  const teacherSpaceId = Number(context?.teacherSpace?.id ?? context?.teacher_space_id ?? 0);
-  if (!Number.isFinite(teacherSpaceId) || teacherSpaceId <= 0) {
-    renderBankWidgetInto(host, {
-      value: "",
-      options: [{ value: "", label: "Espace enseignant introuvable" }],
-      disabled: true,
-      count: 0
-    });
-    setEditorStatus(context, "Impossible de lister les banques sans espace enseignant.", true);
-    return;
+function setQuestionSelectionLoading(container) {
+  const host = container.querySelector("#qr_questionSelectionHost");
+  if (!host) return;
+  const currentSelection = readQuestionSelection(container, {
+    idPrefix: "qr",
+    fallback: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    allowEmpty: true
+  });
+  host.innerHTML = renderQuestionSelectionWidget({
+    idPrefix: "qr",
+    items: [],
+    selection: currentSelection,
+    loading: true,
+    itemKeyGetter: getQuestionItemSelectionKey,
+    renderRow: renderQuestionResponseSelectionRow,
+    itemSingular: "question",
+    itemPlural: "questions"
+  });
+  bindQuestionSelectionWidget(host, { idPrefix: "qr" });
+  updateQuestionSelectionUi(host, { idPrefix: "qr" });
+}
+
+function getSelectionForLoadedBank(container, cfg, bankId) {
+  const sameInitialBank = String(bankId || "").trim() === String(cfg?.bankId || "").trim();
+  if (!sameInitialBank) {
+    return { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] };
   }
+  return readQuestionSelection(container, {
+    idPrefix: "qr",
+    fallback: cfg.questionSelection,
+    allowEmpty: true
+  });
+}
 
-  setEditorStatus(context, "Chargement des banques…");
-  const api = await import("../../teacher/js/teacher-api.js");
-  const banks = await api.listQuestionBanksForSpace(teacherSpaceId, { includeSystem: true });
-  const textBanks = (Array.isArray(banks) ? banks : [])
-    .filter((bank) => String(bank?.bank_type || TEXT_ANSWER_TYPE).trim().toLowerCase() === TEXT_ANSWER_TYPE)
-    .sort(compareBanks);
-
-  if (!textBanks.length) {
-    renderBankWidgetInto(host, {
-      value: "",
-      options: [{ value: "", label: "Aucune banque disponible" }],
-      disabled: true,
-      count: 0
-    });
-    if (snapshotEl) snapshotEl.value = "[]";
-    setEditorStatus(context, "Crée d’abord une banque de type “Texte” dans l’onglet Banques.", true);
-    return;
-  }
-
-  const selectedId = textBanks.some((bank) => String(bank.id) === cfg.bankId)
-    ? cfg.bankId
-    : String(textBanks[0].id || "");
-  const bankOptions = textBanks.map((bank) => ({
-    value: String(bank.id || ""),
-    label: `${String(bank.title || "Banque sans titre")}${bank.is_system ? " · proposée" : ""}`
-  }));
-  const bankById = new Map(textBanks.map((bank) => [String(bank.id || ""), bank]));
-
-  renderBankWidgetInto(host, {
-    value: selectedId,
-    options: bankOptions,
-    disabled: false,
-    count: normalizeQuestionItems(cfg.bankItemsSnapshot).length
+function validateNumericQuestionSelection(items = [], selection = {}) {
+  const selectedItems = filterQuestionItemsBySelection(items, selection);
+  const invalidItem = selectedItems.find((item) => {
+    if (!isStrictNumericAnswer(item.mainAnswer)) return true;
+    return Array.isArray(item.acceptedAnswers)
+      && item.acceptedAnswers.some((answer) => !isStrictNumericAnswer(answer));
   });
 
-  const select = container.querySelector("#qr_bankSelect");
-  if (!select) return;
-  setSelectedBankTitle(select, bankById);
+  if (!invalidItem) return;
 
-  let loadToken = 0;
-  const loadSelectedBank = async () => {
-    const bankId = String(select.value || "").trim();
-    const token = loadToken + 1;
-    loadToken = token;
-    select.dataset.qrItemsLoaded = "false";
-    setEditorStatus(context, "Chargement des questions…");
-    setBankCount(container, null);
-    setSelectedBankTitle(select, bankById);
+  const preview = String(invalidItem.prompt || invalidItem.mainAnswer || "").trim();
+  const suffix = preview ? ` Exemple concerné : “${preview.slice(0, 80)}”.` : "";
+  throw new Error(`En mode Nombre, toutes les réponses sélectionnées doivent être des nombres entiers sans zéro non significatif.${suffix}`);
+}
 
-    try {
-      const items = await api.listQuestionBankItems(bankId);
-      if (token !== loadToken || String(select.value || "").trim() !== bankId) return;
-      const normalizedItems = normalizeQuestionItems(items);
-      if (snapshotEl) snapshotEl.value = JSON.stringify(normalizedItems);
-      select.dataset.qrItemsLoaded = "true";
-      setBankCount(container, normalizedItems.length);
-      if (normalizedItems.length) {
-        clearEditorStatus(context);
-      } else {
-        setEditorStatus(context, "Cette banque ne contient aucune question exploitable.", true);
-      }
-    } catch (err) {
-      if (token !== loadToken || String(select.value || "").trim() !== bankId) return;
-      const previousSnapshot = String(bankId) === String(cfg.bankId)
-        ? normalizeQuestionItems(cfg.bankItemsSnapshot)
-        : [];
-      if (snapshotEl) snapshotEl.value = JSON.stringify(previousSnapshot);
-      select.dataset.qrItemsLoaded = previousSnapshot.length ? "true" : "false";
-      setBankCount(container, previousSnapshot.length);
-      setEditorStatus(context, err?.message || "Impossible de charger les questions de cette banque.", true);
-    }
-  };
-
-  bindSelect(container, "qr_bankSelect", {
-    onChange: () => {
-      setSelectedBankTitle(select, bankById);
-      loadSelectedBank().catch(() => {});
-    }
-  });
-
-  await loadSelectedBank();
+function renderQuestionResponseSelectionRow({ item, index, key, checked }) {
+  return `
+    <label class="general-question-selection-row" role="listitem">
+      <input class="general-question-selection-check" type="checkbox" data-question-key="${escapeHtml(key)}" ${checked ? "checked" : ""}>
+      <span class="general-question-selection-index">${index + 1}</span>
+      <span class="general-question-selection-preview general-question-selection-preview--question">
+        <span class="general-question-selection-preview-text">${escapeHtml(item.prompt || `Question ${index + 1}`)}</span>
+      </span>
+      <span class="general-question-selection-arrow" aria-hidden="true">→</span>
+      <span class="general-question-selection-preview general-question-selection-preview--answer">
+        <span class="general-question-selection-preview-text">${escapeHtml(item.mainAnswer || "Réponse")}</span>
+      </span>
+    </label>
+  `;
 }
 
 function renderBankWidget({
@@ -199,23 +268,15 @@ function renderBankWidget({
   disabled = false,
   count = 0,
 } = {}) {
-  return `
-    <div class="tv-group tv-group-inline qr-config-bank-group">
-      <div class="tv-select-inline qr-config-bank-line">
-        <div class="tv-group-title tv-select-inline-title">Banque</div>
-        <div class="qr-config-bank-control">
-          ${renderSelectControl({
-            id: "qr_bankSelect",
-            value,
-            options,
-            disabled,
-            rootClassName: "tv-select-inline-input qr-config-bank-select"
-          })}
-          <span class="qr-config-bank-count" id="qr_bankCount">${count === null ? "…" : renderQuestionCount(count)}</span>
-        </div>
-      </div>
-    </div>
-  `;
+  return renderQuestionBankPickerWidget({
+    selectId: "qr_bankSelect",
+    countId: "qr_bankCount",
+    value,
+    options,
+    disabled,
+    count,
+    countFormatter: renderQuestionCount
+  });
 }
 
 function renderBankWidgetInto(host, options) {

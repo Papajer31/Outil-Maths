@@ -1,0 +1,14 @@
+{
+  "profiles": "official",
+  "tools": "all",
+  "headless": true,
+  "screenshot": true,
+  "waitMsAfterLoad": 1400,
+  "timeoutMs": 18000,
+  "maxProblemsPerCase": 40,
+  "serverPort": 4177,
+  "outputDir": "responsive-audit-output",
+  "viewportPaddingTolerancePx": 2,
+  "clipTolerancePx": 2,
+  "includeElementSamples": true
+}

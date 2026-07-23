@@ -12,7 +12,9 @@ export function mountCatalogTestRunner({
   onClose = null,
   showToast = null,
   initialLevel = 3,
-  titleLabel = "Test de l’activité"
+  titleLabel = "Test de l’activité",
+  runtimeConfigOptions = null,
+  showLevelSelector = true
 } = {}){
   const safeAccessCode = String(accessCode || "").trim().toUpperCase();
   const safeActivity = activity && typeof activity === "object" ? activity : null;
@@ -36,10 +38,12 @@ export function mountCatalogTestRunner({
           <span class="dashboard-catalog-test-subtitle">${escapeHtml(safeActivity.config_name || safeActivity.title || safeActivity.id)}</span>
         </div>
         <div class="dashboard-catalog-test-actions">
-          <div class="dashboard-catalog-test-levels" role="group" aria-label="Niveau de difficulté">
-            <span class="dashboard-catalog-test-level-pill" aria-hidden="true"></span>
-            ${LEVELS.map((level) => renderLevelButton(level, activeLevel)).join("")}
-          </div>
+          ${showLevelSelector ? `
+            <div class="dashboard-catalog-test-levels" role="group" aria-label="Niveau de difficulté">
+              <span class="dashboard-catalog-test-level-pill" aria-hidden="true"></span>
+              ${LEVELS.map((level) => renderLevelButton(level, activeLevel)).join("")}
+            </div>
+          ` : ""}
           <button class="btn" type="button" data-action="restart-test">Relancer</button>
           <button class="btn" type="button" data-action="toggle-fullscreen-test">Plein écran</button>
           <button class="btn" type="button" data-action="close-test">Fermer</button>
@@ -102,8 +106,18 @@ export function mountCatalogTestRunner({
       responseUi: "boxed",
       progressMode: "practice",
       adaptive: false,
-      catalogActivities
+      catalogActivities,
+      ...(runtimeConfigOptions && typeof runtimeConfigOptions === "object" && !Array.isArray(runtimeConfigOptions)
+        ? runtimeConfigOptions
+        : {})
     });
+
+    // Les réglages du mode Test peuvent contenir des données temporaires qui ne
+    // figurent pas dans le catalogue persistant (notamment le snapshot courant
+    // de l’Atelier Quiz). On les réinjecte explicitement après la construction
+    // de la configuration afin qu’aucune normalisation ou valeur de niveau ne
+    // puisse les remplacer par un objet vide.
+    applyRuntimeConfigOptions(runtimeConfig, runtimeConfigOptions);
 
     if (!runtimeConfig || !Array.isArray(runtimeConfig.sequence)) {
       root.innerHTML = `
@@ -270,6 +284,44 @@ export function openCatalogTestRunner(options = {}){
       options.onClose?.();
     }
   };
+}
+
+function applyRuntimeConfigOptions(runtimeConfig, options){
+  if (!runtimeConfig || !Array.isArray(runtimeConfig.sequence)) return runtimeConfig;
+  if (!options || typeof options !== "object" || Array.isArray(options)) return runtimeConfig;
+
+  const firstItem = runtimeConfig.sequence[0];
+  if (!firstItem || typeof firstItem !== "object") return runtimeConfig;
+  if (!firstItem.draft || typeof firstItem.draft !== "object" || Array.isArray(firstItem.draft)) {
+    firstItem.draft = {};
+  }
+
+  if (Object.prototype.hasOwnProperty.call(options, "settings")) {
+    firstItem.draft.settings = cloneRuntimeValue(options.settings);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(options, "questionCount")) {
+    const questionCount = Math.trunc(Number(options.questionCount));
+    if (Number.isFinite(questionCount) && questionCount > 0) {
+      firstItem.draft.questionCount = questionCount;
+    }
+  }
+
+  return runtimeConfig;
+}
+
+function cloneRuntimeValue(value){
+  if (value == null) return value;
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {}
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
 }
 
 function renderLevelButton(level, activeLevel){

@@ -16,6 +16,9 @@
   <link rel="stylesheet" href="../shared/help-popover.css">
   <link rel="stylesheet" href="../student/css/student-core.css">
   <link rel="stylesheet" href="./css/question-banks.css">
+  <link rel="stylesheet" href="./css/quiz-workshop.css">
+  <link rel="stylesheet" href="./css/quiz-series.css">
+  <link rel="stylesheet" href="./css/resources.css">
   <link rel="stylesheet" href="./css/teacher-tools.css">
 </head>
 
@@ -76,6 +79,16 @@
 
                 <button id="btnNavBanks" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Banques</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavQuiz" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Quiz</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavResources" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Ressources</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
@@ -299,6 +312,499 @@
               <section id="bankEditorHost" class="dashboard-bank-editor-host hidden" aria-live="polite">
                 <div class="dashboard-bank-empty-state">Chargement…</div>
               </section>
+            </div>
+
+            <div id="quizView" class="dashboard-content-view dashboard-banks-view hidden">
+              <div id="quizExplorerPane" class="dashboard-quiz-explorer-pane">
+                <div id="quizExplorerHeader" class="dashboard-config-header dashboard-banks-explorer-header">
+                  <div class="dashboard-config-header-main">
+                    <div class="dashboard-section-title">Quiz</div>
+                  </div>
+
+                  <div class="dashboard-config-header-center" aria-hidden="true"></div>
+
+                  <div class="dashboard-config-header-actions dashboard-banks-header-actions">
+                    <button
+                      id="btnCreateQuizFolder"
+                      class="dashboard-icon-btn dashboard-material-icon-btn"
+                      type="button"
+                      title="Créer un dossier"
+                      aria-label="Créer un dossier"
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
+                    </button>
+
+                    <button id="btnCreateQuizSeries" class="btn primary" type="button">
+                      <span class="dashboard-material-icon" aria-hidden="true">view_list</span>
+                      <span>Créer une série de questions</span>
+                    </button>
+
+                    <button id="btnCreateQuiz" class="btn primary" type="button">
+                      <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                      <span>Créer un quiz</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div id="quizList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
+                  <div class="dashboard-activity-empty-state">Chargement…</div>
+                </div>
+              </div>
+
+                <div id="quizWorkshopView" class="quiz-workshop-view hidden">
+                <header class="quiz-workshop-header">
+                  <div class="quiz-workshop-heading">
+                    <div class="quiz-workshop-heading-row">
+                      <button
+                        id="btnBackQuizExplorer"
+                        class="quiz-workshop-back-btn dashboard-material-icon-btn"
+                        type="button"
+                        aria-label="Retour aux quiz"
+                        title="Retour aux quiz"
+                      >
+                        <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+                      </button>
+                      <h2 class="quiz-workshop-title">Atelier de quiz</h2>
+                    </div>
+                  </div>
+  
+                  <div class="quiz-workshop-header-actions">
+                    <button
+                      id="btnQuizSave"
+                      class="btn quiz-workshop-save-btn"
+                      type="button"
+                      disabled
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">save</span>
+                      <span>Enregistrer</span>
+                    </button>
+                    <button
+                      id="btnQuizTest"
+                      class="btn quiz-workshop-test-btn"
+                      type="button"
+                      disabled
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
+                      <span>Tester le quiz</span>
+                    </button>
+                    <button
+                      id="btnQuizAddQuestion"
+                      class="btn primary quiz-workshop-add-btn"
+                      type="button"
+                      data-quiz-open-drawer
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                      aria-controls="quizWorkshopDrawer"
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                      <span class="quiz-workshop-add-btn-label">Ajouter une question</span>
+                    </button>
+                  </div>
+                </header>
+  
+                <div class="quiz-workshop-stage">
+                  <section class="quiz-workshop-board" aria-label="Structure du quiz">
+                    <div class="quiz-workshop-board-head">
+                      <label class="quiz-workshop-title-field" for="quizWorkshopTitleInput">
+                        <input
+                          id="quizWorkshopTitleInput"
+                          class="quiz-workshop-title-input"
+                          type="text"
+                          value=""
+                          placeholder="Donnez un titre au quiz"
+                          autocomplete="off"
+                          required
+                        >
+                      </label>
+                      <div id="quizWorkshopQuestionCount" class="quiz-workshop-question-count">0 question</div>
+                    </div>
+  
+                    <div id="quizWorkshopEmptyState" class="quiz-workshop-empty-state">
+                      <div class="quiz-workshop-empty-icon" aria-hidden="true">
+                        <span class="dashboard-material-icon">quiz</span>
+                      </div>
+                      <h3>Le quiz est vide</h3>
+                      <p>Ajoutez une première question pour commencer à construire votre quiz.</p>
+                      <button
+                        class="quiz-workshop-empty-action"
+                        type="button"
+                        data-quiz-open-drawer
+                        aria-haspopup="dialog"
+                        aria-expanded="false"
+                        aria-controls="quizWorkshopDrawer"
+                      >
+                        <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                        <span>Ajouter la première question</span>
+                      </button>
+                    </div>
+  
+                    <div id="quizWorkshopQuestions" class="quiz-workshop-questions hidden"></div>
+                    <button
+                      id="btnQuizAddQuestionAfterList"
+                      class="quiz-workshop-add-question-tile hidden"
+                      type="button"
+                      data-quiz-open-drawer
+                      aria-label="Ajouter une question"
+                      title="Ajouter une question"
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                      aria-controls="quizWorkshopDrawer"
+                    ><span aria-hidden="true">+</span></button>
+                  </section>
+                </div>
+  
+                <div id="quizWorkshopScrim" class="quiz-workshop-scrim" aria-hidden="true"></div>
+  
+                <aside
+                  id="quizWorkshopDrawer"
+                  class="quiz-workshop-drawer"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="quizWorkshopDrawerTitle"
+                  aria-hidden="true"
+                >
+                  <div class="quiz-workshop-editor-body">
+                    <aside class="quiz-workshop-library" aria-label="Bibliothèque de composition">
+                      <div class="quiz-workshop-drawer-header">
+                        <div class="quiz-workshop-drawer-heading">
+                          <h3 id="quizWorkshopDrawerTitle" class="quiz-workshop-drawer-title" data-quiz-editor-title>Ajouter une question</h3>
+                        </div>
+                      </div>
+  
+                      <div class="quiz-workshop-library-tabs" role="tablist" aria-label="Bibliothèque">
+                        <button
+                          class="quiz-workshop-library-tab is-active"
+                          type="button"
+                          role="tab"
+                          aria-selected="true"
+                          data-quiz-library-tab="models"
+                        >
+                          <span class="dashboard-material-icon" aria-hidden="true">dashboard_customize</span>
+                          <span>Modèles</span>
+                        </button>
+                        <button
+                          class="quiz-workshop-library-tab"
+                          type="button"
+                          role="tab"
+                          aria-selected="false"
+                          tabindex="-1"
+                          data-quiz-library-tab="elements"
+                        >
+                          <span class="dashboard-material-icon" aria-hidden="true">widgets</span>
+                          <span>Éléments</span>
+                        </button>
+                      </div>
+  
+                      <div class="quiz-workshop-library-panel" role="tabpanel" data-quiz-library-panel="models">
+                        <div class="quiz-workshop-library-heading">
+                          <strong>Modèles de question</strong>
+                        </div>
+                        <div id="quizWorkshopTemplateGrid" class="quiz-workshop-template-grid"></div>
+                      </div>
+  
+                      <div class="quiz-workshop-library-panel hidden" role="tabpanel" data-quiz-library-panel="elements">
+                        <div class="quiz-workshop-library-heading">
+                          <strong>Éléments disponibles</strong>
+                          <span>Cliquez ou glissez un élément sur le canevas.</span>
+                        </div>
+                        <div class="quiz-workshop-element-grid" data-quiz-element-grid></div>
+                      </div>
+  
+                    </aside>
+  
+                    <section class="quiz-workshop-canvas-panel" aria-label="Canevas de la question">
+                      <div class="quiz-workshop-canvas-topbar" data-quiz-canvas-topbar>
+                        <div class="quiz-workshop-canvas-topbar-main">
+                          <button id="btnQuizConfirmTemplate" class="btn primary quiz-workshop-confirm-btn" type="button">
+                            <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                            <span data-quiz-confirm-label>Ajouter la question</span>
+                          </button>
+                          <div class="quiz-workshop-question-warnings" data-quiz-question-warnings aria-live="polite" hidden></div>
+                        </div>
+                        <button
+                          id="btnQuizDrawerClose"
+                          class="quiz-workshop-drawer-close dashboard-material-icon-btn"
+                          type="button"
+                          aria-label="Fermer le volet"
+                          title="Fermer"
+                        >
+                          <span class="dashboard-material-icon" aria-hidden="true">close</span>
+                        </button>
+                      </div>
+  
+                      <div class="quiz-workshop-canvas-workspace" data-quiz-canvas-workspace>
+                        <div class="quiz-workshop-canvas-frame" data-quiz-canvas-frame>
+                          <div
+                            class="quiz-workshop-canvas"
+                            data-quiz-canvas
+                            data-quiz-mode="question"
+                            aria-label="Grille de composition de la question, 12 colonnes sur 8 lignes"
+                          ></div>
+                        </div>
+  
+                        <div class="quiz-workshop-mode-column">
+                          <div class="quiz-workshop-mode-switch quiz-workshop-mode-switch--vertical" role="group" aria-label="Aperçu du canevas">
+                            <button
+                              class="quiz-workshop-mode-button is-active"
+                              type="button"
+                              aria-pressed="true"
+                              data-quiz-preview-mode="question"
+                            >
+                              <span class="dashboard-material-icon" aria-hidden="true">help_outline</span>
+                              <span>Question</span>
+                            </button>
+                            <button
+                              class="quiz-workshop-mode-button"
+                              type="button"
+                              aria-pressed="false"
+                              data-quiz-preview-mode="correction"
+                            >
+                              <span class="dashboard-material-icon" aria-hidden="true">task_alt</span>
+                              <span>Correction</span>
+                            </button>
+                          </div>
+                          <button
+                            class="quiz-workshop-quick-entry-btn"
+                            type="button"
+                            data-quiz-quick-entry
+                            title="Saisir ou modifier les variantes de la question"
+                          >
+                            <span class="dashboard-material-icon" aria-hidden="true">edit_note</span>
+                            <span>Saisie rapide</span>
+                          </button>
+                          <div class="quiz-workshop-variant-navigation" data-quiz-variant-navigation hidden>
+                            <button type="button" data-quiz-variant-step="-1" aria-label="Variante précédente" title="Variante précédente">
+                              <span class="dashboard-material-icon" aria-hidden="true">expand_less</span>
+                            </button>
+                            <button type="button" data-quiz-variant-step="1" aria-label="Variante suivante" title="Variante suivante">
+                              <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+  
+                      <div class="quiz-workshop-text-toolbar" data-quiz-text-toolbar role="toolbar" aria-label="Mise en forme du texte" hidden>
+                        <div class="quiz-workshop-font-size-wrap">
+                          <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-font-size-toggle aria-label="Taille du texte" title="Taille du texte" aria-expanded="false" aria-controls="quizFontSizeMenu">
+                            <svg class="material-icon-svg" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" aria-hidden="true"><path d="M560-160v-520H360v-120h520v120H680v520H560Zm-360 0v-320H80v-120h360v120H320v320H200Z"/></svg>
+                          </button>
+                          <div id="quizFontSizeMenu" class="quiz-workshop-font-size-menu" data-quiz-font-size-menu role="menu" aria-label="Taille du texte" hidden>
+                            <button type="button" data-quiz-font-size="small" role="menuitemradio" aria-checked="false">Petit</button>
+                            <button type="button" data-quiz-font-size="normal" role="menuitemradio" aria-checked="true">Normal</button>
+                            <button type="button" data-quiz-font-size="large" role="menuitemradio" aria-checked="false">Grand</button>
+                            <button type="button" data-quiz-font-size="huge" role="menuitemradio" aria-checked="false">Énorme</button>
+                          </div>
+                        </div>
+
+                        <span class="quiz-workshop-text-toolbar-separator" aria-hidden="true"></span>
+
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-format-command="bold" aria-label="Gras" title="Gras">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_bold</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-format-command="italic" aria-label="Italique" title="Italique">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_italic</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-format-command="underline" aria-label="Souligné" title="Souligné">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_underlined</span>
+                        </button>
+  
+                        <span class="quiz-workshop-text-toolbar-separator" aria-hidden="true"></span>
+  
+                        <div class="quiz-workshop-text-color-wrap">
+                          <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-color-toggle aria-label="Couleur du texte" title="Couleur du texte" aria-expanded="false">
+                            <span class="dashboard-material-icon" aria-hidden="true">palette</span>
+                          </button>
+                          <div class="quiz-workshop-text-color-menu" data-quiz-color-menu hidden>
+                            <button type="button" class="quiz-workshop-text-color" data-quiz-text-color="#d32f2f" style="--quiz-text-color:#d32f2f" aria-label="Rouge" title="Rouge"></button>
+                            <button type="button" class="quiz-workshop-text-color" data-quiz-text-color="#2e7d32" style="--quiz-text-color:#2e7d32" aria-label="Vert" title="Vert"></button>
+                            <button type="button" class="quiz-workshop-text-color" data-quiz-text-color="#1565c0" style="--quiz-text-color:#1565c0" aria-label="Bleu" title="Bleu"></button>
+                            <button type="button" class="quiz-workshop-text-color" data-quiz-text-color="#d49a00" style="--quiz-text-color:#d49a00" aria-label="Jaune" title="Jaune"></button>
+                          </div>
+                        </div>
+  
+                        <span class="quiz-workshop-text-toolbar-separator" aria-hidden="true"></span>
+  
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-text-align="left" aria-label="Aligner à gauche" title="Aligner à gauche">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_align_left</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-text-align="center" aria-label="Centrer" title="Centrer">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_align_center</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-text-align="right" aria-label="Aligner à droite" title="Aligner à droite">
+                          <span class="dashboard-material-icon" aria-hidden="true">format_align_right</span>
+                        </button>
+  
+                        <span class="quiz-workshop-text-toolbar-separator" aria-hidden="true"></span>
+  
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-vertical-align="top" aria-label="Placer le texte en haut" title="Texte en haut">
+                          <span class="dashboard-material-icon" aria-hidden="true">vertical_align_top</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-vertical-align="middle" aria-label="Centrer le texte verticalement" title="Texte au milieu">
+                          <span class="dashboard-material-icon" aria-hidden="true">vertical_align_center</span>
+                        </button>
+                        <button type="button" class="quiz-workshop-text-toolbar-btn" data-quiz-vertical-align="bottom" aria-label="Placer le texte en bas" title="Texte en bas">
+                          <span class="dashboard-material-icon" aria-hidden="true">vertical_align_bottom</span>
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+                </aside>
+                <aside
+                  id="quizQuickEntryDrawer"
+                  class="quiz-workshop-quick-entry-drawer"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Saisie rapide"
+                  aria-hidden="true"
+                ></aside>
+              </div>
+
+              <div id="quizSeriesView" class="quiz-series-view hidden">
+                <header class="quiz-series-header">
+                  <div class="quiz-series-heading">
+                    <button
+                      id="btnBackQuizSeries"
+                      class="quiz-workshop-back-btn dashboard-material-icon-btn"
+                      type="button"
+                      aria-label="Retour aux quiz"
+                      title="Retour aux quiz"
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+                    </button>
+                    <div class="quiz-series-title-identity cfg-header-identity">
+                      <span class="cfg-field-label">Titre du quiz :</span>
+                      <span id="quizSeriesTitleDisplay" class="cfg-config-name-display is-empty" title="Titre du quiz">titre</span>
+                      <button id="btnRenameQuizSeriesTitle" class="dashboard-icon-btn cfg-name-rename-btn" type="button" aria-label="Renommer le quiz" title="Renommer le quiz">
+                        <span class="dashboard-material-icon" aria-hidden="true">drive_file_rename_outline</span>
+                      </button>
+                    </div>
+                    <input id="quizSeriesTitleInput" type="text" autocomplete="off" required hidden>
+                  </div>
+
+                  <div class="quiz-series-header-actions">
+                    <button id="btnQuizSeriesSave" class="btn" type="button" disabled>
+                      <span class="dashboard-material-icon" aria-hidden="true">save</span>
+                      <span>Enregistrer</span>
+                    </button>
+                    <button id="btnQuizSeriesTest" class="btn" type="button" disabled>
+                      <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
+                      <span>Tester</span>
+                    </button>
+                  </div>
+                </header>
+
+                <div class="quiz-series-body">
+                  <div class="quiz-series-toolbar">
+                    <label class="quiz-series-toolbar-instruction" for="quizSeriesInstructionInput">
+                      <span>Consigne générale :</span>
+                      <input id="quizSeriesInstructionInput" type="text" placeholder="Consigne commune à toutes les questions" autocomplete="off" required>
+                    </label>
+                    <div class="quiz-series-toolbar-actions">
+                      <button id="btnQuizSeriesAddRow" class="btn primary" type="button">
+                        <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                        <span>Ajouter une question</span>
+                      </button>
+                      <button id="btnQuizSeriesImportQuestions" class="btn" type="button">
+                        <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                        <span>Importer les questions</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="quizSeriesMessage" class="quiz-series-message" aria-live="polite"></div>
+                  <div id="quizSeriesTableHost" class="quiz-series-table-host"></div>
+                </div>
+
+                <div id="quizSeriesImportScrim" class="quiz-series-import-scrim" aria-hidden="true"></div>
+                <aside
+                  id="quizSeriesImportDrawer"
+                  class="quiz-series-import-drawer"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="quizSeriesImportDrawerTitle"
+                  aria-hidden="true"
+                ></aside>
+
+                <div id="quizSeriesTitleOverlay" class="cfg-modal hidden" aria-hidden="true">
+                  <div class="cfg-modal-backdrop" data-close-quiz-series-title></div>
+                  <div class="panel cfg-modal-card super-admin-title-modal" role="dialog" aria-modal="true" aria-labelledby="quizSeriesTitleOverlayTitle">
+                    <div class="cfg-modal-header">
+                      <div>
+                        <div id="quizSeriesTitleOverlayTitle" class="cfg-modal-title">Renommer le quiz</div>
+                        <div class="cfg-modal-subtitle">Ce titre est affiché dans l’explorateur et dans l’éditeur.</div>
+                      </div>
+                      <button class="btn cfg-modal-close" type="button" data-close-quiz-series-title aria-label="Fermer">✕</button>
+                    </div>
+                    <div class="super-admin-title-modal-body">
+                      <label class="super-admin-title-modal-label" for="quizSeriesTitleOverlayInput">Titre du quiz</label>
+                      <input id="quizSeriesTitleOverlayInput" class="modal-text-input super-admin-title-input" type="text" placeholder="Titre du quiz">
+                      <div id="quizSeriesTitleOverlayMessage" class="modal-message super-admin-title-message" aria-live="polite"></div>
+                    </div>
+                    <div class="super-admin-title-modal-actions">
+                      <button class="btn" type="button" data-close-quiz-series-title>Annuler</button>
+                      <button id="btnApplyQuizSeriesTitle" class="btn primary" type="button">Valider</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+  
+            </div>
+
+            <div id="resourcesView" class="dashboard-content-view dashboard-banks-view dashboard-resources-view hidden">
+              <div id="resourcesHeader" class="dashboard-config-header dashboard-banks-explorer-header dashboard-resources-header">
+                <div class="dashboard-config-header-main">
+                  <div class="dashboard-section-title">Ressources</div>
+                  <div
+                    id="resourceStorageQuota"
+                    class="dashboard-resource-storage-quota"
+                    role="meter"
+                    aria-label="Stockage des ressources personnelles"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="0"
+                  >
+                    <span class="dashboard-resource-storage-quota-track" aria-hidden="true">
+                      <span class="dashboard-resource-storage-quota-fill"></span>
+                    </span>
+                    <span class="dashboard-resource-storage-quota-label">0 Mo utilisés · 100 Mo libres</span>
+                  </div>
+                </div>
+
+                <div class="dashboard-config-header-center" aria-hidden="true"></div>
+
+                <div class="dashboard-config-header-actions dashboard-banks-header-actions">
+                  <button
+                    id="btnCreateResourceFolder"
+                    class="dashboard-icon-btn dashboard-material-icon-btn"
+                    type="button"
+                    title="Créer un dossier personnel"
+                    aria-label="Créer un dossier personnel"
+                    disabled
+                  >
+                    <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
+                  </button>
+                  <button
+                    id="btnImportResources"
+                    class="dashboard-icon-btn dashboard-material-icon-btn"
+                    type="button"
+                    title="Importer des images ou des fichiers audio"
+                    aria-label="Importer des images ou des fichiers audio"
+                    disabled
+                  >
+                    <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
+                  </button>
+                  <input
+                    id="resourceFileInput"
+                    type="file"
+                    accept="image/*,audio/*"
+                    multiple
+                    hidden
+                  >
+                </div>
+              </div>
+
+              <div id="resourcesList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
+              </div>
             </div>
 
             <div id="teacherToolsView" class="dashboard-content-view dashboard-teacher-tools-view hidden">

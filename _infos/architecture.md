@@ -1,6 +1,6 @@
 # Architecture — repères actuels
 
-Dernière mise à jour : 2026-07-04.
+Dernière mise à jour : 2026-07-12.
 
 ## Entrées principales
 
@@ -35,6 +35,25 @@ scene: {
 ```
 
 L’arrière-plan est exposé dans l’interface comme widget système obligatoire, mais il reste stocké dans `scene.background`. Il n’est pas envoyé à la projection comme widget manipulable.
+
+## Convention `shared/tool-ui/` et `shared/tool-commons/`
+
+Les dossiers `shared/tool-ui/` et `shared/tool-commons/` ne doivent pas devenir deux fourre-tout concurrents.
+
+- `shared/tool-ui/` contient les briques UI génériques et bas niveau, réutilisables par plusieurs outils sans connaître leur métier : clavier numérique, champ de réponse numérique, auto-ajustement visuel, formatage d'affichage, helpers d'interaction.
+- `shared/tool-commons/` contient les communs fonctionnels ou les socles de familles d'outils : sélection de questions, sélecteur de banque, cœurs partagés d'une famille pédagogique, logique commune d'éditeur ou de runtime.
+
+Règle pratique : si le module peut être utilisé tel quel par des outils très différents, il va plutôt dans `tool-ui`. S'il connaît une famille d'outils, une banque, une activité ou une logique pédagogique, il va plutôt dans `tool-commons`.
+
+Les nouveaux communs de famille doivent être rangés dans un sous-dossier explicite, par exemple :
+
+```text
+shared/tool-commons/calcul/
+shared/tool-commons/general-tools/
+shared/tool-commons/decimal-representation/
+```
+
+Les nouveaux imports doivent cibler les fichiers canoniques, pas les façades racine.
 
 ## Assets partagés
 

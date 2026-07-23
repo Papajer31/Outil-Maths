@@ -202,6 +202,21 @@ input{
   color:var(--vp-muted);
 }
 
+
+.vp-toolbar-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.vp-btn-toolbar{
+  min-height:34px;
+  padding:6px 12px;
+  border-radius:999px;
+}
+
 .vp-badge{
   display:inline-flex;
   align-items:center;

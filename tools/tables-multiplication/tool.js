@@ -1,6 +1,6 @@
 import * as config from "./config.js";
 import { createActivity as createTablesMultiplicationActivity } from "./activity.js";
-import { normalizeSettings } from "./model.js";
+import { getDefaultInstruction, normalizeSettings } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
 export default defineTool("tables-multiplication", "Tables de multiplication", {
@@ -39,7 +39,7 @@ export default defineTool("tables-multiplication", "Tables de multiplication", {
   createActivity(context = {}) {
     return createTablesMultiplicationActivity({
       ...context,
-      defaultInstruction: "Écris le résultat.",
+      defaultInstruction: getDefaultInstruction(context?.settings),
       supportsCustomInstruction: true
     });
   }

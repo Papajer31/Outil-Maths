@@ -75,6 +75,14 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     description: "Comparer deux collections terme à terme pour trouver la différence.",
     tags: ["maths", "nombres", "comparaison", "collections", "difference", "jetons", "trace", "projection"]
   },
+
+  {
+    id: "somme-difference",
+    label: "Somme ou différence ?",
+    entry: "../tools/somme-difference/tool.js",
+    description: "Choisir entre addition et soustraction à partir de deux collections, puis écrire l'opération complète.",
+    tags: ["maths", "calcul", "addition", "soustraction", "collections", "opération", "trace", "projection"]
+  },
   {
     id: "collection",
     label: "Collection",
@@ -198,6 +206,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["français", "conjugaison", "verbe", "texte", "projection"]
   },
   {
+    id: "quiz",
+    label: "Quiz",
+    entry: "../tools/quiz/tool.js",
+    description: "Questions composées librement sur un canevas de widgets.",
+    tags: ["quiz", "question", "reponse", "texte", "canevas", "projection"]
+  },
+  {
     id: "question-reponse",
     label: "Question/Réponse",
     entry: "../tools/question-reponse/tool.js",
@@ -212,11 +227,11 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["qcm", "question", "choix", "banque", "projection"]
   },
   {
-    id: "flash-texte",
-    label: "Flash-Texte",
-    entry: "../tools/flash-texte/tool.js",
+    id: "flash-question-reponse",
+    label: "Flash-Question/Réponse",
+    entry: "../tools/flash-question-reponse/tool.js",
     description: "Question/Réponse en mode flash avec item affiché brièvement puis masqué.",
-    tags: ["flash", "question", "reponse", "texte", "banque", "projection"]
+    tags: ["flash", "questions", "reponses", "texte", "banque", "projection"]
   },
   {
     id: "flash-qcm",

@@ -15,6 +15,10 @@ import { loadToolsRuntime } from "../../../shared/tool-root-runtime.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { createQuestionBanksViewController } from "./question-banks-view.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
+import {
+  persistAdminDraftRuntimePayload,
+  removeAdminDraftRuntimePayload
+} from "../../../shared/admin-draft-runtime-storage.js";
 
 const EMPTY_LEVELS = Object.freeze({
   "1": { settings: {} },
@@ -33,12 +37,11 @@ const ADMIN_LEVEL_LABELS = Object.freeze({
   "5": "Très exigeant"
 });
 
-
 const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "general",
     label: "Général",
-    toolIds: ["question-reponse", "qcm", "selection", "flash-texte", "flash-qcm"]
+    toolIds: ["quiz", "question-reponse", "qcm", "selection", "flash-question-reponse", "flash-qcm"]
   },
   {
     id: "lecture",
@@ -775,11 +778,40 @@ export function createSuperAdminViewController({
 
   function openViewportTestBench() {
     try {
+      const draftActivity = buildDraftActivityForTest();
+      const currentTeacherSpace = getCurrentTeacherSpace?.() || null;
+      const accessCode = String(currentTeacherSpace?.access_code || "ADMINTEST").trim().toUpperCase();
+      const catalogActivities = [
+        draftActivity,
+        ...(Array.isArray(activities) ? activities : [])
+      ];
+      const token = createAdminDraftRuntimeToken();
+      persistAdminDraftRuntimePayload(token, {
+        version: 1,
+        createdAt: Date.now(),
+        accessCode,
+        activity: draftActivity,
+        catalogActivities,
+        initialLevel: activeLevel
+      });
+
       const url = new URL("../dev/viewport-test.html", window.location.href);
-      const opened = window.open(url.href, "_blank", "noopener");
+      url.searchParams.set("adminDraftToken", token);
+
+      // Ne pas utiliser directement le feature `noopener` ici : Firefox peut
+      // ouvrir correctement l’onglet tout en renvoyant `null`, ce qui faisait
+      // croire à tort que la popup avait été bloquée et supprimait le payload.
+      const opened = window.open("about:blank", "_blank");
       if (!opened) {
+        removeAdminDraftRuntimePayload(token);
         showToast?.("Le navigateur a bloqué l’ouverture du banc de test.", { isError: true });
+        return;
       }
+
+      try {
+        opened.opener = null;
+      } catch {}
+      opened.location.href = url.href;
     } catch (err) {
       showToast?.(err?.message || "Impossible d’ouvrir le banc de test.", { isError: true });
     }
@@ -1358,7 +1390,13 @@ export function createSuperAdminViewController({
     const instruction = getLevelInstructionState(levelDraft);
     const checkedAttr = instruction.enabled ? "checked" : "";
     const disabledAttr = instruction.enabled ? "" : "disabled";
-    const defaultInstruction = String(tool?.defaultInstruction || "").trim();
+    const normalizedLevelDraft = normalizeLevelDraft(levelDraft);
+    const bankInstruction = String(
+      normalizedLevelDraft?.settings?.bankInstruction
+        ?? normalizedLevelDraft?.settings?.bank_instruction
+        ?? ""
+    ).trim();
+    const defaultInstruction = bankInstruction || String(tool?.defaultInstruction || "").trim();
     const placeholder = defaultInstruction || "Consigne affichée uniquement pour ce niveau...";
     return `
       <div class="tv-group tv-group-inline super-admin-level-instruction-group">
@@ -1373,6 +1411,7 @@ export function createSuperAdminViewController({
           class="tv-input super-admin-level-instruction-input"
           type="text"
           placeholder="${escapeAttr(placeholder)}"
+          data-tool-default-instruction="${escapeAttr(String(tool?.defaultInstruction || "").trim())}"
           value="${escapeAttr(instruction.text)}"
           ${disabledAttr}>
       </div>
@@ -1402,6 +1441,12 @@ export function createSuperAdminViewController({
     checkbox.addEventListener("change", () => {
       applyState();
       if (checkbox.checked) input.focus();
+    });
+
+    container.addEventListener("questionbankchange", (event) => {
+      const bankInstruction = String(event?.detail?.instruction || "").trim();
+      const toolDefault = String(input.dataset.toolDefaultInstruction || "").trim();
+      input.placeholder = bankInstruction || toolDefault || "Consigne affichée uniquement pour ce niveau...";
     });
   }
 
@@ -1665,6 +1710,14 @@ export function createSuperAdminViewController({
       default_visible: false,
       is_visible: true
     });
+  }
+
+
+  function createAdminDraftRuntimeToken() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   function cleanupActiveAdminCatalogTestController() {
@@ -2509,6 +2562,7 @@ export function createSuperAdminViewController({
         const bank = await createSystemQuestionBankAsAdmin?.({
           title: payload.title,
           bank_type: payload.bank_type,
+          instruction: payload.instruction || "",
           description: payload.description || "",
           folder_id: null,
           display_order: payload.display_order

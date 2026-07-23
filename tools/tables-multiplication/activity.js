@@ -2,8 +2,10 @@ import {
   normalizeSettings,
   pickQuestion,
   questionKey,
-  formatQuestion,
-  formatAnswer
+  formatAnswer,
+  getExpectedAnswer,
+  getDefaultInstruction,
+  isFactorAnswerQuestion
 } from "./model.js";
 import {
   ensureToolInstructionStyles,
@@ -15,7 +17,34 @@ import {
   createNumericAnswerControl,
   renderNumericAnswerDisplayMarkup
 } from "../../shared/tool-ui/numeric-answer.js";
-import { scheduleCalcLayoutFit } from "../../shared/tool-ui/calc-layout-fit.js";
+import { formatIntegerForDisplay } from "../../shared/tool-ui/number-format.js";
+import {
+  bindCalcFamilyKeypadEvents,
+  ensureCalcFamilyLayoutStyles,
+  getCalcFamilyShellRefs,
+  getNumericAnswerMaxLength,
+  renderCalcFamilyInlineShell,
+  syncCalcFamilyInlineResponsiveState,
+  syncCalcFamilyKeypadVisibility,
+  teardownCalcFamilyKeypadBindings
+} from "../../shared/tool-commons/calcul/calc-family-layout.js";
+
+const TM_IDS = {
+  instruction: "tm_instruction",
+  stage: "tm_stage",
+  equation: "tm_equation",
+  freeExpression: "tm_free_expression",
+  responseShell: "tm_response_shell",
+  responseWrap: "tm_response_wrap",
+  keypadSlot: "tm_keypad_slot"
+};
+
+const TM_KEYPAD_DATA_ATTRIBUTE = "data-tm-numeric-key";
+const TM_MIN_VISUAL_ANSWER_CHARS = 4;
+const LAYOUT_MODES = Object.freeze({
+  RESULT: "result",
+  FACTOR: "factor"
+});
 
 let stylesInjected = false;
 
@@ -27,7 +56,7 @@ export function createActivity(initialContext = {}) {
     mount(container, context = initialContext) {
       state.container = container;
       state.latestContext = context ?? state.latestContext;
-      renderShell(state);
+      renderShell(state, inferInitialLayoutMode(state.latestContext));
       syncValidateState(state);
     },
 
@@ -35,7 +64,6 @@ export function createActivity(initialContext = {}) {
       state.container = container || state.container;
       state.latestContext = context ?? state.latestContext;
       if (!state.container) return;
-      if (!state.root) renderShell(state);
       loadNextQuestion(state, state.latestContext ?? {});
     },
 
@@ -84,19 +112,25 @@ function createRuntimeState(initialContext = {}) {
     container: null,
     latestContext: initialContext,
     root: null,
+    stageEl: null,
+    equationEl: null,
     instructionEl: null,
     exprEl: null,
     responseWrap: null,
     input: null,
     answerControl: null,
+    keypadSlot: null,
+    keypadAbortController: null,
     currentQuestion: null,
     lastQuestionKey: null,
     questionIndex: 0,
     usedQuestionKeys: new Set(),
     settingsKey: "",
+    layoutMode: null,
+    shellShowsResponseBox: null,
     answerRevealed: false,
     showResponseBox: shouldShowResponseBox(initialContext),
-    instructionText: resolveInstruction(initialContext),
+    instructionText: resolveInstruction(initialContext, null),
     answerDisplayMode: "correction",
     studentAnswerSnapshot: null,
     correctionSnapshot: null,
@@ -106,36 +140,69 @@ function createRuntimeState(initialContext = {}) {
 
 function syncRuntimeState(state, context = state.latestContext) {
   state.showResponseBox = shouldShowResponseBox(context);
-  state.instructionText = resolveInstruction(context);
+  state.instructionText = resolveInstruction(context, state.currentQuestion);
 }
 
-function renderShell(state) {
+function renderShell(state, layoutMode = getQuestionLayoutMode(state.currentQuestion)) {
   const container = state.container;
   if (!container) return;
 
   destroyAnswerControl(state);
   syncRuntimeState(state);
-  container.innerHTML = `
-    <div class="tool-runtime tm-root${state.showResponseBox ? " tm-root--boxed" : " tm-root--free"}">
-      ${renderToolInstruction({ id: "tm_instruction" })}
-      <div class="tool-stage tm-stage">
-        <div class="tool-answer-row tm-equation">
-          <div class="tool-big tool-question tm-expression" id="tm_expression"></div>
-          ${state.showResponseBox ? `
-            <div class="tool-big tm-equals">=</div>
-            <div class="tool-answer-panel tm-response-wrap" id="tm_response_wrap"></div>
-          ` : ""}
-        </div>
-      </div>
-    </div>
-  `;
+  resetShellRefs(state);
 
-  state.root = container.querySelector(".tm-root");
-  state.instructionEl = container.querySelector("#tm_instruction");
-  state.exprEl = container.querySelector("#tm_expression");
-  state.responseWrap = container.querySelector("#tm_response_wrap");
-  state.input = null;
+  state.layoutMode = normalizeLayoutMode(layoutMode);
+  state.shellShowsResponseBox = state.showResponseBox;
+  renderUnifiedShell(state);
+
   updateInstructionDisplay(state);
+  syncKeypadVisibility(state);
+}
+
+/**
+ * Tables de multiplication utilise volontairement un seul shell inline pour
+ * les questions « résultat manquant » et « facteur manquant ». Seule la place
+ * de la boîte-réponse change. Le DOM, la typographie et le moteur de fit restent
+ * donc strictement identiques entre les deux variantes.
+ */
+function renderUnifiedShell(state) {
+  const modeClass = state.layoutMode === LAYOUT_MODES.FACTOR
+    ? "tm-root--factor"
+    : "tm-root--result";
+
+  state.container.innerHTML = renderCalcFamilyInlineShell({
+    showResponseBox: state.showResponseBox,
+    instructionHtml: renderToolInstruction({ id: TM_IDS.instruction }),
+    stageId: TM_IDS.stage,
+    equationId: TM_IDS.equation,
+    freeExpressionId: TM_IDS.freeExpression,
+    keypadSlotId: TM_IDS.keypadSlot,
+    rootClassName: `tm-root ${modeClass}${state.showResponseBox ? " tm-root--boxed" : " tm-root--free"}`,
+    stageClassName: "tm-stage",
+    equationClassName: "tm-equation",
+    freeExpressionClassName: "tm-expression tm-free-equation",
+    keypadSlotClassName: "tm-keypad-slot",
+    keypadRootClassName: "tm-keypad",
+    keypadButtonClassName: "tm-keypad-button",
+    keypadClearButtonClassName: "tm-keypad-button--clear",
+    keypadDataAttribute: TM_KEYPAD_DATA_ATTRIBUTE,
+    keypadAriaLabel: "Clavier numérique"
+  });
+
+  const refs = getCalcFamilyShellRefs(state.container, {
+    instructionId: TM_IDS.instruction,
+    stageId: TM_IDS.stage,
+    equationId: TM_IDS.equation,
+    expressionId: TM_IDS.freeExpression,
+    keypadSlotId: TM_IDS.keypadSlot
+  });
+
+  state.root = refs.root;
+  state.stageEl = refs.stageEl;
+  state.equationEl = refs.equationEl;
+  state.instructionEl = refs.instructionEl;
+  state.exprEl = refs.exprEl;
+  state.keypadSlot = refs.keypadSlot;
 }
 
 function loadNextQuestion(state, context = {}) {
@@ -166,32 +233,73 @@ function loadNextQuestion(state, context = {}) {
   state.correctionSnapshot = null;
   state.lastEvaluation = null;
 
-  updateInstructionDisplay(state);
+  syncRuntimeState(state, context);
 
-  if (state.showResponseBox !== Boolean(state.responseWrap)) {
-    renderShell(state);
+  const desiredLayoutMode = getQuestionLayoutMode(nextQuestion);
+  const shellMustChange = !state.root
+    || state.layoutMode !== desiredLayoutMode
+    || state.shellShowsResponseBox !== state.showResponseBox;
+
+  if (shellMustChange) {
+    renderShell(state, desiredLayoutMode);
+  } else {
+    updateInstructionDisplay(state);
   }
 
-  if (state.exprEl) {
-    state.exprEl.textContent = formatQuestion(nextQuestion);
-  }
+  renderCurrentQuestion(state);
   syncCompactClass(state);
 
   if (state.showResponseBox) {
-    renderResponseArea(state);
     focusInput(state);
   }
 }
 
-function renderResponseArea(state) {
-  if (!state.responseWrap) return;
+function renderCurrentQuestion(state) {
+  if (!state.currentQuestion) return;
+
+  syncStableAnswerSlotWidth(state);
+
+  if (state.showResponseBox) {
+    renderInputEquation(state);
+  } else if (state.exprEl) {
+    state.exprEl.innerHTML = renderFreeEquationMarkup(state.currentQuestion);
+  }
+}
+
+function renderInputEquation(state) {
+  if (!state.equationEl || !state.currentQuestion) return;
+
+  state.equationEl.innerHTML = renderQuestionEquationMarkup(state.currentQuestion, {
+    holeMarkup: `
+      <div class="tool-answer-panel calc-family-inline-response-shell tm-inline-response-shell" id="${TM_IDS.responseShell}">
+        <div class="tool-answer-row calc-family-response-wrap calc-family-response-wrap--inline tm-response-wrap tm-response-wrap--inline" id="${TM_IDS.responseWrap}"></div>
+      </div>
+    `
+  });
+
+  state.responseWrap = state.equationEl.querySelector(`#${TM_IDS.responseWrap}`);
+  prepareResponseControl(state, {
+    responseWrap: state.responseWrap,
+    wrapClassName: "tool-answer-row calc-family-response-wrap calc-family-response-wrap--inline tm-response-wrap tm-response-wrap--inline",
+    inputClassName: "calc-family-response-input calc-family-response-input--inline tm-response-input tm-response-input--inline"
+  });
+}
+
+function prepareResponseControl(state, {
+  responseWrap,
+  wrapClassName,
+  inputClassName
+} = {}) {
+  if (!responseWrap) return;
+
   destroyAnswerControl(state);
-  state.responseWrap.className = "tool-answer-panel tm-response-wrap";
+  state.responseWrap = responseWrap;
+  state.responseWrap.className = wrapClassName;
   state.responseWrap.innerHTML = "";
 
   state.answerControl = createNumericAnswerControl({
     id: "tm_response_input",
-    className: "tm-response-input",
+    className: inputClassName,
     ariaLabel: "Réponse",
     maxLength: getCurrentAnswerMaxLength(state),
     captureKeyboard: true,
@@ -205,6 +313,8 @@ function renderResponseArea(state) {
   state.responseWrap.appendChild(state.answerControl.element);
   state.input = state.answerControl.input;
   bindResponseEvents(state);
+  bindKeypadEvents(state);
+  syncKeypadVisibility(state);
 }
 
 function bindResponseEvents(state) {
@@ -225,8 +335,26 @@ function bindResponseEvents(state) {
   syncValidateState(state);
 }
 
+function bindKeypadEvents(state) {
+  bindCalcFamilyKeypadEvents({
+    state,
+    dataAttribute: TM_KEYPAD_DATA_ATTRIBUTE,
+    onAfterInput: () => syncValidateState(state)
+  });
+}
+
+function teardownKeypadBindings(state) {
+  teardownCalcFamilyKeypadBindings(state);
+}
+
+function syncKeypadVisibility(state) {
+  syncCalcFamilyKeypadVisibility(state, {
+    hiddenClassName: "tm-keypad-slot--hidden"
+  });
+}
+
 function revealAnswer(state) {
-  if (!state.currentQuestion || !state.exprEl) return;
+  if (!state.currentQuestion) return;
 
   state.answerRevealed = true;
   state.studentAnswerSnapshot = captureStudentAnswerSnapshot(state);
@@ -235,33 +363,141 @@ function revealAnswer(state) {
   state.answerDisplayMode = "correction";
 
   if (state.showResponseBox) {
-    state.exprEl.textContent = formatQuestion(state.currentQuestion);
     renderDisplayedResponse(state);
-  } else {
-    state.exprEl.textContent = formatAnswer(state.currentQuestion);
+  } else if (state.exprEl) {
+    state.exprEl.innerHTML = renderFreeEquationMarkup(state.currentQuestion, { revealAnswer: true });
   }
 
+  syncKeypadVisibility(state);
   syncCompactClass(state);
   syncValidateState(state);
 }
 
 function renderDisplayedResponse(state) {
-  if (!state.responseWrap || !state.currentQuestion || !state.showResponseBox) return;
+  if (!state.equationEl || !state.currentQuestion || !state.showResponseBox) return;
 
+  const { evaluation, showStudentAnswer, snapshot } = getDisplayedSnapshotState(state);
+  destroyAnswerControl(state);
+
+  const responseClasses = [
+    "tool-answer-row",
+    "calc-family-response-wrap",
+    "calc-family-response-wrap--inline",
+    "tm-response-wrap",
+    "tm-response-wrap--inline",
+    evaluation.isCorrect === true ? "calc-family-response-wrap--correct" : "calc-family-response-wrap--incorrect",
+    evaluation.isCorrect === true ? "tm-response-wrap--correct" : "tm-response-wrap--incorrect"
+  ].join(" ");
+
+  state.equationEl.innerHTML = renderQuestionEquationMarkup(state.currentQuestion, {
+    holeMarkup: `
+      <div class="tool-answer-panel calc-family-inline-response-shell tm-inline-response-shell" id="${TM_IDS.responseShell}">
+        <div class="${responseClasses}" id="${TM_IDS.responseWrap}">
+          ${renderSnapshotMarkup(snapshot, { showStudentAnswer, evaluation })}
+        </div>
+      </div>
+    `
+  });
+
+  state.responseWrap = state.equationEl.querySelector(`#${TM_IDS.responseWrap}`);
+  state.input = null;
+}
+
+function getDisplayedSnapshotState(state) {
   const evaluation = state.lastEvaluation ?? computeStoredEvaluation(state);
   const showStudentAnswer = canToggleStudentAnswerDisplay(state)
     && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
   const snapshot = showStudentAnswer ? state.studentAnswerSnapshot : state.correctionSnapshot;
+  return { evaluation, showStudentAnswer, snapshot };
+}
 
-  state.responseWrap.className = "tool-answer-panel tm-response-wrap";
-  state.responseWrap.classList.toggle("tm-response-wrap--correct", evaluation.isCorrect === true);
-  state.responseWrap.classList.toggle("tm-response-wrap--incorrect", evaluation.isCorrect !== true);
-  destroyAnswerControl(state);
-  state.responseWrap.innerHTML = renderNumericAnswerDisplayMarkup(snapshot?.value ?? "", {
-    className: `tm-response-input${showStudentAnswer ? (evaluation.isCorrect ? " tm-response-input--correct" : " tm-response-input--incorrect") : ""}`,
+function renderSnapshotMarkup(snapshot, { showStudentAnswer, evaluation } = {}) {
+  const stateClass = showStudentAnswer
+    ? (evaluation.isCorrect
+      ? " calc-family-response-input--correct tm-response-input--correct"
+      : " calc-family-response-input--incorrect tm-response-input--incorrect")
+    : "";
+  return renderNumericAnswerDisplayMarkup(snapshot?.value ?? "", {
+    className: `calc-family-response-input calc-family-response-input--inline tm-response-input tm-response-input--inline${stateClass}`,
     ariaLabel: "Réponse affichée"
   });
-  state.input = null;
+}
+
+function renderQuestionEquationMarkup(question, { holeMarkup = "" } = {}) {
+  const factorTarget = isFactorAnswerQuestion(question);
+  const missingIndex = Number(question?.missingIndex) === 0 ? 0 : 1;
+
+  const first = factorTarget && missingIndex === 0
+    ? holeMarkup
+    : renderMathPart(question?.factor1);
+  const second = factorTarget && missingIndex === 1
+    ? holeMarkup
+    : renderMathPart(question?.factor2);
+  const result = factorTarget
+    ? renderMathPart(question?.result ?? "")
+    : holeMarkup;
+
+  return `
+    ${first}
+    ${renderMathPart("×", "tm-operator")}
+    ${second}
+    ${renderMathPart("=", "tm-equals")}
+    ${result}
+  `;
+}
+
+function renderFreeEquationMarkup(question, { revealAnswer = false } = {}) {
+  if (!question) return "";
+
+  const factorTarget = isFactorAnswerQuestion(question);
+  if (!factorTarget) {
+    const baseQuestion = `
+      ${renderFreePart(question.factor1)}
+      ${renderFreePart("×")}
+      ${renderFreePart(question.factor2)}
+    `;
+    if (!revealAnswer) return baseQuestion;
+    return `
+      ${baseQuestion}
+      ${renderFreePart("=")}
+      ${renderFreePart(question.result)}
+    `;
+  }
+
+  const missingIndex = Number(question.missingIndex) === 0 ? 0 : 1;
+  const first = missingIndex === 0
+    ? renderFreeHole(question.factor1, { visible: revealAnswer, label: "Facteur manquant" })
+    : renderFreePart(question.factor1);
+  const second = missingIndex === 1
+    ? renderFreeHole(question.factor2, { visible: revealAnswer, label: "Facteur manquant" })
+    : renderFreePart(question.factor2);
+
+  return `
+    ${first}
+    ${renderFreePart("×")}
+    ${second}
+    ${renderFreePart("=")}
+    ${renderFreePart(question.result)}
+  `;
+}
+
+function renderMathPart(value, extraClass = "") {
+  return `<div class="tool-big calc-family-math-part tm-expression tm-math-part ${escapeHtml(extraClass)}">${escapeHtml(formatMathValue(value))}</div>`;
+}
+
+function renderFreePart(value) {
+  return `<span class="calc-family-free-part tm-free-part">${escapeHtml(formatMathValue(value))}</span>`;
+}
+
+function renderFreeHole(value = "", { visible = false, label = "Nombre manquant" } = {}) {
+  const safeValue = formatMathValue(value);
+  const ariaLabel = visible ? `${label} : ${safeValue}` : label;
+
+  return `
+    <span class="calc-family-free-hole tm-free-hole${visible ? " is-filled" : ""}" role="img" aria-label="${escapeHtml(ariaLabel)}">
+      <span class="calc-family-free-hole-value tm-free-hole-value" aria-hidden="true">${escapeHtml(safeValue)}</span>
+    </span>
+  `;
 }
 
 function captureStudentAnswerSnapshot(state) {
@@ -272,13 +508,13 @@ function captureStudentAnswerSnapshot(state) {
 
 function buildCorrectionSnapshot(question) {
   return {
-    value: String(question?.result ?? "")
+    value: String(getExpectedAnswer(question) ?? "")
   };
 }
 
 function computeStoredEvaluation(state) {
   const answer = String(state.studentAnswerSnapshot?.value ?? "").trim();
-  const expected = String(state.correctionSnapshot?.value ?? state.currentQuestion?.result ?? "").trim();
+  const expected = String(state.correctionSnapshot?.value ?? getExpectedAnswer(state.currentQuestion) ?? "").trim();
   return {
     isCorrect: isNumericAnswer(answer) && Number.parseInt(answer, 10) === Number.parseInt(expected, 10)
   };
@@ -307,7 +543,7 @@ function canToggleStudentAnswerDisplay(state) {
 function isCurrentAnswerCorrect(state) {
   const submittedValue = String(state.input?.value ?? "").trim();
   return isNumericAnswer(submittedValue)
-    && Number.parseInt(submittedValue, 10) === Number(state.currentQuestion?.result);
+    && Number.parseInt(submittedValue, 10) === Number(getExpectedAnswer(state.currentQuestion));
 }
 
 function requestReveal(state) {
@@ -330,8 +566,21 @@ function updateInstructionDisplay(state) {
   setToolInstructionText(state.instructionEl, state.instructionText);
 }
 
-function resolveInstruction(context = {}) {
-  return resolveToolInstructionText(context);
+function resolveInstruction(context = {}, question = null) {
+  const fallback = getQuestionDefaultInstruction(question, context?.settings);
+  return resolveToolInstructionText({
+    ...context,
+    defaultInstruction: fallback
+  }, fallback);
+}
+
+function getQuestionDefaultInstruction(question, settings = {}) {
+  if (question) {
+    return isFactorAnswerQuestion(question)
+      ? "Écris le facteur manquant."
+      : "Écris le résultat.";
+  }
+  return getDefaultInstruction(settings);
 }
 
 function shouldShowResponseBox(context = {}) {
@@ -381,63 +630,85 @@ function focusInput(state) {
 function syncCompactClass(state) {
   if (!state.root || !state.currentQuestion) return;
 
-  const digitCount = getCurrentCalculationDigitCount(state);
-  const shouldMoveAnswerToSecondLine = state.showResponseBox && digitCount > 8;
-  const length = shouldMoveAnswerToSecondLine
-    ? formatQuestion(state.currentQuestion).length
-    : getCurrentLineDisplayLength(state);
-
-  state.root.classList.toggle("calc-runtime--answer-second-line", shouldMoveAnswerToSecondLine);
-  state.root.classList.toggle("calc-runtime--single-line-answer", state.showResponseBox && !shouldMoveAnswerToSecondLine);
-  state.root.classList.toggle("calc-runtime--ultra-dense", length >= 34 || digitCount >= 16);
-  state.root.classList.toggle("calc-runtime--dense", (length >= 26 || digitCount >= 12) && !(length >= 34 || digitCount >= 16));
-  state.root.classList.toggle("calc-runtime--compact", (length >= 18 || digitCount >= 9) && !(length >= 26 || digitCount >= 12));
-
-  scheduleCalcLayoutFit({
+  syncStableAnswerSlotWidth(state);
+  syncCalcFamilyInlineResponsiveState({
     root: state.root,
-    equationEl: state.root.querySelector(".tm-equation"),
-    expressionEl: state.exprEl,
-    equalsEl: state.root.querySelector(".tm-equals"),
-    responseWrapEl: state.responseWrap,
-    answerSecondLine: shouldMoveAnswerToSecondLine,
+    equationEl: state.showResponseBox ? state.equationEl : state.exprEl,
+    lineLength: getStableLineDisplayLength(state),
     minScale: 0.32
   });
 }
 
-function getCurrentCalculationDigitCount(state) {
+function getStableLineDisplayLength(state) {
   const question = state.currentQuestion;
   if (!question) return 0;
 
-  const values = Array.isArray(question.terms)
-    ? question.terms
-    : [question.term1, question.term2, question.factor1, question.factor2];
+  const fullEquationLength = formatAnswer(question).length;
+  const hiddenValue = isFactorAnswerQuestion(question)
+    ? (Number(question.missingIndex) === 0 ? question.factor1 : question.factor2)
+    : question.result;
+  const hiddenValueLength = formatMathValue(hiddenValue).length;
+  const answerSlotLength = getStableAnswerVisualChars(question);
 
-  return values.reduce((total, value) => total + countIntegerDigitsForLayout(value), 0);
+  return Math.max(0, fullEquationLength - hiddenValueLength + answerSlotLength);
 }
 
-function countIntegerDigitsForLayout(value) {
-  const digits = String(Math.abs(Math.trunc(Number(value) || 0))).replace(/\D+/g, "");
-  return Math.max(1, digits.length);
+function syncStableAnswerSlotWidth(state) {
+  if (!state.root || !state.currentQuestion) return;
+  state.root.style.setProperty(
+    "--tm-answer-visual-chars",
+    String(getStableAnswerVisualChars(state.currentQuestion))
+  );
 }
 
-function getCurrentLineDisplayLength(state) {
-  if (!state.currentQuestion) return 0;
-  if (!state.showResponseBox || state.answerRevealed) {
-    return formatAnswer(state.currentQuestion).length;
-  }
-  const answerChars = Math.max(4, getCurrentAnswerMaxLength(state) + 2);
-  return `${formatQuestion(state.currentQuestion)} = `.length + answerChars;
+function getStableAnswerVisualChars(question) {
+  if (!question) return TM_MIN_VISUAL_ANSWER_CHARS;
+  const maxDigits = Math.max(
+    getNumericAnswerMaxLength(question.factor1),
+    getNumericAnswerMaxLength(question.factor2),
+    getNumericAnswerMaxLength(question.result)
+  );
+  return Math.max(TM_MIN_VISUAL_ANSWER_CHARS, maxDigits + 2);
 }
 
 function getCurrentAnswerMaxLength(state) {
-  const rawValue = state.currentQuestion?.result ?? "";
-  const digitCount = String(rawValue).replace(/\D+/g, "").length;
-  return Math.max(1, digitCount);
+  return getNumericAnswerMaxLength(getExpectedAnswer(state.currentQuestion));
+}
+
+function getQuestionLayoutMode(question) {
+  return isFactorAnswerQuestion(question) ? LAYOUT_MODES.FACTOR : LAYOUT_MODES.RESULT;
+}
+
+function inferInitialLayoutMode(context = {}) {
+  const settings = normalizeSettings(context?.settings);
+  return settings.answerTarget === "factor" ? LAYOUT_MODES.FACTOR : LAYOUT_MODES.RESULT;
+}
+
+function normalizeLayoutMode(value) {
+  return value === LAYOUT_MODES.FACTOR ? LAYOUT_MODES.FACTOR : LAYOUT_MODES.RESULT;
 }
 
 function destroyAnswerControl(state) {
+  teardownKeypadBindings(state);
   state.answerControl?.destroy?.();
   state.answerControl = null;
+  syncKeypadVisibility(state);
+}
+
+function resetShellRefs(state) {
+  state.root = null;
+  state.stageEl = null;
+  state.equationEl = null;
+  state.instructionEl = null;
+  state.exprEl = null;
+  state.responseWrap = null;
+  state.keypadSlot = null;
+  state.input = null;
+}
+
+function formatMathValue(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? formatIntegerForDisplay(numeric) : String(value ?? "");
 }
 
 function makeRuntimeSettingsKey(settings) {
@@ -452,13 +723,12 @@ function teardownState(state, container) {
   destroyAnswerControl(state);
   if (container) container.innerHTML = "";
   state.container = null;
-  state.root = null;
-  state.instructionEl = null;
-  state.exprEl = null;
-  state.responseWrap = null;
-  state.input = null;
+  resetShellRefs(state);
   state.answerControl = null;
+  state.keypadAbortController = null;
   state.currentQuestion = null;
+  state.layoutMode = null;
+  state.shellShowsResponseBox = null;
   state.answerRevealed = false;
   state.studentAnswerSnapshot = null;
   state.correctionSnapshot = null;
@@ -469,6 +739,7 @@ function injectStyles() {
   if (stylesInjected) return;
   stylesInjected = true;
   ensureToolInstructionStyles();
+  ensureCalcFamilyLayoutStyles();
 
   const href = new URL("./activity.css", import.meta.url).href;
   if (document.querySelector(`link[data-tm-activity-style="${href}"]`)) return;
@@ -482,9 +753,9 @@ function injectStyles() {
 
 function escapeHtml(value) {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

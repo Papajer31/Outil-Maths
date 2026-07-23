@@ -1,0 +1,549 @@
+
+.sd-root {
+  --sd-character-size: clamp(9.6rem, 20vh, 14.6rem);
+  --sd-object-size: clamp(1.25rem, 2.25vw, 2.05rem);
+  --sd-object-gap: clamp(.12rem, .28vw, .24rem);
+  --sd-object-group-gap: clamp(.78rem, 1.6vw, 1.25rem);
+  --sd-accent: #f59e0b;
+  --sd-green: #22c55e;
+  --sd-red: #ef4444;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.sd-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  gap: clamp(.7rem, 1.5vh, 1.1rem);
+  padding: clamp(.65rem, 1.35vw, 1.15rem);
+}
+
+.sd-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+.sd-scene {
+  position: relative;
+  width: min(94rem, 100%);
+  min-height: clamp(25rem, 58vh, 40rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(.6rem, 1vw, 1.15rem) clamp(3.9rem, 6vw, 5.3rem) clamp(.6rem, 1vw, 1.15rem) clamp(.4rem, 1vw, .8rem);
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.sd-scene[data-sd-density="tiny"] {
+  --sd-object-size: clamp(2.15rem, 6vw, 8rem);
+  --sd-object-gap: clamp(.16rem, .34vw, .29rem);
+  --sd-object-group-gap: clamp(1rem, 2vw, 1.55rem);
+}
+
+.sd-scene[data-sd-density="small"] {
+  --sd-object-size: clamp(1.95rem, 4vw, 7rem);
+  --sd-object-gap: clamp(.15rem, .32vw, .27rem);
+  --sd-object-group-gap: clamp(.94rem, 4vw, 5rem);
+}
+
+.sd-scene[data-sd-density="medium"] {
+  --sd-object-size: clamp(1.65rem, 2.7vw, 3.5rem);
+  --sd-object-gap: clamp(.14rem, .3vw, .25rem);
+  --sd-object-group-gap: clamp(.86rem, 3vw, 4rem);
+}
+
+.sd-scene[data-sd-density="large"] {
+  --sd-object-size: clamp(1.42rem, 1.85vw, 2.5rem);
+  --sd-object-gap: clamp(.12rem, .28vw, .24rem);
+  --sd-object-group-gap: clamp(.78rem, 1.5vw, 3rem);
+}
+
+.sd-scene[data-sd-density="compact"] {
+  --sd-object-size: clamp(1.14rem, 1.85vw, 2.5rem);
+  --sd-object-gap: clamp(.09rem, .22vw, .19rem);
+  --sd-object-group-gap: clamp(.62rem, 1.5vw, 3rem);
+}
+
+
+.sd-rows {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(1.35rem, 3.4vh, 2.8rem);
+  pointer-events: none;
+}
+
+.sd-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 19rem) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(.05rem, .35vw, .3rem);
+}
+
+.sd-character-side {
+  display: grid;
+  align-items: center;
+  justify-content: end;
+  min-width: 0;
+}
+
+.sd-character {
+  width: var(--sd-character-size);
+  height: var(--sd-character-size);
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 .3rem .42rem rgba(0,0,0,.18));
+}
+
+.sd-character--placeholder {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  border: 3px solid rgba(255,255,255,.55);
+  color: #fff;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
+  box-shadow: 0 .35rem .9rem rgba(0,0,0,.18);
+}
+
+.sd-collection-side {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sd-collection {
+  min-width: 0;
+  max-width: 100%;
+  padding: .42rem 0;
+}
+
+.sd-collection--units {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--sd-object-gap);
+}
+
+.sd-collection--organized {
+  display: flex;
+  align-items: center;
+  gap: clamp(.9rem, 2vw, 1.55rem);
+  flex-wrap: nowrap;
+}
+
+.sd-tens-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--sd-tens-columns, 1), max-content);
+  gap: clamp(.32rem, .74vw, .58rem) clamp(.42rem, .92vw, .76rem);
+  align-items: center;
+  justify-content: start;
+}
+
+.sd-ten-group {
+  display: grid;
+  grid-template-columns: repeat(5, var(--sd-object-mini-size));
+  grid-auto-rows: var(--sd-object-mini-size);
+  gap: var(--sd-object-mini-gap);
+  align-items: center;
+  justify-items: center;
+  padding: clamp(.14rem, .32vw, .25rem);
+  border-radius: .42rem;
+  outline: .08rem solid rgba(255,255,255,.16);
+  outline-offset: clamp(.06rem, .12vw, .1rem);
+}
+
+.sd-units-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--sd-object-gap);
+}
+
+.sd-object {
+  flex: 0 0 auto;
+  width: var(--sd-object-size);
+  height: var(--sd-object-size);
+  display: inline-grid;
+  place-items: center;
+  font-size: calc(var(--sd-object-size) * .86);
+  line-height: 1;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.sd-object--compact {
+  width: var(--sd-object-compact-size);
+  height: var(--sd-object-compact-size);
+  font-size: calc(var(--sd-object-compact-size) * .86);
+}
+
+.sd-object--mini {
+  width: var(--sd-object-mini-size);
+  height: var(--sd-object-mini-size);
+  font-size: calc(var(--sd-object-mini-size) * .86);
+}
+
+.sd-object--group-end {
+  margin-right: var(--sd-object-group-gap);
+}
+
+.sd-units-row .sd-object--group-end {
+  margin-right: clamp(.72rem, 1.58vw, 1.25rem);
+}
+
+.sd-object--image {
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 .09rem .13rem rgba(0,0,0,.18));
+}
+
+.sd-object--fallback {
+  display: inline-grid;
+  place-items: center;
+}
+
+.sd-drawing-canvas {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.sd-root--revealed .sd-drawing-canvas {
+  pointer-events: none;
+}
+
+.sd-side-controls {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: clamp(.5rem, 1.1vh, .78rem);
+  justify-items: center;
+  align-items: center;
+}
+
+.sd-clear-traces {
+  width: clamp(3rem, 4.6vw, 3.85rem);
+  height: clamp(3rem, 4.6vw, 3.85rem);
+  min-height: 0;
+  padding: .5rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.94);
+  pointer-events: auto;
+}
+
+.sd-clear-traces svg,
+.sd-keypad-button svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sd-root--revealed .sd-side-controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sd-answer-zone {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 0;
+}
+
+.sd-answer-card {
+  width: min(70rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.55rem, 1.15vh, .9rem);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.sd-operation-input,
+.sd-operation-display {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.4rem, .9vw, .8rem);
+}
+
+.sd-operation-input {
+  position: relative;
+  min-height: clamp(4.7rem, 9vh, 6.2rem);
+}
+
+.sd-operation-input--complete {
+  width: min(36rem, 100%);
+}
+
+.sd-operation-display {
+  min-height: clamp(4.7rem, 9vh, 6.2rem);
+  padding: 0 .9rem;
+  border: .2rem dashed rgba(255,255,255,.42);
+  border-radius: 1.15rem;
+  font-size: clamp(2.3rem, 5.2vw, 4.15rem);
+  font-weight: 900;
+  line-height: 1;
+  color: rgba(255,255,255,.96);
+  background: transparent;
+  box-shadow: none;
+}
+
+.sd-answer-field {
+  min-width: clamp(4.2rem, 7.2vw, 6rem);
+  min-height: clamp(4.7rem, 9vh, 6.2rem);
+  padding: 0 .55rem;
+  border: .2rem dashed rgba(255,255,255,.42);
+  border-radius: 1.15rem;
+  background: transparent;
+  color: rgba(255,255,255,.96);
+  font-size: clamp(2.2rem, 5vw, 3.85rem);
+  font-weight: 900;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+
+.sd-answer-field--readonly {
+  cursor: default;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
+}
+
+.sd-answer-field--wide {
+  width: min(36rem, 100%);
+  min-width: min(36rem, 100%);
+  justify-content: center;
+}
+
+.sd-answer-field.is-active {
+  border-color: rgba(245,158,11,.98);
+  box-shadow: 0 0 0 .18rem rgba(245,158,11,.18);
+  transform: translateY(-1px);
+}
+
+.sd-operation-symbol {
+  min-width: .85em;
+  color: rgba(255,255,255,.92);
+  font-size: clamp(2.3rem, 4.8vw, 3.9rem);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+
+.sd-operation-symbol--given {
+  color: rgba(255,255,255,.92);
+}
+
+.sd-operation-input--readonly .sd-answer-field.is-active {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.sd-correction-frame {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border: .2rem solid rgba(239,68,68,.92);
+  border-radius: 1.15rem;
+  pointer-events: none;
+  box-shadow: 0 0 0 .16rem rgba(239,68,68,.12);
+}
+
+.sd-operation-input--readonly > :not(.sd-correction-frame) {
+  position: relative;
+  z-index: 1;
+}
+
+.sd-answer-card.is-correct .sd-correction-frame {
+  border-color: rgba(34,197,94,.95);
+  box-shadow: 0 0 0 .16rem rgba(34,197,94,.12);
+}
+
+.sd-answer-card.is-incorrect .sd-correction-frame,
+.sd-answer-card.is-impossible .sd-correction-frame {
+  border-color: rgba(239,68,68,.95);
+  box-shadow: 0 0 0 .16rem rgba(239,68,68,.12);
+}
+
+.sd-keypad {
+  width: min(70rem, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: clamp(.28rem, .62vw, .55rem);
+}
+
+.sd-keypad-replacement {
+  width: min(70rem, 100%);
+  min-height: clamp(3.2rem, 5.2vw, 4.65rem);
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.95);
+  font-size: clamp(1.05rem, 2vw, 1.42rem);
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.sd-keypad-button {
+  width: clamp(3.2rem, 5.2vw, 4.65rem);
+  height: clamp(3.2rem, 5.2vw, 4.65rem);
+  min-height: 0;
+  border-radius: .85rem;
+  padding: .25rem;
+  font-size: clamp(1.48rem, 2.75vw, 2.2rem);
+  font-weight: 850;
+  display: grid;
+  place-items: center;
+}
+
+.sd-keypad-button--clear {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, .8);
+}
+
+.sd-keypad-button--clear:hover,
+.sd-keypad-button--clear:focus-visible {
+  border-color: rgba(239, 68, 68, 1);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .18);
+}
+
+
+@media (max-width: 900px) {
+  .sd-root {
+    --sd-character-size: clamp(7.5rem, 17vh, 10.3rem);
+    --sd-object-size: clamp(1.55rem, 5vw, 2.45rem);
+    --sd-object-gap: clamp(.2rem, .6vw, .38rem);
+  }
+
+  .sd-row {
+    grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
+    gap: .15rem;
+  }
+
+  .sd-keypad {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 700px) {
+  .sd-scene {
+    min-height: clamp(24rem, 62vh, 34rem);
+    padding-right: clamp(3rem, 8vw, 3.8rem);
+  }
+
+  .sd-row {
+    grid-template-columns: 1fr;
+    gap: .45rem;
+  }
+
+  .sd-character-side {
+    justify-content: start;
+    max-width: 28rem;
+  }
+
+  .sd-collection-side {
+    justify-content: flex-start;
+    padding-left: clamp(.4rem, 2vw, 1rem);
+  }
+
+  .sd-side-controls {
+    top: .3rem;
+    transform: none;
+  }
+}
+
+
+/* Collections organisées : une vraie grille globale de dizaines.
+   Tous les assets gardent exactement la même taille. */
+.sd-collection-side {
+  overflow: visible;
+}
+
+.sd-collection--units {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--sd-object-gap);
+}
+
+.sd-collection--decades {
+  display: block;
+  max-width: 100%;
+}
+
+.sd-decades-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--sd-decade-columns, 5), max-content);
+  gap: clamp(1.04rem, 2.3vh, 1.64rem) var(--sd-object-group-gap);
+  align-items: start;
+  justify-content: start;
+}
+
+.sd-decade-group {
+  display: grid;
+  grid-template-rows: repeat(2, max-content);
+  gap: var(--sd-object-gap);
+  min-width: calc((5 * var(--sd-object-size)) + (4 * var(--sd-object-gap)));
+}
+
+.sd-decade-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-object-gap);
+  min-height: var(--sd-object-size);
+}
+
+.sd-object,
+.sd-object--compact,
+.sd-object--mini {
+  width: var(--sd-object-size);
+  height: var(--sd-object-size);
+  font-size: calc(var(--sd-object-size) * .86);
+}
+
+.sd-ten-group {
+  outline: 0;
+  padding: 0;
+}

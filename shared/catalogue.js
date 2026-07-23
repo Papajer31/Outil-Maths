@@ -439,6 +439,20 @@ export const CATALOG_ACTIVITIES = Object.freeze([
       }
     }
   },
+
+  {
+    id: "mathematiques.calculs.somme-difference",
+    config_name: "Somme ou différence ?",
+    category_id: "mathematiques.calculs",
+    tool_id: "somme-difference",
+    description: "Choisir entre addition et soustraction à partir de deux collections, puis écrire l'opération complète.",
+    display_order: 10,
+    settings: {
+      collectionRange: { min: 1, max: 10, mode: "simple", start: 1, step: 1, values: [] },
+      responseMode: "segmented",
+      traceMode: "enabled"
+    }
+  },
   {
     id: "mathematiques.calculs.compte-est-bon",
     config_name: "Compte est bon",

@@ -1142,6 +1142,7 @@ create table public.question_banks (
   bank_type text not null default 'text_answer',
   title text not null,
   title_normalized text not null,
+  instruction text not null default '',
   description text not null default '',
   subject text not null default '',
   grade_level text not null default '',

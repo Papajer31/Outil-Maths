@@ -452,7 +452,42 @@
   font-weight:900;
 }
 
+.dashboard-bank-table-heading{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+.dashboard-bank-instruction-field{
+  flex:1 1 440px;
+  min-width:280px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-left:10px;
+  color:#d8dfec;
+  font-size:14px;
+  font-weight:800;
+}
+
+.dashboard-bank-instruction-field > span{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+.dashboard-bank-instruction-input{
+  flex:1 1 auto;
+  min-width:0;
+  height:36px;
+}
+
+.dashboard-bank-instruction-input.is-invalid{
+  border-color:var(--bad, #ff6b6b);
+  box-shadow:0 0 0 2px rgba(255,107,107,.18);
+}
+
 .dashboard-bank-table-title-row{
+  width:100%;
+  min-width:0;
   display:flex;
   align-items:center;
   gap:8px;
@@ -1195,7 +1230,7 @@ input.dashboard-bank-cell{
   place-items: center;
   padding: 28px;
   background: rgba(2, 6, 23, .72);
-  backdrop-filter: blur(6px);
+  backdrop-filter:none;
 }
 
 .dashboard-selection-picker-card {
@@ -1220,19 +1255,25 @@ input.dashboard-bank-cell{
 .dashboard-selection-picker-title {
   color: #f5f7fb;
   font-size: 22px;
-  font-weight: 1000;
+  font-weight: 700;
 }
 
-.dashboard-selection-picker-subtitle,
-.dashboard-selection-picker-summary {
+.dashboard-selection-picker-subtitle {
   color: #aeb7c8;
   font-size: 14px;
   font-weight: 800;
 }
 
-.dashboard-selection-picker-text,
 .dashboard-bank-preview-selection-text {
   line-height: 1.8;
+}
+
+.dashboard-selection-picker-text {
+  line-height: 2.15; /* espace entre les lignes */
+}
+
+.dashboard-selection-picker-text .selection-text-token--word {
+  line-height: 1.5; /* garde les bordures compactes autour des mots */
 }
 
 .dashboard-selection-picker-text {
@@ -1244,7 +1285,7 @@ input.dashboard-bank-cell{
   background: rgba(255,255,255,.035);
   color: #f5f7fb;
   font-size: 30px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .dashboard-selection-picker-text .selection-text-token--word:hover,
@@ -1257,7 +1298,7 @@ input.dashboard-bank-cell{
 .dashboard-selection-picker-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: right;
   gap: 18px;
 }
 

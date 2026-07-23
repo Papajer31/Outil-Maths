@@ -1,0 +1,271 @@
+/* =========================================================
+   Infrastructure responsive commune — Patch Responsive 0
+   ---------------------------------------------------------
+   Ces variables sont volontairement neutres dans ce patch.
+   Aucun outil ni moteur interactif ne les consomme encore.
+   ========================================================= */
+
+:root{
+  /* Mesures brutes du viewport, mises à jour par responsive-runtime.js. */
+  --runtime-viewport-width:100vw;
+  --runtime-viewport-height:100vh;
+  --runtime-viewport-ratio:1;
+
+  /* Échelle commune. Elle reste à 1 tant qu'un patch dédié ne la modifie pas. */
+  --runtime-ui-scale:1;
+
+  /* Zone sûre disponible pour les futurs layouts du runtime. */
+  --runtime-safe-width:var(--runtime-viewport-width);
+  --runtime-safe-height:var(--runtime-viewport-height);
+
+  /* Réserves structurelles communes, neutres pour le moment. */
+  --runtime-header-height:0px;
+  --runtime-footer-height:0px;
+  --runtime-toolbar-height:0px;
+
+  /* Espacements communs destinés aux futurs patches outil par outil. */
+  --runtime-layout-gap:0px;
+  --runtime-layout-padding:0px;
+
+  /* Taille tactile de référence, sans effet tant qu'elle n'est pas utilisée. */
+  --runtime-touch-target:44px;
+
+  /*
+   * Échelle typographique élève calibrée manuellement.
+   * Les quatre paliers sont des tailles cibles : les moteurs peuvent ensuite
+   * les réduire de 2 px en 2 px uniquement si le texte déborde.
+   */
+  --runtime-font-small:32px;
+  --runtime-font-normal:48px;
+  --runtime-font-large:64px;
+  --runtime-font-huge:80px;
+
+  /*
+   * Shell runtime élève — Patch Responsive 2A
+   * Ces valeurs pilotent uniquement le cadre commun autour des outils.
+   * Elles ne modifient ni les moteurs, ni les coordonnées internes des outils.
+   */
+  --runtime-session-chrome-top:70px;
+  --runtime-session-chrome-bottom:80px;
+  --runtime-session-reserve-width:150px;
+  --runtime-session-timer-height:70px;
+  --runtime-session-nav-size:72px;
+  --runtime-session-nav-icon-size:42px;
+  --runtime-session-control-min-height:58px;
+  --runtime-session-control-padding-y:10px;
+  --runtime-session-control-padding-x:16px;
+  --runtime-session-control-gap:10px;
+  --runtime-session-control-font-size:28px;
+  --runtime-session-control-icon-size:30px;
+  --runtime-session-projector-font-size:22px;
+  --runtime-session-projector-icon-size:28px;
+  --runtime-session-countdown-min-width:108px;
+  --runtime-session-countdown-height:52px;
+  --runtime-session-countdown-font-size:30px;
+  --runtime-session-sidebar-panel-width:132px;
+  --runtime-session-sidebar-panel-min-height:260px;
+  --runtime-session-sidebar-panel-padding-y:16px;
+  --runtime-session-sidebar-panel-padding-x:10px;
+  --runtime-session-sidebar-panel-gap:18px;
+  --runtime-session-counter-label-font-size:17px;
+  --runtime-session-counter-value-font-size:38px;
+  --runtime-session-fixed-question-font-size:28px;
+  --runtime-session-final-title-font-size:20px;
+  --runtime-session-final-label-font-size:16px;
+  --runtime-session-final-value-font-size:30px;
+  --runtime-session-gauge-rocket-size:116px;
+  --runtime-session-gauge-rocket-offset:32px;
+  --runtime-session-gauge-track-width:88px;
+  --runtime-session-gauge-track-padding:10px;
+  --runtime-session-gauge-track-border:6px;
+}
+
+
+/* =========================================================
+   Profils officiels — shell runtime commun
+   ---------------------------------------------------------
+   Les profils compacts récupèrent des pixels sur les zones
+   périphériques du shell afin d'éviter les scrollbars et les
+   rognages visibles, sans toucher au contenu des outils.
+   ========================================================= */
+
+:root.viewport-profile--legacy-1024x768{
+  --runtime-font-small:18px;
+  --runtime-font-normal:28px;
+  --runtime-font-large:36px;
+  --runtime-font-huge:46px;
+  --runtime-session-chrome-top:88px;
+  --runtime-session-chrome-bottom:90px;
+  --runtime-session-reserve-width:118px;
+  --runtime-session-timer-height:58px;
+  --runtime-session-nav-size:64px;
+  --runtime-session-nav-icon-size:36px;
+  --runtime-session-control-min-height:50px;
+  --runtime-session-control-padding-y:8px;
+  --runtime-session-control-padding-x:12px;
+  --runtime-session-control-gap:8px;
+  --runtime-session-control-font-size:24px;
+  --runtime-session-control-icon-size:26px;
+  --runtime-session-projector-font-size:18px;
+  --runtime-session-projector-icon-size:24px;
+  --runtime-session-countdown-min-width:92px;
+  --runtime-session-countdown-height:46px;
+  --runtime-session-countdown-font-size:26px;
+  --runtime-session-sidebar-panel-width:108px;
+  --runtime-session-sidebar-panel-min-height:226px;
+  --runtime-session-sidebar-panel-padding-y:12px;
+  --runtime-session-sidebar-panel-padding-x:7px;
+  --runtime-session-sidebar-panel-gap:12px;
+  --runtime-session-counter-label-font-size:15px;
+  --runtime-session-counter-value-font-size:31px;
+  --runtime-session-fixed-question-font-size:23px;
+  --runtime-session-final-title-font-size:17px;
+  --runtime-session-final-label-font-size:14px;
+  --runtime-session-final-value-font-size:25px;
+  --runtime-session-gauge-rocket-size:88px;
+  --runtime-session-gauge-rocket-offset:22px;
+  --runtime-session-gauge-track-width:66px;
+  --runtime-session-gauge-track-padding:7px;
+  --runtime-session-gauge-track-border:4px;
+}
+
+:root.viewport-profile--legacy-1280x1024{
+  --runtime-font-small:20px;
+  --runtime-font-normal:32px;
+  --runtime-font-large:44px;
+  --runtime-font-huge:56px;
+  --runtime-session-chrome-top:96px;
+  --runtime-session-chrome-bottom:96px;
+  --runtime-session-reserve-width:126px;
+  --runtime-session-timer-height:62px;
+  --runtime-session-nav-size:68px;
+  --runtime-session-nav-icon-size:38px;
+  --runtime-session-control-min-height:52px;
+  --runtime-session-control-padding-y:8px;
+  --runtime-session-control-padding-x:14px;
+  --runtime-session-control-gap:8px;
+  --runtime-session-control-font-size:25px;
+  --runtime-session-control-icon-size:27px;
+  --runtime-session-projector-font-size:19px;
+  --runtime-session-projector-icon-size:25px;
+  --runtime-session-countdown-min-width:96px;
+  --runtime-session-countdown-height:48px;
+  --runtime-session-countdown-font-size:27px;
+  --runtime-session-sidebar-panel-width:114px;
+  --runtime-session-sidebar-panel-min-height:236px;
+  --runtime-session-sidebar-panel-padding-y:13px;
+  --runtime-session-sidebar-panel-padding-x:8px;
+  --runtime-session-sidebar-panel-gap:13px;
+  --runtime-session-counter-label-font-size:15px;
+  --runtime-session-counter-value-font-size:32px;
+  --runtime-session-fixed-question-font-size:24px;
+  --runtime-session-final-title-font-size:17px;
+  --runtime-session-final-label-font-size:14px;
+  --runtime-session-final-value-font-size:26px;
+  --runtime-session-gauge-rocket-size:94px;
+  --runtime-session-gauge-rocket-offset:24px;
+  --runtime-session-gauge-track-width:70px;
+  --runtime-session-gauge-track-padding:8px;
+  --runtime-session-gauge-track-border:4px;
+}
+
+:root.viewport-profile--compact-1280x800{
+  --runtime-font-small:20px;
+  --runtime-font-normal:32px;
+  --runtime-font-large:44px;
+  --runtime-font-huge:56px;
+  --runtime-session-chrome-top:70px;
+  --runtime-session-chrome-bottom:72px;
+  --runtime-session-reserve-width:126px;
+  --runtime-session-timer-height:54px;
+  --runtime-session-nav-size:64px;
+  --runtime-session-nav-icon-size:36px;
+  --runtime-session-control-min-height:50px;
+  --runtime-session-control-padding-y:8px;
+  --runtime-session-control-padding-x:14px;
+  --runtime-session-control-gap:8px;
+  --runtime-session-control-font-size:24px;
+  --runtime-session-control-icon-size:27px;
+  --runtime-session-projector-font-size:19px;
+  --runtime-session-projector-icon-size:25px;
+  --runtime-session-countdown-min-width:96px;
+  --runtime-session-countdown-height:48px;
+  --runtime-session-countdown-font-size:27px;
+  --runtime-session-sidebar-panel-width:114px;
+  --runtime-session-sidebar-panel-min-height:236px;
+  --runtime-session-sidebar-panel-padding-y:13px;
+  --runtime-session-sidebar-panel-padding-x:8px;
+  --runtime-session-sidebar-panel-gap:13px;
+  --runtime-session-counter-label-font-size:15px;
+  --runtime-session-counter-value-font-size:32px;
+  --runtime-session-fixed-question-font-size:24px;
+  --runtime-session-final-title-font-size:17px;
+  --runtime-session-final-label-font-size:14px;
+  --runtime-session-final-value-font-size:26px;
+  --runtime-session-gauge-rocket-size:94px;
+  --runtime-session-gauge-rocket-offset:24px;
+  --runtime-session-gauge-track-width:70px;
+  --runtime-session-gauge-track-padding:8px;
+  --runtime-session-gauge-track-border:4px;
+}
+
+:root.viewport-profile--compact-1366x768{
+  --runtime-font-small:24px;
+  --runtime-font-normal:36px;
+  --runtime-font-large:48px;
+  --runtime-font-huge:60px;
+  --runtime-session-chrome-top:62px;
+  --runtime-session-chrome-bottom:64px;
+  --runtime-session-reserve-width:128px;
+  --runtime-session-timer-height:50px;
+  --runtime-session-nav-size:60px;
+  --runtime-session-nav-icon-size:34px;
+  --runtime-session-control-min-height:48px;
+  --runtime-session-control-padding-y:8px;
+  --runtime-session-control-padding-x:14px;
+  --runtime-session-control-gap:8px;
+  --runtime-session-control-font-size:23px;
+  --runtime-session-control-icon-size:26px;
+  --runtime-session-projector-font-size:18px;
+  --runtime-session-projector-icon-size:24px;
+  --runtime-session-countdown-min-width:92px;
+  --runtime-session-countdown-height:46px;
+  --runtime-session-countdown-font-size:26px;
+  --runtime-session-sidebar-panel-width:112px;
+  --runtime-session-sidebar-panel-min-height:228px;
+  --runtime-session-sidebar-panel-padding-y:12px;
+  --runtime-session-sidebar-panel-padding-x:8px;
+  --runtime-session-sidebar-panel-gap:12px;
+  --runtime-session-counter-label-font-size:15px;
+  --runtime-session-counter-value-font-size:31px;
+  --runtime-session-fixed-question-font-size:23px;
+  --runtime-session-final-title-font-size:17px;
+  --runtime-session-final-label-font-size:14px;
+  --runtime-session-final-value-font-size:25px;
+  --runtime-session-gauge-rocket-size:90px;
+  --runtime-session-gauge-rocket-offset:22px;
+  --runtime-session-gauge-track-width:68px;
+  --runtime-session-gauge-track-padding:7px;
+  --runtime-session-gauge-track-border:4px;
+}
+
+:root.viewport-profile--standard-1920x1080{
+  --runtime-font-small:32px;
+  --runtime-font-normal:48px;
+  --runtime-font-large:64px;
+  --runtime-font-huge:80px;
+  --runtime-session-chrome-top:70px;
+  --runtime-session-chrome-bottom:80px;
+  --runtime-session-reserve-width:150px;
+}
+
+:root.viewport-profile--comfortable-1920x1200{
+  --runtime-font-small:32px;
+  --runtime-font-normal:48px;
+  --runtime-font-large:64px;
+  --runtime-font-huge:80px;
+  --runtime-session-chrome-top:78px;
+  --runtime-session-chrome-bottom:86px;
+  --runtime-session-reserve-width:146px;
+  --runtime-session-timer-height:68px;
+}

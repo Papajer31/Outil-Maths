@@ -45,7 +45,23 @@ import {
   updateQuestionBank,
   deleteQuestionBank,
   listQuestionBankItems,
-  replaceQuestionBankItems
+  replaceQuestionBankItems,
+  listQuizFoldersForSpace,
+  createQuizFolderForSpace,
+  updateQuizFolder,
+  deleteQuizFolder,
+  listQuizzesForSpace,
+  saveQuizForSpace,
+  deleteQuiz,
+  listResourceFoldersForSpace,
+  createResourceFolderForSpace,
+  updateResourceFolder,
+  deleteResourceFolder,
+  listResourcesForSpace,
+  uploadResourceForSpace,
+  updateResource,
+  deleteResource,
+  createResourceSignedUrl
 } from "./teacher-api.js";
 import { createHeaderPopupController } from "./dashboard/header-popups.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
@@ -53,6 +69,12 @@ import { createQuestionBanksViewController } from "./dashboard/question-banks-vi
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
 import { createMissionsViewController } from "./dashboard/missions-view.js";
 import { createTeacherToolsViewController } from "./dashboard/teacher-tools-view.js";
+import { createQuizWorkshopViewController } from "./dashboard/quiz-workshop-view.js";
+import { createQuizExplorerViewController } from "./dashboard/quiz-explorer-view.js";
+import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from "./dashboard/quiz-series-view.js";
+import { createResourcesViewController } from "./dashboard/resources-view.js";
+import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
+import { getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues } from "../../tools/quiz/model.js";
 import { createSuperAdminViewController } from "./dashboard/superadmin-view.js";
 import {
   applyContextualHelpPreference,
@@ -86,6 +108,8 @@ const btnNavClass = document.getElementById("btnNavClass");
 const btnNavActivities = document.getElementById("btnNavActivities");
 const btnNavMissions = document.getElementById("btnNavMissions");
 const btnNavBanks = document.getElementById("btnNavBanks");
+const btnNavQuiz = document.getElementById("btnNavQuiz");
+const btnNavResources = document.getElementById("btnNavResources");
 const btnNavTeacherTools = document.getElementById("btnNavTeacherTools");
 const btnNavSuperAdmin = document.getElementById("btnNavSuperAdmin");
 const btnStudentListView = document.getElementById("btnStudentListView");
@@ -104,6 +128,34 @@ const missionsView = document.getElementById("missionsView");
 const missionsHeader = document.getElementById("missionsHeader");
 const missionsList = document.getElementById("missionsList");
 const banksView = document.getElementById("banksView");
+const quizView = document.getElementById("quizView");
+const quizExplorerPane = document.getElementById("quizExplorerPane");
+const quizExplorerHeader = document.getElementById("quizExplorerHeader");
+const quizList = document.getElementById("quizList");
+const btnCreateQuiz = document.getElementById("btnCreateQuiz");
+const btnCreateQuizSeries = document.getElementById("btnCreateQuizSeries");
+const btnCreateQuizFolder = document.getElementById("btnCreateQuizFolder");
+const btnBackQuizExplorer = document.getElementById("btnBackQuizExplorer");
+const quizWorkshopView = document.getElementById("quizWorkshopView");
+const quizSeriesView = document.getElementById("quizSeriesView");
+const btnBackQuizSeries = document.getElementById("btnBackQuizSeries");
+const btnQuizSeriesSave = document.getElementById("btnQuizSeriesSave");
+const btnQuizSeriesTest = document.getElementById("btnQuizSeriesTest");
+const btnQuizSeriesAddRow = document.getElementById("btnQuizSeriesAddRow");
+const btnQuizSeriesImportQuestions = document.getElementById("btnQuizSeriesImportQuestions");
+const quizSeriesImportScrim = document.getElementById("quizSeriesImportScrim");
+const quizSeriesImportDrawer = document.getElementById("quizSeriesImportDrawer");
+const quizSeriesTitleInput = document.getElementById("quizSeriesTitleInput");
+const quizSeriesInstructionInput = document.getElementById("quizSeriesInstructionInput");
+const quizSeriesTableHost = document.getElementById("quizSeriesTableHost");
+const quizSeriesMessage = document.getElementById("quizSeriesMessage");
+const resourcesView = document.getElementById("resourcesView");
+const resourcesHeader = document.getElementById("resourcesHeader");
+const resourcesList = document.getElementById("resourcesList");
+const btnCreateResourceFolder = document.getElementById("btnCreateResourceFolder");
+const btnImportResources = document.getElementById("btnImportResources");
+const resourceFileInput = document.getElementById("resourceFileInput");
+const resourceStorageQuota = document.getElementById("resourceStorageQuota");
 const teacherToolsView = document.getElementById("teacherToolsView");
 const teacherToolsHost = document.getElementById("teacherToolsHost");
 const superAdminView = document.getElementById("superAdminView");
@@ -127,6 +179,19 @@ const bankImportMessage = document.getElementById("bankImportMessage");
 const bankImportPreview = document.getElementById("bankImportPreview");
 const btnBankImportCancel = document.getElementById("btnBankImportCancel");
 const btnBankImportConfirm = document.getElementById("btnBankImportConfirm");
+const btnQuizAddQuestion = document.getElementById("btnQuizAddQuestion");
+const btnQuizSave = document.getElementById("btnQuizSave");
+const btnQuizTest = document.getElementById("btnQuizTest");
+const quizWorkshopDrawer = document.getElementById("quizWorkshopDrawer");
+const quizQuickEntryDrawer = document.getElementById("quizQuickEntryDrawer");
+const quizWorkshopScrim = document.getElementById("quizWorkshopScrim");
+const btnQuizDrawerClose = document.getElementById("btnQuizDrawerClose");
+const quizWorkshopTemplateGrid = document.getElementById("quizWorkshopTemplateGrid");
+const btnQuizConfirmTemplate = document.getElementById("btnQuizConfirmTemplate");
+const quizWorkshopQuestions = document.getElementById("quizWorkshopQuestions");
+const quizWorkshopEmptyState = document.getElementById("quizWorkshopEmptyState");
+const quizWorkshopQuestionCount = document.getElementById("quizWorkshopQuestionCount");
+const quizWorkshopTitleInput = document.getElementById("quizWorkshopTitleInput");
 const accessCodeModal = document.getElementById("accessCodeModal");
 const accessCodeInput = document.getElementById("accessCodeInput");
 const btnModalCreate = document.getElementById("btnModalCreate");
@@ -149,7 +214,7 @@ let currentUser = null;
 let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
-let currentDashboardSection = "activities"; // "activities" | "missions" | "class" | "banks" | "teacher-tools" | "super-admin"
+let currentDashboardSection = "activities"; // "activities" | "missions" | "class" | "banks" | "quiz" | "resources" | "teacher-tools" | "super-admin"
 let showDashboardHelpIcons = getContextualHelpEnabled();
 let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
@@ -157,6 +222,8 @@ let hasMountedClassView = false;
 let hasMountedActivitiesView = false;
 let hasMountedMissionsView = false;
 let hasMountedBanksView = false;
+let hasMountedQuizView = false;
+let hasMountedResourcesView = false;
 let hasMountedTeacherToolsView = false;
 let hasMountedSuperAdminView = false;
 let currentUserIsSuperAdmin = false;
@@ -164,6 +231,8 @@ let mountedClassTeacherSpaceId = "";
 let mountedActivitiesTeacherSpaceId = "";
 let mountedMissionsTeacherSpaceId = "";
 let mountedBanksTeacherSpaceId = "";
+let mountedQuizTeacherSpaceId = "";
+let mountedResourcesTeacherSpaceId = "";
 let mountedTeacherToolsTeacherSpaceId = "";
 let mountedSuperAdminTeacherSpaceId = "";
 let dashboardToast = null;
@@ -174,6 +243,10 @@ const legacyActivityQuarantineSet = new Set();
 let activitiesViewController = null;
 let missionsViewController = null;
 let banksViewController = null;
+let quizExplorerViewController = null;
+let quizWorkshopViewController = null;
+let quizSeriesViewController = null;
+let resourcesViewController = null;
 let teacherToolsViewController = null;
 let superAdminViewController = null;
 let studentController = null;
@@ -284,6 +357,197 @@ banksViewController = createQuestionBanksViewController({
   btnImportConfirm: btnBankImportConfirm,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   showToast: showDashboardShareToast
+});
+
+function testQuizSnapshot(snapshot) {
+  const issues = getQuizTestIssues(snapshot);
+  if (issues.length) {
+    showDashboardShareToast(issues[0], { isError: true });
+    return;
+  }
+
+  const quizSettings = {
+    ...getDefaultQuizSettings(),
+    quizId: snapshot.id || "",
+    quizTitle: snapshot.title || "",
+    quizSnapshot: snapshot
+  };
+
+  const activity = {
+    id: "atelier.quiz.test",
+    config_name: snapshot.title || "Test du quiz",
+    category_id: "autres",
+    tool_id: "quiz",
+    description: "Test direct depuis l’Atelier de quiz.",
+    default_question_count: snapshot.questions.reduce((total, question) => total + Math.max(1, question?.variants?.length || 1), 0),
+    settings: quizSettings,
+    difficulty_levels: {
+      3: {
+        settings: quizSettings
+      }
+    }
+  };
+
+  openCatalogTestRunner({
+    accessCode: String(currentTeacherSpace?.access_code || "TEST").trim().toUpperCase() || "TEST",
+    activity,
+    catalogActivities: [activity],
+    initialLevel: 3,
+    titleLabel: "Test du quiz",
+    runtimeConfigOptions: {
+      settings: quizSettings
+    },
+    showLevelSelector: false,
+    showToast: showDashboardShareToast
+  });
+}
+
+quizWorkshopViewController = createQuizWorkshopViewController({
+  view: quizWorkshopView,
+  addButton: btnQuizAddQuestion,
+  drawer: quizWorkshopDrawer,
+  quickEntryDrawer: quizQuickEntryDrawer,
+  drawerScrim: quizWorkshopScrim,
+  drawerCloseButton: btnQuizDrawerClose,
+  templateGrid: quizWorkshopTemplateGrid,
+  confirmButton: btnQuizConfirmTemplate,
+  saveButton: btnQuizSave,
+  testButton: btnQuizTest,
+  titleInput: quizWorkshopTitleInput,
+  questionsHost: quizWorkshopQuestions,
+  emptyState: quizWorkshopEmptyState,
+  questionCount: quizWorkshopQuestionCount,
+  getCurrentTeacherSpace: () => currentTeacherSpace,
+  listResourceFoldersForSpace,
+  createResourceFolderForSpace,
+  listResourcesForSpace,
+  uploadResourceForSpace,
+  createResourceSignedUrl,
+  showToast: showDashboardShareToast,
+  onSaveQuiz: async (snapshot) => {
+    const saved = await quizExplorerViewController?.saveQuiz?.(snapshot);
+    if (!saved) throw new Error("Enregistrement Supabase impossible.");
+    showDashboardShareToast(`Quiz « ${saved.title} » enregistré.`);
+    return saved;
+  },
+  onTestQuiz: testQuizSnapshot
+});
+
+function showQuizExplorer(){
+  quizWorkshopViewController?.close?.();
+  quizSeriesViewController?.close?.();
+  quizWorkshopView?.classList.add("hidden");
+  quizSeriesView?.classList.add("hidden");
+  quizExplorerPane?.classList.remove("hidden");
+  quizView?.classList.remove("is-quiz-workshop-open", "is-quiz-series-open");
+  quizExplorerViewController?.render?.();
+}
+
+function showQuizWorkshop({ quiz = null, folderId = null } = {}){
+  quizExplorerPane?.classList.add("hidden");
+  quizSeriesView?.classList.add("hidden");
+  quizWorkshopView?.classList.remove("hidden");
+  quizView?.classList.remove("is-quiz-series-open");
+  quizView?.classList.add("is-quiz-workshop-open");
+  quizWorkshopViewController?.render?.();
+  if (quiz) quizWorkshopViewController?.loadQuiz?.(quiz);
+  else quizWorkshopViewController?.resetQuiz?.({ folderId, title: "" });
+}
+
+function showQuizSeries({ quiz = null, folderId = null, modelId = "", instruction = "", title = "" } = {}){
+  quizExplorerPane?.classList.add("hidden");
+  quizWorkshopView?.classList.add("hidden");
+  quizSeriesView?.classList.remove("hidden");
+  quizView?.classList.remove("is-quiz-workshop-open");
+  quizView?.classList.add("is-quiz-series-open");
+  quizSeriesViewController?.render?.();
+  try {
+    if (quiz) quizSeriesViewController?.loadQuiz?.(quiz);
+    else quizSeriesViewController?.resetSeries?.({ folderId, modelId, instruction, title });
+  } catch (error) {
+    showDashboardShareToast(error?.message || "Impossible d’ouvrir cette série.", { isError:true });
+    showQuizExplorer();
+  }
+}
+
+quizSeriesViewController = createQuizSeriesViewController({
+  view: quizSeriesView,
+  backButton: btnBackQuizSeries,
+  saveButton: btnQuizSeriesSave,
+  testButton: btnQuizSeriesTest,
+  titleInput: quizSeriesTitleInput,
+  instructionInput: quizSeriesInstructionInput,
+  tableHost: quizSeriesTableHost,
+  addRowButton: btnQuizSeriesAddRow,
+  importQuestionsButton: btnQuizSeriesImportQuestions,
+  importScrim: quizSeriesImportScrim,
+  importDrawer: quizSeriesImportDrawer,
+  messageHost: quizSeriesMessage,
+  showToast: showDashboardShareToast,
+  onBack: showQuizExplorer,
+  onSaveQuiz: async (snapshot) => {
+    const saved = await quizExplorerViewController?.saveQuiz?.(snapshot);
+    if (!saved) throw new Error("Enregistrement Supabase impossible.");
+    showDashboardShareToast(`Quiz « ${saved.title} » enregistré.`);
+    return saved;
+  },
+  onTestQuiz: testQuizSnapshot
+});
+
+quizExplorerViewController = createQuizExplorerViewController({
+  view: quizView,
+  header: quizExplorerHeader,
+  list: quizList,
+  createQuizButton: btnCreateQuiz,
+  createSeriesButton: btnCreateQuizSeries,
+  createFolderButton: btnCreateQuizFolder,
+  onCreateQuiz: ({ folderId } = {}) => showQuizWorkshop({ folderId }),
+  onCreateSeries: ({ folderId } = {}) => {
+    openQuizSeriesCreationOverlay({
+      onConfirm: ({ modelId, title, instruction, action }) => {
+        showQuizSeries({ folderId, modelId, title, instruction });
+        if (action === "import") {
+          window.requestAnimationFrame(() => {
+            quizSeriesViewController?.openImportDrawer?.({ source:"creation" });
+          });
+        }
+      }
+    });
+  },
+  onOpenQuiz: (quiz) => {
+    if (String(quiz?.editorMode || "") === "series") showQuizSeries({ quiz });
+    else showQuizWorkshop({ quiz });
+  },
+  getCurrentTeacherSpace: () => currentTeacherSpace,
+  listQuizFoldersForSpace,
+  createQuizFolderForSpace,
+  updateQuizFolder,
+  deleteQuizFolder,
+  listQuizzesForSpace,
+  saveQuizForSpace,
+  deleteQuiz,
+  showToast: showDashboardShareToast
+});
+
+resourcesViewController = createResourcesViewController({
+  view: resourcesView,
+  header: resourcesHeader,
+  list: resourcesList,
+  createFolderButton: btnCreateResourceFolder,
+  importResourcesButton: btnImportResources,
+  resourceFileInput,
+  storageQuotaElement: resourceStorageQuota,
+  showToast: showDashboardShareToast,
+  getCurrentTeacherSpace: () => currentTeacherSpace,
+  listResourceFoldersForSpace,
+  createResourceFolderForSpace,
+  updateResourceFolder,
+  deleteResourceFolder,
+  listResourcesForSpace,
+  uploadResourceForSpace,
+  updateResource,
+  deleteResource,
+  createResourceSignedUrl
 });
 
 teacherToolsViewController = createTeacherToolsViewController({
@@ -453,6 +717,24 @@ async function ensureBanksViewMounted({ forceRefresh = false } = {}){
   mountedBanksTeacherSpaceId = teacherSpaceId;
 }
 
+async function ensureQuizViewMounted(){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  await quizExplorerViewController?.refresh?.();
+  if (!hasMountedQuizView || mountedQuizTeacherSpaceId !== teacherSpaceId) {
+    quizWorkshopViewController?.render?.();
+    hasMountedQuizView = true;
+    mountedQuizTeacherSpaceId = teacherSpaceId;
+  }
+  showQuizExplorer();
+}
+
+async function ensureResourcesViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  await resourcesViewController?.refresh?.({ forceRefresh });
+  hasMountedResourcesView = true;
+  mountedResourcesTeacherSpaceId = teacherSpaceId;
+}
+
 async function ensureTeacherToolsViewMounted({ forceRefresh = false } = {}){
   const teacherSpaceId = String(currentTeacherSpace?.id || "");
   if (!forceRefresh && hasMountedTeacherToolsView && mountedTeacherToolsTeacherSpaceId === teacherSpaceId) {
@@ -506,6 +788,8 @@ function renderDashboardShellState(){
   btnNavMissions?.classList.toggle("is-active", currentDashboardSection === "missions");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
   btnNavBanks?.classList.toggle("is-active", currentDashboardSection === "banks");
+  btnNavQuiz?.classList.toggle("is-active", currentDashboardSection === "quiz");
+  btnNavResources?.classList.toggle("is-active", currentDashboardSection === "resources");
   btnNavTeacherTools?.classList.toggle("is-active", currentDashboardSection === "teacher-tools");
   btnNavSuperAdmin?.classList.toggle("is-active", currentDashboardSection === "super-admin");
   btnNavSuperAdmin?.classList.toggle("hidden", !currentUserIsSuperAdmin);
@@ -514,7 +798,10 @@ function renderDashboardShellState(){
   missionsView?.classList.toggle("hidden", currentDashboardSection !== "missions");
   classView?.classList.toggle("hidden", currentDashboardSection !== "class");
   banksView?.classList.toggle("hidden", currentDashboardSection !== "banks");
+  quizView?.classList.toggle("hidden", currentDashboardSection !== "quiz");
+  resourcesView?.classList.toggle("hidden", currentDashboardSection !== "resources");
   teacherToolsView?.classList.toggle("hidden", currentDashboardSection !== "teacher-tools");
+  if (currentDashboardSection !== "quiz") quizWorkshopViewController?.close?.();
   superAdminView?.classList.toggle("hidden", currentDashboardSection !== "super-admin");
 
   navHelpButtons.forEach((button) => {
@@ -573,6 +860,19 @@ btnNavBanks?.addEventListener("click", async () => {
   currentDashboardSection = "banks";
   renderDashboardShellState();
   await ensureBanksViewMounted();
+});
+btnNavQuiz?.addEventListener("click", async () => {
+  currentDashboardSection = "quiz";
+  renderDashboardShellState();
+  await ensureQuizViewMounted();
+});
+btnBackQuizExplorer?.addEventListener("click", () => {
+  showQuizExplorer();
+});
+btnNavResources?.addEventListener("click", async () => {
+  currentDashboardSection = "resources";
+  renderDashboardShellState();
+  await ensureResourcesViewMounted();
 });
 btnNavTeacherTools?.addEventListener("click", async () => {
   currentDashboardSection = "teacher-tools";

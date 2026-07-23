@@ -1,4 +1,11 @@
 import {
+  DEFAULT_QUESTION_SELECTION_MODE,
+  filterItemsByQuestionSelection,
+  getItemSelectionKey,
+  getQuestionSelectionSignature as getCommonQuestionSelectionSignature,
+  normalizeQuestionSelection as normalizeCommonQuestionSelection
+} from "../../shared/tool-commons/general-tools/question-selection.js";
+import {
   findTokenIndexesFromSelectionText,
   formatSelectionIndexes,
   normalizeSelectionMode,
@@ -13,8 +20,10 @@ export function getDefaultSettings() {
   return {
     bankId: "",
     bankTitle: "",
+    bankInstruction: "",
     drawMode: DEFAULT_DRAW_MODE,
     selectionMode: DEFAULT_SELECTION_MODE,
+    questionSelection: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
     bankItemsSnapshot: []
   };
 }
@@ -26,10 +35,30 @@ export function normalizeSettings(settings = {}) {
     ...settings,
     bankId: String(settings?.bankId || settings?.bank_id || "").trim(),
     bankTitle: String(settings?.bankTitle || settings?.bank_title || "").trim(),
+    bankInstruction: String(settings?.bankInstruction || settings?.bank_instruction || "").trim(),
     drawMode: normalizeDrawMode(settings?.drawMode),
     selectionMode: normalizeSelectionMode(settings?.selectionMode || DEFAULT_SELECTION_MODE),
+    questionSelection: normalizeQuestionSelection(settings?.questionSelection || settings?.question_selection || {}),
     bankItemsSnapshot: normalizeSelectionItems(settings?.bankItemsSnapshot || settings?.bank_items_snapshot || [])
   };
+}
+
+export function normalizeQuestionSelection(selection = {}) {
+  return normalizeCommonQuestionSelection(selection);
+}
+
+export function getSelectionItemSelectionKey(item = {}, index = 0) {
+  return getItemSelectionKey(item, index);
+}
+
+export function filterSelectionItemsByQuestionSelection(items = [], selection = {}) {
+  return filterItemsByQuestionSelection(normalizeSelectionItems(items), selection, {
+    itemKeyGetter: getSelectionItemSelectionKey
+  });
+}
+
+export function getQuestionSelectionSignature(selection = {}) {
+  return getCommonQuestionSelectionSignature(selection);
 }
 
 export function normalizeDrawMode(value) {
@@ -143,3 +172,5 @@ export function shuffleArray(values = []) {
   }
   return nextValues;
 }
+
+export { DEFAULT_QUESTION_SELECTION_MODE };

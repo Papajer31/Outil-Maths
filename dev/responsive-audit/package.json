@@ -1,0 +1,16 @@
+{
+  "name": "site-outils-responsive-audit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Audit visuel automatisé du runtime élève sur les profils viewport officiels.",
+  "scripts": {
+    "audit": "node ./run-responsive-audit.mjs",
+    "audit:headed": "node ./run-responsive-audit.mjs --headed",
+    "audit:one": "node ./run-responsive-audit.mjs --tools=addition --profiles=compact-1366x768",
+    "install-browser": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

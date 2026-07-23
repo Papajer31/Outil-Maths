@@ -21,6 +21,7 @@ export function getDefaultSettings() {
   return {
     bankId: "",
     bankTitle: "",
+    bankInstruction: "",
     drawMode: DEFAULT_DRAW_MODE,
     shuffleChoices: true,
     maxChoiceCount: DEFAULT_MAX_CHOICE_COUNT,
@@ -46,6 +47,7 @@ export function normalizeSettings(settings = {}) {
     ...safeSettings,
     bankId: String(safeSettings.bankId || safeSettings.bank_id || "").trim(),
     bankTitle: String(safeSettings.bankTitle || safeSettings.bank_title || "").trim(),
+    bankInstruction: String(safeSettings.bankInstruction || safeSettings.bank_instruction || "").trim(),
     drawMode,
     shuffleChoices: safeSettings.shuffleChoices !== false && safeSettings.shuffle_choices !== false,
     maxChoiceCount: normalizeChoiceCount(safeSettings.maxChoiceCount ?? safeSettings.max_choice_count ?? safeSettings.choiceCount ?? safeSettings.choice_count),

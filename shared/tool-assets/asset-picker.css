@@ -11,8 +11,8 @@
 }
 
 .tool-asset-picker-card{
-  width:min(1060px, calc(100vw - 56px));
-  max-height:min(780px, calc(100vh - 56px));
+  width:min(1180px, calc(100vw - 56px));
+  height:min(820px, calc(100vh - 56px));
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -36,7 +36,7 @@
 .tool-asset-picker-kicker{
   color:#ffb45d;
   font-size:12px;
-  font-weight:900;
+  font-weight:700;
   letter-spacing:.08em;
   text-transform:uppercase;
 }
@@ -44,7 +44,7 @@
 .tool-asset-picker-title{
   margin-top:3px;
   font-size:22px;
-  font-weight:950;
+  font-weight:750;
   line-height:1.15;
 }
 
@@ -56,6 +56,59 @@
   padding:14px 20px;
   border-bottom:1px solid rgba(255,255,255,.08);
   background:rgba(255,255,255,.025);
+}
+
+
+.tool-asset-picker-scopes{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px;
+  border:1px solid rgba(124,152,255,.18);
+  border-radius:12px;
+  background:rgba(255,255,255,.045);
+}
+
+.tool-asset-picker-scopes.is-hidden{
+  display:none;
+}
+
+.tool-asset-picker-scope{
+  min-height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 11px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:#aeb7c8;
+  font:inherit;
+  font-size:13px;
+  font-weight:650;
+  cursor:pointer;
+}
+
+.tool-asset-picker-scope:hover,
+.tool-asset-picker-scope:focus-visible{
+  color:#f3f6ff;
+  background:rgba(255,255,255,.07);
+  outline:none;
+}
+
+.tool-asset-picker-scope.is-active{
+  border-color:rgba(255,197,74,.55);
+  background:rgba(255,197,74,.15);
+  color:#fff3d0;
+}
+
+.tool-asset-picker-scope-count{
+  min-width:22px;
+  padding:1px 6px;
+  border-radius:999px;
+  background:rgba(255,255,255,.09);
+  font-size:11px;
+  text-align:center;
 }
 
 .tool-asset-picker-search{
@@ -86,7 +139,7 @@
   background:transparent;
   color:#f3f6ff;
   font:inherit;
-  font-weight:750;
+  font-weight:500;
 }
 
 .tool-asset-picker-search-input::placeholder{
@@ -102,16 +155,52 @@
   flex:1 1 auto;
   min-height:0;
   display:grid;
-  grid-template-columns:230px minmax(0, 1fr);
+  grid-template-columns:270px minmax(0, 1fr);
 }
 
 .tool-asset-picker-folders{
   min-height:0;
-  padding:14px 12px;
+  padding:12px 10px;
   overflow:auto;
   border-right:1px solid rgba(255,255,255,.08);
   background:rgba(255,255,255,.025);
   scrollbar-gutter:stable;
+}
+
+.tool-asset-picker-tree{
+  display:grid;
+  gap:2px;
+}
+
+.tool-asset-picker-tree-row{
+  min-width:0;
+  display:grid;
+  grid-template-columns:22px minmax(0, 1fr);
+  gap:2px;
+  padding-left:calc(var(--tool-asset-tree-depth, 0) * 12px);
+}
+
+.tool-asset-picker-tree-row--root{
+  display:block;
+  margin-bottom:7px;
+}
+
+.tool-asset-picker-tree-indicator,
+.tool-asset-picker-tree-spacer{
+  width:22px;
+  height:34px;
+  display:grid;
+  place-items:center;
+}
+
+.tool-asset-picker-tree-indicator{
+  color:#aeb7c8;
+}
+
+.tool-asset-picker-tree-indicator svg{
+  width:18px;
+  height:18px;
+  display:block;
 }
 
 .tool-asset-picker-folder{
@@ -120,15 +209,16 @@
   display:grid;
   grid-template-columns:22px minmax(0, 1fr) auto;
   align-items:center;
-  gap:8px;
-  margin:0 0 7px;
-  padding:9px 10px;
-  border:1px solid rgba(255,255,255,.09);
-  border-radius:12px;
+  gap:7px;
+  margin:0;
+  padding:7px 8px;
+  border:1px solid transparent;
+  border-radius:9px;
   background:transparent;
   color:#dbe4f5;
   font:inherit;
-  font-weight:850;
+  font-size:13px;
+  font-weight:600;
   text-align:left;
   cursor:pointer;
   transition:background .1s ease, border-color .1s ease;
@@ -148,8 +238,8 @@
 }
 
 .tool-asset-picker-folder-icon{
-  width:22px;
-  height:22px;
+  width:19px;
+  height:19px;
   color:#ffb45d;
 }
 
@@ -167,7 +257,7 @@
   background:rgba(255,255,255,.08);
   color:#aeb7c8;
   font-size:12px;
-  font-weight:900;
+  font-weight:650;
   text-align:center;
 }
 
@@ -187,7 +277,7 @@
   padding:10px 20px;
   color:#aeb7c8;
   font-size:13px;
-  font-weight:850;
+  font-weight:600;
 }
 
 .tool-asset-picker-status.is-empty,
@@ -246,7 +336,7 @@
   min-width:0;
   color:#f3f6ff;
   font-size:14px;
-  font-weight:900;
+  font-weight:650;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;

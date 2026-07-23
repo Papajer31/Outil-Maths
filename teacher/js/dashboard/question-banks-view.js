@@ -55,7 +55,8 @@ const META_INPUT_IDS = new Set([
   "bankSubjectInput",
   "bankGradeInput",
   "bankTagsInput",
-  "bankDescriptionInput"
+  "bankDescriptionInput",
+  "bankInstructionInput"
 ]);
 const ITEM_FIELD_LABELS_BY_TYPE = {
   text_answer: {
@@ -1913,6 +1914,7 @@ export function createQuestionBanksViewController({
     const isSystem = bank.is_system === true;
     const bankType = normalizeBankType(bank.bank_type);
     const isEditableItemsBank = isEditableBankType(bankType);
+    const canEditBank = canEditSelectedBank();
     const canEditItems = canEditSelectedBankItems();
     const qcmDistractorColumnCount = isQcmType(bankType) ? getCurrentQcmDistractorColumnCount() : 1;
 
@@ -1930,10 +1932,22 @@ export function createQuestionBanksViewController({
 
         ${isEditableItemsBank ? `
           <div class="dashboard-bank-table-toolbar">
-            <div>
+            <div class="dashboard-bank-table-heading">
               <div class="dashboard-bank-table-title-row">
                 <div class="dashboard-bank-table-title">Items</div>
                 <div class="dashboard-bank-table-count">- ${itemDrafts.length} question${itemDrafts.length > 1 ? "s" : ""}</div>
+                <label class="dashboard-bank-instruction-field" for="bankInstructionInput">
+                  <span>Consigne de la banque :</span>
+                  <input
+                    id="bankInstructionInput"
+                    class="dashboard-bank-input dashboard-bank-instruction-input"
+                    type="text"
+                    value="${escapeAttr(metaDraft.instruction || "")}"
+                    required
+                    aria-required="true"
+                    ${canEditBank ? "" : "disabled"}
+                  >
+                </label>
                 <div class="dashboard-bank-preview-wrap">
                   <button
                     id="btnBankPreview"
@@ -2450,6 +2464,7 @@ export function createQuestionBanksViewController({
     metaDraft.grade_level = getScopedElementById("bankGradeInput")?.value ?? metaDraft.grade_level;
     metaDraft.tags = normalizeTagsInput(getScopedElementById("bankTagsInput")?.value ?? metaDraft.tags);
     metaDraft.description = getScopedElementById("bankDescriptionInput")?.value ?? metaDraft.description;
+    metaDraft.instruction = getScopedElementById("bankInstructionInput")?.value ?? metaDraft.instruction;
   }
 
   function updateDraftItem(index, field, value) {
@@ -3107,6 +3122,10 @@ export function createQuestionBanksViewController({
     }
 
     if (META_INPUT_IDS.has(target.id)) {
+      if (target.id === "bankInstructionInput" && String(target.value || "").trim()) {
+        target.classList.remove("is-invalid");
+        target.removeAttribute("aria-invalid");
+      }
       syncMetaDraftFromInputs();
       setPendingChanges(true);
     }
@@ -3232,6 +3251,7 @@ export function createQuestionBanksViewController({
     selectedBank = banks.find((bank) => String(bank.id) === String(bankId)) || null;
     metaDraft = selectedBank ? {
       title: selectedBank.title || "",
+      instruction: selectedBank.instruction || "",
       description: selectedBank.description || "",
       subject: selectedBank.subject || "",
       grade_level: selectedBank.grade_level || "",
@@ -3358,10 +3378,11 @@ export function createQuestionBanksViewController({
     await refresh({ forceRefresh: true, preferredBankId: bank.id });
     if (String(selectedBankId) === String(bank.id) && !itemDrafts.length && selectedBankIsEditableType()) {
       itemDrafts = [createEmptyItem(bank.bank_type || DEFAULT_BANK_TYPE)];
-      setSaveStatus("saved", "Nouvelle banque créée");
+      hasPendingChanges = true;
+      setSaveStatus("dirty", "Renseigne la consigne de la banque");
       updateActionState();
       renderEditor();
-      focusBankCell(0, "prompt");
+      getScopedElementById("bankInstructionInput")?.focus();
     }
   }
 
@@ -3557,6 +3578,17 @@ export function createQuestionBanksViewController({
       return;
     }
 
+    const instruction = String(metaDraft?.instruction || "").trim();
+    if (!instruction) {
+      const instructionInput = getScopedElementById("bankInstructionInput");
+      instructionInput?.classList.add("is-invalid");
+      instructionInput?.setAttribute("aria-invalid", "true");
+      showToast?.("La consigne de la banque est obligatoire.", { isError: true });
+      setSaveStatus("error", "Consigne obligatoire");
+      instructionInput?.focus();
+      return;
+    }
+
     const shouldSaveItems = isEditableBankType(bank.bank_type);
     const invalidIndex = shouldSaveItems
       ? itemDrafts.findIndex((item) => {
@@ -3578,6 +3610,7 @@ export function createQuestionBanksViewController({
     try {
       const updatedBank = await updateQuestionBankApi(bank.id, {
         title,
+        instruction,
         description: metaDraft.description,
         subject: metaDraft.subject,
         grade_level: metaDraft.grade_level,
@@ -3592,6 +3625,7 @@ export function createQuestionBanksViewController({
       selectedBankId = updatedBank.id;
       metaDraft = {
         title: updatedBank.title || "",
+        instruction: updatedBank.instruction || "",
         description: updatedBank.description || "",
         subject: updatedBank.subject || "",
         grade_level: updatedBank.grade_level || "",

@@ -15,7 +15,27 @@ import {
   createNumericAnswerControl,
   renderNumericAnswerDisplayMarkup
 } from "../../shared/tool-ui/numeric-answer.js";
-import { scheduleCalcLayoutFit } from "../../shared/tool-ui/calc-layout-fit.js";
+import {
+  bindCalcFamilyKeypadEvents,
+  ensureCalcFamilyLayoutStyles,
+  estimateBoxedCalculationLineLength,
+  getCalcFamilyShellRefs,
+  getCalculationDigitCount,
+  getNumericAnswerMaxLength,
+  renderCalcFamilyShell,
+  syncCalcFamilyKeypadVisibility,
+  syncCalcFamilyResponsiveState,
+  teardownCalcFamilyKeypadBindings
+} from "../../shared/tool-commons/calcul/calc-family-layout.js";
+
+const MPOS_IDS = {
+  instruction: "mpos_instruction",
+  expression: "mpos_expression",
+  responseWrap: "mpos_response_wrap",
+  keypadSlot: "mpos_keypad_slot"
+};
+
+const MPOS_KEYPAD_DATA_ATTRIBUTE = "data-mpos-numeric-key";
 
 let stylesInjected = false;
 
@@ -89,6 +109,8 @@ function createRuntimeState(initialContext = {}) {
     responseWrap: null,
     input: null,
     answerControl: null,
+    keypadSlot: null,
+    keypadAbortController: null,
     currentQuestion: null,
     lastQuestionKey: null,
     questionIndex: 0,
@@ -115,27 +137,41 @@ function renderShell(state) {
 
   destroyAnswerControl(state);
   syncRuntimeState(state);
-  container.innerHTML = `
-    <div class="tool-runtime mpos-root${state.showResponseBox ? " mpos-root--boxed" : " mpos-root--free"}">
-      ${renderToolInstruction({ id: "mpos_instruction" })}
-      <div class="tool-stage mpos-stage">
-        <div class="tool-answer-row mpos-equation">
-          <div class="tool-big tool-question mpos-expression" id="mpos_expression"></div>
-          ${state.showResponseBox ? `
-            <div class="tool-big mpos-equals">=</div>
-            <div class="tool-answer-panel mpos-response-wrap" id="mpos_response_wrap"></div>
-          ` : ""}
-        </div>
-      </div>
-    </div>
-  `;
+  container.innerHTML = renderCalcFamilyShell({
+    showResponseBox: state.showResponseBox,
+    instructionHtml: renderToolInstruction({ id: MPOS_IDS.instruction }),
+    expressionId: MPOS_IDS.expression,
+    responseWrapId: MPOS_IDS.responseWrap,
+    keypadSlotId: MPOS_IDS.keypadSlot,
+    rootClassName: `mpos-root${state.showResponseBox ? " mpos-root--boxed" : " mpos-root--free"}`,
+    stageClassName: "mpos-stage",
+    equationClassName: "mpos-equation",
+    expressionClassName: "mpos-expression",
+    equalsClassName: "mpos-equals",
+    responseWrapClassName: "mpos-response-wrap",
+    keypadSlotClassName: "mpos-keypad-slot",
+    keypadRootClassName: "mpos-keypad",
+    keypadButtonClassName: "mpos-keypad-button",
+    keypadClearButtonClassName: "mpos-keypad-button--clear",
+    keypadDataAttribute: MPOS_KEYPAD_DATA_ATTRIBUTE,
+    keypadAriaLabel: "Clavier numérique"
+  });
 
-  state.root = container.querySelector(".mpos-root");
-  state.instructionEl = container.querySelector("#mpos_instruction");
-  state.exprEl = container.querySelector("#mpos_expression");
-  state.responseWrap = container.querySelector("#mpos_response_wrap");
+  const refs = getCalcFamilyShellRefs(container, {
+    instructionId: MPOS_IDS.instruction,
+    expressionId: MPOS_IDS.expression,
+    responseWrapId: MPOS_IDS.responseWrap,
+    keypadSlotId: MPOS_IDS.keypadSlot
+  });
+
+  state.root = refs.root;
+  state.instructionEl = refs.instructionEl;
+  state.exprEl = refs.exprEl;
+  state.responseWrap = refs.responseWrap;
+  state.keypadSlot = refs.keypadSlot;
   state.input = null;
   updateInstructionDisplay(state);
+  syncKeypadVisibility(state);
 }
 
 function loadNextQuestion(state, context = {}) {
@@ -175,23 +211,25 @@ function loadNextQuestion(state, context = {}) {
   if (state.exprEl) {
     state.exprEl.textContent = formatQuestion(nextQuestion);
   }
-  syncCompactClass(state);
 
   if (state.showResponseBox) {
     renderResponseArea(state);
+    syncCompactClass(state);
     focusInput(state);
+  } else {
+    syncCompactClass(state);
   }
 }
 
 function renderResponseArea(state) {
   if (!state.responseWrap) return;
   destroyAnswerControl(state);
-  state.responseWrap.className = "tool-answer-panel mpos-response-wrap";
+  state.responseWrap.className = "tool-answer-panel calc-family-response-wrap mpos-response-wrap";
   state.responseWrap.innerHTML = "";
 
   state.answerControl = createNumericAnswerControl({
     id: "mpos_response_input",
-    className: "mpos-response-input",
+    className: "calc-family-response-input mpos-response-input",
     ariaLabel: "Réponse",
     maxLength: getCurrentAnswerMaxLength(state),
     captureKeyboard: true,
@@ -205,6 +243,8 @@ function renderResponseArea(state) {
   state.responseWrap.appendChild(state.answerControl.element);
   state.input = state.answerControl.input;
   bindResponseEvents(state);
+  bindKeypadEvents(state);
+  syncKeypadVisibility(state);
 }
 
 function bindResponseEvents(state) {
@@ -225,6 +265,24 @@ function bindResponseEvents(state) {
   syncValidateState(state);
 }
 
+function bindKeypadEvents(state) {
+  bindCalcFamilyKeypadEvents({
+    state,
+    dataAttribute: MPOS_KEYPAD_DATA_ATTRIBUTE,
+    onAfterInput: () => syncValidateState(state)
+  });
+}
+
+function teardownKeypadBindings(state) {
+  teardownCalcFamilyKeypadBindings(state);
+}
+
+function syncKeypadVisibility(state) {
+  syncCalcFamilyKeypadVisibility(state, {
+    hiddenClassName: "mpos-keypad-slot--hidden"
+  });
+}
+
 function revealAnswer(state) {
   if (!state.currentQuestion || !state.exprEl) return;
 
@@ -241,6 +299,7 @@ function revealAnswer(state) {
     state.exprEl.textContent = formatAnswer(state.currentQuestion);
   }
 
+  syncKeypadVisibility(state);
   syncCompactClass(state);
   syncValidateState(state);
 }
@@ -253,12 +312,14 @@ function renderDisplayedResponse(state) {
     && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
   const snapshot = showStudentAnswer ? state.studentAnswerSnapshot : state.correctionSnapshot;
 
-  state.responseWrap.className = "tool-answer-panel mpos-response-wrap";
+  state.responseWrap.className = "tool-answer-panel calc-family-response-wrap mpos-response-wrap";
+  state.responseWrap.classList.toggle("calc-family-response-wrap--correct", evaluation.isCorrect === true);
+  state.responseWrap.classList.toggle("calc-family-response-wrap--incorrect", evaluation.isCorrect !== true);
   state.responseWrap.classList.toggle("mpos-response-wrap--correct", evaluation.isCorrect === true);
   state.responseWrap.classList.toggle("mpos-response-wrap--incorrect", evaluation.isCorrect !== true);
   destroyAnswerControl(state);
   state.responseWrap.innerHTML = renderNumericAnswerDisplayMarkup(snapshot?.value ?? "", {
-    className: `mpos-response-input${showStudentAnswer ? (evaluation.isCorrect ? " mpos-response-input--correct" : " mpos-response-input--incorrect") : ""}`,
+    className: `calc-family-response-input mpos-response-input${showStudentAnswer ? (evaluation.isCorrect ? " calc-family-response-input--correct mpos-response-input--correct" : " calc-family-response-input--incorrect mpos-response-input--incorrect") : ""}`,
     ariaLabel: "Réponse affichée"
   });
   state.input = null;
@@ -382,62 +443,52 @@ function syncCompactClass(state) {
   if (!state.root || !state.currentQuestion) return;
 
   const digitCount = getCurrentCalculationDigitCount(state);
-  const shouldMoveAnswerToSecondLine = state.showResponseBox && digitCount > 8;
-  const length = shouldMoveAnswerToSecondLine
-    ? formatQuestion(state.currentQuestion).length
-    : getCurrentLineDisplayLength(state);
-
-  state.root.classList.toggle("calc-runtime--answer-second-line", shouldMoveAnswerToSecondLine);
-  state.root.classList.toggle("calc-runtime--single-line-answer", state.showResponseBox && !shouldMoveAnswerToSecondLine);
-  state.root.classList.toggle("calc-runtime--ultra-dense", length >= 34 || digitCount >= 16);
-  state.root.classList.toggle("calc-runtime--dense", (length >= 26 || digitCount >= 12) && !(length >= 34 || digitCount >= 16));
-  state.root.classList.toggle("calc-runtime--compact", (length >= 18 || digitCount >= 9) && !(length >= 26 || digitCount >= 12));
-
-  scheduleCalcLayoutFit({
+  syncCalcFamilyResponsiveState({
     root: state.root,
-    equationEl: state.root.querySelector(".mpos-equation"),
+    equationEl: state.root.querySelector(".calc-family-equation"),
     expressionEl: state.exprEl,
-    equalsEl: state.root.querySelector(".mpos-equals"),
+    equalsEl: state.root.querySelector(".calc-family-equals"),
     responseWrapEl: state.responseWrap,
-    answerSecondLine: shouldMoveAnswerToSecondLine,
+    showResponseBox: state.showResponseBox,
+    digitCount,
+    lineLength: getCurrentLineDisplayLength(state),
+    secondLineLength: formatQuestion(state.currentQuestion).length,
     minScale: 0.32
   });
 }
 
 function getCurrentCalculationDigitCount(state) {
-  const question = state.currentQuestion;
-  if (!question) return 0;
-
-  const values = Array.isArray(question.terms)
-    ? question.terms
-    : [question.term1, question.term2, question.factor1, question.factor2];
-
-  return values.reduce((total, value) => total + countIntegerDigitsForLayout(value), 0);
-}
-
-function countIntegerDigitsForLayout(value) {
-  const digits = String(Math.abs(Math.trunc(Number(value) || 0))).replace(/\D+/g, "");
-  return Math.max(1, digits.length);
+  return getCalculationDigitCount(state.currentQuestion);
 }
 
 function getCurrentLineDisplayLength(state) {
   if (!state.currentQuestion) return 0;
-  if (!state.showResponseBox || state.answerRevealed) {
-    return formatAnswer(state.currentQuestion).length;
+
+  // Quand la réponse est saisie dans une boîte, le layout doit rester stable
+  // entre la phase de saisie et la phase de correction. On dimensionne donc
+  // toujours la ligne sur la même enveloppe théorique : question + signe =
+  // + largeur visuelle maximale de la boîte réponse. Sinon, une question située
+  // juste au seuil compact/dense peut grossir brutalement au moment de la
+  // correction, parce que le texte corrigé est plus court que la boîte.
+  if (state.showResponseBox) {
+    return estimateBoxedCalculationLineLength({
+      questionText: formatQuestion(state.currentQuestion),
+      answerMaxLength: getCurrentAnswerMaxLength(state)
+    });
   }
-  const answerChars = Math.max(4, getCurrentAnswerMaxLength(state) + 2);
-  return `${formatQuestion(state.currentQuestion)} = `.length + answerChars;
+
+  return formatAnswer(state.currentQuestion).length;
 }
 
 function getCurrentAnswerMaxLength(state) {
-  const rawValue = state.currentQuestion?.result ?? "";
-  const digitCount = String(rawValue).replace(/\D+/g, "").length;
-  return Math.max(1, digitCount);
+  return getNumericAnswerMaxLength(state.currentQuestion?.result);
 }
 
 function destroyAnswerControl(state) {
+  teardownKeypadBindings(state);
   state.answerControl?.destroy?.();
   state.answerControl = null;
+  syncKeypadVisibility(state);
 }
 
 function makeRuntimeSettingsKey(settings) {
@@ -456,8 +507,10 @@ function teardownState(state, container) {
   state.instructionEl = null;
   state.exprEl = null;
   state.responseWrap = null;
+  state.keypadSlot = null;
   state.input = null;
   state.answerControl = null;
+  state.keypadAbortController = null;
   state.currentQuestion = null;
   state.answerRevealed = false;
   state.studentAnswerSnapshot = null;
@@ -469,6 +522,7 @@ function injectStyles() {
   if (stylesInjected) return;
   stylesInjected = true;
   ensureToolInstructionStyles();
+  ensureCalcFamilyLayoutStyles();
 
   const href = new URL("./activity.css", import.meta.url).href;
   if (document.querySelector(`link[data-mpos-activity-style="${href}"]`)) return;
@@ -476,15 +530,6 @@ function injectStyles() {
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
-  link.dataset.addActivityStyle = href;
+  link.dataset.mposActivityStyle = href;
   document.head.appendChild(link);
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

@@ -10,7 +10,7 @@
   text-align:center;
   font-family:"Andika", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size:clamp(30px, 3.2vw, 46px);
-  font-weight:1000;
+  font-weight:var(--tool-text-font-weight, 500);
   line-height:1.08;
   color:var(--text, #f5f7fb);
 }

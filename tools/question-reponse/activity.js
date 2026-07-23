@@ -2,6 +2,8 @@ import {
   buildQuestionFromItem,
   createQuestionDeck,
   evaluateAnswer,
+  filterQuestionItemsBySelection,
+  getQuestionSelectionSignature,
   normalizeQuestionItems,
   normalizeSettings
 } from "./model.js";
@@ -12,6 +14,8 @@ import {
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
 import { renderSimpleMarkupToHtml } from "../../shared/simple-markup.js";
+import { createNumericAnswerControl, renderNumericAnswerDisplayMarkup } from "../../shared/tool-ui/numeric-answer.js";
+import { bindNumericKeypadEvents, renderNumericKeypad } from "../../shared/tool-ui/numeric-keypad.js";
 import { scheduleQuestionAutoFit, teardownQuestionAutoFit } from "../../shared/tool-ui/question-auto-fit.js";
 import { listPublicQuestionBankItemsForSpace } from "../../shared/public-api.js";
 import {
@@ -106,12 +110,14 @@ function createRuntimeState(initialContext = {}) {
     correctionEl: null,
     responseInputEl: null,
     responseInputAbortController: null,
+    answerControl: null,
     currentQuestion: null,
     questions: [],
     deck: [],
     deckIndex: 0,
     loadedBankId: "",
     loadedDrawMode: "",
+    loadedQuestionSelectionSignature: "",
     loadingPromise: null,
     answerRevealed: false,
     submittedAnswer: "",
@@ -135,7 +141,7 @@ function renderShell(state) {
   syncRuntimeState(state);
 
   container.innerHTML = `
-    <div class="tool-runtime tool-runtime--question-reponse${state.flash?.enabled ? " tool-runtime--flash tool-runtime--flash-texte" : ""} qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
+    <div class="tool-runtime tool-runtime--question-reponse${state.flash?.enabled ? " tool-runtime--flash tool-runtime--flash-question-reponse" : ""} qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
       ${renderToolInstruction({ id: "qr_instruction" })}
       <div class="tool-stage tool-panel qr-card" id="qr_card">
         <div class="tool-question tool-question--large qr-question" id="qr_question"></div>
@@ -181,6 +187,7 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
   const bankId = String(settings.bankId || "").trim();
   const accessCode = resolveAccessCode(context);
   const drawMode = String(settings.drawMode || "").trim();
+  const questionSelectionSignature = getQuestionSelectionSignature(settings.questionSelection);
 
   if (!bankId) {
     state.questions = [];
@@ -188,19 +195,25 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     state.deckIndex = 0;
     state.loadedBankId = "";
     state.loadedDrawMode = "";
+    state.loadedQuestionSelectionSignature = "";
     return;
   }
 
-  if (state.loadedBankId === bankId && state.loadedDrawMode === drawMode && state.questions.length) return;
+  if (
+    state.loadedBankId === bankId
+    && state.loadedDrawMode === drawMode
+    && state.loadedQuestionSelectionSignature === questionSelectionSignature
+    && state.questions.length
+  ) return;
+
   if (state.loadingPromise) await state.loadingPromise;
-  if (state.loadedBankId === bankId && state.loadedDrawMode === drawMode && state.questions.length) return;
 
-  if (state.loadedBankId === bankId && state.questions.length) {
-    state.deck = createQuestionDeck(state.questions, settings.drawMode);
-    state.deckIndex = 0;
-    state.loadedDrawMode = drawMode;
-    return;
-  }
+  if (
+    state.loadedBankId === bankId
+    && state.loadedDrawMode === drawMode
+    && state.loadedQuestionSelectionSignature === questionSelectionSignature
+    && state.questions.length
+  ) return;
 
   state.loadingPromise = (async () => {
     let items = [];
@@ -218,11 +231,13 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     }
 
     const normalizedItems = normalizeQuestionItems(items);
-    state.questions = normalizedItems.map(buildQuestionFromItem).filter((question) => question.prompt && question.expectedAnswer);
-    state.deck = createQuestionDeck(normalizedItems, settings.drawMode);
+    const selectedItems = filterQuestionItemsBySelection(normalizedItems, settings.questionSelection);
+    state.questions = selectedItems.map(buildQuestionFromItem).filter((question) => question.prompt && question.expectedAnswer);
+    state.deck = createQuestionDeck(selectedItems, settings.drawMode);
     state.deckIndex = 0;
     state.loadedBankId = bankId;
     state.loadedDrawMode = drawMode;
+    state.loadedQuestionSelectionSignature = questionSelectionSignature;
   })();
 
   try {
@@ -252,7 +267,10 @@ function pickNextQuestion(state, settings) {
 
   const nextQuestion = state.deck[state.deckIndex] || state.questions[0];
   state.deckIndex += 1;
-  return nextQuestion || null;
+  return nextQuestion ? {
+    ...nextQuestion,
+    answerType: settings.answerType
+  } : null;
 }
 
 async function renderQuestion(state) {
@@ -269,7 +287,7 @@ async function renderQuestion(state) {
   const questionHtml = `<span class="qr-question-text-inner">${renderSimpleMarkupToHtml(state.currentQuestion.prompt)}</span>`;
   if (state.questionEl && !state.flash?.enabled) {
     state.questionEl.innerHTML = questionHtml;
-    applyQrQuestionSizePreset(state);
+    clearQrQuestionSizePreset(state.questionEl);
     scheduleQrQuestionAutoFit(state);
   }
 
@@ -282,13 +300,21 @@ async function renderQuestion(state) {
   }
 
   if (state.responseSlotEl) {
-    state.responseSlotEl.innerHTML = state.showResponseBox
-      ? renderInputMarkup()
-      : renderFreePlaceholderMarkup();
-    state.responseInputEl = state.responseSlotEl.querySelector("[data-qr-response-input]");
     state.responseDraftValue = "";
     state.pendingValidationValue = "";
-    bindResponseEvents(state);
+
+    if (!state.showResponseBox) {
+      state.responseSlotEl.classList.remove("qr-response-slot--numeric");
+      state.responseSlotEl.innerHTML = renderFreePlaceholderMarkup();
+      state.responseInputEl = null;
+    } else if (isNumericAnswerMode(state)) {
+      renderNumericResponseInput(state);
+    } else {
+      state.responseSlotEl.classList.remove("qr-response-slot--numeric");
+      state.responseSlotEl.innerHTML = renderInputMarkup();
+      state.responseInputEl = state.responseSlotEl.querySelector("[data-qr-response-input]");
+      bindResponseEvents(state);
+    }
   }
 
   if (state.flash?.enabled) {
@@ -311,7 +337,7 @@ async function startFlashQuestion(state, questionHtml = "") {
   if (!isSameFlashSequence(state, sequenceId)) return;
 
   state.questionEl.innerHTML = renderFlashItemMarkup(questionHtml);
-  applyQrQuestionSizePreset(state);
+  clearQrQuestionSizePreset(state.questionEl);
   scheduleQrQuestionAutoFit(state);
   bindFlashReplay(state, sequenceId);
   setQrResponseVisible(state, !answersAfterQuestion);
@@ -523,18 +549,21 @@ function renderDisplayedResponse(state) {
   if (!state.responseSlotEl || !state.currentQuestion) return;
   const evaluation = getStoredEvaluation(state);
   const showStudentAnswer = canToggleStudentAnswerDisplay(state) && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
+  const value = showStudentAnswer ? state.submittedAnswer : state.currentQuestion.expectedAnswer;
 
+  teardownResponseInputBindings(state);
   state.responseSlotEl.classList.toggle("qr-response-slot--correct", evaluation.isCorrect);
   state.responseSlotEl.classList.toggle("qr-response-slot--incorrect", !evaluation.isCorrect);
-  state.responseSlotEl.innerHTML = showStudentAnswer
-    ? renderDisplayBox(state.submittedAnswer, { student: true, correct: evaluation.isCorrect })
-    : renderDisplayBox(state.currentQuestion.expectedAnswer, { correct: evaluation.isCorrect });
+  state.responseSlotEl.innerHTML = isNumericAnswerMode(state)
+    ? renderNumericDisplayBox(value, { student: showStudentAnswer, correct: evaluation.isCorrect })
+    : renderDisplayBox(value, { student: showStudentAnswer, correct: evaluation.isCorrect });
   state.responseInputEl = null;
   renderCorrectionExplanation(state);
 }
 
 function renderFreeAnswer(state) {
   if (!state.responseSlotEl || !state.currentQuestion) return;
+  teardownResponseInputBindings(state);
   state.responseSlotEl.classList.remove("qr-response-slot--correct", "qr-response-slot--incorrect");
   state.responseSlotEl.innerHTML = renderDisplayBox(state.currentQuestion.expectedAnswer, { free: true });
   state.responseInputEl = null;
@@ -553,6 +582,79 @@ function renderCorrectionExplanation(state) {
   state.correctionEl.classList.remove("qr-correction--empty");
   state.correctionEl.setAttribute("aria-hidden", "false");
   state.correctionEl.innerHTML = renderSimpleMarkupToHtml(explanation);
+}
+
+function renderNumericResponseInput(state) {
+  if (!state.responseSlotEl) return;
+
+  teardownResponseInputBindings(state);
+  state.responseSlotEl.classList.add("qr-response-slot--numeric");
+  state.responseSlotEl.innerHTML = `
+    <div class="qr-numeric-response">
+      <div class="qr-numeric-response-input-host" id="qr_numeric_response_host"></div>
+      ${renderNumericKeypad({
+        rootClassName: "qr-numeric-keypad",
+        buttonClassName: "qr-numeric-keypad-button",
+        clearButtonClassName: "qr-numeric-keypad-button--clear",
+        dataAttribute: "data-qr-numeric-key",
+        ariaLabel: "Clavier numérique"
+      })}
+    </div>
+  `;
+
+  const host = state.responseSlotEl.querySelector("#qr_numeric_response_host");
+  state.answerControl = createNumericAnswerControl({
+    id: "qr_numeric_response_input",
+    className: "qr-numeric-answer",
+    ariaLabel: "Réponse",
+    value: "",
+    maxLength: getExpectedAnswerMaxLength(state),
+    captureKeyboard: !state.flash?.enabled,
+    captureRoot: state.root,
+    onInput: (value) => {
+      if (state.answerRevealed) return;
+      state.responseDraftValue = String(value || "");
+      state.pendingValidationValue = "";
+      syncValidateState(state);
+    },
+    onSubmit: () => {
+      if (state.answerRevealed) return;
+      if (!canSubmitAnswer(state)) return;
+      requestReveal(state);
+    }
+  });
+  host?.appendChild(state.answerControl.element);
+  state.responseInputEl = state.answerControl.input;
+
+  const abortController = new AbortController();
+  const { signal } = abortController;
+  state.responseInputAbortController = abortController;
+  bindNumericKeypadEvents({
+    root: state.responseSlotEl,
+    control: state.answerControl,
+    signal,
+    dataAttribute: "data-qr-numeric-key",
+    onAfterInput: () => syncValidateState(state)
+  });
+}
+
+function renderNumericDisplayBox(value, { correct = false, student = false } = {}) {
+  const className = [
+    "qr-answer-box",
+    "qr-answer-box--display",
+    "qr-numeric-answer",
+    correct ? "is-correct" : "is-incorrect",
+    student ? "is-student-answer" : ""
+  ].filter(Boolean).join(" ");
+
+  return renderNumericAnswerDisplayMarkup(value, {
+    className,
+    ariaLabel: student ? "Réponse de l’élève" : "Correction"
+  });
+}
+
+function getExpectedAnswerMaxLength(state) {
+  return String(state.currentQuestion?.expectedAnswer || "").trim().length || null;
 }
 
 function renderInputMarkup() {
@@ -625,46 +727,11 @@ function syncValidateState(state) {
 }
 
 function scheduleQrQuestionAutoFit(state) {
-  if (state.questionEl?.dataset?.qrQuestionSizePreset === "tiny") return;
   scheduleQuestionAutoFit(state.questionEl, {
-    minFontSize: 34,
-    maxFontSize: 320,
+    minFontSize: 12,
+    step: 2,
     mediaMaxWidthRatio: 0.99,
     mediaMaxHeightRatio: 0.98
-  });
-}
-
-function applyQrQuestionSizePreset(state) {
-  const element = state.questionEl;
-  if (!element) return;
-
-  clearQrQuestionSizePreset(element);
-
-  const text = String(state.currentQuestion?.prompt || "")
-    .replace(/\s+/g, "")
-    .trim();
-  if (!text) return;
-
-  const preset = text.length <= 2
-    ? "tiny"
-    : text.length <= 4
-      ? "short"
-      : "";
-  if (!preset) return;
-
-  const size = preset === "tiny"
-    ? "clamp(160px, 26vmin, 320px)"
-    : "clamp(92px, 14vmin, 180px)";
-  const lineHeight = preset === "tiny" ? "0.95" : "1";
-
-  element.dataset.qrQuestionSizePreset = preset;
-  element.classList.add(`qr-question--fit-${preset}`);
-  element.style.setProperty("--tool-question-font-size", size);
-  element.style.setProperty("font-size", size, "important");
-  element.style.setProperty("line-height", lineHeight, "important");
-  element.querySelectorAll(".qr-question-text-inner, .flash-item-inner .qr-question-text-inner, .simple-markup-strong, .simple-markup-em, .simple-markup-highlight").forEach((target) => {
-    target.style.setProperty("font-size", size, "important");
-    target.style.setProperty("line-height", lineHeight, "important");
   });
 }
 
@@ -682,7 +749,8 @@ function clearQrQuestionSizePreset(element) {
 }
 
 function updateInstructionDisplay(state) {
-  const fallback = state.currentQuestion?.prompt ? "Réponds à la question." : "";
+  const settings = normalizeSettings(state.latestContext?.settings || {});
+  const fallback = settings.bankInstruction || (state.currentQuestion?.prompt ? "Réponds à la question." : "");
   const text = resolveQuestionInstructionText(state.latestContext, fallback);
   setToolInstructionText(state.instructionEl, text);
 }
@@ -690,6 +758,10 @@ function updateInstructionDisplay(state) {
 function getCurrentResponseValue(state) {
   if (state.answerRevealed && state.submittedAnswer != null) {
     return String(state.submittedAnswer ?? "").trim();
+  }
+
+  if (isNumericAnswerMode(state) && state.answerControl) {
+    return String(state.answerControl.getValue?.() ?? "").trim();
   }
 
   const pendingValue = String(state.pendingValidationValue ?? "");
@@ -741,6 +813,10 @@ function applyShellAnswerDisplayMode(state, mode) {
 
 function normalizeAnswerDisplayMode(value) {
   return String(value ?? "").trim().toLowerCase() === "student" ? "student" : "correction";
+}
+
+function isNumericAnswerMode(state) {
+  return normalizeSettings(state.latestContext?.settings || {}).answerType === "number";
 }
 
 function shouldShowResponseBox(context = {}) {
@@ -797,6 +873,8 @@ function shouldIgnoreReplacementInput(event) {
 function teardownResponseInputBindings(state) {
   state.responseInputAbortController?.abort?.();
   state.responseInputAbortController = null;
+  state.answerControl?.destroy?.();
+  state.answerControl = null;
 }
 
 function injectStyles() {

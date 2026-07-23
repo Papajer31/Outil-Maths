@@ -175,8 +175,8 @@
       "id": "images-emojis-alimentation-coco",
       "type": "image",
       "src": "images/emojis/alimentation/coco.webp",
-      "label": "coco",
-      "alt": "coco",
+      "label": "noix de coco",
+      "alt": "noix de coco",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -235,8 +235,8 @@
       "id": "images-emojis-alimentation-cuillere",
       "type": "image",
       "src": "images/emojis/alimentation/cuillere.webp",
-      "label": "cuillere",
-      "alt": "cuillere",
+      "label": "cuillère",
+      "alt": "cuillère",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -295,8 +295,8 @@
       "id": "images-emojis-alimentation-gateau",
       "type": "image",
       "src": "images/emojis/alimentation/gateau.webp",
-      "label": "gateau",
-      "alt": "gateau",
+      "label": "gâteau",
+      "alt": "gâteau",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -367,8 +367,8 @@
       "id": "images-emojis-alimentation-mais",
       "type": "image",
       "src": "images/emojis/alimentation/mais.webp",
-      "label": "mais",
-      "alt": "mais",
+      "label": "maïs",
+      "alt": "maïs",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -403,8 +403,8 @@
       "id": "images-emojis-alimentation-oeuf",
       "type": "image",
       "src": "images/emojis/alimentation/oeuf.webp",
-      "label": "oeuf",
-      "alt": "oeuf",
+      "label": "œuf",
+      "alt": "œuf",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -427,8 +427,8 @@
       "id": "images-emojis-alimentation-onion",
       "type": "image",
       "src": "images/emojis/alimentation/onion.webp",
-      "label": "onion",
-      "alt": "onion",
+      "label": "ognon",
+      "alt": "ognon",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -487,8 +487,8 @@
       "id": "images-emojis-alimentation-pasteque",
       "type": "image",
       "src": "images/emojis/alimentation/pasteque.webp",
-      "label": "pasteque",
-      "alt": "pasteque",
+      "label": "pastèque",
+      "alt": "pastèque",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -499,8 +499,8 @@
       "id": "images-emojis-alimentation-patate",
       "type": "image",
       "src": "images/emojis/alimentation/patate.webp",
-      "label": "patate",
-      "alt": "patate",
+      "label": "pomme de terre",
+      "alt": "pomme de terre",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -511,8 +511,8 @@
       "id": "images-emojis-alimentation-peche",
       "type": "image",
       "src": "images/emojis/alimentation/peche.webp",
-      "label": "peche",
-      "alt": "peche",
+      "label": "pêche",
+      "alt": "pêche",
       "category": "emojis / alimentation",
       "tags": [
         "emojis",
@@ -739,8 +739,8 @@
       "id": "images-emojis-animaux-araignee",
       "type": "image",
       "src": "images/emojis/animaux/araignee.webp",
-      "label": "araignee",
-      "alt": "araignee",
+      "label": "araignée",
+      "alt": "araignée",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1015,8 +1015,8 @@
       "id": "images-emojis-animaux-ecureuil",
       "type": "image",
       "src": "images/emojis/animaux/ecureuil.webp",
-      "label": "ecureuil",
-      "alt": "ecureuil",
+      "label": "écureuil",
+      "alt": "écureuil",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1027,8 +1027,8 @@
       "id": "images-emojis-animaux-elephant",
       "type": "image",
       "src": "images/emojis/animaux/elephant.webp",
-      "label": "elephant",
-      "alt": "elephant",
+      "label": "éléphant",
+      "alt": "éléphant",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1087,8 +1087,8 @@
       "id": "images-emojis-animaux-herisson",
       "type": "image",
       "src": "images/emojis/animaux/herisson.webp",
-      "label": "herisson",
-      "alt": "herisson",
+      "label": "hérisson",
+      "alt": "hérisson",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1123,8 +1123,8 @@
       "id": "images-emojis-animaux-lezard",
       "type": "image",
       "src": "images/emojis/animaux/lezard.webp",
-      "label": "lezard",
-      "alt": "lezard",
+      "label": "lézard",
+      "alt": "lézard",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1135,8 +1135,8 @@
       "id": "images-emojis-animaux-meduse",
       "type": "image",
       "src": "images/emojis/animaux/meduse.webp",
-      "label": "meduse",
-      "alt": "meduse",
+      "label": "méduse",
+      "alt": "méduse",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1243,8 +1243,8 @@
       "id": "images-emojis-animaux-pain",
       "type": "image",
       "src": "images/emojis/animaux/pain.webp",
-      "label": "pain",
-      "alt": "pain",
+      "label": "paon",
+      "alt": "paon",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1279,8 +1279,8 @@
       "id": "images-emojis-animaux-phoenix",
       "type": "image",
       "src": "images/emojis/animaux/phoenix.webp",
-      "label": "phoenix",
-      "alt": "phoenix",
+      "label": "phénix",
+      "alt": "phénix",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1339,8 +1339,8 @@
       "id": "images-emojis-animaux-poisson-lune",
       "type": "image",
       "src": "images/emojis/animaux/poisson_lune.webp",
-      "label": "poisson lune",
-      "alt": "poisson lune",
+      "label": "poisson-lune",
+      "alt": "poisson-lune",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1399,8 +1399,8 @@
       "id": "images-emojis-animaux-scarabee",
       "type": "image",
       "src": "images/emojis/animaux/scarabee.webp",
-      "label": "scarabee",
-      "alt": "scarabee",
+      "label": "scarabée",
+      "alt": "scarabée",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1447,8 +1447,8 @@
       "id": "images-emojis-animaux-souris-animal",
       "type": "image",
       "src": "images/emojis/animaux/souris_animal.webp",
-      "label": "souris animal",
-      "alt": "souris animal",
+      "label": "souris (animal)",
+      "alt": "souris (animal)",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1471,8 +1471,8 @@
       "id": "images-emojis-animaux-toile-araignee",
       "type": "image",
       "src": "images/emojis/animaux/toile_araignee.webp",
-      "label": "toile araignee",
-      "alt": "toile araignee",
+      "label": "toile d’araignée",
+      "alt": "toile d’araignée",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1531,8 +1531,8 @@
       "id": "images-emojis-animaux-zebre",
       "type": "image",
       "src": "images/emojis/animaux/zebre.webp",
-      "label": "zebre",
-      "alt": "zebre",
+      "label": "zèbre",
+      "alt": "zèbre",
       "category": "emojis / animaux",
       "tags": [
         "emojis",
@@ -1555,8 +1555,8 @@
       "id": "images-emojis-argent-temps-chronometre",
       "type": "image",
       "src": "images/emojis/argent_temps/chronometre.webp",
-      "label": "chronometre",
-      "alt": "chronometre",
+      "label": "chronomètre",
+      "alt": "chronomètre",
       "category": "emojis / argent_temps",
       "tags": [
         "emojis",
@@ -1591,8 +1591,8 @@
       "id": "images-emojis-argent-temps-piece",
       "type": "image",
       "src": "images/emojis/argent_temps/piece.webp",
-      "label": "piece",
-      "alt": "piece",
+      "label": "pièce",
+      "alt": "pièce",
       "category": "emojis / argent_temps",
       "tags": [
         "emojis",
@@ -1603,8 +1603,8 @@
       "id": "images-emojis-argent-temps-reveil",
       "type": "image",
       "src": "images/emojis/argent_temps/reveil.webp",
-      "label": "reveil",
-      "alt": "reveil",
+      "label": "réveil",
+      "alt": "réveil",
       "category": "emojis / argent_temps",
       "tags": [
         "emojis",
@@ -1627,8 +1627,8 @@
       "id": "images-emojis-argent-temps-sac-argent",
       "type": "image",
       "src": "images/emojis/argent_temps/sac_argent.webp",
-      "label": "sac argent",
-      "alt": "sac argent",
+      "label": "sac d’argent",
+      "alt": "sac d’argent",
       "category": "emojis / argent_temps",
       "tags": [
         "emojis",
@@ -1687,8 +1687,8 @@
       "id": "images-emojis-bureau-crayon-couleur",
       "type": "image",
       "src": "images/emojis/bureau/crayon_couleur.webp",
-      "label": "crayon couleur",
-      "alt": "crayon couleur",
+      "label": "crayon de couleur",
+      "alt": "crayon de couleur",
       "category": "emojis / bureau",
       "tags": [
         "emojis",
@@ -1711,8 +1711,8 @@
       "id": "images-emojis-bureau-equerre",
       "type": "image",
       "src": "images/emojis/bureau/equerre.webp",
-      "label": "equerre",
-      "alt": "equerre",
+      "label": "équerre",
+      "alt": "équerre",
       "category": "emojis / bureau",
       "tags": [
         "emojis",
@@ -1783,8 +1783,8 @@
       "id": "images-emojis-bureau-regle",
       "type": "image",
       "src": "images/emojis/bureau/regle.webp",
-      "label": "regle",
-      "alt": "regle",
+      "label": "règle",
+      "alt": "règle",
       "category": "emojis / bureau",
       "tags": [
         "emojis",
@@ -1795,8 +1795,8 @@
       "id": "images-emojis-bureau-serviette",
       "type": "image",
       "src": "images/emojis/bureau/serviette.webp",
-      "label": "serviette",
-      "alt": "serviette",
+      "label": "sacoche",
+      "alt": "sacoche",
       "category": "emojis / bureau",
       "tags": [
         "emojis",
@@ -1831,8 +1831,8 @@
       "id": "images-emojis-celebrations-ballon-baudruche",
       "type": "image",
       "src": "images/emojis/celebrations/ballon_baudruche.webp",
-      "label": "ballon baudruche",
-      "alt": "ballon baudruche",
+      "label": "ballon de baudruche",
+      "alt": "ballon de baudruche",
       "category": "emojis / celebrations",
       "tags": [
         "emojis",
@@ -1867,8 +1867,8 @@
       "id": "images-emojis-celebrations-petard",
       "type": "image",
       "src": "images/emojis/celebrations/petard.webp",
-      "label": "petard",
-      "alt": "petard",
+      "label": "pétard",
+      "alt": "pétard",
       "category": "emojis / celebrations",
       "tags": [
         "emojis",
@@ -1879,8 +1879,8 @@
       "id": "images-emojis-drapeaux-drapeau-damier",
       "type": "image",
       "src": "images/emojis/drapeaux/drapeau_damier.webp",
-      "label": "drapeau damier",
-      "alt": "drapeau damier",
+      "label": "drapeau à damier",
+      "alt": "drapeau à damier",
       "category": "emojis / drapeaux",
       "tags": [
         "emojis",
@@ -1891,8 +1891,8 @@
       "id": "images-emojis-drapeaux-drapeau-france",
       "type": "image",
       "src": "images/emojis/drapeaux/drapeau_france.webp",
-      "label": "drapeau france",
-      "alt": "drapeau france",
+      "label": "drapeau de la France",
+      "alt": "drapeau de la France",
       "category": "emojis / drapeaux",
       "tags": [
         "emojis",
@@ -1915,8 +1915,8 @@
       "id": "images-emojis-jeux-culture-boule-cristal",
       "type": "image",
       "src": "images/emojis/jeux_culture/boule_cristal.webp",
-      "label": "boule cristal",
-      "alt": "boule cristal",
+      "label": "boule de cristal",
+      "alt": "boule de cristal",
       "category": "emojis / jeux_culture",
       "tags": [
         "emojis",
@@ -1927,8 +1927,8 @@
       "id": "images-emojis-jeux-culture-cerf-volant",
       "type": "image",
       "src": "images/emojis/jeux_culture/cerf_volant.webp",
-      "label": "cerf volant",
-      "alt": "cerf volant",
+      "label": "cerf-volant",
+      "alt": "cerf-volant",
       "category": "emojis / jeux_culture",
       "tags": [
         "emojis",
@@ -1939,8 +1939,8 @@
       "id": "images-emojis-jeux-culture-de",
       "type": "image",
       "src": "images/emojis/jeux_culture/de.webp",
-      "label": "de",
-      "alt": "de",
+      "label": "dé",
+      "alt": "dé",
       "category": "emojis / jeux_culture",
       "tags": [
         "emojis",
@@ -2011,8 +2011,8 @@
       "id": "images-emojis-meteo-arc-en-ciel",
       "type": "image",
       "src": "images/emojis/meteo/arc_en_ciel.webp",
-      "label": "arc en ciel",
-      "alt": "arc en ciel",
+      "label": "arc-en-ciel",
+      "alt": "arc-en-ciel",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2023,8 +2023,8 @@
       "id": "images-emojis-meteo-comete",
       "type": "image",
       "src": "images/emojis/meteo/comete.webp",
-      "label": "comete",
-      "alt": "comete",
+      "label": "comète",
+      "alt": "comète",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2035,8 +2035,8 @@
       "id": "images-emojis-meteo-eclair",
       "type": "image",
       "src": "images/emojis/meteo/eclair.webp",
-      "label": "eclair",
-      "alt": "eclair",
+      "label": "éclair",
+      "alt": "éclair",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2047,8 +2047,8 @@
       "id": "images-emojis-meteo-etoile",
       "type": "image",
       "src": "images/emojis/meteo/etoile.webp",
-      "label": "etoile",
-      "alt": "etoile",
+      "label": "étoile",
+      "alt": "étoile",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2071,8 +2071,8 @@
       "id": "images-emojis-meteo-flocon-neige",
       "type": "image",
       "src": "images/emojis/meteo/flocon_neige.webp",
-      "label": "flocon neige",
-      "alt": "flocon neige",
+      "label": "flocon de neige",
+      "alt": "flocon de neige",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2095,8 +2095,8 @@
       "id": "images-emojis-meteo-lune-croissant",
       "type": "image",
       "src": "images/emojis/meteo/lune_croissant.webp",
-      "label": "lune croissant",
-      "alt": "lune croissant",
+      "label": "croissant de lune",
+      "alt": "croissant de lune",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2107,8 +2107,8 @@
       "id": "images-emojis-meteo-lune-pleine",
       "type": "image",
       "src": "images/emojis/meteo/lune_pleine.webp",
-      "label": "lune pleine",
-      "alt": "lune pleine",
+      "label": "pleine lune",
+      "alt": "pleine lune",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2131,8 +2131,8 @@
       "id": "images-emojis-meteo-planete",
       "type": "image",
       "src": "images/emojis/meteo/planete.webp",
-      "label": "planete",
-      "alt": "planete",
+      "label": "planète",
+      "alt": "planète",
       "category": "emojis / meteo",
       "tags": [
         "emojis",
@@ -2203,8 +2203,8 @@
       "id": "images-emojis-musique-son-megaphone",
       "type": "image",
       "src": "images/emojis/musique_son/megaphone.webp",
-      "label": "megaphone",
-      "alt": "megaphone",
+      "label": "mégaphone",
+      "alt": "mégaphone",
       "category": "emojis / musique_son",
       "tags": [
         "emojis",
@@ -2383,8 +2383,8 @@
       "id": "images-emojis-nature-trefle",
       "type": "image",
       "src": "images/emojis/nature/trefle.webp",
-      "label": "trefle",
-      "alt": "trefle",
+      "label": "trèfle",
+      "alt": "trèfle",
       "category": "emojis / nature",
       "tags": [
         "emojis",
@@ -2515,8 +2515,8 @@
       "id": "images-emojis-outils-objets-divers-brosse-dent",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/brosse_dent.webp",
-      "label": "brosse dent",
-      "alt": "brosse dent",
+      "label": "brosse à dents",
+      "alt": "brosse à dents",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2563,8 +2563,8 @@
       "id": "images-emojis-outils-objets-divers-cle",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/cle.webp",
-      "label": "cle",
-      "alt": "cle",
+      "label": "clé",
+      "alt": "clé",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2575,8 +2575,8 @@
       "id": "images-emojis-outils-objets-divers-cle-molette",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/cle_molette.webp",
-      "label": "cle molette",
-      "alt": "cle molette",
+      "label": "clé à molette",
+      "alt": "clé à molette",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2587,8 +2587,8 @@
       "id": "images-emojis-outils-objets-divers-cle-vieille",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/cle_vieille.webp",
-      "label": "cle vieille",
-      "alt": "cle vieille",
+      "label": "vieille clé",
+      "alt": "vieille clé",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2611,8 +2611,8 @@
       "id": "images-emojis-outils-objets-divers-echelle",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/echelle.webp",
-      "label": "echelle",
-      "alt": "echelle",
+      "label": "échelle",
+      "alt": "échelle",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2623,8 +2623,8 @@
       "id": "images-emojis-outils-objets-divers-eponge",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/eponge.webp",
-      "label": "eponge",
-      "alt": "eponge",
+      "label": "éponge",
+      "alt": "éponge",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2647,8 +2647,8 @@
       "id": "images-emojis-outils-objets-divers-fenetre",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/fenetre.webp",
-      "label": "fenetre",
-      "alt": "fenetre",
+      "label": "fenêtre",
+      "alt": "fenêtre",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2671,8 +2671,8 @@
       "id": "images-emojis-outils-objets-divers-lampe-poche",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/lampe_poche.webp",
-      "label": "lampe poche",
-      "alt": "lampe poche",
+      "label": "lampe de poche",
+      "alt": "lampe de poche",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2803,8 +2803,8 @@
       "id": "images-emojis-outils-objets-divers-telescope",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/telescope.webp",
-      "label": "telescope",
-      "alt": "telescope",
+      "label": "télescope",
+      "alt": "télescope",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2815,8 +2815,8 @@
       "id": "images-emojis-outils-objets-divers-thermometre",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/thermometre.webp",
-      "label": "thermometre",
-      "alt": "thermometre",
+      "label": "thermomètre",
+      "alt": "thermomètre",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2839,8 +2839,8 @@
       "id": "images-emojis-outils-objets-divers-tube-essai",
       "type": "image",
       "src": "images/emojis/outils_objets_divers/tube_essai.webp",
-      "label": "tube essai",
-      "alt": "tube essai",
+      "label": "tube à essai",
+      "alt": "tube à essai",
       "category": "emojis / outils_objets_divers",
       "tags": [
         "emojis",
@@ -2875,8 +2875,8 @@
       "id": "images-emojis-sports-balle-baseball",
       "type": "image",
       "src": "images/emojis/sports/balle_baseball.webp",
-      "label": "balle baseball",
-      "alt": "balle baseball",
+      "label": "balle de baseball",
+      "alt": "balle de baseball",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -2887,8 +2887,8 @@
       "id": "images-emojis-sports-balle-tennis",
       "type": "image",
       "src": "images/emojis/sports/balle_tennis.webp",
-      "label": "balle tennis",
-      "alt": "balle tennis",
+      "label": "balle de tennis",
+      "alt": "balle de tennis",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -2899,8 +2899,8 @@
       "id": "images-emojis-sports-ballon-basket",
       "type": "image",
       "src": "images/emojis/sports/ballon_basket.webp",
-      "label": "ballon basket",
-      "alt": "ballon basket",
+      "label": "ballon de basket",
+      "alt": "ballon de basket",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -2911,8 +2911,8 @@
       "id": "images-emojis-sports-ballon-foot",
       "type": "image",
       "src": "images/emojis/sports/ballon_foot.webp",
-      "label": "ballon foot",
-      "alt": "ballon foot",
+      "label": "ballon de football",
+      "alt": "ballon de football",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -2971,8 +2971,8 @@
       "id": "images-emojis-sports-gant-boxe",
       "type": "image",
       "src": "images/emojis/sports/gant_boxe.webp",
-      "label": "gant boxe",
-      "alt": "gant boxe",
+      "label": "gant de boxe",
+      "alt": "gant de boxe",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -2995,8 +2995,8 @@
       "id": "images-emojis-sports-medaille",
       "type": "image",
       "src": "images/emojis/sports/medaille.webp",
-      "label": "medaille",
-      "alt": "medaille",
+      "label": "médaille",
+      "alt": "médaille",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -3007,8 +3007,8 @@
       "id": "images-emojis-sports-medaille-etoile",
       "type": "image",
       "src": "images/emojis/sports/medaille_etoile.webp",
-      "label": "medaille etoile",
-      "alt": "medaille etoile",
+      "label": "médaille étoilée",
+      "alt": "médaille étoilée",
       "category": "emojis / sports",
       "tags": [
         "emojis",
@@ -3031,8 +3031,8 @@
       "id": "images-emojis-symboles-coeur",
       "type": "image",
       "src": "images/emojis/symboles/coeur.webp",
-      "label": "coeur",
-      "alt": "coeur",
+      "label": "cœur",
+      "alt": "cœur",
       "category": "emojis / symboles",
       "tags": [
         "emojis",
@@ -3091,8 +3091,8 @@
       "id": "images-emojis-technologie-ecran",
       "type": "image",
       "src": "images/emojis/technologie/ecran.webp",
-      "label": "ecran",
-      "alt": "ecran",
+      "label": "écran",
+      "alt": "écran",
       "category": "emojis / technologie",
       "tags": [
         "emojis",
@@ -3103,8 +3103,8 @@
       "id": "images-emojis-technologie-ordi-portable",
       "type": "image",
       "src": "images/emojis/technologie/ordi_portable.webp",
-      "label": "ordi portable",
-      "alt": "ordi portable",
+      "label": "ordinateur portable",
+      "alt": "ordinateur portable",
       "category": "emojis / technologie",
       "tags": [
         "emojis",
@@ -3127,8 +3127,8 @@
       "id": "images-emojis-tetes-mort",
       "type": "image",
       "src": "images/emojis/tetes/mort.webp",
-      "label": "mort",
-      "alt": "mort",
+      "label": "tête de mort",
+      "alt": "tête de mort",
       "category": "emojis / tetes",
       "tags": [
         "emojis",
@@ -3163,8 +3163,8 @@
       "id": "images-emojis-vetements-accessoires-chapeau-haut",
       "type": "image",
       "src": "images/emojis/vetements_accessoires/chapeau_haut.webp",
-      "label": "chapeau haut",
-      "alt": "chapeau haut",
+      "label": "chapeau haut-de-forme",
+      "alt": "chapeau haut-de-forme",
       "category": "emojis / vetements_accessoires",
       "tags": [
         "emojis",
@@ -3199,8 +3199,8 @@
       "id": "images-emojis-vetements-accessoires-eventail",
       "type": "image",
       "src": "images/emojis/vetements_accessoires/eventail.webp",
-      "label": "eventail",
-      "alt": "eventail",
+      "label": "éventail",
+      "alt": "éventail",
       "category": "emojis / vetements_accessoires",
       "tags": [
         "emojis",
@@ -3259,8 +3259,8 @@
       "id": "images-emojis-voyage-chateau",
       "type": "image",
       "src": "images/emojis/voyage/chateau.webp",
-      "label": "chateau",
-      "alt": "chateau",
+      "label": "château",
+      "alt": "château",
       "category": "emojis / voyage",
       "tags": [
         "emojis",
@@ -3271,8 +3271,8 @@
       "id": "images-emojis-voyage-helicoptere",
       "type": "image",
       "src": "images/emojis/voyage/helicoptere.webp",
-      "label": "helicoptere",
-      "alt": "helicoptere",
+      "label": "hélicoptère",
+      "alt": "hélicoptère",
       "category": "emojis / voyage",
       "tags": [
         "emojis",
@@ -3307,8 +3307,8 @@
       "id": "images-emojis-voyage-moai",
       "type": "image",
       "src": "images/emojis/voyage/moai.webp",
-      "label": "moai",
-      "alt": "moai",
+      "label": "moaï",
+      "alt": "moaï",
       "category": "emojis / voyage",
       "tags": [
         "emojis",
@@ -3427,8 +3427,8 @@
       "id": "images-emojis-voyage-tori",
       "type": "image",
       "src": "images/emojis/voyage/tori.webp",
-      "label": "tori",
-      "alt": "tori",
+      "label": "torii",
+      "alt": "torii",
       "category": "emojis / voyage",
       "tags": [
         "emojis",
@@ -3451,8 +3451,8 @@
       "id": "images-emojis-voyage-velo",
       "type": "image",
       "src": "images/emojis/voyage/velo.webp",
-      "label": "velo",
-      "alt": "velo",
+      "label": "vélo",
+      "alt": "vélo",
       "category": "emojis / voyage",
       "tags": [
         "emojis",
@@ -3498,10 +3498,10 @@
     {
       "id": "images-graphs-a",
       "type": "image",
-      "src": "images/graphs/a.webp",
-      "label": "a",
-      "alt": "a",
-      "category": "graphs",
+      "src": "images/graphemes/a.webp",
+     "label": "a",
+     "alt": "a",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3509,10 +3509,10 @@
     {
       "id": "images-graphs-ai",
       "type": "image",
-      "src": "images/graphs/ai.webp",
-      "label": "ai",
-      "alt": "ai",
-      "category": "graphs",
+      "src": "images/graphemes/ai.webp",
+     "label": "ai",
+     "alt": "ai",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3520,10 +3520,10 @@
     {
       "id": "images-graphs-ain",
       "type": "image",
-      "src": "images/graphs/ain.webp",
-      "label": "ain",
-      "alt": "ain",
-      "category": "graphs",
+      "src": "images/graphemes/ain.webp",
+     "label": "ain",
+     "alt": "ain",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3531,10 +3531,10 @@
     {
       "id": "images-graphs-am",
       "type": "image",
-      "src": "images/graphs/am.webp",
-      "label": "am",
-      "alt": "am",
-      "category": "graphs",
+      "src": "images/graphemes/am.webp",
+     "label": "am",
+     "alt": "am",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3542,10 +3542,10 @@
     {
       "id": "images-graphs-an",
       "type": "image",
-      "src": "images/graphs/an.webp",
-      "label": "an",
-      "alt": "an",
-      "category": "graphs",
+      "src": "images/graphemes/an.webp",
+     "label": "an",
+     "alt": "an",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3553,10 +3553,10 @@
     {
       "id": "images-graphs-au",
       "type": "image",
-      "src": "images/graphs/au.webp",
-      "label": "au",
-      "alt": "au",
-      "category": "graphs",
+      "src": "images/graphemes/au.webp",
+     "label": "au",
+     "alt": "au",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3564,10 +3564,10 @@
     {
       "id": "images-graphs-b",
       "type": "image",
-      "src": "images/graphs/b.webp",
-      "label": "b",
-      "alt": "b",
-      "category": "graphs",
+      "src": "images/graphemes/b.webp",
+     "label": "b",
+     "alt": "b",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3575,10 +3575,10 @@
     {
       "id": "images-graphs-c-cedille",
       "type": "image",
-      "src": "images/graphs/c_cedille.webp",
-      "label": "c cedille",
-      "alt": "c cedille",
-      "category": "graphs",
+      "src": "images/graphemes/c_cedille.webp",
+     "label": "c cédille",
+     "alt": "c cédille",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3586,10 +3586,10 @@
     {
       "id": "images-graphs-c-k",
       "type": "image",
-      "src": "images/graphs/c_k.webp",
-      "label": "c k",
-      "alt": "c k",
-      "category": "graphs",
+      "src": "images/graphemes/c_k.webp",
+     "label": "c k",
+     "alt": "c k",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3597,10 +3597,10 @@
     {
       "id": "images-graphs-c-s",
       "type": "image",
-      "src": "images/graphs/c_s.webp",
-      "label": "c s",
-      "alt": "c s",
-      "category": "graphs",
+      "src": "images/graphemes/c_s.webp",
+     "label": "c s",
+     "alt": "c s",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3608,10 +3608,10 @@
     {
       "id": "images-graphs-ch",
       "type": "image",
-      "src": "images/graphs/ch.webp",
-      "label": "ch",
-      "alt": "ch",
-      "category": "graphs",
+      "src": "images/graphemes/ch.webp",
+     "label": "ch",
+     "alt": "ch",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3619,10 +3619,10 @@
     {
       "id": "images-graphs-d",
       "type": "image",
-      "src": "images/graphs/d.webp",
-      "label": "d",
-      "alt": "d",
-      "category": "graphs",
+      "src": "images/graphemes/d.webp",
+     "label": "d",
+     "alt": "d",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3630,10 +3630,10 @@
     {
       "id": "images-graphs-e",
       "type": "image",
-      "src": "images/graphs/e.webp",
-      "label": "e",
-      "alt": "e",
-      "category": "graphs",
+      "src": "images/graphemes/e.webp",
+     "label": "e",
+     "alt": "e",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3641,10 +3641,10 @@
     {
       "id": "images-graphs-e-aigu",
       "type": "image",
-      "src": "images/graphs/e_aigu.webp",
-      "label": "e aigu",
-      "alt": "e aigu",
-      "category": "graphs",
+      "src": "images/graphemes/e_aigu.webp",
+     "label": "é aigu",
+     "alt": "é aigu",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3652,10 +3652,10 @@
     {
       "id": "images-graphs-e-circonflexe",
       "type": "image",
-      "src": "images/graphs/e_circonflexe.webp",
-      "label": "e circonflexe",
-      "alt": "e circonflexe",
-      "category": "graphs",
+      "src": "images/graphemes/e_circonflexe.webp",
+     "label": "ê circonflexe",
+     "alt": "ê circonflexe",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3663,10 +3663,10 @@
     {
       "id": "images-graphs-e-grave",
       "type": "image",
-      "src": "images/graphs/e_grave.webp",
-      "label": "e grave",
-      "alt": "e grave",
-      "category": "graphs",
+      "src": "images/graphemes/e_grave.webp",
+     "label": "è grave",
+     "alt": "è grave",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3674,10 +3674,10 @@
     {
       "id": "images-graphs-eau",
       "type": "image",
-      "src": "images/graphs/eau.webp",
-      "label": "eau",
-      "alt": "eau",
-      "category": "graphs",
+      "src": "images/graphemes/eau.webp",
+     "label": "eau",
+     "alt": "eau",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3685,10 +3685,10 @@
     {
       "id": "images-graphs-ec-cons",
       "type": "image",
-      "src": "images/graphs/ec_cons.webp",
-      "label": "ec cons",
-      "alt": "ec cons",
-      "category": "graphs",
+      "src": "images/graphemes/ec_cons.webp",
+     "label": "ec cons",
+     "alt": "ec cons",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3696,10 +3696,10 @@
     {
       "id": "images-graphs-ef-cons",
       "type": "image",
-      "src": "images/graphs/ef_cons.webp",
-      "label": "ef cons",
-      "alt": "ef cons",
-      "category": "graphs",
+      "src": "images/graphemes/ef_cons.webp",
+     "label": "ef cons",
+     "alt": "ef cons",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3707,10 +3707,10 @@
     {
       "id": "images-graphs-ei",
       "type": "image",
-      "src": "images/graphs/ei.webp",
-      "label": "ei",
-      "alt": "ei",
-      "category": "graphs",
+      "src": "images/graphemes/ei.webp",
+     "label": "ei",
+     "alt": "ei",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3718,10 +3718,10 @@
     {
       "id": "images-graphs-ein",
       "type": "image",
-      "src": "images/graphs/ein.webp",
-      "label": "ein",
-      "alt": "ein",
-      "category": "graphs",
+      "src": "images/graphemes/ein.webp",
+     "label": "ein",
+     "alt": "ein",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3729,10 +3729,10 @@
     {
       "id": "images-graphs-el-cons",
       "type": "image",
-      "src": "images/graphs/el_cons.webp",
-      "label": "el cons",
-      "alt": "el cons",
-      "category": "graphs",
+      "src": "images/graphemes/el_cons.webp",
+     "label": "el cons",
+     "alt": "el cons",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3740,10 +3740,10 @@
     {
       "id": "images-graphs-elle",
       "type": "image",
-      "src": "images/graphs/elle.webp",
-      "label": "elle",
-      "alt": "elle",
-      "category": "graphs",
+      "src": "images/graphemes/elle.webp",
+     "label": "elle",
+     "alt": "elle",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3751,10 +3751,10 @@
     {
       "id": "images-graphs-em",
       "type": "image",
-      "src": "images/graphs/em.webp",
-      "label": "em",
-      "alt": "em",
-      "category": "graphs",
+      "src": "images/graphemes/em.webp",
+     "label": "em",
+     "alt": "em",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3762,10 +3762,10 @@
     {
       "id": "images-graphs-en",
       "type": "image",
-      "src": "images/graphs/en.webp",
-      "label": "en",
-      "alt": "en",
-      "category": "graphs",
+      "src": "images/graphemes/en.webp",
+     "label": "en",
+     "alt": "en",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3773,10 +3773,10 @@
     {
       "id": "images-graphs-enne",
       "type": "image",
-      "src": "images/graphs/enne.webp",
-      "label": "enne",
-      "alt": "enne",
-      "category": "graphs",
+      "src": "images/graphemes/enne.webp",
+     "label": "enne",
+     "alt": "enne",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3784,10 +3784,10 @@
     {
       "id": "images-graphs-er",
       "type": "image",
-      "src": "images/graphs/er.webp",
-      "label": "er",
-      "alt": "er",
-      "category": "graphs",
+      "src": "images/graphemes/er.webp",
+     "label": "er",
+     "alt": "er",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3795,10 +3795,10 @@
     {
       "id": "images-graphs-er-cons",
       "type": "image",
-      "src": "images/graphs/er_cons.webp",
-      "label": "er cons",
-      "alt": "er cons",
-      "category": "graphs",
+      "src": "images/graphemes/er_cons.webp",
+     "label": "er cons",
+     "alt": "er cons",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3806,10 +3806,10 @@
     {
       "id": "images-graphs-erre",
       "type": "image",
-      "src": "images/graphs/erre.webp",
-      "label": "erre",
-      "alt": "erre",
-      "category": "graphs",
+      "src": "images/graphemes/erre.webp",
+     "label": "erre",
+     "alt": "erre",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3817,10 +3817,10 @@
     {
       "id": "images-graphs-es",
       "type": "image",
-      "src": "images/graphs/es.webp",
-      "label": "es",
-      "alt": "es",
-      "category": "graphs",
+      "src": "images/graphemes/es.webp",
+     "label": "es",
+     "alt": "es",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3828,10 +3828,10 @@
     {
       "id": "images-graphs-es-cons",
       "type": "image",
-      "src": "images/graphs/es_cons.webp",
-      "label": "es cons",
-      "alt": "es cons",
-      "category": "graphs",
+      "src": "images/graphemes/es_cons.webp",
+     "label": "es cons",
+     "alt": "es cons",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3839,10 +3839,10 @@
     {
       "id": "images-graphs-esse",
       "type": "image",
-      "src": "images/graphs/esse.webp",
-      "label": "esse",
-      "alt": "esse",
-      "category": "graphs",
+      "src": "images/graphemes/esse.webp",
+     "label": "esse",
+     "alt": "esse",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3850,10 +3850,10 @@
     {
       "id": "images-graphs-et",
       "type": "image",
-      "src": "images/graphs/et.webp",
-      "label": "et",
-      "alt": "et",
-      "category": "graphs",
+      "src": "images/graphemes/et.webp",
+     "label": "et",
+     "alt": "et",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3861,10 +3861,10 @@
     {
       "id": "images-graphs-ette",
       "type": "image",
-      "src": "images/graphs/ette.webp",
-      "label": "ette",
-      "alt": "ette",
-      "category": "graphs",
+      "src": "images/graphemes/ette.webp",
+     "label": "ette",
+     "alt": "ette",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3872,10 +3872,10 @@
     {
       "id": "images-graphs-eu",
       "type": "image",
-      "src": "images/graphs/eu.webp",
-      "label": "eu",
-      "alt": "eu",
-      "category": "graphs",
+      "src": "images/graphemes/eu.webp",
+     "label": "eu",
+     "alt": "eu",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3883,10 +3883,10 @@
     {
       "id": "images-graphs-ez",
       "type": "image",
-      "src": "images/graphs/ez.webp",
-      "label": "ez",
-      "alt": "ez",
-      "category": "graphs",
+      "src": "images/graphemes/ez.webp",
+     "label": "ez",
+     "alt": "ez",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3894,10 +3894,10 @@
     {
       "id": "images-graphs-f",
       "type": "image",
-      "src": "images/graphs/f.webp",
-      "label": "f",
-      "alt": "f",
-      "category": "graphs",
+      "src": "images/graphemes/f.webp",
+     "label": "f",
+     "alt": "f",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3905,10 +3905,10 @@
     {
       "id": "images-graphs-g-g",
       "type": "image",
-      "src": "images/graphs/g_g.webp",
-      "label": "g g",
-      "alt": "g g",
-      "category": "graphs",
+      "src": "images/graphemes/g_g.webp",
+     "label": "g g",
+     "alt": "g g",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3916,10 +3916,10 @@
     {
       "id": "images-graphs-g-j",
       "type": "image",
-      "src": "images/graphs/g_j.webp",
-      "label": "g j",
-      "alt": "g j",
-      "category": "graphs",
+      "src": "images/graphemes/g_j.webp",
+     "label": "g j",
+     "alt": "g j",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3927,10 +3927,10 @@
     {
       "id": "images-graphs-ge",
       "type": "image",
-      "src": "images/graphs/ge.webp",
-      "label": "ge",
-      "alt": "ge",
-      "category": "graphs",
+      "src": "images/graphemes/ge.webp",
+     "label": "ge",
+     "alt": "ge",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3938,10 +3938,10 @@
     {
       "id": "images-graphs-gn",
       "type": "image",
-      "src": "images/graphs/gn.webp",
-      "label": "gn",
-      "alt": "gn",
-      "category": "graphs",
+      "src": "images/graphemes/gn.webp",
+     "label": "gn",
+     "alt": "gn",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3949,10 +3949,10 @@
     {
       "id": "images-graphs-gu",
       "type": "image",
-      "src": "images/graphs/gu.webp",
-      "label": "gu",
-      "alt": "gu",
-      "category": "graphs",
+      "src": "images/graphemes/gu.webp",
+     "label": "gu",
+     "alt": "gu",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3960,10 +3960,10 @@
     {
       "id": "images-graphs-h",
       "type": "image",
-      "src": "images/graphs/h.webp",
-      "label": "h",
-      "alt": "h",
-      "category": "graphs",
+      "src": "images/graphemes/h.webp",
+     "label": "h",
+     "alt": "h",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3971,10 +3971,10 @@
     {
       "id": "images-graphs-i",
       "type": "image",
-      "src": "images/graphs/i.webp",
-      "label": "i",
-      "alt": "i",
-      "category": "graphs",
+      "src": "images/graphemes/i.webp",
+     "label": "i",
+     "alt": "i",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3982,10 +3982,10 @@
     {
       "id": "images-graphs-ill",
       "type": "image",
-      "src": "images/graphs/ill.webp",
-      "label": "ill",
-      "alt": "ill",
-      "category": "graphs",
+      "src": "images/graphemes/ill.webp",
+     "label": "ill",
+     "alt": "ill",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -3993,10 +3993,10 @@
     {
       "id": "images-graphs-im",
       "type": "image",
-      "src": "images/graphs/im.webp",
-      "label": "im",
-      "alt": "im",
-      "category": "graphs",
+      "src": "images/graphemes/im.webp",
+     "label": "im",
+     "alt": "im",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4004,10 +4004,10 @@
     {
       "id": "images-graphs-in",
       "type": "image",
-      "src": "images/graphs/in.webp",
-      "label": "in",
-      "alt": "in",
-      "category": "graphs",
+      "src": "images/graphemes/in.webp",
+     "label": "in",
+     "alt": "in",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4015,10 +4015,10 @@
     {
       "id": "images-graphs-j",
       "type": "image",
-      "src": "images/graphs/j.webp",
-      "label": "j",
-      "alt": "j",
-      "category": "graphs",
+      "src": "images/graphemes/j.webp",
+     "label": "j",
+     "alt": "j",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4026,10 +4026,10 @@
     {
       "id": "images-graphs-k",
       "type": "image",
-      "src": "images/graphs/k.webp",
-      "label": "k",
-      "alt": "k",
-      "category": "graphs",
+      "src": "images/graphemes/k.webp",
+     "label": "k",
+     "alt": "k",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4037,10 +4037,10 @@
     {
       "id": "images-graphs-l",
       "type": "image",
-      "src": "images/graphs/l.webp",
-      "label": "l",
-      "alt": "l",
-      "category": "graphs",
+      "src": "images/graphemes/l.webp",
+     "label": "l",
+     "alt": "l",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4048,10 +4048,10 @@
     {
       "id": "images-graphs-m",
       "type": "image",
-      "src": "images/graphs/m.webp",
-      "label": "m",
-      "alt": "m",
-      "category": "graphs",
+      "src": "images/graphemes/m.webp",
+     "label": "m",
+     "alt": "m",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4059,10 +4059,10 @@
     {
       "id": "images-graphs-n",
       "type": "image",
-      "src": "images/graphs/n.webp",
-      "label": "n",
-      "alt": "n",
-      "category": "graphs",
+      "src": "images/graphemes/n.webp",
+     "label": "n",
+     "alt": "n",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4070,10 +4070,10 @@
     {
       "id": "images-graphs-o",
       "type": "image",
-      "src": "images/graphs/o.webp",
-      "label": "o",
-      "alt": "o",
-      "category": "graphs",
+      "src": "images/graphemes/o.webp",
+     "label": "o",
+     "alt": "o",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4081,10 +4081,10 @@
     {
       "id": "images-graphs-o-circonflexe",
       "type": "image",
-      "src": "images/graphs/o_circonflexe.webp",
-      "label": "o circonflexe",
-      "alt": "o circonflexe",
-      "category": "graphs",
+      "src": "images/graphemes/o_circonflexe.webp",
+     "label": "ô circonflexe",
+     "alt": "ô circonflexe",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4092,10 +4092,10 @@
     {
       "id": "images-graphs-oeu",
       "type": "image",
-      "src": "images/graphs/oeu.webp",
-      "label": "oeu",
-      "alt": "oeu",
-      "category": "graphs",
+      "src": "images/graphemes/oeu.webp",
+     "label": "oeu",
+     "alt": "oeu",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4103,10 +4103,10 @@
     {
       "id": "images-graphs-oi",
       "type": "image",
-      "src": "images/graphs/oi.webp",
-      "label": "oi",
-      "alt": "oi",
-      "category": "graphs",
+      "src": "images/graphemes/oi.webp",
+     "label": "oi",
+     "alt": "oi",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4114,10 +4114,10 @@
     {
       "id": "images-graphs-om",
       "type": "image",
-      "src": "images/graphs/om.webp",
-      "label": "om",
-      "alt": "om",
-      "category": "graphs",
+      "src": "images/graphemes/om.webp",
+     "label": "om",
+     "alt": "om",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4125,10 +4125,10 @@
     {
       "id": "images-graphs-on",
       "type": "image",
-      "src": "images/graphs/on.webp",
-      "label": "on",
-      "alt": "on",
-      "category": "graphs",
+      "src": "images/graphemes/on.webp",
+     "label": "on",
+     "alt": "on",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4136,10 +4136,10 @@
     {
       "id": "images-graphs-ou",
       "type": "image",
-      "src": "images/graphs/ou.webp",
-      "label": "ou",
-      "alt": "ou",
-      "category": "graphs",
+      "src": "images/graphemes/ou.webp",
+     "label": "ou",
+     "alt": "ou",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4147,10 +4147,10 @@
     {
       "id": "images-graphs-p",
       "type": "image",
-      "src": "images/graphs/p.webp",
-      "label": "p",
-      "alt": "p",
-      "category": "graphs",
+      "src": "images/graphemes/p.webp",
+     "label": "p",
+     "alt": "p",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4158,10 +4158,10 @@
     {
       "id": "images-graphs-ph",
       "type": "image",
-      "src": "images/graphs/ph.webp",
-      "label": "ph",
-      "alt": "ph",
-      "category": "graphs",
+      "src": "images/graphemes/ph.webp",
+     "label": "ph",
+     "alt": "ph",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4169,10 +4169,10 @@
     {
       "id": "images-graphs-q",
       "type": "image",
-      "src": "images/graphs/q.webp",
-      "label": "q",
-      "alt": "q",
-      "category": "graphs",
+      "src": "images/graphemes/q.webp",
+     "label": "q",
+     "alt": "q",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4180,10 +4180,10 @@
     {
       "id": "images-graphs-qu",
       "type": "image",
-      "src": "images/graphs/qu.webp",
-      "label": "qu",
-      "alt": "qu",
-      "category": "graphs",
+      "src": "images/graphemes/qu.webp",
+     "label": "qu",
+     "alt": "qu",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4191,10 +4191,10 @@
     {
       "id": "images-graphs-r",
       "type": "image",
-      "src": "images/graphs/r.webp",
-      "label": "r",
-      "alt": "r",
-      "category": "graphs",
+      "src": "images/graphemes/r.webp",
+     "label": "r",
+     "alt": "r",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4202,10 +4202,10 @@
     {
       "id": "images-graphs-s-s",
       "type": "image",
-      "src": "images/graphs/s_s.webp",
-      "label": "s s",
-      "alt": "s s",
-      "category": "graphs",
+      "src": "images/graphemes/s_s.webp",
+     "label": "s s",
+     "alt": "s s",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4213,10 +4213,10 @@
     {
       "id": "images-graphs-s-z",
       "type": "image",
-      "src": "images/graphs/s_z.webp",
-      "label": "s z",
-      "alt": "s z",
-      "category": "graphs",
+      "src": "images/graphemes/s_z.webp",
+     "label": "s z",
+     "alt": "s z",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4224,10 +4224,10 @@
     {
       "id": "images-graphs-sc",
       "type": "image",
-      "src": "images/graphs/sc.webp",
-      "label": "sc",
-      "alt": "sc",
-      "category": "graphs",
+      "src": "images/graphemes/sc.webp",
+     "label": "sc",
+     "alt": "sc",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4235,10 +4235,10 @@
     {
       "id": "images-graphs-ss",
       "type": "image",
-      "src": "images/graphs/ss.webp",
-      "label": "ss",
-      "alt": "ss",
-      "category": "graphs",
+      "src": "images/graphemes/ss.webp",
+     "label": "ss",
+     "alt": "ss",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4246,10 +4246,10 @@
     {
       "id": "images-graphs-t",
       "type": "image",
-      "src": "images/graphs/t.webp",
-      "label": "t",
-      "alt": "t",
-      "category": "graphs",
+      "src": "images/graphemes/t.webp",
+     "label": "t",
+     "alt": "t",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4257,10 +4257,10 @@
     {
       "id": "images-graphs-u",
       "type": "image",
-      "src": "images/graphs/u.webp",
-      "label": "u",
-      "alt": "u",
-      "category": "graphs",
+      "src": "images/graphemes/u.webp",
+     "label": "u",
+     "alt": "u",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4268,10 +4268,10 @@
     {
       "id": "images-graphs-v",
       "type": "image",
-      "src": "images/graphs/v.webp",
-      "label": "v",
-      "alt": "v",
-      "category": "graphs",
+      "src": "images/graphemes/v.webp",
+     "label": "v",
+     "alt": "v",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4279,10 +4279,10 @@
     {
       "id": "images-graphs-y-i",
       "type": "image",
-      "src": "images/graphs/y_i.webp",
-      "label": "y i",
-      "alt": "y i",
-      "category": "graphs",
+      "src": "images/graphemes/y_i.webp",
+     "label": "y i",
+     "alt": "y i",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4290,10 +4290,10 @@
     {
       "id": "images-graphs-z",
       "type": "image",
-      "src": "images/graphs/z.webp",
-      "label": "z",
-      "alt": "z",
-      "category": "graphs",
+      "src": "images/graphemes/z.webp",
+     "label": "z",
+     "alt": "z",
+      "category": "graphemes",
       "tags": [
         "graphs"
       ]
@@ -4301,7 +4301,7 @@
     {
       "id": "images-comparaison-maxibille",
       "type": "image",
-      "src": "images/comparaison/Maxibille.webp",
+      "src": "images/personnages/Maxibille.webp",
       "label": "Maxibille",
       "alt": "Maxibille",
       "category": "comparaison",
@@ -4312,7 +4312,7 @@
     {
       "id": "images-comparaison-minibille",
       "type": "image",
-      "src": "images/comparaison/Minibille.webp",
+      "src": "images/personnages/Minibille.webp",
       "label": "Minibille",
       "alt": "Minibille",
       "category": "comparaison",
@@ -4324,8 +4324,8 @@
       "id": "images-monnaie-c1",
       "type": "image",
       "src": "images/monnaie/c1.webp",
-      "label": "c1",
-      "alt": "c1",
+      "label": "pièce de 1 centime",
+      "alt": "pièce de 1 centime",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4335,8 +4335,8 @@
       "id": "images-monnaie-c10",
       "type": "image",
       "src": "images/monnaie/c10.webp",
-      "label": "c10",
-      "alt": "c10",
+      "label": "pièce de 10 centimes",
+      "alt": "pièce de 10 centimes",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4346,8 +4346,8 @@
       "id": "images-monnaie-c2",
       "type": "image",
       "src": "images/monnaie/c2.webp",
-      "label": "c2",
-      "alt": "c2",
+      "label": "pièce de 2 centimes",
+      "alt": "pièce de 2 centimes",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4357,8 +4357,8 @@
       "id": "images-monnaie-c20",
       "type": "image",
       "src": "images/monnaie/c20.webp",
-      "label": "c20",
-      "alt": "c20",
+      "label": "pièce de 20 centimes",
+      "alt": "pièce de 20 centimes",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4368,8 +4368,8 @@
       "id": "images-monnaie-c5",
       "type": "image",
       "src": "images/monnaie/c5.webp",
-      "label": "c5",
-      "alt": "c5",
+      "label": "pièce de 5 centimes",
+      "alt": "pièce de 5 centimes",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4379,8 +4379,8 @@
       "id": "images-monnaie-c50",
       "type": "image",
       "src": "images/monnaie/c50.webp",
-      "label": "c50",
-      "alt": "c50",
+      "label": "pièce de 50 centimes",
+      "alt": "pièce de 50 centimes",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4390,8 +4390,8 @@
       "id": "images-monnaie-e1",
       "type": "image",
       "src": "images/monnaie/e1.webp",
-      "label": "e1",
-      "alt": "e1",
+      "label": "pièce de 1 euro",
+      "alt": "pièce de 1 euro",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4401,8 +4401,8 @@
       "id": "images-monnaie-e10",
       "type": "image",
       "src": "images/monnaie/e10.webp",
-      "label": "e10",
-      "alt": "e10",
+      "label": "billet de 10 euros",
+      "alt": "billet de 10 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4412,8 +4412,8 @@
       "id": "images-monnaie-e100",
       "type": "image",
       "src": "images/monnaie/e100.webp",
-      "label": "e100",
-      "alt": "e100",
+      "label": "billet de 100 euros",
+      "alt": "billet de 100 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4423,8 +4423,8 @@
       "id": "images-monnaie-e2",
       "type": "image",
       "src": "images/monnaie/e2.webp",
-      "label": "e2",
-      "alt": "e2",
+      "label": "pièce de 2 euros",
+      "alt": "pièce de 2 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4434,8 +4434,8 @@
       "id": "images-monnaie-e20",
       "type": "image",
       "src": "images/monnaie/e20.webp",
-      "label": "e20",
-      "alt": "e20",
+      "label": "billet de 20 euros",
+      "alt": "billet de 20 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4445,8 +4445,8 @@
       "id": "images-monnaie-e200",
       "type": "image",
       "src": "images/monnaie/e200.webp",
-      "label": "e200",
-      "alt": "e200",
+      "label": "billet de 200 euros",
+      "alt": "billet de 200 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4456,8 +4456,8 @@
       "id": "images-monnaie-e5",
       "type": "image",
       "src": "images/monnaie/e5.webp",
-      "label": "e5",
-      "alt": "e5",
+      "label": "billet de 5 euros",
+      "alt": "billet de 5 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4467,8 +4467,8 @@
       "id": "images-monnaie-e50",
       "type": "image",
       "src": "images/monnaie/e50.webp",
-      "label": "e50",
-      "alt": "e50",
+      "label": "billet de 50 euros",
+      "alt": "billet de 50 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4478,8 +4478,8 @@
       "id": "images-monnaie-e500",
       "type": "image",
       "src": "images/monnaie/e500.webp",
-      "label": "e500",
-      "alt": "e500",
+      "label": "billet de 500 euros",
+      "alt": "billet de 500 euros",
       "category": "monnaie",
       "tags": [
         "monnaie"
@@ -4608,7 +4608,7 @@
     {
       "id": "images-nombres-picbille-boite-1",
       "type": "image",
-      "src": "images/nombres/picbille/boite_1.webp",
+      "src": "images/nombres/picbille/boite/boite_1.webp",
       "label": "boite 1",
       "alt": "boite 1",
       "category": "nombres / picbille",
@@ -4620,7 +4620,7 @@
     {
       "id": "images-nombres-picbille-boite-10",
       "type": "image",
-      "src": "images/nombres/picbille/boite_10.webp",
+      "src": "images/nombres/picbille/boite/boite_10.webp",
       "label": "boite 10",
       "alt": "boite 10",
       "category": "nombres / picbille",
@@ -4632,7 +4632,7 @@
     {
       "id": "images-nombres-picbille-boite-2",
       "type": "image",
-      "src": "images/nombres/picbille/boite_2.webp",
+      "src": "images/nombres/picbille/boite/boite_2.webp",
       "label": "boite 2",
       "alt": "boite 2",
       "category": "nombres / picbille",
@@ -4644,7 +4644,7 @@
     {
       "id": "images-nombres-picbille-boite-3",
       "type": "image",
-      "src": "images/nombres/picbille/boite_3.webp",
+      "src": "images/nombres/picbille/boite/boite_3.webp",
       "label": "boite 3",
       "alt": "boite 3",
       "category": "nombres / picbille",
@@ -4656,7 +4656,7 @@
     {
       "id": "images-nombres-picbille-boite-4",
       "type": "image",
-      "src": "images/nombres/picbille/boite_4.webp",
+      "src": "images/nombres/picbille/boite/boite_4.webp",
       "label": "boite 4",
       "alt": "boite 4",
       "category": "nombres / picbille",
@@ -4668,7 +4668,7 @@
     {
       "id": "images-nombres-picbille-boite-5",
       "type": "image",
-      "src": "images/nombres/picbille/boite_5.webp",
+      "src": "images/nombres/picbille/boite/boite_5.webp",
       "label": "boite 5",
       "alt": "boite 5",
       "category": "nombres / picbille",
@@ -4680,7 +4680,7 @@
     {
       "id": "images-nombres-picbille-boite-6",
       "type": "image",
-      "src": "images/nombres/picbille/boite_6.webp",
+      "src": "images/nombres/picbille/boite/boite_6.webp",
       "label": "boite 6",
       "alt": "boite 6",
       "category": "nombres / picbille",
@@ -4692,7 +4692,7 @@
     {
       "id": "images-nombres-picbille-boite-7",
       "type": "image",
-      "src": "images/nombres/picbille/boite_7.webp",
+      "src": "images/nombres/picbille/boite/boite_7.webp",
       "label": "boite 7",
       "alt": "boite 7",
       "category": "nombres / picbille",
@@ -4704,7 +4704,7 @@
     {
       "id": "images-nombres-picbille-boite-8",
       "type": "image",
-      "src": "images/nombres/picbille/boite_8.webp",
+      "src": "images/nombres/picbille/boite/boite_8.webp",
       "label": "boite 8",
       "alt": "boite 8",
       "category": "nombres / picbille",
@@ -4716,7 +4716,7 @@
     {
       "id": "images-nombres-picbille-boite-9",
       "type": "image",
-      "src": "images/nombres/picbille/boite_9.webp",
+      "src": "images/nombres/picbille/boite/boite_9.webp",
       "label": "boite 9",
       "alt": "boite 9",
       "category": "nombres / picbille",
@@ -4728,9 +4728,9 @@
     {
       "id": "images-nombres-picbille-dede-1",
       "type": "image",
-      "src": "images/nombres/picbille/dede_1.webp",
-      "label": "dede 1",
-      "alt": "dede 1",
+      "src": "images/nombres/picbille/dede/dede_1.webp",
+      "label": "Dédé 1",
+      "alt": "Dédé 1",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4740,9 +4740,9 @@
     {
       "id": "images-nombres-picbille-dede-10",
       "type": "image",
-      "src": "images/nombres/picbille/dede_10.webp",
-      "label": "dede 10",
-      "alt": "dede 10",
+      "src": "images/nombres/picbille/dede/dede_10.webp",
+      "label": "Dédé 10",
+      "alt": "Dédé 10",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4752,9 +4752,9 @@
     {
       "id": "images-nombres-picbille-dede-2",
       "type": "image",
-      "src": "images/nombres/picbille/dede_2.webp",
-      "label": "dede 2",
-      "alt": "dede 2",
+      "src": "images/nombres/picbille/dede/dede_2.webp",
+      "label": "Dédé 2",
+      "alt": "Dédé 2",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4764,9 +4764,9 @@
     {
       "id": "images-nombres-picbille-dede-3",
       "type": "image",
-      "src": "images/nombres/picbille/dede_3.webp",
-      "label": "dede 3",
-      "alt": "dede 3",
+      "src": "images/nombres/picbille/dede/dede_3.webp",
+      "label": "Dédé 3",
+      "alt": "Dédé 3",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4776,9 +4776,9 @@
     {
       "id": "images-nombres-picbille-dede-4",
       "type": "image",
-      "src": "images/nombres/picbille/dede_4.webp",
-      "label": "dede 4",
-      "alt": "dede 4",
+      "src": "images/nombres/picbille/dede/dede_4.webp",
+      "label": "Dédé 4",
+      "alt": "Dédé 4",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4788,9 +4788,9 @@
     {
       "id": "images-nombres-picbille-dede-5",
       "type": "image",
-      "src": "images/nombres/picbille/dede_5.webp",
-      "label": "dede 5",
-      "alt": "dede 5",
+      "src": "images/nombres/picbille/dede/dede_5.webp",
+      "label": "Dédé 5",
+      "alt": "Dédé 5",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4800,9 +4800,9 @@
     {
       "id": "images-nombres-picbille-dede-6",
       "type": "image",
-      "src": "images/nombres/picbille/dede_6.webp",
-      "label": "dede 6",
-      "alt": "dede 6",
+      "src": "images/nombres/picbille/dede/dede_6.webp",
+      "label": "Dédé 6",
+      "alt": "Dédé 6",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4812,9 +4812,9 @@
     {
       "id": "images-nombres-picbille-dede-7",
       "type": "image",
-      "src": "images/nombres/picbille/dede_7.webp",
-      "label": "dede 7",
-      "alt": "dede 7",
+      "src": "images/nombres/picbille/dede/dede_7.webp",
+      "label": "Dédé 7",
+      "alt": "Dédé 7",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4824,9 +4824,9 @@
     {
       "id": "images-nombres-picbille-dede-8",
       "type": "image",
-      "src": "images/nombres/picbille/dede_8.webp",
-      "label": "dede 8",
-      "alt": "dede 8",
+      "src": "images/nombres/picbille/dede/dede_8.webp",
+      "label": "Dédé 8",
+      "alt": "Dédé 8",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4836,9 +4836,9 @@
     {
       "id": "images-nombres-picbille-dede-9",
       "type": "image",
-      "src": "images/nombres/picbille/dede_9.webp",
-      "label": "dede 9",
-      "alt": "dede 9",
+      "src": "images/nombres/picbille/dede/dede_9.webp",
+      "label": "Dédé 9",
+      "alt": "Dédé 9",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4848,9 +4848,9 @@
     {
       "id": "images-nombres-picbille-patti-1",
       "type": "image",
-      "src": "images/nombres/picbille/patti_1.webp",
-      "label": "patti 1",
-      "alt": "patti 1",
+      "src": "images/nombres/picbille/patti/patti_1.webp",
+      "label": "Patti 1",
+      "alt": "Patti 1",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4860,9 +4860,9 @@
     {
       "id": "images-nombres-picbille-patti-10",
       "type": "image",
-      "src": "images/nombres/picbille/patti_10.webp",
-      "label": "patti 10",
-      "alt": "patti 10",
+      "src": "images/nombres/picbille/patti/patti_10.webp",
+      "label": "Patti 10",
+      "alt": "Patti 10",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4872,9 +4872,9 @@
     {
       "id": "images-nombres-picbille-patti-2",
       "type": "image",
-      "src": "images/nombres/picbille/patti_2.webp",
-      "label": "patti 2",
-      "alt": "patti 2",
+      "src": "images/nombres/picbille/patti/patti_2.webp",
+      "label": "Patti 2",
+      "alt": "Patti 2",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4884,9 +4884,9 @@
     {
       "id": "images-nombres-picbille-patti-3",
       "type": "image",
-      "src": "images/nombres/picbille/patti_3.webp",
-      "label": "patti 3",
-      "alt": "patti 3",
+      "src": "images/nombres/picbille/patti/patti_3.webp",
+      "label": "Patti 3",
+      "alt": "Patti 3",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4896,9 +4896,9 @@
     {
       "id": "images-nombres-picbille-patti-4",
       "type": "image",
-      "src": "images/nombres/picbille/patti_4.webp",
-      "label": "patti 4",
-      "alt": "patti 4",
+      "src": "images/nombres/picbille/patti/patti_4.webp",
+      "label": "Patti 4",
+      "alt": "Patti 4",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4908,9 +4908,9 @@
     {
       "id": "images-nombres-picbille-patti-5",
       "type": "image",
-      "src": "images/nombres/picbille/patti_5.webp",
-      "label": "patti 5",
-      "alt": "patti 5",
+      "src": "images/nombres/picbille/patti/patti_5.webp",
+      "label": "Patti 5",
+      "alt": "Patti 5",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4920,9 +4920,9 @@
     {
       "id": "images-nombres-picbille-patti-6",
       "type": "image",
-      "src": "images/nombres/picbille/patti_6.webp",
-      "label": "patti 6",
-      "alt": "patti 6",
+      "src": "images/nombres/picbille/patti/patti_6.webp",
+      "label": "Patti 6",
+      "alt": "Patti 6",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4932,9 +4932,9 @@
     {
       "id": "images-nombres-picbille-patti-7",
       "type": "image",
-      "src": "images/nombres/picbille/patti_7.webp",
-      "label": "patti 7",
-      "alt": "patti 7",
+      "src": "images/nombres/picbille/patti/patti_7.webp",
+      "label": "Patti 7",
+      "alt": "Patti 7",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4944,9 +4944,9 @@
     {
       "id": "images-nombres-picbille-patti-8",
       "type": "image",
-      "src": "images/nombres/picbille/patti_8.webp",
-      "label": "patti 8",
-      "alt": "patti 8",
+      "src": "images/nombres/picbille/patti/patti_8.webp",
+      "label": "Patti 8",
+      "alt": "Patti 8",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4956,9 +4956,9 @@
     {
       "id": "images-nombres-picbille-patti-9",
       "type": "image",
-      "src": "images/nombres/picbille/patti_9.webp",
-      "label": "patti 9",
-      "alt": "patti 9",
+      "src": "images/nombres/picbille/patti/patti_9.webp",
+      "label": "Patti 9",
+      "alt": "Patti 9",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4968,9 +4968,9 @@
     {
       "id": "images-nombres-picbille-picbille-0",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_0.webp",
-      "label": "picbille 0",
-      "alt": "picbille 0",
+      "src": "images/nombres/picbille/picbille/picbille_0.webp",
+      "label": "Picbille 0",
+      "alt": "Picbille 0",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4980,9 +4980,9 @@
     {
       "id": "images-nombres-picbille-picbille-1",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_1.webp",
-      "label": "picbille 1",
-      "alt": "picbille 1",
+      "src": "images/nombres/picbille/picbille/picbille_1.webp",
+      "label": "Picbille 1",
+      "alt": "Picbille 1",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -4992,9 +4992,9 @@
     {
       "id": "images-nombres-picbille-picbille-10",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_10.webp",
-      "label": "picbille 10",
-      "alt": "picbille 10",
+      "src": "images/nombres/picbille/picbille/picbille_10.webp",
+      "label": "Picbille 10",
+      "alt": "Picbille 10",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5004,9 +5004,9 @@
     {
       "id": "images-nombres-picbille-picbille-2",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_2.webp",
-      "label": "picbille 2",
-      "alt": "picbille 2",
+      "src": "images/nombres/picbille/picbille/picbille_2.webp",
+      "label": "Picbille 2",
+      "alt": "Picbille 2",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5016,9 +5016,9 @@
     {
       "id": "images-nombres-picbille-picbille-3",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_3.webp",
-      "label": "picbille 3",
-      "alt": "picbille 3",
+      "src": "images/nombres/picbille/picbille/picbille_3.webp",
+      "label": "Picbille 3",
+      "alt": "Picbille 3",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5028,9 +5028,9 @@
     {
       "id": "images-nombres-picbille-picbille-4",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_4.webp",
-      "label": "picbille 4",
-      "alt": "picbille 4",
+      "src": "images/nombres/picbille/picbille/picbille_4.webp",
+      "label": "Picbille 4",
+      "alt": "Picbille 4",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5040,9 +5040,9 @@
     {
       "id": "images-nombres-picbille-picbille-5",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_5.webp",
-      "label": "picbille 5",
-      "alt": "picbille 5",
+      "src": "images/nombres/picbille/picbille/picbille_5.webp",
+      "label": "Picbille 5",
+      "alt": "Picbille 5",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5052,9 +5052,9 @@
     {
       "id": "images-nombres-picbille-picbille-6",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_6.webp",
-      "label": "picbille 6",
-      "alt": "picbille 6",
+      "src": "images/nombres/picbille/picbille/picbille_6.webp",
+      "label": "Picbille 6",
+      "alt": "Picbille 6",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5064,9 +5064,9 @@
     {
       "id": "images-nombres-picbille-picbille-7",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_7.webp",
-      "label": "picbille 7",
-      "alt": "picbille 7",
+      "src": "images/nombres/picbille/picbille/picbille_7.webp",
+      "label": "Picbille 7",
+      "alt": "Picbille 7",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5076,9 +5076,9 @@
     {
       "id": "images-nombres-picbille-picbille-8",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_8.webp",
-      "label": "picbille 8",
-      "alt": "picbille 8",
+      "src": "images/nombres/picbille/picbille/picbille_8.webp",
+      "label": "Picbille 8",
+      "alt": "Picbille 8",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5088,9 +5088,9 @@
     {
       "id": "images-nombres-picbille-picbille-9",
       "type": "image",
-      "src": "images/nombres/picbille/picbille_9.webp",
-      "label": "picbille 9",
-      "alt": "picbille 9",
+      "src": "images/nombres/picbille/picbille/picbille_9.webp",
+      "label": "Picbille 9",
+      "alt": "Picbille 9",
       "category": "nombres / picbille",
       "tags": [
         "nombres",
@@ -5101,8 +5101,8 @@
       "id": "images-representation-blue-squares",
       "type": "image",
       "src": "images/representation/blue_squares.webp",
-      "label": "blue squares",
-      "alt": "blue squares",
+      "label": "carrés bleus",
+      "alt": "carrés bleus",
       "category": "representation",
       "tags": [
         "representation"
@@ -5111,9 +5111,9 @@
     {
       "id": "images-representation-dede",
       "type": "image",
-      "src": "images/representation/dede.webp",
-      "label": "dede",
-      "alt": "dede",
+      "src": "images/personnages/dede.webp",
+      "label": "Dédé",
+      "alt": "Dédé",
       "category": "representation",
       "tags": [
         "representation"
@@ -5122,9 +5122,9 @@
     {
       "id": "images-representation-picbille",
       "type": "image",
-      "src": "images/representation/picbille.webp",
-      "label": "picbille",
-      "alt": "picbille",
+      "src": "images/personnages/picbille.webp",
+      "label": "Picbille",
+      "alt": "Picbille",
       "category": "representation",
       "tags": [
         "representation"
@@ -5180,6 +5180,17 @@
       "src": "images/personnages/Mathis.webp",
       "label": "Mathis",
       "alt": "Mathis",
+      "category": "personnages",
+      "tags": [
+        "personnages"
+      ]
+    },
+    {
+      "id": "images-personnages-patti",
+      "type": "image",
+      "src": "images/personnages/Patti.webp",
+      "label": "Patti",
+      "alt": "Patti",
       "category": "personnages",
       "tags": [
         "personnages"

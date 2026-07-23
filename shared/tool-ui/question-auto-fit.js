@@ -1,7 +1,8 @@
 const FIT_STATE = new WeakMap();
 const DEFAULT_OPTIONS = Object.freeze({
-  minFontSize: 32,
-  maxFontSize: 220,
+  minFontSize: 12,
+  step: 2,
+  targetFontSize: null,
   mediaMaxWidthRatio: 0.98,
   mediaMaxHeightRatio: 0.96,
   tolerance: 3,
@@ -36,7 +37,7 @@ export function teardownQuestionAutoFit(element) {
   state.resizeObserver?.disconnect?.();
   state.viewportAbortController?.abort?.();
   state.imageAbortController?.abort?.();
-  element.classList.remove("tool-question--auto-fit");
+  element.classList.remove("tool-question--auto-fit", "is-question-overflowing");
   element.style.removeProperty("--tool-question-font-size");
   element.style.removeProperty("font-size");
   element.style.removeProperty("--qcm-question-media-max-width");
@@ -45,6 +46,7 @@ export function teardownQuestionAutoFit(element) {
   clearDirectMediaBounds(element);
   delete element.dataset.questionAutoFitSize;
   delete element.dataset.questionAutoFitKind;
+  delete element.dataset.questionAutoFitOverflow;
   FIT_STATE.delete(element);
 }
 
@@ -66,15 +68,16 @@ function getFitState(element) {
 }
 
 function normalizeOptions(options = {}) {
-  const minFontSize = clampNumber(options.minFontSize, 12, 320, DEFAULT_OPTIONS.minFontSize);
-  const maxFontSize = clampNumber(options.maxFontSize, minFontSize, 360, DEFAULT_OPTIONS.maxFontSize);
+  const minFontSize = clampNumber(options.minFontSize, 8, 320, DEFAULT_OPTIONS.minFontSize);
+  const explicitTarget = Number(options.targetFontSize);
   const delayedRefitMs = Array.isArray(options.delayedRefitMs)
     ? options.delayedRefitMs
     : DEFAULT_OPTIONS.delayedRefitMs;
 
   return {
     minFontSize,
-    maxFontSize,
+    step: Math.max(1, Math.floor(clampNumber(options.step, 1, 20, DEFAULT_OPTIONS.step))),
+    targetFontSize: Number.isFinite(explicitTarget) ? explicitTarget : null,
     mediaMaxWidthRatio: clampNumber(options.mediaMaxWidthRatio, 0.2, 1, DEFAULT_OPTIONS.mediaMaxWidthRatio),
     mediaMaxHeightRatio: clampNumber(options.mediaMaxHeightRatio, 0.2, 1, DEFAULT_OPTIONS.mediaMaxHeightRatio),
     tolerance: clampNumber(options.tolerance, 0, 16, DEFAULT_OPTIONS.tolerance),
@@ -158,50 +161,52 @@ function fitQuestionElement(element, options) {
 
   const contentInfo = getContentInfo(element);
   element.dataset.questionAutoFitKind = contentInfo.kind;
-
   applyMediaBounds(element, rect, options);
 
-  const maxFontSize = resolveEffectiveMaxFontSize(element, rect, options, contentInfo);
-  let low = Math.floor(options.minFontSize);
-  let high = Math.max(low, Math.floor(maxFontSize));
-  let best = low;
+  const targetFontSize = resolveTargetFontSize(element, options);
+  const minFontSize = Math.min(targetFontSize, Math.floor(options.minFontSize));
+  const step = Math.max(1, Math.floor(options.step || 2));
+  let fittedSize = targetFontSize;
 
-  applyFontSize(element, low);
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    applyFontSize(element, mid);
-
-    if (questionFits(element, options.tolerance)) {
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
+  applyFontSize(element, fittedSize);
+  while (fittedSize > minFontSize && !questionFits(element, options.tolerance)) {
+    fittedSize = Math.max(minFontSize, fittedSize - step);
+    applyFontSize(element, fittedSize);
   }
 
-  applyFontSize(element, best);
-  element.dataset.questionAutoFitSize = String(best);
+  const stillOverflows = !questionFits(element, options.tolerance);
+  element.classList.toggle("is-question-overflowing", stillOverflows);
+  element.dataset.questionAutoFitOverflow = stillOverflows ? "true" : "false";
+  element.dataset.questionAutoFitSize = String(fittedSize);
 }
 
-function resolveEffectiveMaxFontSize(element, rect, options, contentInfo = getContentInfo(element)) {
-  if (contentInfo.kind === "media") return options.maxFontSize;
+function resolveTargetFontSize(element, options) {
+  if (Number.isFinite(options.targetFontSize)) {
+    return Math.max(1, Math.floor(options.targetFontSize));
+  }
 
-  const textLength = Math.max(1, contentInfo.textLength);
-  const heightBasedMax = rect.height * (textLength <= 2 ? 0.92 : textLength <= 8 ? 0.82 : 0.72);
-  const widthBasedMax = rect.width / getEstimatedTextWidthFactor(textLength);
-  const geometricMax = Math.min(heightBasedMax, widthBasedMax);
+  const computed = window.getComputedStyle(element);
+  const semanticTarget = parseFloat(computed.getPropertyValue("--tool-question-target-font-size"));
+  if (Number.isFinite(semanticTarget) && semanticTarget > 0) {
+    return Math.floor(semanticTarget);
+  }
 
-  return Math.max(options.minFontSize, Math.min(options.maxFontSize, Math.floor(geometricMax)));
-}
+  const semanticKey = element.classList.contains("tool-question--huge") || element.classList.contains("tool-statement--huge")
+    ? "huge"
+    : element.classList.contains("tool-question--small") || element.classList.contains("tool-statement--small")
+      ? "small"
+      : element.classList.contains("tool-question--normal") || element.classList.contains("tool-statement--normal")
+        ? "normal"
+        : "large";
+  const runtimeTarget = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue(`--runtime-font-${semanticKey}`));
+  if (Number.isFinite(runtimeTarget) && runtimeTarget > 0) {
+    return Math.floor(runtimeTarget);
+  }
 
-function getEstimatedTextWidthFactor(textLength) {
-  if (textLength <= 1) return 0.72;
-  if (textLength === 2) return 1.25;
-  if (textLength <= 4) return textLength * 0.72;
-  if (textLength <= 8) return textLength * 0.62;
-  if (textLength <= 16) return textLength * 0.55;
-  return textLength * 0.5;
+  const currentSize = parseFloat(computed.fontSize);
+  return Number.isFinite(currentSize) && currentSize > 0
+    ? Math.floor(currentSize)
+    : Math.max(1, Math.floor(options.minFontSize));
 }
 
 function applyFontSize(element, fontSize) {

@@ -10,6 +10,7 @@ import {
   MULTIPLIER_OPTIONS,
   ORDER_MODES,
   FACTOR_POSITIONS,
+  ANSWER_TARGETS,
   getDefaultSettings,
   normalizeSettings,
   hasAtLeastOneQuestion,
@@ -36,6 +37,16 @@ export function renderToolSettings(container, settings) {
         dataAttr: "data-tm-multiplier",
         values: MULTIPLIER_OPTIONS,
         selectedValues: cfg.multipliers
+      })}
+      ${renderRadioGroup({
+        title: "Réponse à fournir",
+        id: "tm_answerTarget",
+        value: cfg.answerTarget,
+        options: [
+          { value: ANSWER_TARGETS.RESULT, label: "Résultat" },
+          { value: ANSWER_TARGETS.FACTOR, label: "Facteur" },
+          { value: ANSWER_TARGETS.BOTH, label: "Les deux" }
+        ]
       })}
       ${renderSection("Réglages avancés", `
         ${renderRadioGroup({
@@ -69,6 +80,7 @@ export function readToolSettings(container, settings = {}) {
   const nextSettings = {
     tables: readCheckedNumberValues(container, "[data-tm-table]", TABLE_OPTIONS, []),
     multipliers: readCheckedNumberValues(container, "[data-tm-multiplier]", MULTIPLIER_OPTIONS, []),
+    answerTarget: readRadio(container, "tm_answerTarget", previous.answerTarget),
     orderMode: readRadio(container, "tm_orderMode", previous.orderMode),
     factorPosition: readRadio(container, "tm_factorPosition", previous.factorPosition)
   };
@@ -85,6 +97,7 @@ export { getDefaultSettings };
 
 function bindToolSettings(container) {
   bindCollapsibleSection(container, "tm_advanced");
+  bindRadio(container, "tm_answerTarget");
   bindRadio(container, "tm_orderMode");
   bindRadio(container, "tm_factorPosition");
 

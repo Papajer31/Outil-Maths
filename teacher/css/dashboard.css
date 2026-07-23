@@ -950,6 +950,34 @@ body .dashboard-share-popup.cfg-share-popup{
   color: var(--bad);
 }
 
+.dashboard-confirm-dialog .modal-content{
+  width:min(430px, calc(100vw - 48px));
+  gap:16px;
+}
+
+.dashboard-confirm-dialog-header{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+
+.dashboard-confirm-dialog-header .modal-title{
+  flex:1 1 auto;
+  margin:0;
+}
+
+.dashboard-confirm-dialog-message{
+  margin:0;
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.5;
+}
+
+.dashboard-confirm-dialog-actions{
+  justify-content:flex-end;
+  margin-top:0;
+}
+
 .modal-body-text{
   color:var(--text);
   font-size:16px;
@@ -1366,6 +1394,11 @@ body .dashboard-share-popup.cfg-share-popup{
   cursor:pointer;
   font-size:20px;
   font-weight:900;
+}
+
+/* Le lien Admin est présent dans le DOM, mais réservé au super-admin. */
+.dashboard-nav-main.hidden{
+  display:none !important;
 }
 
 .dashboard-nav-main.is-active{
@@ -1869,6 +1902,22 @@ body .dashboard-share-popup.cfg-share-popup{
 }
 
 #missionsList{
+  flex:1 1 auto;
+  min-height:0;
+}
+
+#quizExplorerPane{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+#quizExplorerHeader{
+  flex:0 0 auto;
+}
+
+#quizList{
   flex:1 1 auto;
   min-height:0;
 }
@@ -4194,6 +4243,20 @@ body .dashboard-share-popup.cfg-share-popup{
   border-color:rgba(255, 120, 120, .38);
 }
 
+/* L’avertissement final occupe sa propre ligne : il ne peut plus être
+   écrasé entre les deux boutons d’action. */
+.super-admin-delete-card .modal-actions{
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.super-admin-delete-card .modal-message{
+  flex:0 0 100%;
+  width:100%;
+  text-align:left;
+  line-height:1.35;
+}
+
 .super-admin-delete-icon{
   width:54px;
   height:54px;
@@ -4586,7 +4649,7 @@ body.dashboard-catalog-test-fullscreen-lock{
 /* Admin activité : titre plus lisible dans l'éditeur catalogue. */
 .super-admin-editor-identity .cfg-config-name-display{
   color:var(--warn, #ffb020);
-  font-weight:900;
+  font-weight:700;
 }
 
 /* Admin activité : la tuile de sélection d'outil doit toujours montrer sa bordure haute. */

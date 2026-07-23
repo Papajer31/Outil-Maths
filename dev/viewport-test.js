@@ -1,19 +1,18 @@
-const PRESETS = Object.freeze([
-  { width: 1024, height: 768, label: "1024×768", meta: "Vieux PC 4:3" },
-  { width: 1280, height: 1024, label: "1280×1024", meta: "Ordi fond de classe" },
-  { width: 1280, height: 800, label: "1280×800", meta: "16:10 / tablette paysage" },
-  { width: 1366, height: 768, label: "1366×768", meta: "Portable bas de gamme" },
-  { width: 1440, height: 900, label: "1440×900", meta: "16:10 standard" },
-  { width: 1920, height: 1080, label: "1920×1080", meta: "Écran moderne 16:9" },
-  { width: 1920, height: 1200, label: "1920×1200", meta: "Écran confortable 16:10" }
-]);
+import { RUNTIME_VIEWPORT_PROFILES } from "../shared/responsive-profiles.js";
+import { adoptAdminDraftRuntimePayloadForTab } from "../shared/admin-draft-runtime-storage.js";
+
+const PRESETS = RUNTIME_VIEWPORT_PROFILES;
+
+const urlParams = new URLSearchParams(window.location.search || "");
+const adminDraftToken = String(urlParams.get("adminDraftToken") || "").trim();
+const adminDraftRoute = adminDraftToken ? buildAdminDraftRoute(adminDraftToken) : "";
 
 const state = {
   width: 1280,
   height: 1024,
   label: "1280×1024",
-  meta: "Ordi fond de classe",
-  route: "#/home"
+  meta: "Écran 5:4",
+  route: adminDraftRoute || "#/home"
 };
 
 const presetButtons = document.getElementById("presetButtons");
@@ -23,6 +22,7 @@ const applyCustomBtn = document.getElementById("applyCustomBtn");
 const routeInput = document.getElementById("routeInput");
 const reloadBtn = document.getElementById("reloadBtn");
 const resetRouteBtn = document.getElementById("resetRouteBtn");
+const restartSessionBtn = document.getElementById("restartSessionBtn");
 const frameShell = document.getElementById("frameShell");
 const frameRuler = document.getElementById("frameRuler");
 const runtimeFrame = document.getElementById("runtimeFrame");
@@ -33,6 +33,15 @@ const iframeSizeBadge = document.getElementById("iframeSizeBadge");
 boot();
 
 function boot(){
+  if (adminDraftToken) {
+    adoptAdminDraftRuntimePayloadForTab(adminDraftToken);
+  }
+  if (routeInput) routeInput.value = state.route;
+  if (adminDraftToken) {
+    document.body.classList.add("vp-admin-draft-mode");
+    const routeTitle = document.getElementById("vpRouteTitle");
+    if (routeTitle) routeTitle.textContent = "Activité testée";
+  }
   renderPresetButtons();
   bindEvents();
   applyViewport(PRESETS[1], { reload: true });
@@ -91,8 +100,9 @@ function bindEvents(){
   });
 
   reloadBtn?.addEventListener("click", reloadRuntime);
+  restartSessionBtn?.addEventListener("click", restartRuntimeSession);
   resetRouteBtn?.addEventListener("click", () => {
-    state.route = "#/home";
+    state.route = adminDraftRoute || "#/home";
     if (routeInput) routeInput.value = state.route;
     reloadRuntime();
   });
@@ -121,7 +131,11 @@ function applyViewport(preset, { reload = false } = {}){
   if (reload) reloadRuntime();
 }
 
-function reloadRuntime(){
+function restartRuntimeSession(){
+  reloadRuntime({ cacheBust: true });
+}
+
+function reloadRuntime({ cacheBust = false } = {}){
   if (!runtimeFrame) return;
   const route = normalizeRoute(routeInput?.value || state.route || "#/home");
   state.route = route;
@@ -131,7 +145,20 @@ function reloadRuntime(){
   url.searchParams.set("devViewport", "1");
   url.searchParams.set("devViewportWidth", String(state.width));
   url.searchParams.set("devViewportHeight", String(state.height));
+  if (cacheBust) {
+    url.searchParams.set("devRestart", String(Date.now()));
+  }
   runtimeFrame.src = `${url.pathname}${url.search}${route}`;
+}
+
+function buildAdminDraftRoute(token){
+  const params = new URLSearchParams();
+  params.set("adminDraftToken", token);
+  params.set("catalogTest", "1");
+  params.set("shared", "1");
+  params.set("classCode", "ADMINTEST");
+  params.set("configName", "__admin_draft_test__");
+  return `#/session?${params.toString()}`;
 }
 
 function normalizeRoute(value){

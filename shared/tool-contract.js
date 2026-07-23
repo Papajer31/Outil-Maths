@@ -79,7 +79,13 @@ export function normalizeToolTags(value) {
 
 export function resolveToolInstruction(tool, settings = null) {
   const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
-  const defaultInstruction = normalizeToolInstruction(safeTool.defaultInstruction, "");
+  const toolDefaultInstruction = normalizeToolInstruction(safeTool.defaultInstruction, "");
+  const bankInstruction = String(
+    settings?.bankInstruction
+      ?? settings?.bank_instruction
+      ?? ""
+  ).trim();
+  const defaultInstruction = bankInstruction || toolDefaultInstruction;
   const supportsCustomInstruction = safeTool.supportsCustomInstruction !== false;
 
   if (!supportsCustomInstruction) {

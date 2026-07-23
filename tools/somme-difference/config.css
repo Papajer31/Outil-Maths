@@ -1,0 +1,14 @@
+.sd-config-root {
+  display: block;
+}
+
+
+.sd-config-root [data-widget-id="sd_responseMode"],
+.sd-config-root [data-setting-id="sd_responseMode"],
+.sd-config-root .tool-setting:has([name="sd_responseMode"]) {
+  align-items: center;
+}
+
+.sd-config-root [name="sd_responseMode"] {
+  white-space: nowrap;
+}

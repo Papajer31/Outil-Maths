@@ -1,20 +1,30 @@
 import {
   renderRadioGroup,
-  renderSelectControl,
   renderSection,
   bindCollapsibleSection,
   bindRadio,
-  bindSelect,
   readRadio,
   readSelect,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
 import {
+  renderQuestionBankPickerWidget,
+  setupQuestionBankPicker
+} from "../../shared/tool-commons/general-tools/question-bank-picker.js";
+import {
+  bindQuestionSelectionWidget,
+  readQuestionSelection,
+  renderQuestionSelectionWidget,
+  updateQuestionSelectionUi
+} from "../../shared/tool-commons/general-tools/question-selection-widget.js";
+import {
   getDefaultSettings,
+  getSelectionItemSelectionKey,
   normalizeSelectionItems,
   normalizeSettings,
   DEFAULT_DRAW_MODE,
-  DEFAULT_SELECTION_MODE
+  DEFAULT_SELECTION_MODE,
+  DEFAULT_QUESTION_SELECTION_MODE
 } from "./model.js";
 
 let stylesInjected = false;
@@ -40,6 +50,18 @@ export function renderToolSettings(container, settings, context = {}) {
         })}
       </div>
       <textarea id="selection_bankSnapshot" hidden>${escapeHtml(JSON.stringify(initialSnapshot))}</textarea>
+      <div id="selection_questionSelectionHost">
+        ${renderQuestionSelectionWidget({
+          idPrefix: "selection",
+          items: initialSnapshot,
+          selection: cfg.questionSelection,
+          itemKeyGetter: getSelectionItemSelectionKey,
+          renderRow: renderSelectionQuestionSelectionRow,
+          itemSingular: "question",
+          itemPlural: "questions",
+          emptyMessage: "Aucun item à afficher."
+        })}
+      </div>
     `,
     renderRadioGroup({
       title: "Tirage des questions dans la banque",
@@ -64,6 +86,7 @@ export function renderToolSettings(container, settings, context = {}) {
   bindRadio(container, "selection_drawMode");
   bindCollapsibleSection(container, "selection_advanced");
   bindRadio(container, "selection_selectionMode");
+  refreshQuestionSelectionWidget(container, initialSnapshot, cfg.questionSelection);
   setupBankSelect(container, cfg, context).catch((err) => {
     const host = container.querySelector("#selection_bankWidgetHost");
     if (!host) return;
@@ -83,9 +106,13 @@ export function readToolSettings(container, settings = {}) {
   const snapshotEl = container.querySelector("#selection_bankSnapshot");
   const bankId = String(readSelect(container, "selection_bankSelect", { parse: (value) => value }) || "").trim();
   const bankTitle = String(select?.dataset?.bankTitle || previous.bankTitle || "").trim();
+  const bankInstruction = String(select?.dataset?.bankInstruction || previous.bankInstruction || "").trim();
   const drawMode = readRadio(container, "selection_drawMode", DEFAULT_DRAW_MODE);
   const selectionMode = readRadio(container, "selection_selectionMode", DEFAULT_SELECTION_MODE);
   const snapshot = readSnapshot(snapshotEl?.value || "[]");
+  const questionSelection = readQuestionSelection(container, {
+    idPrefix: "selection"
+  });
 
   if (!bankId || bankId === LOADING_OPTION_VALUE) {
     throw new Error("Sélectionne une banque Sélection.");
@@ -97,12 +124,18 @@ export function readToolSettings(container, settings = {}) {
       : "Les items de la banque ne sont pas encore chargés.");
   }
 
+  if (questionSelection.mode === "custom" && !questionSelection.questionKeys.length) {
+    throw new Error("Sélectionne au moins une question pour ce niveau.");
+  }
+
   return normalizeSettings({
     ...previous,
     bankId,
     bankTitle,
+    bankInstruction,
     drawMode,
     selectionMode,
+    questionSelection,
     bankItemsSnapshot: snapshot
   });
 }
@@ -110,120 +143,118 @@ export function readToolSettings(container, settings = {}) {
 export { getDefaultSettings };
 
 async function setupBankSelect(container, cfg, context = {}) {
-  const host = container.querySelector("#selection_bankWidgetHost");
-  const snapshotEl = container.querySelector("#selection_bankSnapshot");
+  await setupQuestionBankPicker({
+    container,
+    context,
+    selectId: "selection_bankSelect",
+    countId: "selection_bankCount",
+    snapshotId: "selection_bankSnapshot",
+    bankType: SELECTION_BANK_TYPE,
+    bankTypeLabel: "Sélection",
+    selectedBankId: cfg.bankId,
+    bankItemsSnapshot: cfg.bankItemsSnapshot,
+    normalizeItems: normalizeSelectionItems,
+    countFormatter: renderQuestionCount,
+    loadingBanksMessage: "Chargement des banques Sélection…",
+    loadingItemsMessage: "Chargement des items Sélection…",
+    noBankMessage: "Crée d’abord une banque de type “Sélection” dans l’onglet Banques.",
+    emptyBankMessage: "Cette banque ne contient aucun item Sélection exploitable.",
+    loadErrorMessage: "Impossible de charger les items de cette banque.",
+    noSpaceMessage: "Impossible de lister les banques sans espace enseignant.",
+    setEditorStatus: (message, isError = false) => setEditorStatus(context, message, isError),
+    clearEditorStatus: () => clearEditorStatus(context),
+    onLoadStart: () => setQuestionSelectionLoading(container),
+    onItemsLoaded: (normalizedItems, bankId) => {
+      refreshQuestionSelectionWidget(container, normalizedItems, getSelectionForLoadedBank(container, cfg, bankId));
+    }
+  });
+}
+
+function refreshQuestionSelectionWidget(container, items = [], selection = null) {
+  const host = container.querySelector("#selection_questionSelectionHost");
   if (!host) return;
-
-  const teacherSpaceId = Number(context?.teacherSpace?.id ?? context?.teacher_space_id ?? 0);
-  if (!Number.isFinite(teacherSpaceId) || teacherSpaceId <= 0) {
-    renderBankWidgetInto(host, {
-      value: "",
-      options: [{ value: "", label: "Espace enseignant introuvable" }],
-      disabled: true,
-      count: 0
-    });
-    setEditorStatus(context, "Impossible de lister les banques sans espace enseignant.", true);
-    return;
-  }
-
-  setEditorStatus(context, "Chargement des banques Sélection…");
-  const api = await import("../../teacher/js/teacher-api.js");
-  const banks = await api.listQuestionBanksForSpace(teacherSpaceId, { includeSystem: true });
-  const selectionBanks = (Array.isArray(banks) ? banks : [])
-    .filter((bank) => String(bank?.bank_type || "").trim().toLowerCase() === SELECTION_BANK_TYPE)
-    .sort(compareBanks);
-
-  if (!selectionBanks.length) {
-    renderBankWidgetInto(host, {
-      value: "",
-      options: [{ value: "", label: "Aucune banque Sélection" }],
-      disabled: true,
-      count: 0
-    });
-    if (snapshotEl) snapshotEl.value = "[]";
-    setEditorStatus(context, "Crée d’abord une banque de type “Sélection” dans l’onglet Banques.", true);
-    return;
-  }
-
-  const selectedId = selectionBanks.some((bank) => String(bank.id) === cfg.bankId)
-    ? cfg.bankId
-    : String(selectionBanks[0].id || "");
-  const bankOptions = selectionBanks.map((bank) => ({
-    value: String(bank.id || ""),
-    label: `${String(bank.title || "Banque sans titre")}${bank.is_system ? " · proposée" : ""}`
-  }));
-  const bankById = new Map(selectionBanks.map((bank) => [String(bank.id || ""), bank]));
-
-  renderBankWidgetInto(host, {
-    value: selectedId,
-    options: bankOptions,
-    disabled: false,
-    count: normalizeSelectionItems(cfg.bankItemsSnapshot).length
+  const normalizedItems = normalizeSelectionItems(items);
+  const safeSelection = selection || readQuestionSelection(container, {
+    idPrefix: "selection",
+    fallback: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    allowEmpty: true
   });
-
-  const select = container.querySelector("#selection_bankSelect");
-  if (!select) return;
-  setSelectedBankTitle(select, bankById);
-
-  let loadToken = 0;
-  const loadSelectedBank = async () => {
-    const bankId = String(select.value || "").trim();
-    const token = loadToken + 1;
-    loadToken = token;
-    select.dataset.selectionItemsLoaded = "false";
-    setEditorStatus(context, "Chargement des items Sélection…");
-    setBankCount(container, null);
-    setSelectedBankTitle(select, bankById);
-
-    try {
-      const items = await api.listQuestionBankItems(bankId);
-      if (token !== loadToken || String(select.value || "").trim() !== bankId) return;
-      const normalizedItems = normalizeSelectionItems(items);
-      if (snapshotEl) snapshotEl.value = JSON.stringify(normalizedItems);
-      select.dataset.selectionItemsLoaded = "true";
-      setBankCount(container, normalizedItems.length);
-      if (normalizedItems.length) clearEditorStatus(context);
-      else setEditorStatus(context, "Cette banque ne contient aucun item Sélection exploitable.", true);
-    } catch (err) {
-      if (token !== loadToken || String(select.value || "").trim() !== bankId) return;
-      const previousSnapshot = String(bankId) === String(cfg.bankId)
-        ? normalizeSelectionItems(cfg.bankItemsSnapshot)
-        : [];
-      if (snapshotEl) snapshotEl.value = JSON.stringify(previousSnapshot);
-      select.dataset.selectionItemsLoaded = previousSnapshot.length ? "true" : "false";
-      setBankCount(container, previousSnapshot.length);
-      setEditorStatus(context, err?.message || "Impossible de charger les items de cette banque.", true);
-    }
-  };
-
-  bindSelect(container, "selection_bankSelect", {
-    onChange: () => {
-      setSelectedBankTitle(select, bankById);
-      loadSelectedBank().catch(() => {});
-    }
+  host.innerHTML = renderQuestionSelectionWidget({
+    idPrefix: "selection",
+    items: normalizedItems,
+    selection: safeSelection,
+    itemKeyGetter: getSelectionItemSelectionKey,
+    renderRow: renderSelectionQuestionSelectionRow,
+    itemSingular: "question",
+    itemPlural: "questions",
+    emptyMessage: "Aucun item à afficher."
   });
+  bindQuestionSelectionWidget(host, { idPrefix: "selection" });
+  updateQuestionSelectionUi(host, { idPrefix: "selection" });
+}
 
-  await loadSelectedBank();
+function setQuestionSelectionLoading(container) {
+  const host = container.querySelector("#selection_questionSelectionHost");
+  if (!host) return;
+  const currentSelection = readQuestionSelection(container, {
+    idPrefix: "selection",
+    fallback: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    allowEmpty: true
+  });
+  host.innerHTML = renderQuestionSelectionWidget({
+    idPrefix: "selection",
+    items: [],
+    selection: currentSelection,
+    loading: true,
+    itemKeyGetter: getSelectionItemSelectionKey,
+    renderRow: renderSelectionQuestionSelectionRow,
+    itemSingular: "question",
+    itemPlural: "questions"
+  });
+  bindQuestionSelectionWidget(host, { idPrefix: "selection" });
+  updateQuestionSelectionUi(host, { idPrefix: "selection" });
+}
+
+function getSelectionForLoadedBank(container, cfg, bankId) {
+  const sameInitialBank = String(bankId || "").trim() === String(cfg?.bankId || "").trim();
+  if (!sameInitialBank) {
+    return { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] };
+  }
+  return readQuestionSelection(container, {
+    idPrefix: "selection",
+    fallback: cfg.questionSelection,
+    allowEmpty: true
+  });
+}
+
+function renderSelectionQuestionSelectionRow({ item, index, key, checked }) {
+  const payload = item?.payload_json || {};
+  const expected = String(payload.expectedSelectionText || "").trim();
+  return `
+    <label class="general-question-selection-row" role="listitem">
+      <input class="general-question-selection-check" type="checkbox" data-question-key="${escapeHtml(key)}" ${checked ? "checked" : ""}>
+      <span class="general-question-selection-index">${index + 1}</span>
+      <span class="general-question-selection-preview general-question-selection-preview--question">
+        <span class="general-question-selection-preview-text">${escapeHtml(item.prompt || `Item ${index + 1}`)}</span>
+      </span>
+      <span class="general-question-selection-arrow" aria-hidden="true">→</span>
+      <span class="general-question-selection-preview general-question-selection-preview--answer">
+        <span class="general-question-selection-preview-text">${escapeHtml(expected || "Sélection attendue")}</span>
+      </span>
+    </label>
+  `;
 }
 
 function renderBankWidget({ value = "", options = [], disabled = false, count = 0 } = {}) {
-  return `
-    <div class="tv-group tv-group-inline selection-config-bank-group">
-      <div class="tv-select-inline selection-config-bank-line">
-        <div class="tv-group-title tv-select-inline-title">Banque</div>
-        <div class="selection-config-bank-control">
-          ${renderSelectControl({
-            id: "selection_bankSelect",
-            value,
-            options,
-            disabled,
-            rootClassName: "tv-select-inline-input selection-config-bank-select"
-          })}
-          <span class="selection-config-bank-count" id="selection_bankCount">${count === null ? "…" : renderQuestionCount(count)}</span>
-        </div>
-      </div>
-    </div>
-  `;
+  return renderQuestionBankPickerWidget({
+    selectId: "selection_bankSelect",
+    countId: "selection_bankCount",
+    value,
+    options,
+    disabled,
+    count,
+    countFormatter: renderQuestionCount
+  });
 }
 
 function renderBankWidgetInto(host, options) {

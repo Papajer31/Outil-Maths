@@ -25,8 +25,13 @@
   --tool-ui-shadow-soft: 0 18px 42px rgba(0, 0, 0, .18);
 
   --tool-font-family: "Andika", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --tool-question-font-size: clamp(34px, 3.4vw, 58px);
-  --tool-question-font-weight: 900;
+  --tool-text-font-weight: 500;
+  --tool-text-strong-font-weight: 700;
+  /* Hors Quiz, une question démarre au palier Grand. L’auto-fit ne fait
+     ensuite que réduire cette cible, sans jamais agrandir un texte court. */
+  --tool-question-target-font-size: var(--runtime-font-large, 64px);
+  --tool-question-font-size: var(--tool-question-target-font-size);
+  --tool-question-font-weight: var(--tool-text-font-weight);
   --tool-question-line-height: 1.22;
   --tool-statement-line-height: 1.55;
 
@@ -40,7 +45,7 @@
   --tool-answer-bg: rgba(255, 255, 255, .04);
   --tool-answer-color: var(--tool-ui-text);
   --tool-answer-font-size: clamp(34px, 3.2vw, 54px);
-  --tool-answer-font-weight: 900;
+  --tool-answer-font-weight: var(--tool-text-font-weight);
   --tool-answer-line-height: 1.1;
   --tool-answer-placeholder-color: rgba(255, 255, 255, .42);
 
@@ -48,14 +53,14 @@
   --tool-choice-padding: 12px 22px;
   --tool-choice-radius: 24px;
   --tool-choice-font-size: clamp(24px, 2.2vw, 36px);
-  --tool-choice-font-weight: 900;
+  --tool-choice-font-weight: var(--tool-text-font-weight);
   --tool-choice-line-height: 1.16;
 
   --tool-feedback-height: 70px;
   --tool-feedback-padding: 10px 18px;
   --tool-feedback-radius: 18px;
   --tool-feedback-font-size: clamp(20px, 1.6vw, 28px);
-  --tool-feedback-font-weight: 700;
+  --tool-feedback-font-weight: var(--tool-text-strong-font-weight);
   --tool-feedback-line-height: 1.25;
 
   color: var(--tool-ui-text);
@@ -89,14 +94,28 @@
   line-height: var(--tool-statement-line-height);
 }
 
-.tool-question--large,
-.tool-statement--large {
-  --tool-question-font-size: clamp(34px, 3.4vw, 58px);
-}
-
 .tool-question--small,
 .tool-statement--small {
-  --tool-question-font-size: clamp(26px, 2.6vw, 42px);
+  --tool-question-target-font-size: var(--runtime-font-small, 32px);
+  --tool-question-font-size: var(--tool-question-target-font-size);
+}
+
+.tool-question--normal,
+.tool-statement--normal {
+  --tool-question-target-font-size: var(--runtime-font-normal, 48px);
+  --tool-question-font-size: var(--tool-question-target-font-size);
+}
+
+.tool-question--large,
+.tool-statement--large {
+  --tool-question-target-font-size: var(--runtime-font-large, 64px);
+  --tool-question-font-size: var(--tool-question-target-font-size);
+}
+
+.tool-question--huge,
+.tool-statement--huge {
+  --tool-question-target-font-size: var(--runtime-font-huge, 80px);
+  --tool-question-font-size: var(--tool-question-target-font-size);
 }
 
 .tool-answer-panel,
@@ -358,7 +377,6 @@ button.tool-choice-button.is-selected:hover:not(:disabled) {
 
 @media (max-width: 900px) {
   .tool-runtime {
-    --tool-question-font-size: clamp(28px, 6vw, 42px);
     --tool-choice-min-height: 62px;
     --tool-choice-padding: 10px 16px;
   }
@@ -443,5 +461,4 @@ button.tool-choice-button.is-selected:hover:not(:disabled) {
 .tool-numeric-answer--readonly {
   cursor: default;
 }
-
 

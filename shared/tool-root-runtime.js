@@ -166,7 +166,13 @@ function renderCommonToolSettings(draft, context = {}) {
   const showInstructionField = safeTool?.supportsCustomInstruction !== false;
   const instructionState = getCommonInstructionState(safeDraft.settings);
   const successGoalSettings = getCommonSuccessGoalSettings(safeDraft);
-  const defaultInstructionText = String(safeTool?.defaultInstruction || "").trim();
+  const bankInstructionText = String(
+    safeDraft?.settings?.bankInstruction
+      ?? safeDraft?.settings?.bank_instruction
+      ?? ""
+  ).trim();
+  const toolDefaultInstructionText = String(safeTool?.defaultInstruction || "").trim();
+  const defaultInstructionText = bankInstructionText || toolDefaultInstructionText;
   const passationProfile = normalizePassationProfile({
     activityMode: context?.activityMode ?? context?.activity_mode ?? context?.mode,
     responseUi: context?.responseUi ?? context?.response_ui,
@@ -274,7 +280,7 @@ function renderCommonToolSettings(draft, context = {}) {
                 checked: instructionState.hidden
               })}
             </div>
-            ${renderCurrentInstructionHint(defaultInstructionText)}
+            ${renderCurrentInstructionHint(defaultInstructionText, toolDefaultInstructionText)}
           </div>
           <div class="cfg-common-flow-instruction-panel" id="commonToolInstructionPanel"${instructionState.enabled && !instructionState.hidden ? "" : " hidden"}>
             <textarea
@@ -295,6 +301,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
   const instructionHiddenToggle = container.querySelector("#commonToolInstructionHidden");
   const instructionPanel = container.querySelector("#commonToolInstructionPanel");
   const instructionInput = container.querySelector("#commonToolInstructionText");
+  const instructionCurrentText = container.querySelector(".cfg-common-flow-instruction-current-text");
   const successGoalRow = container.querySelector("#commonToolSuccessGoalRow");
 
   const applyInstructionState = () => {
@@ -415,6 +422,13 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     buttonId: "commonToolMaxTimeInfinite",
     inputId: "commonToolMaxTimeMin",
     onChange: () => onDirty?.()
+  });
+
+  container.addEventListener("questionbankchange", (event) => {
+    if (!instructionCurrentText) return;
+    const instruction = String(event?.detail?.instruction || "").trim();
+    const toolDefault = String(instructionCurrentText.dataset.toolDefaultInstruction || "").trim();
+    instructionCurrentText.textContent = instruction || toolDefault || "Aucune";
   });
 
   applySuccessGoalState(getActiveQuestionCountMode(container));
@@ -612,12 +626,13 @@ function renderQuestionCountModeControl({
   `;
 }
 
-function renderCurrentInstructionHint(defaultInstructionText = "") {
+function renderCurrentInstructionHint(defaultInstructionText = "", toolDefaultInstructionText = "") {
   const safeText = String(defaultInstructionText || "").trim() || "Aucune";
+  const safeToolDefault = String(toolDefaultInstructionText || "").trim();
   return `
     <div class="cfg-common-flow-instruction-current">
       <span class="cfg-common-flow-instruction-current-label">Consigne actuelle :</span>
-      <span class="cfg-common-flow-instruction-current-text">${escapeHtml(safeText)}</span>
+      <span class="cfg-common-flow-instruction-current-text" data-tool-default-instruction="${escapeHtml(safeToolDefault)}">${escapeHtml(safeText)}</span>
     </div>
   `;
 }

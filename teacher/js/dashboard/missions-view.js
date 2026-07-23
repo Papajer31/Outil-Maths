@@ -1,4 +1,5 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
+import { openDashboardConfirmDialog } from "./confirm-dialog.js";
 
 export function createMissionsViewController({
   missionsHeader,
@@ -154,7 +155,13 @@ export function createMissionsViewController({
     missionsList.querySelectorAll("[data-action='edit-mission']").forEach((btn) => btn.addEventListener("click", () => openEditor(btn.dataset.missionId || "")));
     missionsList.querySelectorAll("[data-action='delete-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
       event.stopPropagation();
-      if (!confirm("Archiver cette mission ?")) return;
+      const confirmed = await openDashboardConfirmDialog({
+        title:"Archiver la mission",
+        message:"Archiver cette mission ?",
+        confirmLabel:"Archiver",
+        danger:true
+      });
+      if (!confirmed) return;
       await deleteMission?.(btn.dataset.missionId || "");
       await refreshData();
       renderExplorer();

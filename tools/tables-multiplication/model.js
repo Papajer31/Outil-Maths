@@ -14,10 +14,17 @@ export const FACTOR_POSITIONS = Object.freeze({
   BOTH: "both"
 });
 
+export const ANSWER_TARGETS = Object.freeze({
+  RESULT: "result",
+  FACTOR: "factor",
+  BOTH: "both"
+});
+
 export function getDefaultSettings() {
   return {
     tables: [2, 3, 4, 5],
     multipliers: [...MULTIPLIER_OPTIONS],
+    answerTarget: ANSWER_TARGETS.RESULT,
     orderMode: ORDER_MODES.SHUFFLED,
     factorPosition: FACTOR_POSITIONS.FIRST
   };
@@ -32,6 +39,7 @@ export function normalizeSettings(settings = {}) {
   return {
     tables: normalizeNumberSelection(base.tables, TABLE_OPTIONS, getDefaultSettings().tables),
     multipliers: normalizeNumberSelection(base.multipliers, MULTIPLIER_OPTIONS, getDefaultSettings().multipliers),
+    answerTarget: normalizeAnswerTarget(base.answerTarget),
     orderMode: normalizeOrderMode(base.orderMode),
     factorPosition: normalizeFactorPosition(base.factorPosition)
   };
@@ -47,6 +55,13 @@ export function getImpossibleMessage(settings = {}) {
   if (!cfg.tables.length) return "Aucune question possible : aucune table travaillée n’est sélectionnée.";
   if (!cfg.multipliers.length) return "Aucune question possible : aucun multiplicateur n’est sélectionné.";
   return "Aucune question de table possible avec ces réglages.";
+}
+
+export function getDefaultInstruction(settings = {}) {
+  const answerTarget = normalizeSettings(settings).answerTarget;
+  if (answerTarget === ANSWER_TARGETS.FACTOR) return "Écris le facteur manquant.";
+  if (answerTarget === ANSWER_TARGETS.BOTH) return "Écris le résultat ou le facteur manquant.";
+  return "Écris le résultat.";
 }
 
 export function pickQuestion(settings = {}, {
@@ -73,12 +88,15 @@ export function buildQuestions(settings = {}) {
 
   cfg.tables.forEach((table) => {
     cfg.multipliers.forEach((multiplier) => {
-      const factors = resolveFactors(table, multiplier, cfg.factorPosition);
-      questions.push(createQuestion({
-        table,
-        multiplier,
-        factors
-      }));
+      const arrangement = resolveFactors(table, multiplier, cfg.factorPosition);
+      resolveAnswerTargets(cfg.answerTarget).forEach((answerTarget) => {
+        questions.push(createQuestion({
+          table,
+          multiplier,
+          arrangement,
+          answerTarget
+        }));
+      });
     });
   });
 
@@ -92,7 +110,9 @@ export function questionKey(question) {
     question?.multiplier ?? "",
     question?.factor1 ?? "",
     question?.factor2 ?? "",
-    question?.result ?? ""
+    question?.result ?? "",
+    question?.answerTarget ?? ANSWER_TARGETS.RESULT,
+    question?.missingIndex ?? ""
   ].join("|");
 }
 
@@ -104,6 +124,19 @@ export function formatQuestion(question) {
 export function formatAnswer(question) {
   if (!question) return "";
   return `${formatQuestion(question)} = ${formatIntegerForDisplay(question.result)}`;
+}
+
+export function getExpectedAnswer(question) {
+  if (!question) return "";
+  if (isFactorAnswerQuestion(question)) {
+    const missingIndex = Number(question.missingIndex) === 0 ? 0 : 1;
+    return missingIndex === 0 ? question.factor1 : question.factor2;
+  }
+  return question.result;
+}
+
+export function isFactorAnswerQuestion(question) {
+  return String(question?.answerTarget || "") === ANSWER_TARGETS.FACTOR;
 }
 
 function pickOrderedQuestion(questions, { sequenceIndex = 0, usedKeys = null } = {}) {
@@ -139,28 +172,67 @@ function pickShuffledQuestion(questions, { avoidKey = null, usedKeys = null } = 
   return finalPool[Math.floor(Math.random() * finalPool.length)] ?? pool[0];
 }
 
-function createQuestion({ table, multiplier, factors }) {
-  const [factor1, factor2] = factors;
+function createQuestion({ table, multiplier, arrangement, answerTarget }) {
+  const factor1 = arrangement.factor1;
+  const factor2 = arrangement.factor2;
+  const result = factor1 * factor2;
+  const factorQuestion = answerTarget === ANSWER_TARGETS.FACTOR;
+  const missingIndex = factorQuestion ? arrangement.multiplierIndex : null;
+
   return {
     tool: "tables-multiplication",
     table,
     multiplier,
     factor1,
     factor2,
-    result: factor1 * factor2
+    result,
+    answerTarget,
+    missingIndex,
+    expectedAnswer: factorQuestion
+      ? (missingIndex === 0 ? factor1 : factor2)
+      : result
   };
 }
 
 function resolveFactors(table, multiplier, factorPosition) {
   if (factorPosition === FACTOR_POSITIONS.SECOND) {
-    return [multiplier, table];
+    return {
+      factor1: multiplier,
+      factor2: table,
+      tableIndex: 1,
+      multiplierIndex: 0
+    };
   }
 
   if (factorPosition === FACTOR_POSITIONS.BOTH && table !== multiplier && Math.random() < 0.5) {
-    return [multiplier, table];
+    return {
+      factor1: multiplier,
+      factor2: table,
+      tableIndex: 1,
+      multiplierIndex: 0
+    };
   }
 
-  return [table, multiplier];
+  return {
+    factor1: table,
+    factor2: multiplier,
+    tableIndex: 0,
+    multiplierIndex: 1
+  };
+}
+
+function resolveAnswerTargets(value) {
+  if (value === ANSWER_TARGETS.BOTH) {
+    return [ANSWER_TARGETS.RESULT, ANSWER_TARGETS.FACTOR];
+  }
+  return [value === ANSWER_TARGETS.FACTOR ? ANSWER_TARGETS.FACTOR : ANSWER_TARGETS.RESULT];
+}
+
+function normalizeAnswerTarget(value) {
+  const safeValue = String(value || "");
+  if (safeValue === ANSWER_TARGETS.FACTOR) return ANSWER_TARGETS.FACTOR;
+  if (safeValue === ANSWER_TARGETS.BOTH) return ANSWER_TARGETS.BOTH;
+  return ANSWER_TARGETS.RESULT;
 }
 
 function normalizeOrderMode(value) {

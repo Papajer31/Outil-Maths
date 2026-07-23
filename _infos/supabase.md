@@ -1,6 +1,6 @@
 # Supabase — état documentaire actuel
 
-Dernière mise à jour : 2026-06-27.
+Dernière mise à jour : 2026-07-17.
 
 ## Statut des SQL
 
@@ -24,7 +24,9 @@ Blocs actifs ou attendus :
 - progression élève par activité Catalogue ;
 - ressources système ;
 - banques personnelles et système ;
-- super-admin.
+- super-admin ;
+- Quiz Supabase ;
+- ressources personnelles Supabase et Storage.
 
 ## Tables utilisées par le code JS
 
@@ -40,6 +42,11 @@ Cette liste documente les tables actuellement référencées dans le code côté
 - `phonology_words`
 - `question_bank_folders`
 - `question_bank_items`
+- `quiz_folders`
+- `quizzes`
+- `resource_folders`
+- `resources`
+- `quiz_resources`
 - `question_banks`
 - `students`
 - `teacher_classes`
@@ -82,3 +89,12 @@ Tables principales :
 - `question_bank_folders`.
 
 Deux familles doivent être distinguées : banques personnelles et banques système protégées. La duplication d’une banque système vers les banques personnelles existe côté code et doit rester vérifiée/documentée en usage réel.
+
+## Quiz
+
+Le nouvel Atelier Quiz utilise désormais les tables `quiz_folders` et `quizzes`. Le document complet du quiz est stocké en `jsonb` dans `quizzes.document`, avec une version de schéma séparée. Lors de la première ouverture, les anciens Quiz locaux sont importés automatiquement si le nouvel espace Supabase est encore vide. La copie locale reste présente dans le navigateur mais ne constitue plus la source principale.
+
+## Ressources personnelles
+
+Les dossiers et métadonnées utilisent `resource_folders` et `resources`. Le bucket privé `teacher-resources` est préparé par `07_quizzes_resources.sql`. À ce stade, l’explorateur lit Supabase, mais les imports image/audio effectués directement dans l’Atelier Quiz utilisent encore le stockage local ; leur transfert vers Storage constitue l’étape suivante.
+

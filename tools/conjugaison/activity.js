@@ -113,12 +113,12 @@ function renderShell(state) {
   syncRuntimeState(state);
 
   container.innerHTML = `
-    <div class="qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
+    <div class="tool-runtime tool-runtime--conjugaison qr-root${state.showResponseBox ? " qr-root--boxed" : " qr-root--free"}">
       ${renderToolInstruction({ id: "qr_instruction" })}
-      <div class="qr-card" id="qr_card">
-        <div class="qr-question" id="qr_question"></div>
-        <div class="qr-response-slot" id="qr_response_slot"></div>
-        <div class="qr-correction qr-correction--empty" id="qr_correction" aria-hidden="true"></div>
+      <div class="tool-stage tool-panel qr-card" id="qr_card">
+        <div class="tool-question tool-question--large qr-question" id="qr_question"></div>
+        <div class="tool-answer-panel qr-response-slot" id="qr_response_slot"></div>
+        <div class="tool-feedback tool-correction qr-correction qr-correction--empty" id="qr_correction" aria-hidden="true"></div>
       </div>
     </div>
   `;
@@ -397,9 +397,9 @@ function renderCorrectionExplanation(state) {
 
 function renderInputMarkup() {
   return `
-    <label class="qr-answer-box qr-answer-box--input" for="qr_response_input">
+    <label class="tool-answer-box qr-answer-box qr-answer-box--input" for="qr_response_input">
       <input
-        class="qr-answer-input"
+        class="tool-answer-input qr-answer-input"
         id="qr_response_input"
         data-qr-response-input
         type="text"
@@ -418,6 +418,8 @@ function renderInputMarkup() {
 
 function renderDisplayBox(value, { correct = false, student = false, free = false } = {}) {
   const classNames = [
+    "tool-answer-box",
+    "tool-answer-box--display",
     "qr-answer-box",
     "qr-answer-box--display",
     correct ? "is-correct" : "is-incorrect",
@@ -434,7 +436,7 @@ function renderDisplayBox(value, { correct = false, student = false, free = fals
 
 function renderFreePlaceholderMarkup() {
   return `
-    <div class="qr-answer-box qr-answer-box--placeholder">
+    <div class="tool-answer-box qr-answer-box qr-answer-box--placeholder">
       Réponse à trouver
     </div>
   `;

@@ -5,6 +5,8 @@ import { normalizeTokenIndexes, renderSelectionTextToHtml } from "../../shared/s
 import {
   createQuestionDeck,
   evaluateSelection,
+  filterSelectionItemsByQuestionSelection,
+  getQuestionSelectionSignature,
   normalizeSelectionItems,
   normalizeSettings
 } from "./model.js";
@@ -106,6 +108,7 @@ function createRuntimeState(initialContext = {}) {
     loadedBankId: "",
     loadedDrawMode: "",
     loadedSelectionMode: "",
+    loadedQuestionSelectionSignature: "",
     loadingPromise: null,
     answerRevealed: false,
     selectedTokenIndexes: [],
@@ -170,6 +173,7 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
   const accessCode = resolveAccessCode(context);
   const drawMode = String(settings.drawMode || "").trim();
   const selectionMode = String(settings.selectionMode || "").trim();
+  const questionSelectionSignature = getQuestionSelectionSignature(settings.questionSelection);
 
   if (!bankId) {
     state.questions = [];
@@ -178,6 +182,7 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     state.loadedBankId = "";
     state.loadedDrawMode = "";
     state.loadedSelectionMode = "";
+    state.loadedQuestionSelectionSignature = "";
     return;
   }
 
@@ -185,6 +190,7 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     state.loadedBankId === bankId
     && state.loadedDrawMode === drawMode
     && state.loadedSelectionMode === selectionMode
+    && state.loadedQuestionSelectionSignature === questionSelectionSignature
     && state.questions.length
   ) return;
 
@@ -194,6 +200,7 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     state.loadedBankId === bankId
     && state.loadedDrawMode === drawMode
     && state.loadedSelectionMode === selectionMode
+    && state.loadedQuestionSelectionSignature === questionSelectionSignature
     && state.questions.length
   ) return;
 
@@ -210,12 +217,14 @@ async function ensureQuestionsLoaded(state, settings, context = {}) {
     if (!items.length) items = settings.bankItemsSnapshot;
 
     const normalizedItems = normalizeSelectionItems(items);
-    state.questions = normalizedItems;
-    state.deck = createQuestionDeck(normalizedItems, settings.drawMode);
+    const selectedItems = filterSelectionItemsByQuestionSelection(normalizedItems, settings.questionSelection);
+    state.questions = selectedItems;
+    state.deck = createQuestionDeck(selectedItems, settings.drawMode);
     state.deckIndex = 0;
     state.loadedBankId = bankId;
     state.loadedDrawMode = drawMode;
     state.loadedSelectionMode = selectionMode;
+    state.loadedQuestionSelectionSignature = questionSelectionSignature;
   })();
 
   try {
@@ -407,7 +416,8 @@ function syncValidateState(state) {
 }
 
 function updateInstructionDisplay(state) {
-  const fallback = "Sélectionne les mots demandés.";
+  const settings = normalizeSettings(state.latestContext?.settings || {});
+  const fallback = settings.bankInstruction || "Sélectionne les mots demandés.";
   const text = resolveQuestionInstructionText(state.latestContext, fallback);
   setToolInstructionText(state.instructionEl, text);
 }

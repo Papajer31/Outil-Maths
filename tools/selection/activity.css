@@ -118,6 +118,12 @@
   overflow: hidden;
 }
 
+.selection-correction {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
 @media (max-width: 900px) {
   .selection-card {
     width: calc(100% - 32px);
