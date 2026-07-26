@@ -1,3 +1,5 @@
+-- HISTORIQUE UNIQUEMENT — NE PAS REJOUER SUR LA BASE ACTUELLE.
+-- Ce script contient notamment l’ancien modèle des banques, supprimé le 24/07/2026.
 -- =========================================================
 -- SUPABASE — RESET COMPLET + SCHÉMA PROPRE + SEEDS
 -- Projet Site d'outils — refonte Catalogue / Missions / Aventure

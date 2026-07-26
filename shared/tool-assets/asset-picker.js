@@ -36,9 +36,9 @@ export async function openToolAssetPicker(options = {}) {
         </div>
         <div class="tool-asset-picker-body">
           <nav class="tool-asset-picker-folders" aria-label="Dossiers de ressources"></nav>
-          <section class="tool-asset-picker-main" aria-label="Images disponibles">
+          <section class="tool-asset-picker-main" aria-label="${type === "audio" ? "Audios disponibles" : "Images disponibles"}">
             <div class="tool-asset-picker-status" aria-live="polite">Chargement des ressources…</div>
-            <div class="tool-asset-picker-grid" role="listbox" aria-label="Images disponibles"></div>
+            <div class="tool-asset-picker-grid" role="listbox" aria-label="${type === "audio" ? "Audios disponibles" : "Images disponibles"}"></div>
           </section>
         </div>
       </div>
@@ -51,16 +51,20 @@ export async function openToolAssetPicker(options = {}) {
     const folders = overlay.querySelector(".tool-asset-picker-folders");
     const status = overlay.querySelector(".tool-asset-picker-status");
     const grid = overlay.querySelector(".tool-asset-picker-grid");
+    grid?.classList.toggle("is-audio-picker", type === "audio");
 
     let assets = [];
     let selectedScope = "system";
     let selectedCategory = "";
+    let folderPaths = Array.isArray(options.folderPaths) ? options.folderPaths : [];
+    let usesUnifiedTree = options.unifiedTree === true;
     const collapsedCategoryPaths = new Set();
     let closed = false;
 
     const close = (asset) => {
       if (closed) return;
       closed = true;
+      overlay.querySelectorAll("audio").forEach((audio) => { try { audio.pause(); } catch {} });
       overlay.remove();
       activePicker = null;
       resolve(asset || null);
@@ -68,10 +72,16 @@ export async function openToolAssetPicker(options = {}) {
 
     activePicker = { close };
 
-    const getScopeAssets = () => assets.filter((asset) => asset.scope === selectedScope);
+    const getScopeAssets = () => usesUnifiedTree
+      ? assets
+      : assets.filter((asset) => asset.scope === selectedScope);
 
     const getCategories = () => {
       const counts = new Map();
+      folderPaths.forEach((path) => {
+        const name = String(path || "").trim();
+        if (name) counts.set(name, 0);
+      });
       for (const asset of getScopeAssets()) {
         const category = String(asset.category || "Sans dossier").trim() || "Sans dossier";
         counts.set(category, (counts.get(category) || 0) + 1);
@@ -82,6 +92,11 @@ export async function openToolAssetPicker(options = {}) {
 
     const renderScopes = () => {
       if (!scopes) return;
+      if (usesUnifiedTree) {
+        scopes.classList.add("is-hidden");
+        scopes.innerHTML = "";
+        return;
+      }
       const available = [
         { id: "personal", label: "Personnelles" },
         { id: "system", label: "Système" }
@@ -128,7 +143,7 @@ export async function openToolAssetPicker(options = {}) {
 
       const hasChildren = node.children.length > 0;
       const isCollapsed = collapsedCategoryPaths.has(node.path);
-      const label = selectedScope === "system" ? formatToolAssetCategory(node.label) : node.label;
+      const label = selectedScope === "system" && !usesUnifiedTree ? formatToolAssetCategory(node.label) : node.label;
       const indicatorPath = isCollapsed
         ? "M9.29 6.71a1 1 0 0 0 0 1.41L13.59 12l-4.3 3.88a1 1 0 1 0 1.34 1.48l5.12-4.62a1 1 0 0 0 0-1.48L10.63 6.7a1 1 0 0 0-1.34.01Z"
         : "M7.41 8.59a1 1 0 0 0 0 1.41l3.88 3.88a1 1 0 0 0 1.42 0L16.59 10a1 1 0 1 0-1.42-1.41L12 11.76 8.83 8.59a1 1 0 0 0-1.42 0Z";
@@ -183,14 +198,32 @@ export async function openToolAssetPicker(options = {}) {
       if (!grid || !status) return;
       const filtered = getFilteredAssets();
       const categoryLabel = selectedCategory
-        ? (selectedScope === "system" ? formatToolAssetCategory(selectedCategory) : selectedCategory)
+        ? (selectedScope === "system" && !usesUnifiedTree ? formatToolAssetCategory(selectedCategory) : selectedCategory)
         : "Toutes";
+      const itemNoun = type === "audio" ? "audio" : "image";
       status.textContent = filtered.length
-        ? `${categoryLabel} · ${filtered.length} image${filtered.length > 1 ? "s" : ""}`
+        ? `${categoryLabel} · ${filtered.length} ${itemNoun}${filtered.length > 1 ? "s" : ""}`
         : emptyMessage;
       status.classList.toggle("is-empty", filtered.length === 0);
 
-      grid.innerHTML = filtered.map((asset) => `
+      grid.innerHTML = filtered.map((asset) => type === "audio" ? `
+        <article
+          class="tool-asset-picker-item is-audio"
+          role="option"
+          tabindex="0"
+          data-tool-asset-id="${escapeAttr(asset.id)}"
+          title="${escapeAttr(asset.label || asset.id)}"
+        >
+          <div class="tool-asset-picker-audio-actions">
+            <button class="tool-asset-picker-audio-toggle" type="button" data-tool-asset-audio-toggle aria-label="Lire l’audio" title="Lire l’audio">
+              <span class="dashboard-material-icon" aria-hidden="true" data-tool-asset-audio-icon>play_arrow</span>
+            </button>
+            <button class="tool-asset-picker-select" type="button" data-tool-asset-select>Utiliser</button>
+          </div>
+          <audio class="tool-asset-picker-audio" preload="metadata" src="${escapeAttr(asset.url || asset.src)}" data-tool-asset-audio></audio>
+          <span class="tool-asset-picker-label">${escapeHtml(asset.label || asset.id)}</span>
+        </article>
+      ` : `
         <button
           class="tool-asset-picker-item"
           type="button"
@@ -202,6 +235,23 @@ export async function openToolAssetPicker(options = {}) {
           <span class="tool-asset-picker-label">${escapeHtml(asset.label || asset.id)}</span>
         </button>
       `).join("");
+      grid.querySelectorAll("[data-tool-asset-audio]").forEach((audio) => {
+        audio.addEventListener("play", () => syncAudioToggle(audio));
+        audio.addEventListener("pause", () => syncAudioToggle(audio));
+        audio.addEventListener("ended", () => syncAudioToggle(audio));
+      });
+    };
+
+    const syncAudioToggle = (audio) => {
+      const item = audio.closest("[data-tool-asset-id]");
+      const button = item?.querySelector("[data-tool-asset-audio-toggle]");
+      const icon = item?.querySelector("[data-tool-asset-audio-icon]");
+      if (!button || !icon) return;
+      const isPlaying = !audio.paused && !audio.ended;
+      const label = isPlaying ? "Mettre l’audio en pause" : "Lire l’audio";
+      icon.textContent = isPlaying ? "pause" : "play_arrow";
+      button.setAttribute("aria-label", label);
+      button.title = label;
     };
 
     const refresh = () => {
@@ -250,8 +300,27 @@ export async function openToolAssetPicker(options = {}) {
         return;
       }
 
+      const audioToggle = target.closest("[data-tool-asset-audio-toggle]");
+      if (audioToggle && grid?.contains(audioToggle)) {
+        const item = audioToggle.closest("[data-tool-asset-id]");
+        const audio = item?.querySelector("[data-tool-asset-audio]");
+        if (!audio) return;
+        if (audio.paused) {
+          grid.querySelectorAll("[data-tool-asset-audio]").forEach((otherAudio) => {
+            if (otherAudio !== audio) otherAudio.pause();
+          });
+          void audio.play().catch(() => {});
+        } else {
+          audio.pause();
+        }
+        return;
+      }
+
+      if (target.closest("[data-tool-asset-audio]")) return;
       const item = target.closest("[data-tool-asset-id]");
       if (item && grid?.contains(item)) {
+        const isAudioItem = item.classList.contains("is-audio");
+        if (isAudioItem && !target.closest("[data-tool-asset-select]")) return;
         const assetId = item.dataset.toolAssetId || "";
         close(assets.find((asset) => asset.id === assetId) || null);
       }
@@ -265,8 +334,11 @@ export async function openToolAssetPicker(options = {}) {
       }
       if (event.key === "Enter") {
         const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest?.("[data-tool-asset-audio]")) return;
         const item = target?.closest?.("[data-tool-asset-id]");
         if (item) {
+          const isAudioItem = item.classList.contains("is-audio");
+          if (isAudioItem && !target?.closest?.("[data-tool-asset-select]") && target !== item) return;
           event.preventDefault();
           const assetId = item.dataset.toolAssetId || "";
           close(assets.find((asset) => asset.id === assetId) || null);
@@ -282,7 +354,12 @@ export async function openToolAssetPicker(options = {}) {
         ? Promise.resolve(options.loadAssets({ type }))
         : Promise.resolve(options.assets || [])
     ])
-      .then(([defaultAssets, extraAssets]) => {
+      .then(([defaultAssets, extraResult]) => {
+        const extraAssets = Array.isArray(extraResult) ? extraResult : extraResult?.assets;
+        if (!Array.isArray(extraResult)) {
+          folderPaths = Array.isArray(extraResult?.folderPaths) ? extraResult.folderPaths : folderPaths;
+          usesUnifiedTree = extraResult?.unifiedTree === true || usesUnifiedTree;
+        }
         const systemAssets = (Array.isArray(defaultAssets) ? defaultAssets : [])
           .map((asset) => normalizePickerAsset(asset, "system"))
           .filter(Boolean);
@@ -290,7 +367,9 @@ export async function openToolAssetPicker(options = {}) {
           .map((asset) => normalizePickerAsset(asset, asset?.scope || "personal"))
           .filter((asset) => asset && asset.type === type);
         assets = dedupeAssets([...providedAssets, ...systemAssets]);
-        selectedScope = assets.some((asset) => asset.scope === "personal") ? "personal" : "system";
+        selectedScope = usesUnifiedTree
+          ? "all"
+          : (assets.some((asset) => asset.scope === "personal") ? "personal" : "system");
         selectedCategory = "";
         refresh();
       })

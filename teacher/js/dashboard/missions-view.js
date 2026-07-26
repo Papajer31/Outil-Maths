@@ -212,7 +212,7 @@ export function createMissionsViewController({
     const assignedClassIds = new Set(editingAssignments.filter((a) => a.target_type === "class").map((a) => String(a.teacher_class_id)));
     const assignedStudentIds = new Set(editingAssignments.filter((a) => a.target_type === "student").map((a) => String(a.student_id)));
     missionsList.innerHTML = `
-      <div class="dashboard-bank-editor-host" style="display:block; padding:1rem;">
+      <div class="dashboard-mission-editor-host" style="display:block; padding:1rem;">
         <section class="panel" style="padding:1rem; display:grid; gap:1rem;">
           <div style="display:flex; justify-content:space-between; gap:1rem; align-items:center;">
             <div class="dashboard-section-title">${editingMission.id ? "Modifier la mission" : "Créer une mission"}</div>

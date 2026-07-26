@@ -6,12 +6,10 @@ import {
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
 import { loadToolAssetsManifest } from "../../../shared/tool-assets/tool-assets.js";
-import {
-  formatToolAssetCategory,
-  formatToolAssetFolderName
-} from "../../../shared/tool-assets/labels.js";
+import { formatToolAssetFolderName } from "../../../shared/tool-assets/labels.js";
 import { resolveQuizImageSourceUrl } from "../../../shared/quiz-local-image-store.js";
-import { resolveQuizAudioSourceUrl } from "../../../shared/quiz-local-audio-store.js";
+import { resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
+import { openAudioRecorderDialog } from "./audio-recorder-dialog.js";
 
 const RESOURCE_ROOT_PERSONAL = "__resource_root_personal";
 const RESOURCE_ROOT_SYSTEM = "__resource_root_system";
@@ -141,12 +139,14 @@ export function createResourcesViewController({
   list,
   createFolderButton,
   importResourcesButton,
+  recordAudioButton,
   resourceFileInput,
   storageQuotaElement,
   showToast,
   getCurrentTeacherSpace,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -166,6 +166,7 @@ export function createResourcesViewController({
   let manifestLoaded = false;
   let manifestError = "";
   let isImporting = false;
+  let isRecordingResource = false;
   let isMoving = false;
   let draggedNode = null;
   let resourceDropTarget = null;
@@ -405,6 +406,8 @@ export function createResourcesViewController({
     const folderId = String(folder.id);
     const isSelected = normalizeTreeId(currentOpenFolderId) === folderId;
     const isDraggable = folder?.is_system !== true && folder?.is_virtual_root !== true;
+    const hasChildFolders = getExplorerFolders().some((candidate) => normalizeTreeId(candidate?.parent_id) === folderId);
+    const isCollapsed = hasChildFolders && node.isCollapsed;
     return `
       <div
         class="dashboard-activity-tree-row dashboard-tree-node ${isSelected ? "is-selected" : ""}"
@@ -419,12 +422,13 @@ export function createResourcesViewController({
           type="button"
           data-action="toggle-folder"
           data-folder-id="${escapeAttr(folderId)}"
-          title="${node.isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
-          aria-label="${node.isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
+          title="${hasChildFolders ? (isCollapsed ? "Déplier le dossier" : "Replier le dossier") : "Ce dossier ne contient pas de sous-dossier"}"
+          aria-label="${hasChildFolders ? (isCollapsed ? "Déplier le dossier" : "Replier le dossier") : "Ce dossier ne contient pas de sous-dossier"}"
+          ${hasChildFolders ? "" : "disabled"}
         >
-          <span class="dashboard-material-icon" aria-hidden="true">${node.isCollapsed ? "chevron_right" : "expand_more"}</span>
+          <span class="dashboard-material-icon" aria-hidden="true">${isCollapsed ? "chevron_right" : "expand_more"}</span>
         </button>
-        <button class="dashboard-activity-tree-main" type="button" data-action="toggle-folder" data-folder-id="${escapeAttr(folderId)}">
+        <button class="dashboard-activity-tree-main" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folderId)}">
           <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">folder</span>
           <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name || "")}</span>
         </button>
@@ -501,7 +505,10 @@ export function createResourcesViewController({
     const actions = isProtected
       ? ""
       : `
-        <div class="dashboard-activity-tile-corner-actions dashboard-resource-tile-actions">
+        <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked dashboard-resource-tile-actions">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-resource" data-resource-id="${escapeAttr(resourceId)}" title="Renommer la ressource" aria-label="Renommer la ressource">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
           <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">delete</span>
           </button>
@@ -575,22 +582,38 @@ export function createResourcesViewController({
 
   function updateActions(){
     const treeState = buildTreeState();
-    const writable = isWritablePersonalLocation(currentOpenFolderId, treeState);
-    const busy = isImporting || isMoving;
+    const atExplorerRoot = !normalizeTreeId(currentOpenFolderId);
+    const writable = !atExplorerRoot && isWritablePersonalLocation(currentOpenFolderId, treeState);
+    const busy = isImporting || isRecordingResource || isMoving;
     if (createFolderButton) {
       createFolderButton.disabled = !writable || busy;
-      createFolderButton.title = writable
-        ? (currentOpenFolderId ? "Créer un dossier personnel ici" : "Créer un dossier dans Ressources personnelles")
-        : "Les ressources système sont protégées en écriture";
+      createFolderButton.title = atExplorerRoot
+        ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
+        : writable
+          ? "Créer un dossier personnel ici"
+          : "Les ressources système sont protégées en écriture";
     }
     if (importResourcesButton) {
       importResourcesButton.disabled = !writable || busy;
       importResourcesButton.title = busy
         ? "Import en cours…"
-        : writable
-          ? (currentOpenFolderId ? "Importer des fichiers ici" : "Importer dans Ressources personnelles")
-          : "Les ressources système sont protégées en écriture";
+        : atExplorerRoot
+          ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
+          : writable
+            ? "Importer des fichiers ici"
+            : "Les ressources système sont protégées en écriture";
       importResourcesButton.setAttribute("aria-busy", String(busy));
+    }
+    if (recordAudioButton) {
+      recordAudioButton.disabled = !writable || busy;
+      recordAudioButton.title = busy
+        ? "Une opération est déjà en cours…"
+        : atExplorerRoot
+          ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
+          : writable
+            ? "Enregistrer un audio personnel ici"
+            : "Les ressources système sont protégées en écriture";
+      recordAudioButton.setAttribute("aria-busy", String(busy));
     }
   }
 
@@ -837,6 +860,12 @@ export function createResourcesViewController({
         void deleteFolder(button.dataset.folderId);
       });
     });
+    list?.querySelectorAll('[data-action="rename-resource"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        renamePersonalResource(button.dataset.resourceId);
+      });
+    });
     list?.querySelectorAll('[data-action="delete-resource"]').forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -996,7 +1025,7 @@ export function createResourcesViewController({
 
   function chooseResourceFiles(){
     const treeState = buildTreeState();
-    if (!isWritablePersonalLocation(currentOpenFolderId, treeState) || isImporting) return;
+    if (!normalizeTreeId(currentOpenFolderId) || !isWritablePersonalLocation(currentOpenFolderId, treeState) || isImporting) return;
     resourceFileInput?.click();
   }
 
@@ -1005,6 +1034,7 @@ export function createResourcesViewController({
     if (!files.length || typeof uploadResourceForSpace !== "function") return;
 
     const treeState = buildTreeState();
+    if (!normalizeTreeId(currentOpenFolderId)) return;
     const targetFolderId = getPersonalTargetFolderId(currentOpenFolderId, treeState);
     if (targetFolderId === undefined) {
       showToast?.("Les ressources système sont protégées en écriture.", { isError: true });
@@ -1094,8 +1124,55 @@ export function createResourcesViewController({
     showToast?.(`Import terminé : ${messages.join(", ")}.`, { isError: errors.length > 0 || ignoredCount > 0 });
   }
 
+  async function recordAudioResource(){
+    const treeState = buildTreeState();
+    if (!normalizeTreeId(currentOpenFolderId) || !isWritablePersonalLocation(currentOpenFolderId, treeState) || isImporting || isRecordingResource) return;
+    if (typeof uploadResourceForSpace !== "function" || typeof listResourcesForSpace !== "function") {
+      showToast?.("La gestion des ressources personnelles n’est pas disponible.", { isError:true });
+      return;
+    }
+
+    const targetFolderId = getPersonalTargetFolderId(currentOpenFolderId, treeState);
+    if (targetFolderId === undefined) {
+      showToast?.("Les ressources système sont protégées en écriture.", { isError:true });
+      return;
+    }
+
+    const teacherSpaceId = getTeacherSpaceId();
+    const useAutomaticRecordingsFolder = targetFolderId === null;
+    if (useAutomaticRecordingsFolder && typeof ensureRecordingsResourceFolderForSpace !== "function") {
+      showToast?.("Le dossier automatique des enregistrements n’est pas disponible.", { isError:true });
+      return;
+    }
+
+    isRecordingResource = true;
+    updateActions();
+    try {
+      const resource = await openAudioRecorderDialog({
+        teacherSpaceId,
+        destinationFolderId:useAutomaticRecordingsFolder ? null : targetFolderId,
+        ensureDestinationFolder:useAutomaticRecordingsFolder
+          ? () => ensureRecordingsResourceFolderForSpace(teacherSpaceId)
+          : null,
+        listResourcesForSpace,
+        uploadResourceForSpace,
+        showToast
+      });
+      if (!resource?.id) return;
+      await reloadRemoteState();
+      render();
+    } catch (error) {
+      console.error("Impossible d’enregistrer l’audio depuis Ressources.", error);
+      showToast?.(error?.message || "Impossible d’enregistrer cet audio.", { isError:true });
+    } finally {
+      isRecordingResource = false;
+      updateActions();
+    }
+  }
+
   function createFolder(){
     const treeState = buildTreeState();
+    if (!normalizeTreeId(currentOpenFolderId)) return;
     const parentId = getPersonalTargetFolderId(currentOpenFolderId, treeState);
     if (parentId === undefined || isImporting) return;
     openNameOverlay({
@@ -1157,6 +1234,25 @@ export function createResourcesViewController({
     }
   }
 
+  function renamePersonalResource(resourceId){
+    const resource = personalResources.find((item) => String(item.id) === String(resourceId));
+    if (!resource || resource.is_system === true || typeof updateResource !== "function") return;
+    openNameOverlay({
+      title:"Renommer la ressource",
+      initialValue:resource.title || "",
+      placeholder:"Nom de la ressource",
+      onConfirm:async (title) => {
+        const updated = await updateResource(resource.id, { title });
+        if (!updated) throw new Error("Renommage impossible.");
+        personalResources = personalResources.map((item) => String(item.id) === String(updated.id)
+          ? { ...item, ...updated, url:item.url || updated.url }
+          : item);
+        render();
+        showToast?.("Ressource renommée.");
+      }
+    });
+  }
+
   async function deletePersonalResource(resourceId){
     const resource = personalResources.find((item) => String(item.id) === String(resourceId));
     if (!resource || resource.is_system === true || typeof deleteResource !== "function") return;
@@ -1194,55 +1290,166 @@ export function createResourcesViewController({
   async function openResourceDetails(resource){
     const overlay = document.createElement("div");
     overlay.className = "modal dashboard-resource-detail-modal";
+    let detailResource = {
+      ...resource,
+      tags: Array.isArray(resource.tags) ? resource.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : []
+    };
+    const canEditTags = detailResource.is_system !== true && typeof updateResource === "function";
     const url = await resolveResourceUrl(resource).catch(() => "");
     const preview = resource.type === "audio"
       ? (url
-        ? `<audio class="dashboard-resource-detail-audio" controls preload="metadata" src="${escapeAttr(url)}"></audio>`
+        ? `
+          <div class="dashboard-resource-detail-audio-player">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-resource-audio-toggle aria-label="Lire l’audio" title="Lire l’audio">
+              <span class="dashboard-material-icon" aria-hidden="true" data-resource-audio-icon>play_arrow</span>
+            </button>
+            <input class="dashboard-resource-detail-audio-progress" type="range" min="0" max="0" value="0" step="0.01" data-resource-audio-progress aria-label="Progression de l’audio">
+            <span class="dashboard-resource-detail-audio-time" data-resource-audio-time>0:00 / 0:00</span>
+            <audio preload="metadata" src="${escapeAttr(url)}" data-resource-audio-player></audio>
+          </div>`
         : `<div class="dashboard-resource-detail-unavailable">Audio indisponible.</div>`)
       : (url
         ? `<img class="dashboard-resource-detail-image" src="${escapeAttr(url)}" alt="${escapeAttr(resource.alt || resource.title || "Image")}">`
         : `<div class="dashboard-resource-detail-unavailable">Image indisponible.</div>`);
-    const dimensions = resource.width && resource.height ? `${resource.width} × ${resource.height} px` : "";
-    const duration = formatDuration(resource.duration);
-    const size = formatBytes(resource.size_bytes);
-    const tags = Array.isArray(resource.tags) && resource.tags.length
-      ? resource.tags.map((tag) => `<span class="dashboard-resource-detail-tag">${escapeHtml(tag)}</span>`).join("")
-      : '<span class="dashboard-resource-detail-muted">Aucun tag</span>';
+    const dimensions = detailResource.width && detailResource.height
+      ? `${detailResource.width} × ${detailResource.height} pixels`
+      : "Dimensions indisponibles";
+    const durationSeconds = Math.max(0, Math.round(Number(detailResource.duration) || 0));
+    const duration = durationSeconds < 60
+      ? `${durationSeconds} seconde${durationSeconds === 1 ? "" : "s"}`
+      : `${Math.floor(durationSeconds / 60)} min ${durationSeconds % 60} s`;
+    const size = formatBytes(detailResource.size_bytes) || "Poids indisponible";
+    const renderTags = () => {
+      const tags = detailResource.tags.length
+        ? detailResource.tags.map((tag) => canEditTags
+          ? `<button class="dashboard-resource-detail-tag" type="button" data-resource-tag-remove="${escapeAttr(tag)}" title="Retirer le tag ${escapeAttr(tag)}"><span>${escapeHtml(tag)}</span><span class="dashboard-material-icon" aria-hidden="true">close</span></button>`
+          : `<span class="dashboard-resource-detail-tag">${escapeHtml(tag)}</span>`
+        ).join("")
+        : '<span class="dashboard-resource-detail-muted">Aucun tag</span>';
+      return `
+        <div class="dashboard-resource-detail-tag-list">${tags}</div>
+        ${canEditTags ? `
+          <form class="dashboard-resource-detail-tag-form" data-resource-tag-form>
+            <input type="text" name="tag" maxlength="60" placeholder="Ajouter un tag" aria-label="Ajouter un tag">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="submit" aria-label="Ajouter le tag" title="Ajouter le tag">
+              <span class="dashboard-material-icon" aria-hidden="true">add</span>
+            </button>
+          </form>` : ""}
+      `;
+    };
 
     overlay.innerHTML = `
       <div class="modal-content dashboard-resource-detail-card">
         <div class="dashboard-resource-detail-head">
           <div>
-            <div class="modal-title">${escapeHtml(resource.title || "Ressource")}</div>
-            <div class="dashboard-resource-detail-scope">${resource.is_system ? "Ressource système" : "Ressource personnelle"}</div>
+            <div class="modal-title">${escapeHtml(detailResource.title || "Ressource")}</div>
           </div>
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="close" aria-label="Fermer" title="Fermer">
             <span class="dashboard-material-icon" aria-hidden="true">close</span>
           </button>
         </div>
-        <div class="dashboard-resource-detail-preview">${preview}</div>
-        <dl class="dashboard-resource-detail-list">
-          <div><dt>Type</dt><dd>${resource.type === "audio" ? "Audio" : "Image"}</dd></div>
-          ${resource.path ? `<div><dt>Chemin</dt><dd>${escapeHtml(resource.path)}</dd></div>` : ""}
-          ${resource.category ? `<div><dt>Catégorie</dt><dd>${escapeHtml(formatToolAssetCategory(resource.category))}</dd></div>` : ""}
-          ${dimensions ? `<div><dt>Dimensions</dt><dd>${escapeHtml(dimensions)}</dd></div>` : ""}
-          ${duration ? `<div><dt>Durée</dt><dd>${escapeHtml(duration)}</dd></div>` : ""}
-          ${size ? `<div><dt>Poids</dt><dd>${escapeHtml(size)}</dd></div>` : ""}
-          <div><dt>Tags</dt><dd class="dashboard-resource-detail-tags">${tags}</dd></div>
+        <div class="dashboard-resource-detail-preview${detailResource.type === "audio" ? " is-audio" : ""}">${preview}</div>
+        <dl class="dashboard-resource-detail-properties${detailResource.is_system ? " is-system" : ""}">
+          <div><dt>Type</dt><dd>${detailResource.type === "audio" ? "Audio" : "Image"}</dd></div>
+          ${detailResource.is_system ? "" : `
+            <div><dt>${detailResource.type === "audio" ? "Durée" : "Dimensions"}</dt><dd>${escapeHtml(detailResource.type === "audio" ? duration : dimensions)}</dd></div>
+            <div><dt>Poids</dt><dd>${escapeHtml(size)}</dd></div>
+          `}
         </dl>
+        <section class="dashboard-resource-detail-tags-panel">
+          <h3>Tags</h3>
+          <div class="dashboard-resource-detail-tags" data-resource-detail-tags>${renderTags()}</div>
+        </section>
       </div>
     `;
     document.body.appendChild(overlay);
+    const player = overlay.querySelector("[data-resource-audio-player]");
+    const playerToggle = overlay.querySelector("[data-resource-audio-toggle]");
+    const playerIcon = overlay.querySelector("[data-resource-audio-icon]");
+    const playerProgress = overlay.querySelector("[data-resource-audio-progress]");
+    const playerTime = overlay.querySelector("[data-resource-audio-time]");
+    const tagsHost = overlay.querySelector("[data-resource-detail-tags]");
+    const formatPlayerTime = (value) => {
+      const seconds = Math.max(0, Math.floor(Number(value) || 0));
+      return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    };
+    const syncPlayer = () => {
+      const duration = Number.isFinite(player?.duration) ? player.duration : Number(detailResource.duration) || 0;
+      const currentTime = Math.min(Math.max(0, Number(player?.currentTime) || 0), duration || 0);
+      if (playerProgress) {
+        playerProgress.max = String(duration || 0);
+        playerProgress.value = String(currentTime);
+      }
+      if (playerTime) playerTime.textContent = `${formatPlayerTime(currentTime)} / ${formatPlayerTime(duration)}`;
+      if (playerIcon) playerIcon.textContent = player?.paused ? "play_arrow" : "pause";
+      if (playerToggle) {
+        const label = player?.paused ? "Lire l’audio" : "Mettre en pause";
+        playerToggle.setAttribute("aria-label", label);
+        playerToggle.title = label;
+      }
+    };
     const close = () => {
-      overlay.querySelector("audio")?.pause();
+      player?.pause();
       overlay.remove();
     };
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay || event.target.closest('[data-action="close"]')) close();
+      if (event.target.closest("[data-resource-audio-toggle]")) {
+        if (player?.paused) void player.play?.();
+        else player?.pause();
+      }
+      const removeTag = event.target.closest("[data-resource-tag-remove]");
+      if (removeTag && canEditTags) {
+        const tag = String(removeTag.dataset.resourceTagRemove || "");
+        void saveTags(detailResource.tags.filter((currentTag) => currentTag !== tag));
+      }
     });
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") close();
     });
+    player?.addEventListener("loadedmetadata", syncPlayer);
+    player?.addEventListener("durationchange", syncPlayer);
+    player?.addEventListener("timeupdate", syncPlayer);
+    player?.addEventListener("play", syncPlayer);
+    player?.addEventListener("pause", syncPlayer);
+    player?.addEventListener("ended", syncPlayer);
+    playerProgress?.addEventListener("input", () => {
+      if (!player || !Number.isFinite(player.duration)) return;
+      player.currentTime = Math.min(Math.max(0, Number(playerProgress.value) || 0), player.duration);
+      syncPlayer();
+    });
+    const saveTags = async (nextTags) => {
+      if (!canEditTags) return;
+      const uniqueTags = Array.from(new Map(
+        nextTags
+          .map((tag) => String(tag || "").trim())
+          .filter(Boolean)
+          .map((tag) => [tag.toLocaleLowerCase("fr-FR"), tag])
+      ).values());
+      try {
+        const updated = await updateResource(detailResource.id, { tags:uniqueTags });
+        if (!updated) throw new Error("Mise à jour des tags impossible.");
+        detailResource = { ...detailResource, ...updated, tags:Array.isArray(updated.tags) ? updated.tags : uniqueTags };
+        personalResources = personalResources.map((item) => String(item.id) === String(detailResource.id)
+          ? { ...item, ...updated, tags:detailResource.tags, url:item.url || updated.url }
+          : item);
+        if (tagsHost) tagsHost.innerHTML = renderTags();
+      } catch (error) {
+        console.error("Impossible de mettre à jour les tags de la ressource.", error);
+        showToast?.(error?.message || "Impossible de mettre à jour les tags.", { isError:true });
+      }
+    };
+    tagsHost?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const input = event.target.elements?.tag;
+      const tagsToAdd = String(input?.value || "").split(",").map((tag) => tag.trim()).filter(Boolean);
+      if (!tagsToAdd.length) return;
+      void saveTags([...detailResource.tags, ...tagsToAdd]);
+    });
+    if (player) {
+      syncPlayer();
+      void player.play().catch(() => {});
+    }
   }
 
   async function loadSystemResources({ force = false } = {}){
@@ -1268,6 +1475,7 @@ export function createResourcesViewController({
 
   createFolderButton?.addEventListener("click", createFolder);
   importResourcesButton?.addEventListener("click", chooseResourceFiles);
+  recordAudioButton?.addEventListener("click", () => { void recordAudioResource(); });
   resourceFileInput?.addEventListener("change", () => {
     void importResourceFiles(resourceFileInput.files);
   });

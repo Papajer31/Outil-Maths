@@ -4,7 +4,6 @@ import {
   renderRadioGroup,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { renderQuestionBankPickerWidget } from "../../shared/tool-commons/general-tools/question-bank-picker.js";
 import {
   bindQuestionSelectionWidget,
   readQuestionSelection,
@@ -102,7 +101,7 @@ export function readToolSettings(container, settings = {}){
   const input = container.querySelector("#quiz_quizSelect");
   const snapshotEl = container.querySelector("#quiz_snapshot");
   const quizId = String(input?.value || "").trim();
-  const quizTitle = String(input?.dataset?.quizTitle || input?.dataset?.bankTitle || previous.quizTitle || "").trim();
+  const quizTitle = String(input?.dataset?.quizTitle || previous.quizTitle || "").trim();
   const drawMode = readRadio(container, "quiz_drawMode", DEFAULT_DRAW_MODE);
   const quizSnapshot = readSnapshot(snapshotEl?.value || "{}");
   const questionSelection = readQuestionSelection(container, {
@@ -138,7 +137,7 @@ export function readToolSettings(container, settings = {}){
     ...previous,
     quizId,
     quizTitle: quizTitle || quizSnapshot.title,
-    bankInstruction: quizSnapshot.instruction,
+    sourceInstruction: quizSnapshot.instruction,
     drawMode,
     questionSelection,
     quizSnapshot: {
@@ -200,7 +199,7 @@ async function setupQuizPicker(container, {
   });
 
   const input = container.querySelector("#quiz_quizSelect");
-  const openButton = container.querySelector("[data-qb-picker-open]");
+  const openButton = container.querySelector("[data-quiz-picker-open]");
   if (!input || !openButton) return;
   input.dataset.quizTitle = String(selectedQuiz?.title || selectedQuizTitle || "").trim();
 
@@ -246,20 +245,19 @@ function setQuizPickerState(container, {
   count = 0
 } = {}){
   const input = container.querySelector("#quiz_quizSelect");
-  const nameEl = container.querySelector("[data-qb-picker-bank-name]");
+  const nameEl = container.querySelector("[data-quiz-picker-name]");
   const countEl = container.querySelector("#quiz_quizCount");
-  const button = container.querySelector("[data-qb-picker-open]");
+  const button = container.querySelector("[data-quiz-picker-open]");
   if (input && value !== undefined) input.value = String(value || "");
   if (input) {
     input.dataset.quizTitle = String(title || "");
-    input.dataset.bankTitle = String(title || "");
   }
   if (nameEl) nameEl.textContent = String(title || "Aucun quiz sélectionné");
   if (countEl) countEl.textContent = count === null ? "…" : renderQuestionCount(count);
   if (button) {
     button.disabled = Boolean(disabled);
     const hasSelection = Boolean(String(input?.value || "").trim());
-    button.classList.toggle("qb-picker-button--change", hasSelection);
+    button.classList.toggle("quiz-picker-button--change", hasSelection);
     button.textContent = hasSelection ? "+ Changer de quiz" : "+ Sélectionner le quiz";
   }
 }
@@ -270,9 +268,9 @@ function applyQuizSelection(container, quiz, {
 } = {}){
   const input = container.querySelector("#quiz_quizSelect");
   const snapshotEl = container.querySelector("#quiz_snapshot");
-  const nameEl = container.querySelector("[data-qb-picker-bank-name]");
+  const nameEl = container.querySelector("[data-quiz-picker-name]");
   const countEl = container.querySelector("#quiz_quizCount");
-  const button = container.querySelector("[data-qb-picker-open]");
+  const button = container.querySelector("[data-quiz-picker-open]");
   if (!input || !snapshotEl || !quiz) return;
 
   const snapshot = normalizeQuizSnapshot(quiz);
@@ -280,16 +278,15 @@ function applyQuizSelection(container, quiz, {
   const quizTitle = String(quiz.title || snapshot.title || "Quiz sans titre").trim();
 
   input.value = quizId;
-  input.dataset.bankTitle = quizTitle;
   input.dataset.quizTitle = quizTitle;
   snapshotEl.value = JSON.stringify(snapshot);
   if (nameEl) nameEl.textContent = quizTitle;
   if (countEl) countEl.textContent = renderQuestionCount(snapshot.questions.length);
   if (button) {
     button.textContent = "+ Changer de quiz";
-    button.classList.add("qb-picker-button--change");
+    button.classList.add("quiz-picker-button--change");
   }
-  container.querySelector("[data-qb-picker-summary]")?.classList.add("is-selected");
+  container.querySelector("[data-quiz-picker-summary]")?.classList.add("is-selected");
 
   const sameInitialQuiz = quizId === String(initialQuizId || "").trim();
   refreshQuestionSelectionWidget(
@@ -298,7 +295,7 @@ function applyQuizSelection(container, quiz, {
     sameInitialQuiz ? initialSelection : { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
     snapshot.instruction
   );
-  container.dispatchEvent(new CustomEvent("questionbankchange", {
+  container.dispatchEvent(new CustomEvent("toolsourceinstructionchange", {
     bubbles:true,
     detail:{ instruction:snapshot.instruction }
   }));
@@ -329,42 +326,63 @@ function renderQuizPicker({
   disabled = false,
   emptyLabel = "Aucun quiz sélectionné"
 } = {}){
-  const options = quizzes.map((quiz) => ({
-    value: quiz.id,
-    label: quiz.title
-  }));
-  return renderQuestionBankPickerWidget({
-    selectId: "quiz_quizSelect",
-    countId: "quiz_quizCount",
-    value,
-    options,
-    disabled,
-    count,
-    countFormatter: renderQuestionCount,
-    emptyLabel,
-    disabledLabel: "Aucun quiz disponible",
-    entityLabel: "Quiz",
-    selectButtonLabel: "+ Sélectionner le quiz",
-    changeButtonLabel: "+ Changer de quiz"
-  });
+  const safeValue = String(value || "").trim();
+  const selectedQuiz = findQuizById(quizzes, safeValue);
+  const title = String(selectedQuiz?.title || "").trim();
+  const label = disabled
+    ? String(quizzes?.[0]?.title || emptyLabel)
+    : (title || emptyLabel);
+  const hasSelection = Boolean(safeValue && title);
+  const buttonLabel = hasSelection
+    ? "+ Changer de quiz"
+    : "+ Sélectionner le quiz";
+
+  return `
+    <div class="tv-group tv-group-inline quiz-picker-widget" data-quiz-picker-widget>
+      <div class="quiz-picker-line">
+        <div class="tv-group-title quiz-picker-title">Quiz</div>
+        <div class="quiz-picker-control">
+          <input
+            id="quiz_quizSelect"
+            type="hidden"
+            value="${escapeHtml(safeValue)}"
+            data-quiz-title="${escapeHtml(title)}"
+            data-quiz-picker-input
+          >
+          <button
+            class="tool-choice-button quiz-picker-button${hasSelection ? " quiz-picker-button--change" : ""}"
+            type="button"
+            data-quiz-picker-open
+            ${disabled ? "disabled" : ""}
+          >
+            ${escapeHtml(buttonLabel)}
+          </button>
+          <div class="quiz-picker-summary${hasSelection ? " is-selected" : ""}" data-quiz-picker-summary>
+            <span class="quiz-picker-name" data-quiz-picker-name>${escapeHtml(label)}</span>
+            <span class="quiz-picker-count" id="quiz_quizCount">${count === null ? "…" : escapeHtml(renderQuestionCount(count))}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function openQuizPickerOverlay({ quizzes = [], folders = [], selectedQuizId = "", onSelect = () => {} } = {}){
   closeQuizPickerOverlay();
 
   const overlay = document.createElement("div");
-  overlay.className = "qb-picker-overlay";
+  overlay.className = "quiz-picker-overlay";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.innerHTML = `
-    <div class="qb-picker-modal" role="document">
-      <header class="qb-picker-modal-header">
+    <div class="quiz-picker-modal" role="document">
+      <header class="quiz-picker-modal-header">
         <div>
-          <div class="qb-picker-modal-eyebrow">Quiz</div>
+          <div class="quiz-picker-modal-eyebrow">Quiz</div>
           <h2>Sélectionner le quiz</h2>
         </div>
       </header>
-      <div class="qb-picker-modal-body">
+      <div class="quiz-picker-modal-body">
         ${renderQuizTree({ quizzes, folders, selectedQuizId })}
       </div>
     </div>
@@ -394,7 +412,7 @@ function openQuizPickerOverlay({ quizzes = [], folders = [], selectedQuizId = ""
 }
 
 function closeQuizPickerOverlay(){
-  document.querySelectorAll(".qb-picker-overlay").forEach((overlay) => overlay.remove());
+  document.querySelectorAll(".quiz-picker-overlay").forEach((overlay) => overlay.remove());
 }
 
 function renderQuizTree({ quizzes = [], folders = [], selectedQuizId = "" } = {}){
@@ -418,28 +436,28 @@ function renderQuizTree({ quizzes = [], folders = [], selectedQuizId = "" } = {}
   const personalHasContent = personalRootFolders.length || personalRootQuizzes.length;
   const systemHasContent = systemRootFolders.length || systemRootQuizzes.length;
   return `
-    <div class="qb-picker-tree">
-      <section class="qb-picker-tree-section">
+    <div class="quiz-picker-tree">
+      <section class="quiz-picker-tree-section">
         <h3>Quiz personnels</h3>
         ${personalHasContent
           ? `
-            <div class="qb-picker-tree-list">
+            <div class="quiz-picker-tree-list">
               ${personalRootFolders.map((folder) => renderQuizFolderNode({ folder, folders: personalFolders, quizzes: personalQuizzes, selectedQuizId, depth: 0 })).join("")}
               ${personalRootQuizzes.map((quiz) => renderQuizNode({ quiz, selectedQuizId, depth: 0 })).join("")}
             </div>
           `
-          : '<p class="qb-picker-empty">Aucun quiz personnel.</p>'}
+          : '<p class="quiz-picker-empty">Aucun quiz personnel.</p>'}
       </section>
-      <section class="qb-picker-tree-section">
+      <section class="quiz-picker-tree-section">
         <h3>Quiz système</h3>
         ${systemHasContent
           ? `
-            <div class="qb-picker-tree-list">
+            <div class="quiz-picker-tree-list">
               ${systemRootFolders.map((folder) => renderQuizFolderNode({ folder, folders: systemFolders, quizzes: systemQuizzes, selectedQuizId, depth: 0, system: true })).join("")}
               ${systemRootQuizzes.map((quiz) => renderQuizNode({ quiz, selectedQuizId, depth: 0, system: true })).join("")}
             </div>
           `
-          : '<p class="qb-picker-empty">Aucun quiz système.</p>'}
+          : '<p class="quiz-picker-empty">Aucun quiz système.</p>'}
       </section>
     </div>
   `;
@@ -455,8 +473,8 @@ function renderQuizFolderNode({ folder, folders, quizzes, selectedQuizId, depth,
     .sort(compareTreeItems);
 
   return `
-    <div class="qb-picker-folder" style="--qb-depth:${Math.max(0, depth)};">
-      <div class="qb-picker-folder-label">📁 ${escapeHtml(folder.name || "Dossier")}</div>
+    <div class="quiz-picker-folder" style="--quiz-depth:${Math.max(0, depth)};">
+      <div class="quiz-picker-folder-label">📁 ${escapeHtml(folder.name || "Dossier")}</div>
       ${childFolders.map((child) => renderQuizFolderNode({ folder: child, folders, quizzes, selectedQuizId, depth: depth + 1, system })).join("")}
       ${childQuizzes.map((quiz) => renderQuizNode({ quiz, selectedQuizId, depth: depth + 1, system })).join("")}
     </div>
@@ -469,14 +487,14 @@ function renderQuizNode({ quiz, selectedQuizId, depth, system = false }){
   const selected = quizId && quizId === String(selectedQuizId || "").trim();
   return `
     <button
-      class="qb-picker-bank${selected ? " is-selected" : ""}"
+      class="quiz-picker-item${selected ? " is-selected" : ""}"
       type="button"
       data-quiz-picker-id="${escapeHtml(quizId)}"
-      style="--qb-depth:${Math.max(0, depth)};"
+      style="--quiz-depth:${Math.max(0, depth)};"
     >
-      <span class="qb-picker-bank-icon" aria-hidden="true">${system ? "★" : "•"}</span>
-      <span class="qb-picker-bank-title">${escapeHtml(quiz.title || "Quiz sans titre")}</span>
-      <span class="qb-picker-bank-badge quiz-picker-count-badge">${escapeHtml(renderQuestionCount(questionCount))}</span>
+      <span class="quiz-picker-item-icon" aria-hidden="true">${system ? "★" : "•"}</span>
+      <span class="quiz-picker-item-title">${escapeHtml(quiz.title || "Quiz sans titre")}</span>
+      <span class="quiz-picker-item-badge quiz-picker-count-badge">${escapeHtml(renderQuestionCount(questionCount))}</span>
     </button>
   `;
 }

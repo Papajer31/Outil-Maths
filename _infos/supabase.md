@@ -1,16 +1,12 @@
 # Supabase — état documentaire actuel
 
-Dernière mise à jour : 2026-07-17.
+Dernière mise à jour : 2026-07-24.
 
 ## Statut des SQL
 
-Le dossier `_infos/sql` est un historique de requêtes. Il sert à comprendre l’évolution du projet, mais il ne doit pas être rejoué comme une migration propre de production.
+Le dossier `_infos/sql` constitue l’historique des requêtes ayant construit et fait évoluer le projet. Ces fichiers ne doivent pas être rejoués comme un ensemble de migrations de production.
 
-À terme, il faudra distinguer clairement :
-
-- les SQL historiques conservés pour mémoire ;
-- les migrations réellement rejouables ;
-- les scripts ponctuels d’administration.
+`10_remove_question_banks.sql` a été exécuté avec succès le 24 juillet 2026. Il est désormais lui aussi historique.
 
 ## Modèle actif
 
@@ -22,15 +18,12 @@ Blocs actifs ou attendus :
 - visibilité du Catalogue par enseignant ;
 - Missions ;
 - progression élève par activité Catalogue ;
-- ressources système ;
-- banques personnelles et système ;
 - super-admin ;
 - Quiz Supabase ;
-- ressources personnelles Supabase et Storage.
+- ressources personnelles Supabase et Storage ;
+- ressources techniques utilisées par certains outils.
 
-## Tables utilisées par le code JS
-
-Cette liste documente les tables actuellement référencées dans le code côté client.
+## Tables utilisées par le code JavaScript
 
 - `catalog_activities`
 - `catalog_activity_visibility`
@@ -40,14 +33,11 @@ Cette liste documente les tables actuellement référencées dans le code côté
 - `mission_steps`
 - `missions`
 - `phonology_words`
-- `question_bank_folders`
-- `question_bank_items`
 - `quiz_folders`
+- `quiz_resources`
 - `quizzes`
 - `resource_folders`
 - `resources`
-- `quiz_resources`
-- `question_banks`
 - `students`
 - `teacher_classes`
 - `teacher_phonology_presets`
@@ -55,14 +45,13 @@ Cette liste documente les tables actuellement référencées dans le code côté
 - `teacher_vocabulary_words`
 - `vocabulary_default_words`
 
-## RPC utilisées par le code JS
+## RPC utilisées par le code JavaScript
 
 - `access_code_exists`
 - `delete_catalog_activity_cascade`
 - `get_catalog_activity_usage_as_admin`
 - `get_catalog_visibility_for_space`
 - `get_conjugation_personal_list`
-- `get_question_bank_items_for_space`
 - `get_space_classes`
 - `get_space_mission_steps`
 - `get_space_missions`
@@ -71,30 +60,37 @@ Cette liste documente les tables actuellement référencées dans le code côté
 - `get_student_activity_progress`
 - `is_super_admin`
 - `record_student_activity_session`
-- `replace_question_bank_items`
 - `replace_teacher_vocabulary_words`
 - `reset_teacher_vocabulary_words`
 - `verify_student_code`
 
-## Ancien modèle
+## Ancien modèle des banques
 
-`activity_configs` et `activity_folders` sont legacy. Ils ne doivent plus guider les nouveaux écrans ni les nouvelles fonctions API.
-
-## Banques
-
-Tables principales :
+Les objets suivants ont été supprimés physiquement de Supabase :
 
 - `question_banks` ;
 - `question_bank_items` ;
-- `question_bank_folders`.
+- `question_bank_folders` ;
+- les fonctions et politiques exclusivement liées à ces tables.
 
-Deux familles doivent être distinguées : banques personnelles et banques système protégées. La duplication d’une banque système vers les banques personnelles existe côté code et doit rester vérifiée/documentée en usage réel.
+Aucune rétrocompatibilité n’est prévue.
+
+Les expressions « banque de mots » présentes dans les outils d’ordre alphabétique désignent des listes de vocabulaire. Elles n’ont aucun lien avec l’ancien modèle des banques de questions.
 
 ## Quiz
 
-Le nouvel Atelier Quiz utilise désormais les tables `quiz_folders` et `quizzes`. Le document complet du quiz est stocké en `jsonb` dans `quizzes.document`, avec une version de schéma séparée. Lors de la première ouverture, les anciens Quiz locaux sont importés automatiquement si le nouvel espace Supabase est encore vide. La copie locale reste présente dans le navigateur mais ne constitue plus la source principale.
+L’Atelier Quiz utilise `quiz_folders` et `quizzes`. Le document complet du Quiz est stocké en `jsonb` dans `quizzes.document`, avec une version de schéma séparée.
+
+Les liaisons avec les ressources personnelles utilisent `quiz_resources`.
 
 ## Ressources personnelles
 
-Les dossiers et métadonnées utilisent `resource_folders` et `resources`. Le bucket privé `teacher-resources` est préparé par `07_quizzes_resources.sql`. À ce stade, l’explorateur lit Supabase, mais les imports image/audio effectués directement dans l’Atelier Quiz utilisent encore le stockage local ; leur transfert vers Storage constitue l’étape suivante.
+Les dossiers et métadonnées utilisent `resource_folders` et `resources`. Le bucket privé `teacher-resources` peut exposer temporairement au runtime élève les ressources réellement utilisées par un Quiz.
 
+La migration `11_resource_recordings_folder.sql` ajoute `resource_folders.metadata`. Le rôle interne `recordings` identifie le dossier automatique des enregistrements sans dépendre de son nom ni de sa position. Les fichiers audio sont stockés sous une clé physique immuable contenant l’UUID de la ressource ; renommer ou déplacer une ressource ne modifie donc pas les références des Quiz.
+
+## Ressources système et techniques
+
+Les ressources système de l’interface sont locales et indexées par `shared/tool-assets/manifest.json`.
+
+Les tables `image_assets`, `phonology_words` et `vocabulary_default_words` restent actives pour les outils qui les consomment. Leur ancienne interface d’administration a disparu. Un outil d’import technique indépendant pourra être créé ultérieurement.

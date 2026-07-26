@@ -48,10 +48,6 @@ export function createStudentDashboardController({
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
-  setCachedActivities,
-  setCachedActivityFolders,
-  getCollapsedActivityFolderIds,
-  getKnownActivityFolderIds,
   studentNotesDrafts = new Map(),
   showToast
 } = {}){
@@ -91,10 +87,6 @@ export function createStudentDashboardController({
     if (!currentTeacherSpace?.id){
       setCurrentStudents?.([]);
       setCurrentStudent?.(null);
-      setCachedActivities?.(null);
-      setCachedActivityFolders?.(null);
-      getCollapsedActivityFolderIds?.().clear();
-      getKnownActivityFolderIds?.().clear();
       rightPanelMode = "activities";
       updateClassSectionTitle?.();
       return;

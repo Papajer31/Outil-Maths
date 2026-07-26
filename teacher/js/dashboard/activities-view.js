@@ -7,20 +7,41 @@ import {
   escapeHtml
 } from "./text-utils.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
+import { createCatalogAdminViewController } from "./catalog-admin-view.js";
 
 export function createActivitiesViewController({
   configHeader,
   configsList,
   getCurrentTeacherSpace,
+  getIsSuperAdmin,
   listCatalogActivitiesForTeacherSpace,
   setCatalogActivityVisibility,
+  listCatalogActivitiesForAdmin,
+  saveCatalogActivityAsAdmin,
+  deleteCatalogActivityAsAdmin,
+  getCatalogActivityUsageAsAdmin,
   showToast
 } = {}){
   let currentOpenFolderId = null;
-  let cachedCatalogActivities = null;
+  let cachedTeacherCatalogActivities = null;
+  let cachedAdminCatalogActivities = null;
+  let cachedRenderedCatalogActivities = null;
+  let currentRenderIsSuperAdmin = false;
   let catalogueChangeListenerAttached = false;
   let activeCatalogTestController = null;
   const folders = getCatalogFolders();
+
+  const catalogAdminViewController = createCatalogAdminViewController({
+    header: configHeader,
+    list: configsList,
+    getCurrentTeacherSpace,
+    listCatalogActivitiesForAdmin,
+    saveCatalogActivityAsAdmin,
+    deleteCatalogActivityAsAdmin,
+    getCatalogActivityUsageAsAdmin,
+    showToast,
+    onReturnToCatalogue: ({ forceRefresh = false } = {}) => renderActivitiesForSpace({ forceRefresh })
+  });
 
   function getFolderById(id){
     const safeId = String(id || "").trim();
@@ -37,7 +58,11 @@ export function createActivitiesViewController({
     return trail;
   }
 
-  function getFolderIdsLeadingToActivities(activities = []){
+  function getFolderIdsLeadingToActivities(activities = [], { includeAllFolders = false } = {}){
+    if (includeAllFolders) {
+      return new Set(folders.map((folder) => String(folder.id)));
+    }
+
     const usefulFolderIds = new Set();
     const folderById = new Map(folders.map((folder) => [String(folder.id), folder]));
 
@@ -55,9 +80,9 @@ export function createActivitiesViewController({
     return usefulFolderIds;
   }
 
-  function syncCurrentOpenFolderWithActivities(activities = []){
+  function syncCurrentOpenFolderWithActivities(activities = [], { includeAllFolders = false } = {}){
     if (!currentOpenFolderId) return;
-    const usefulFolderIds = getFolderIdsLeadingToActivities(activities);
+    const usefulFolderIds = getFolderIdsLeadingToActivities(activities, { includeAllFolders });
     let cursor = getFolderById(currentOpenFolderId);
 
     while (cursor && !usefulFolderIds.has(String(cursor.id))) {
@@ -75,7 +100,7 @@ export function createActivitiesViewController({
     ));
   }
 
-  function renderConfigHeader(){
+  function renderConfigHeader({ isSuperAdmin = false } = {}){
     if (!configHeader) return;
     const breadcrumb = getBreadcrumb();
     const breadcrumbHtml = [
@@ -97,7 +122,9 @@ export function createActivitiesViewController({
           ${breadcrumbHtml}
         </nav>
       </div>
-      <div class="dashboard-config-header-actions"></div>
+      <div class="dashboard-config-header-actions">
+        ${isSuperAdmin ? catalogAdminViewController.renderHeaderActions() : ""}
+      </div>
     `;
 
     configHeader.querySelectorAll("[data-action='open-root']").forEach((btn) => {
@@ -113,6 +140,10 @@ export function createActivitiesViewController({
         void renderActivitiesForSpace();
       });
     });
+
+    if (isSuperAdmin) {
+      catalogAdminViewController.bindHeaderActions();
+    }
   }
 
   function renderTreeFolder(folder, usefulFolderIds, depth = 0){
@@ -161,45 +192,67 @@ export function createActivitiesViewController({
     `;
   }
 
-  function renderActivityTile(activity){
-    const visible = activity?.is_visible !== false;
+  function renderActivityTile(activity, { isSuperAdmin = false } = {}){
+    const isPublished = String(activity?.status || "published") === "published";
+    const visible = isPublished && activity?.is_visible !== false;
+    const adminEnhancement = isSuperAdmin
+      ? catalogAdminViewController.getActivityTileEnhancement(activity)
+      : null;
+    const tileClasses = [
+      "dashboard-activity-tile",
+      "dashboard-activity-tile--activity",
+      "dashboard-activity-tile--catalog-activity",
+      visible || !isPublished ? "" : "is-hidden",
+      adminEnhancement?.className || ""
+    ].filter(Boolean).join(" ");
+
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--activity dashboard-activity-tile--catalog-activity ${visible ? "" : "is-hidden"}">
+      <article class="${tileClasses}" ${adminEnhancement?.attributes || ""}>
         <div class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" style="cursor:default;">
           <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">extension</span>
           <span class="dashboard-activity-tile-labelbox dashboard-activity-tile-labelbox--activity">
-            <span class="dashboard-activity-tile-title">${escapeHtml(activity?.config_name || "Activité")}</span>
+            <span class="dashboard-activity-tile-title">${escapeHtml(activity?.config_name || activity?.title || "Activité")}</span>
             ${activity?.description ? `<span class="dashboard-activity-tile-subtitle">${escapeHtml(activity.description)}</span>` : ""}
+            ${adminEnhancement?.subtitleHtml || ""}
           </span>
         </div>
         <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="test-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Tester" aria-label="Tester">
             <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
           </button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn ${visible ? "" : "is-muted"}" type="button" data-action="toggle-catalog-visible" data-catalog-activity-id="${escapeAttr(activity.id)}" title="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}" aria-label="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}">
-            <span class="dashboard-material-icon" aria-hidden="true">${visible ? "visibility" : "visibility_off"}</span>
-          </button>
+          ${isPublished ? `
+            <button class="dashboard-icon-btn dashboard-material-icon-btn ${visible ? "" : "is-muted"}" type="button" data-action="toggle-catalog-visible" data-catalog-activity-id="${escapeAttr(activity.id)}" title="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}" aria-label="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}">
+              <span class="dashboard-material-icon" aria-hidden="true">${visible ? "visibility" : "visibility_off"}</span>
+            </button>
+          ` : ""}
+          ${adminEnhancement?.actionsHtml || ""}
         </div>
       </article>
     `;
   }
 
-  function renderShell(activities){
-    const usefulFolderIds = getFolderIdsLeadingToActivities(activities);
+  function renderShell(activities, { isSuperAdmin = false } = {}){
+    const usefulFolderIds = getFolderIdsLeadingToActivities(activities, { includeAllFolders: isSuperAdmin });
     const selectedFolder = getFolderById(currentOpenFolderId);
     const parentId = selectedFolder ? String(selectedFolder.id) : null;
     const childFolders = getVisibleChildFolders(parentId, usefulFolderIds).sort(compareByOrderAndName);
-    const childActivities = (activities || []).filter((activity) => getActivityFolderId(activity) === String(parentId || "")).sort(compareByOrderAndName);
+    const childActivities = (activities || [])
+      .filter((activity) => getActivityFolderId(activity) === String(parentId || ""))
+      .sort(compareByOrderAndName);
     const rootFolders = getVisibleChildFolders(null, usefulFolderIds).sort(compareByOrderAndName);
     const treeHtml = rootFolders.map((folder) => renderTreeFolder(folder, usefulFolderIds, 0)).join("");
     const tilesHtml = [
       renderParentTile(selectedFolder),
       ...childFolders.map(renderFolderTile),
-      ...childActivities.map(renderActivityTile)
+      ...childActivities.map((activity) => renderActivityTile(activity, { isSuperAdmin }))
     ].filter(Boolean).join("");
+    const adminGridClass = isSuperAdmin ? " dashboard-admin-catalogue-grid" : "";
+    const adminDropzoneAttributes = isSuperAdmin
+      ? catalogAdminViewController.getDropzoneAttributes(parentId)
+      : "";
     const rightPaneHtml = `
       <div class="dashboard-activity-tiles-grid-wrap">
-        <div class="dashboard-activity-tiles-grid">
+        <div class="dashboard-activity-tiles-grid${adminGridClass}" ${adminDropzoneAttributes}>
           ${tilesHtml || `<div class="dashboard-activity-empty-state">Aucune activité dans cette catégorie.</div>`}
         </div>
       </div>
@@ -226,7 +279,7 @@ export function createActivitiesViewController({
     `;
   }
 
-  function bindEvents(){
+  function bindEvents({ isSuperAdmin = false } = {}){
     configsList?.querySelectorAll("[data-action='open-root']").forEach((btn) => {
       btn.addEventListener("click", () => {
         currentOpenFolderId = null;
@@ -244,12 +297,19 @@ export function createActivitiesViewController({
     configsList?.querySelectorAll("[data-action='toggle-catalog-visible']").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const currentTeacherSpace = getCurrentTeacherSpace?.();
-        if (!currentTeacherSpace?.id) return;
+        if (!currentTeacherSpace?.id) {
+          showToast?.("Crée d’abord ton code de connexion pour gérer la visibilité.", { isError: true });
+          return;
+        }
         const activityId = String(btn.dataset.catalogActivityId || "").trim();
-        const activity = (cachedCatalogActivities || []).find((item) => item.id === activityId);
-        if (!activity) return;
+        const activity = (cachedRenderedCatalogActivities || []).find((item) => String(item?.id || "") === activityId);
+        if (!activity || String(activity?.status || "published") !== "published") return;
         try {
-          cachedCatalogActivities = await setCatalogActivityVisibility?.(currentTeacherSpace.id, activityId, activity.is_visible === false);
+          cachedTeacherCatalogActivities = await setCatalogActivityVisibility?.(
+            currentTeacherSpace.id,
+            activityId,
+            activity.is_visible === false
+          );
           await renderActivitiesForSpace();
         } catch (err) {
           showToast?.(err?.message || "Impossible de modifier la visibilité.", { isError: true });
@@ -259,17 +319,20 @@ export function createActivitiesViewController({
 
     configsList?.querySelectorAll("[data-action='test-catalog-activity']").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const currentTeacherSpace = getCurrentTeacherSpace?.();
         const activityId = String(btn.dataset.catalogActivityId || "").trim();
-        if (!currentTeacherSpace?.access_code || !activityId) return;
+        if (!activityId) return;
         openCatalogTestPanel(activityId);
       });
     });
+
+    if (isSuperAdmin) {
+      catalogAdminViewController.bindCatalogueEvents({ root: configsList });
+    }
   }
 
   function openCatalogTestPanel(catalogActivityId){
     const activityId = String(catalogActivityId || "").trim();
-    const activity = (cachedCatalogActivities || []).find((item) => String(item?.id || "") === activityId);
+    const activity = (cachedRenderedCatalogActivities || []).find((item) => String(item?.id || "") === activityId);
     const currentTeacherSpace = getCurrentTeacherSpace?.();
 
     if (!activity) {
@@ -277,16 +340,17 @@ export function createActivitiesViewController({
       return;
     }
 
-    if (!currentTeacherSpace?.access_code) {
+    const accessCode = String(currentTeacherSpace?.access_code || (currentRenderIsSuperAdmin ? "ADMINTEST" : "")).trim().toUpperCase();
+    if (!accessCode) {
       showToast?.("Impossible d’ouvrir le test : code de classe manquant.", { isError: true });
       return;
     }
 
     cleanupActiveCatalogTestController();
     activeCatalogTestController = openCatalogTestRunner({
-      accessCode: currentTeacherSpace.access_code,
+      accessCode,
       activity,
-      catalogActivities: cachedCatalogActivities || [],
+      catalogActivities: cachedRenderedCatalogActivities || [],
       onClose: () => {
         activeCatalogTestController = null;
       },
@@ -306,40 +370,76 @@ export function createActivitiesViewController({
   async function renderActivitiesForSpace({ forceRefresh = false } = {}){
     attachCatalogueChangeListener();
     if (!configsList) return;
-    const currentTeacherSpace = getCurrentTeacherSpace?.();
-    renderConfigHeader();
 
-    if (!currentTeacherSpace?.id) {
+    const isSuperAdmin = await getIsSuperAdmin?.() === true;
+    const currentTeacherSpace = getCurrentTeacherSpace?.();
+    currentRenderIsSuperAdmin = isSuperAdmin;
+
+    if (!currentTeacherSpace?.id && !isSuperAdmin) {
+      renderConfigHeader({ isSuperAdmin: false });
       configsList.classList.add("dashboard-explorer-host");
+      configsList.classList.remove("super-admin-editor-scroll");
       configsList.innerHTML = `<div class="dashboard-activity-empty-state">Crée d’abord ton code de connexion.</div>`;
       return;
     }
 
-    if (forceRefresh || !cachedCatalogActivities) {
+    const needsTeacherActivities = Boolean(currentTeacherSpace?.id)
+      && (forceRefresh || !cachedTeacherCatalogActivities);
+    const needsAdminActivities = isSuperAdmin
+      && (forceRefresh || !cachedAdminCatalogActivities);
+
+    if (needsTeacherActivities || needsAdminActivities) {
       configsList.classList.add("dashboard-explorer-host");
+      configsList.classList.remove("super-admin-editor-scroll");
       cleanupActiveCatalogTestController();
       configsList.innerHTML = `<div class="dashboard-activity-empty-state">Chargement du catalogue…</div>`;
-      cachedCatalogActivities = await listCatalogActivitiesForTeacherSpace?.(currentTeacherSpace.id);
+
+      const [teacherActivities, adminActivities] = await Promise.all([
+        needsTeacherActivities
+          ? listCatalogActivitiesForTeacherSpace?.(currentTeacherSpace.id)
+          : Promise.resolve(cachedTeacherCatalogActivities || []),
+        needsAdminActivities
+          ? listCatalogActivitiesForAdmin?.()
+          : Promise.resolve(cachedAdminCatalogActivities || [])
+      ]);
+
+      if (needsTeacherActivities) cachedTeacherCatalogActivities = teacherActivities || [];
+      if (needsAdminActivities) cachedAdminCatalogActivities = adminActivities || [];
     }
 
-    syncCurrentOpenFolderWithActivities(cachedCatalogActivities || []);
+    if (!currentTeacherSpace?.id) {
+      cachedTeacherCatalogActivities = [];
+    }
+
+    const activities = isSuperAdmin
+      ? mergeAdminAndTeacherActivities(cachedAdminCatalogActivities || [], cachedTeacherCatalogActivities || [])
+      : (cachedTeacherCatalogActivities || []);
+
+    cachedRenderedCatalogActivities = activities;
+    syncCurrentOpenFolderWithActivities(activities, { includeAllFolders: isSuperAdmin });
+    catalogAdminViewController.setCatalogueState({
+      activities: cachedAdminCatalogActivities || [],
+      currentFolderId: currentOpenFolderId
+    });
 
     configsList.classList.add("dashboard-explorer-host");
+    configsList.classList.remove("super-admin-editor-scroll");
     cleanupActiveCatalogTestController();
-    renderConfigHeader();
-    configsList.innerHTML = renderShell(cachedCatalogActivities || []);
-    bindEvents();
+    renderConfigHeader({ isSuperAdmin });
+    configsList.innerHTML = renderShell(activities, { isSuperAdmin });
+    bindEvents({ isSuperAdmin });
   }
 
   function attachCatalogueChangeListener(){
     if (catalogueChangeListenerAttached) return;
     catalogueChangeListenerAttached = true;
     window.addEventListener("catalogue:changed", () => {
-      cachedCatalogActivities = null;
+      cachedTeacherCatalogActivities = null;
+      cachedAdminCatalogActivities = null;
+      cachedRenderedCatalogActivities = null;
       void renderActivitiesForSpace({ forceRefresh: true });
     });
   }
-
 
   return {
     renderRightPanel: renderActivitiesForSpace,
@@ -351,11 +451,47 @@ export function createActivitiesViewController({
   };
 }
 
+function mergeAdminAndTeacherActivities(adminActivities = [], teacherActivities = []){
+  const teacherById = new Map(
+    (Array.isArray(teacherActivities) ? teacherActivities : [])
+      .map((activity) => [String(activity?.id || ""), activity])
+      .filter(([id]) => id)
+  );
+  const adminIds = new Set();
+  const merged = (Array.isArray(adminActivities) ? adminActivities : []).map((activity) => {
+    const id = String(activity?.id || "");
+    adminIds.add(id);
+    const teacherActivity = teacherById.get(id) || null;
+    const isPublished = String(activity?.status || "draft") === "published";
+    return {
+      ...activity,
+      is_visible: isPublished
+        ? (teacherActivity?.is_visible ?? activity?.default_visible !== false)
+        : false
+    };
+  });
+
+  teacherById.forEach((activity, id) => {
+    if (!adminIds.has(id)) merged.push(activity);
+  });
+
+  return merged.sort(compareByOrderAndName);
+}
+
 function compareByOrderAndName(a, b){
+  const folderA = getActivityFolderId(a);
+  const folderB = getActivityFolderId(b);
+  if (folderA !== folderB) {
+    return folderA.localeCompare(folderB, "fr", { sensitivity: "base" });
+  }
   const orderA = Number(a?.display_order) || 0;
   const orderB = Number(b?.display_order) || 0;
   if (orderA !== orderB) return orderA - orderB;
-  return String(a?.name || a?.config_name || "").localeCompare(String(b?.name || b?.config_name || ""), "fr", { sensitivity: "base" });
+  return String(a?.name || a?.config_name || a?.title || "").localeCompare(
+    String(b?.name || b?.config_name || b?.title || ""),
+    "fr",
+    { sensitivity: "base" }
+  );
 }
 
 function getActivityFolderId(activity){

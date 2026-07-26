@@ -5,7 +5,7 @@ import { defineTool } from "../../shared/tool-contract.js";
 
 function getDefaultInstruction(settings = {}){
   const normalized = normalizeSettings(settings);
-  return String(normalized.bankInstruction || normalized.quizSnapshot?.instruction || "").trim();
+  return String(normalized.sourceInstruction || normalized.quizSnapshot?.instruction || "").trim();
 }
 
 export default defineTool("quiz", "Quiz", {

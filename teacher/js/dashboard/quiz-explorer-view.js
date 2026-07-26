@@ -21,6 +21,7 @@ export function createQuizExplorerViewController({
   onCreateSeries,
   onOpenQuiz,
   getCurrentTeacherSpace,
+  getIsSuperAdmin,
   listQuizFoldersForSpace,
   createQuizFolderForSpace,
   updateQuizFolder,
@@ -37,6 +38,10 @@ export function createQuizExplorerViewController({
   let currentOpenFolderId = null;
   const collapsedFolderIds = new Set();
   const knownFolderIds = new Set();
+
+  function canEditSystemContent(){
+    return getIsSuperAdmin?.() === true;
+  }
 
   function getTeacherSpaceId(){
     const id = Number(getCurrentTeacherSpace?.()?.id);
@@ -319,8 +324,9 @@ export function createQuizExplorerViewController({
   }
 
   function renderFolderTile(folder){
-    const isProtected = folder?.is_virtual_root === true || folder?.is_system === true;
-    const actions = !isProtected
+    const isVirtual = folder?.is_virtual_root === true;
+    const canEdit = !isVirtual && (folder?.is_system !== true || canEditSystemContent());
+    const actions = canEdit
       ? `
         <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-folder" data-folder-id="${escapeAttr(folder.id)}" title="Renommer le dossier" aria-label="Renommer le dossier">
@@ -369,7 +375,7 @@ export function createQuizExplorerViewController({
 
   function renderQuizTile(quiz){
     const quizId = String(quiz.id || "");
-    const canEdit = quiz.is_system !== true;
+    const canEdit = quiz.is_system !== true || canEditSystemContent();
     const actions = canEdit
       ? `
         <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
@@ -452,17 +458,27 @@ export function createQuizExplorerViewController({
 
   function updateActions(){
     const isSystem = isSystemLocation();
+    const isGlobalRoot = !normalizeTreeId(currentOpenFolderId);
+    const canCreate = !isGlobalRoot && (!isSystem || canEditSystemContent());
+    const disabledTitle = isGlobalRoot
+      ? "Sélectionne d’abord « Quiz personnels » ou l’un de ses dossiers."
+      : "Les quiz système sont réservés au super-admin.";
     if (createQuizButton) {
-      createQuizButton.disabled = isSystem;
-      createQuizButton.title = isSystem ? "Les quiz système se créent dans l’onglet Admin." : "Créer un quiz";
+      createQuizButton.disabled = !canCreate;
+      createQuizButton.title = canCreate ? (isSystem ? "Créer un quiz système" : "Créer un quiz") : disabledTitle;
+      const label = createQuizButton.querySelector("span:last-child");
+      if (label) label.textContent = isSystem && canEditSystemContent() ? "Créer un quiz système" : "Créer un quiz";
     }
     if (createSeriesButton) {
-      createSeriesButton.disabled = isSystem;
-      createSeriesButton.title = isSystem ? "Les séries système se créent dans l’onglet Admin." : "Créer une série de questions";
+      createSeriesButton.disabled = !canCreate;
+      createSeriesButton.title = canCreate ? (isSystem ? "Créer une série système" : "Créer une série de questions") : disabledTitle;
+      const label = createSeriesButton.querySelector("span:last-child");
+      if (label) label.textContent = isSystem && canEditSystemContent() ? "Créer une série système" : "Créer une série de questions";
     }
     if (createFolderButton) {
-      createFolderButton.disabled = isSystem;
-      createFolderButton.title = isSystem ? "Les dossiers système sont protégés en écriture." : "Créer un dossier";
+      createFolderButton.disabled = !canCreate;
+      createFolderButton.title = canCreate ? (isSystem ? "Créer un dossier système" : "Créer un dossier") : disabledTitle;
+      createFolderButton.setAttribute("aria-label", createFolderButton.title);
     }
   }
 
@@ -549,20 +565,24 @@ export function createQuizExplorerViewController({
   }
 
   function createFolder(){
-    if (isSystemLocation()) return;
+    if (!normalizeTreeId(currentOpenFolderId)) return;
+    const isSystem = isSystemLocation();
+    if (isSystem && !canEditSystemContent()) return;
     openNameOverlay({
-      title: "Créer un dossier",
+      title: isSystem ? "Créer un dossier système" : "Créer un dossier",
       placeholder: "Nom du dossier",
       confirmLabel: "Créer",
       onConfirm: async (name) => {
-        const parentId = isVirtualRoot(currentOpenFolderId)
-          ? (currentOpenFolderId === QUIZ_ROOT_PERSONAL ? null : currentOpenFolderId)
-          : currentOpenFolderId;
-        const siblings = folders.filter((folder) => normalizeTreeId(folder.parent_id) === normalizeTreeId(parentId));
+        const parentId = isVirtualRoot(currentOpenFolderId) ? null : currentOpenFolderId;
+        const siblings = folders.filter((folder) =>
+          folder?.is_system === isSystem
+          && normalizeTreeId(folder.parent_id) === normalizeTreeId(parentId)
+        );
         const folder = await createQuizFolderForSpace?.(getTeacherSpaceId(), {
           name,
           parent_id: parentId,
-          display_order: siblings.length
+          display_order: siblings.length,
+          is_system: isSystem
         });
         if (!folder) throw new Error("Création du dossier impossible.");
         folders.push(folder);
@@ -576,13 +596,13 @@ export function createQuizExplorerViewController({
 
   function renameFolder(folderId){
     const folder = folders.find((item) => String(item.id) === String(folderId));
-    if (!folder) return;
+    if (!folder || (folder.is_system === true && !canEditSystemContent())) return;
     openNameOverlay({
       title: "Renommer le dossier",
       initialValue: folder.name || "",
       placeholder: "Nom du dossier",
       onConfirm: async (name) => {
-        const updated = await updateQuizFolder?.(folder.id, { name });
+        const updated = await updateQuizFolder?.(folder.id, { name, is_system: folder.is_system === true });
         if (!updated) throw new Error("Renommage impossible.");
         folders = folders.map((item) => String(item.id) === String(updated.id) ? updated : item);
         render();
@@ -593,7 +613,7 @@ export function createQuizExplorerViewController({
 
   async function deleteFolder(folderId){
     const folder = folders.find((item) => String(item.id) === String(folderId));
-    if (!folder) return;
+    if (!folder || (folder.is_system === true && !canEditSystemContent())) return;
     const confirmed = await openDashboardConfirmDialog({
       title:"Supprimer le dossier",
       message:`Supprimer le dossier « ${folder.name} » ?`,
@@ -602,7 +622,7 @@ export function createQuizExplorerViewController({
     });
     if (!confirmed) return;
     try {
-      await deleteQuizFolder?.(folder.id);
+      await deleteQuizFolder?.(folder.id, { is_system: folder.is_system === true });
       folders = folders.filter((item) => String(item.id) !== String(folder.id));
       if (String(currentOpenFolderId || "") === String(folder.id)) currentOpenFolderId = null;
       render();
@@ -617,13 +637,13 @@ export function createQuizExplorerViewController({
 
   function renameQuiz(quizId){
     const quiz = quizzes.find((item) => String(item.id) === String(quizId));
-    if (!quiz || quiz.is_system === true) return;
+    if (!quiz || (quiz.is_system === true && !canEditSystemContent())) return;
     openNameOverlay({
       title: "Renommer le quiz",
       initialValue: quiz.title || "",
       placeholder: "Nom du quiz",
       onConfirm: async (title) => {
-        const saved = await saveQuizForSpace?.(getTeacherSpaceId(), { ...quiz, title });
+        const saved = await saveQuizForSpace?.(getTeacherSpaceId(), { ...quiz, title, is_system: quiz.is_system === true });
         if (!saved) throw new Error("Renommage impossible.");
         quizzes = quizzes.map((item) => String(item.id) === String(saved.id) ? saved : item);
         render();
@@ -634,7 +654,7 @@ export function createQuizExplorerViewController({
 
   async function removeQuiz(quizId){
     const quiz = quizzes.find((item) => String(item.id) === String(quizId));
-    if (!quiz || quiz.is_system === true) return;
+    if (!quiz || (quiz.is_system === true && !canEditSystemContent())) return;
     const confirmed = await openDashboardConfirmDialog({
       title:"Supprimer le quiz",
       message:`Supprimer le quiz « ${quiz.title || "Quiz sans titre"} » ?`,
@@ -643,7 +663,7 @@ export function createQuizExplorerViewController({
     });
     if (!confirmed) return;
     try {
-      await deleteQuiz?.(quiz.id);
+      await deleteQuiz?.(quiz.id, { is_system: quiz.is_system === true });
       quizzes = quizzes.filter((item) => String(item.id) !== String(quiz.id));
       render();
       showToast?.("Quiz supprimé.");
@@ -701,26 +721,32 @@ export function createQuizExplorerViewController({
   }
 
   createQuizButton?.addEventListener("click", () => {
-    if (isSystemLocation()) return;
+    if (!normalizeTreeId(currentOpenFolderId)) return;
+    const isSystem = isSystemLocation();
+    if (isSystem && !canEditSystemContent()) return;
     const folderId = isVirtualRoot(currentOpenFolderId) ? null : currentOpenFolderId;
-    onCreateQuiz?.({ folderId });
+    onCreateQuiz?.({ folderId, isSystem });
   });
   createSeriesButton?.addEventListener("click", () => {
-    if (isSystemLocation()) return;
+    if (!normalizeTreeId(currentOpenFolderId)) return;
+    const isSystem = isSystemLocation();
+    if (isSystem && !canEditSystemContent()) return;
     const folderId = isVirtualRoot(currentOpenFolderId) ? null : currentOpenFolderId;
-    onCreateSeries?.({ folderId });
+    onCreateSeries?.({ folderId, isSystem });
   });
   createFolderButton?.addEventListener("click", createFolder);
 
   async function saveQuiz(quiz = {}){
+    const isSystem = quiz?.is_system === true;
+    if (isSystem && !canEditSystemContent()) throw new Error("La modification des quiz système est réservée au super-admin.");
     const folderId = isVirtualRoot(quiz.folder_id) ? null : normalizeTreeId(quiz.folder_id);
     const saved = await saveQuizForSpace?.(getTeacherSpaceId(), {
       ...quiz,
       folder_id: folderId,
       display_order: quiz.display_order != null && Number.isFinite(Number(quiz.display_order))
         ? Number(quiz.display_order)
-        : quizzes.filter((item) => item.is_system !== true).length,
-      is_system: false
+        : quizzes.filter((item) => item.is_system === isSystem).length,
+      is_system: isSystem
     });
     if (!saved) throw new Error("Enregistrement Supabase impossible.");
     const index = quizzes.findIndex((item) => String(item.id) === String(saved.id));

@@ -1,14 +1,18 @@
 import { openToolAssetPicker } from "../../../shared/tool-assets/asset-picker.js";
 import { listToolAssets } from "../../../shared/tool-assets/tool-assets.js";
+import { formatToolAssetFolderName } from "../../../shared/tool-assets/labels.js";
 import {
   normalizeQuizImageSource,
   resolveQuizImageSourceUrl
 } from "../../../shared/quiz-local-image-store.js";
 import {
   normalizeQuizAudioSource,
-  resolveQuizAudioSourceUrl,
-  saveQuizLocalAudio
-} from "../../../shared/quiz-local-audio-store.js";
+  resolveQuizAudioSourceUrl
+} from "../../../shared/quiz-audio-source.js";
+import {
+  createDefaultAudioRecordingTitle,
+  openAudioRecorderDialog
+} from "./audio-recorder-dialog.js";
 import { QUESTION_MODELS } from "./quiz-question-models.js";
 import {
   findQuizSelectionIndexesFromText,
@@ -1312,6 +1316,7 @@ export function createQuizWorkshopViewController({
   getCurrentTeacherSpace = null,
   listResourceFoldersForSpace = null,
   createResourceFolderForSpace = null,
+  ensureRecordingsResourceFolderForSpace = null,
   listResourcesForSpace = null,
   uploadResourceForSpace = null,
   createResourceSignedUrl = null,
@@ -1353,6 +1358,7 @@ export function createQuizWorkshopViewController({
   let currentQuizCreatedAt = "";
   let currentQuizUpdatedAt = "";
   let currentQuizDisplayOrder = null;
+  let currentQuizIsSystem = false;
   let isQuizDirty = false;
   let lastDrawerTrigger = addButton || null;
   let canvasResizeObserver = null;
@@ -1360,7 +1366,6 @@ export function createQuizWorkshopViewController({
   let savedTextSelection = null;
   let drawerCloseTimer = null;
   let drawerMotion = null;
-  let activeAudioRecording = null;
 
   function getSelectedModel(){
     return QUESTION_MODELS.find((model) => model.id === selectedModelId) || null;
@@ -1899,10 +1904,12 @@ export function createQuizWorkshopViewController({
               <span class="dashboard-material-icon" aria-hidden="true">collections</span>
               <span>Ressources</span>
             </button>
-            <button class="btn quiz-workshop-image-action" type="button" data-upload-quiz-image="${escapeHtml(widget.id)}">
-              <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
-              <span>Importer</span>
-            </button>
+            ${currentQuizIsSystem ? "" : `
+              <button class="btn quiz-workshop-image-action" type="button" data-upload-quiz-image="${escapeHtml(widget.id)}">
+                <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
+                <span>Importer</span>
+              </button>
+            `}
           </div>
         `}
       </div>
@@ -2000,7 +2007,34 @@ export function createQuizWorkshopViewController({
   }
 
   async function loadQuizImageResources(){
-    if (typeof listResourcesForSpace !== "function") return [];
+    const systemRoot = "Ressources système";
+    const personalRoot = "Ressources personnelles";
+    const systemImagesRoot = `${systemRoot} / Images`;
+    const folderPaths = new Set([personalRoot, systemRoot, systemImagesRoot]);
+    const siteAssets = await listToolAssets({ type:"image" });
+    const systemAssets = (Array.isArray(siteAssets) ? siteAssets : []).map((asset) => {
+      const parts = String(asset?.src || "").split("/").filter(Boolean);
+      const folderParts = parts.slice(1, -1).map((part) => formatToolAssetFolderName(part));
+      let category = systemImagesRoot;
+      folderParts.forEach((part) => {
+        category = `${category} / ${part}`;
+        folderPaths.add(category);
+      });
+      return {
+        ...asset,
+        type:"image",
+        scope:"system",
+        category,
+        label:String(asset?.label || asset?.id || "Image"),
+        alt:String(asset?.alt || asset?.label || "Image"),
+        mimeType:String(asset?.mimeType || asset?.mime_type || "image/*")
+      };
+    });
+
+    if (currentQuizIsSystem || typeof listResourcesForSpace !== "function") {
+      return { assets:systemAssets, folderPaths:[...folderPaths], unifiedTree:true };
+    }
+
     const teacherSpaceId = getActiveTeacherSpaceId();
     const [folderRows, resourceRows] = await Promise.all([
       typeof listResourceFoldersForSpace === "function" ? listResourceFoldersForSpace(teacherSpaceId) : [],
@@ -2009,7 +2043,13 @@ export function createQuizWorkshopViewController({
     const foldersById = new Map((Array.isArray(folderRows) ? folderRows : []).map((folder) => [String(folder.id || ""), folder]));
     const images = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) => resource?.type === "image");
 
-    return await Promise.all(images.map(async (resource) => {
+    (Array.isArray(folderRows) ? folderRows : []).forEach((folder) => {
+      const root = folder?.is_system === true ? systemRoot : personalRoot;
+      const path = getResourceFolderPath(folder?.id, foldersById);
+      if (path && path !== "Sans dossier") folderPaths.add(`${root} / ${path}`);
+    });
+
+    const resourceAssets = await Promise.all(images.map(async (resource) => {
       let url = String(resource.url || "").trim();
       if (!url && resource.storage_path && typeof createResourceSignedUrl === "function") {
         try { url = await createResourceSignedUrl(resource, 3600); }
@@ -2020,14 +2060,24 @@ export function createQuizWorkshopViewController({
         resourceId:String(resource.id || ""),
         type:"image",
         scope:resource.is_system === true ? "system" : "personal",
-        category:getResourceFolderPath(resource.folder_id, foldersById),
+        category:(() => {
+          const root = resource.is_system === true ? systemRoot : personalRoot;
+          const path = getResourceFolderPath(resource.folder_id, foldersById);
+          return path && path !== "Sans dossier" ? `${root} / ${path}` : root;
+        })(),
         label:String(resource.title || "Image"),
         alt:String(resource.alt || resource.title || "Image"),
         tags:Array.isArray(resource.tags) ? resource.tags : [],
         mimeType:String(resource.mime_type || "image/*"),
         url
       };
-    })).then((assets) => assets.filter((asset) => asset.resourceId && asset.url));
+    }));
+
+    return {
+      assets:[...systemAssets, ...resourceAssets.filter((asset) => asset.resourceId && asset.url)],
+      folderPaths:[...folderPaths],
+      unifiedTree:true
+    };
   }
 
   async function chooseSiteImage(widgetId){
@@ -2038,7 +2088,7 @@ export function createQuizWorkshopViewController({
         type:"image",
         title:"Choisir une image",
         loadAssets:loadQuizImageResources,
-        includeDefaultAssets:true,
+        includeDefaultAssets:false,
         emptyMessage:"Aucune image disponible dans ce dossier."
       });
       if (!asset) return;
@@ -2111,6 +2161,10 @@ export function createQuizWorkshopViewController({
   }
 
   function chooseImportedImage(widgetId){
+    if (currentQuizIsSystem) {
+      showToast?.("Un quiz système ne peut utiliser que les images système du site.", { isError:true });
+      return;
+    }
     const widget = draftWidgets.find((entry) => entry.id === widgetId);
     if (!widget || widget.type !== "image") return;
     const input = document.createElement("input");
@@ -2179,31 +2233,20 @@ export function createQuizWorkshopViewController({
   function getAudioEditorMarkup(widget, widgetView, isSelected){
     const source = normalizeQuizAudioSource(widgetView.audioSource);
     const sourcePayload = source ? escapeHtml(JSON.stringify(source)) : "";
-    const isRecording = activeAudioRecording?.widgetId === widget.id;
-    if (isRecording) {
-      return `
-        <div class="quiz-workshop-audio-content is-recorder" data-quiz-audio-recording-widget="${escapeHtml(widget.id)}">
-          <div class="quiz-workshop-audio-recording-panel">
-            <button class="quiz-workshop-audio-record-toggle dashboard-material-icon-btn" type="button" data-toggle-quiz-audio-recording="${escapeHtml(widget.id)}" aria-label="${activeAudioRecording.isRecording ? "Arrêter l’enregistrement" : "Démarrer l’enregistrement"}" title="${activeAudioRecording.isRecording ? "Arrêter" : "Enregistrer"}">
-              <span class="dashboard-material-icon" aria-hidden="true">${activeAudioRecording.isRecording ? "crop_square" : "radio_button_unchecked"}</span>
-            </button>
-            <div class="quiz-workshop-audio-record-clock" data-quiz-audio-record-clock>0:00</div>
-            <div class="quiz-workshop-audio-record-waveform" data-quiz-audio-record-waveform aria-hidden="true">${Array.from({ length:24 }, () => "<span></span>").join("")}</div>
-          </div>
-        </div>`;
-    }
     return `
       <div class="quiz-workshop-audio-content${source ? " has-audio" : " is-empty"}">
         ${source ? `
           <audio class="quiz-workshop-audio-element" data-quiz-audio-source="${sourcePayload}" preload="metadata"></audio>
-          <div class="quiz-workshop-audio-playback${widgetView.columnSpan <= 2 ? " is-narrow" : ""}">
-            <button class="quiz-workshop-audio-play dashboard-material-icon-btn" type="button" data-toggle-quiz-audio-preview="${escapeHtml(widget.id)}" aria-label="Lire l’audio" title="Lire / mettre en pause"><span class="dashboard-material-icon" aria-hidden="true">play_arrow</span></button>
-            <input class="quiz-workshop-audio-seek" data-quiz-audio-seek type="range" min="0" max="100" value="0" aria-label="Position de lecture">
+          <div class="quiz-workshop-audio-playback dashboard-audio-recorder-preview">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-toggle-quiz-audio-preview="${escapeHtml(widget.id)}" aria-label="Lire l’audio" title="Lire / mettre en pause"><span class="dashboard-material-icon" aria-hidden="true">play_arrow</span></button>
+            <input class="dashboard-audio-recorder-progress" data-quiz-audio-seek type="range" min="0" max="100" value="0" aria-label="Position de lecture">
           </div>` : `
           <div class="quiz-workshop-audio-actions">
-            <button class="btn" type="button" title="Les ressources audio arrivent bientôt"><span class="dashboard-material-icon" aria-hidden="true">collections</span>Ressources</button>
-            <button class="btn" type="button" data-upload-quiz-audio="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">upload_file</span>Importer</button>
-            <button class="btn" type="button" data-open-quiz-audio-recorder="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">radio_button_checked</span>Enregistrer</button>
+            <button class="btn" type="button" data-choose-quiz-audio-site="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">collections</span>Ressources</button>
+            ${currentQuizIsSystem ? "" : `
+              <button class="btn" type="button" data-upload-quiz-audio="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">upload_file</span>Importer</button>
+              <button class="btn" type="button" data-open-quiz-audio-recorder="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">radio_button_checked</span>Enregistrer</button>
+            `}
           </div>`}
         ${source ? `<button class="btn quiz-workshop-audio-remove${isSelected ? " is-visible" : ""}" type="button" data-remove-quiz-audio="${escapeHtml(widget.id)}">Supprimer</button>` : ""}
         <div class="quiz-workshop-audio-unavailable">Audio indisponible</div>
@@ -2331,493 +2374,225 @@ export function createQuizWorkshopViewController({
     renderCanvas();
   }
 
-  function buildAudioRecordingName(widget){
-    const quizPart = getQuizTitle() || "quiz";
-    const questionIndex = editingQuestionId
-      ? Math.max(1, questions.findIndex((question) => question.id === editingQuestionId) + 1)
-      : questions.length + 1;
-    const raw = `${quizPart}-question-${questionIndex}-${widget?.label || "audio"}`;
-    return `${raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "audio"}.webm`;
+  async function loadQuizAudioResources(){
+    const systemRoot = "Ressources système";
+    const personalRoot = "Ressources personnelles";
+    const systemAudioRoot = `${systemRoot} / Audios`;
+    const folderPaths = new Set([personalRoot, systemRoot, systemAudioRoot]);
+    const siteAssets = await listToolAssets({ type:"audio" });
+    const systemAssets = (Array.isArray(siteAssets) ? siteAssets : []).map((asset) => {
+      const parts = String(asset?.src || "").split("/").filter(Boolean);
+      const folderParts = parts.slice(1, -1).map((part) => formatToolAssetFolderName(part));
+      let category = systemAudioRoot;
+      folderParts.forEach((part) => {
+        category = `${category} / ${part}`;
+        folderPaths.add(category);
+      });
+      return {
+        ...asset,
+        type:"audio",
+        scope:"system",
+        category,
+        label:String(asset?.label || asset?.id || "Audio"),
+        mimeType:String(asset?.mimeType || asset?.mime_type || "audio/*"),
+        duration:Math.max(0, Number(asset?.duration) || 0)
+      };
+    });
+
+    if (currentQuizIsSystem || typeof listResourcesForSpace !== "function") {
+      return { assets:systemAssets, folderPaths:[...folderPaths], unifiedTree:true };
+    }
+
+    const teacherSpaceId = getActiveTeacherSpaceId();
+    const [folderRows, resourceRows] = await Promise.all([
+      typeof listResourceFoldersForSpace === "function" ? listResourceFoldersForSpace(teacherSpaceId) : [],
+      listResourcesForSpace(teacherSpaceId)
+    ]);
+    const foldersById = new Map((Array.isArray(folderRows) ? folderRows : []).map((folder) => [String(folder.id || ""), folder]));
+    const audios = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) => resource?.type === "audio");
+
+    (Array.isArray(folderRows) ? folderRows : []).forEach((folder) => {
+      const root = folder?.is_system === true ? systemRoot : personalRoot;
+      const path = getResourceFolderPath(folder?.id, foldersById);
+      if (path && path !== "Sans dossier") folderPaths.add(`${root} / ${path}`);
+    });
+
+    const resourceAssets = await Promise.all(audios.map(async (resource) => {
+      let url = String(resource.url || "").trim();
+      if (!url && resource.storage_path && typeof createResourceSignedUrl === "function") {
+        try { url = await createResourceSignedUrl(resource, 3600); }
+        catch (error) { console.warn("Impossible de signer une ressource audio du Quiz.", error); }
+      }
+      return {
+        id:`resource:${resource.id}`,
+        resourceId:String(resource.id || ""),
+        type:"audio",
+        scope:resource.is_system === true ? "system" : "personal",
+        category:(() => {
+          const root = resource.is_system === true ? systemRoot : personalRoot;
+          const path = getResourceFolderPath(resource.folder_id, foldersById);
+          return path && path !== "Sans dossier" ? `${root} / ${path}` : root;
+        })(),
+        label:String(resource.title || "Audio"),
+        tags:Array.isArray(resource.tags) ? resource.tags : [],
+        mimeType:String(resource.mime_type || "audio/*"),
+        duration:Math.max(0, Number(resource.duration) || 0),
+        url
+      };
+    }));
+
+    return {
+      assets:[...systemAssets, ...resourceAssets.filter((asset) => asset.resourceId && asset.url)],
+      folderPaths:[...folderPaths],
+      unifiedTree:true
+    };
+  }
+
+  async function chooseAudioResource(widgetId){
+    const widget = draftWidgets.find((entry) => entry.id === widgetId && entry.type === "audio");
+    if (!widget) return;
+    try {
+      const asset = await openToolAssetPicker({
+        type:"audio",
+        title:"Choisir un audio",
+        loadAssets:loadQuizAudioResources,
+        includeDefaultAssets:false,
+        emptyMessage:"Aucun audio disponible dans ce dossier."
+      });
+      if (!asset) return;
+      if (asset.resourceId) {
+        setWidgetAudioSource(widget, {
+          kind:"resource",
+          resourceId:asset.resourceId,
+          label:asset.label,
+          mimeType:asset.mimeType || "audio/*",
+          duration:asset.duration || 0
+        });
+        return;
+      }
+      setWidgetAudioSource(widget, {
+        kind:"site-asset",
+        assetId:asset.id,
+        src:asset.src,
+        label:asset.label,
+        mimeType:asset.mimeType || "audio/*",
+        duration:asset.duration || 0
+      });
+    } catch (error) {
+      console.error("Impossible d’ouvrir les ressources audio du Quiz.", error);
+      showToast?.(error?.message || "Impossible de charger les ressources audio.", { isError:true });
+    }
+  }
+
+  async function readAudioDuration(file){
+    if (!(file instanceof Blob)) return 0;
+    return await new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const audio = document.createElement("audio");
+      const finish = (duration = 0) => {
+        URL.revokeObjectURL(url);
+        audio.remove();
+        resolve(Math.max(0, Number(duration) || 0));
+      };
+      audio.preload = "metadata";
+      audio.addEventListener("loadedmetadata", () => finish(Number.isFinite(audio.duration) ? audio.duration : 0), { once:true });
+      audio.addEventListener("error", () => finish(0), { once:true });
+      audio.src = url;
+    });
   }
 
   function chooseImportedAudio(widgetId){
+    if (currentQuizIsSystem) {
+      showToast?.("Un quiz système ne peut utiliser que les audios système du site.", { isError:true });
+      return;
+    }
     const widget = draftWidgets.find((entry) => entry.id === widgetId && entry.type === "audio");
     if (!widget) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "audio/*,.mp3,.wav,.ogg,.webm,.m4a,.mp4";
-    input.addEventListener("change", () => {
-      const file = input.files?.[0];
+    input.hidden = true;
+    document.body.appendChild(input);
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0] || null;
+      input.remove();
       if (!file) return;
-      if (file.type && !file.type.startsWith("audio/")) {
-        window.alert("Le fichier sélectionné n’est pas un audio.");
-        return;
+      try {
+        const mimeType = String(file.type || "").trim().toLowerCase();
+        if (mimeType && !mimeType.startsWith("audio/")) throw new Error("Le fichier sélectionné n’est pas un audio.");
+        if (Number(file.size) > MAX_RESOURCE_FILE_SIZE) throw new Error("Cet audio dépasse la limite de 25 Mo.");
+        if (typeof uploadResourceForSpace !== "function" || typeof listResourcesForSpace !== "function") {
+          throw new Error("L’import Supabase des ressources n’est pas disponible.");
+        }
+
+        const teacherSpaceId = getActiveTeacherSpaceId();
+        const existingResources = await listResourcesForSpace(teacherSpaceId);
+        const usedBytes = (Array.isArray(existingResources) ? existingResources : [])
+          .filter((resource) => resource?.is_system !== true)
+          .reduce((total, resource) => total + Math.max(0, Number(resource?.size_bytes) || 0), 0);
+        if (usedBytes + Math.max(0, Number(file.size) || 0) > RESOURCE_STORAGE_QUOTA_BYTES) {
+          throw new Error("Le quota de stockage personnel de 100 Mo serait dépassé.");
+        }
+
+        const importsFolder = await ensureImportsResourceFolder(teacherSpaceId);
+        const title = getImportedResourceTitle(file);
+        const duration = await readAudioDuration(file);
+        const uploaded = await uploadResourceForSpace(teacherSpaceId, file, {
+          folder_id:importsFolder.id,
+          title,
+          alt:title,
+          type:"audio",
+          mime_type:mimeType || "audio/*",
+          duration,
+          metadata:{ origin:"import" }
+        });
+        if (!uploaded?.id) throw new Error("La ressource importée n’a pas été enregistrée.");
+
+        setWidgetAudioSource(widget, {
+          kind:"resource",
+          resourceId:uploaded.id,
+          label:uploaded.title || title,
+          mimeType:uploaded.mime_type || mimeType || "audio/*",
+          duration:uploaded.duration || duration
+        });
+        showToast?.("Audio importé dans Ressources personnelles / Imports.");
+      } catch (error) {
+        console.error("Impossible d’importer l’audio.", error);
+        showToast?.(error?.message || "Impossible d’importer cet audio.", { isError:true });
       }
-      saveQuizLocalAudio(file, { name:file.name, kind:"local-upload", duration:0 })
-        .then((source) => setWidgetAudioSource(widget, source))
-        .catch((error) => window.alert(error?.message || "Impossible d’importer cet audio."));
     }, { once:true });
+    input.addEventListener("cancel", () => input.remove(), { once:true });
     input.click();
   }
 
-  function clearInlineAudioRecording(session = activeAudioRecording){
-    if (!session) return;
-    if (session.timer) window.clearInterval(session.timer);
-    if (session.frame) window.cancelAnimationFrame(session.frame);
-    session.stream?.getTracks?.().forEach((track) => track.stop());
-    session.audioContext?.close?.().catch?.(() => {});
-    session.timer = null;
-    session.frame = null;
-  }
-
-  function updateInlineAudioRecordingUi(session = activeAudioRecording){
-    if (!session) return;
-    const host = canvas?.querySelector(`[data-quiz-audio-recording-widget="${CSS.escape(session.widgetId)}"]`);
-    if (!host) return;
-    const elapsed = session.startedAt ? (Date.now() - session.startedAt) / 1000 : 0;
-    const clock = host.querySelector("[data-quiz-audio-record-clock]");
-    const status = host.querySelector("[data-quiz-audio-record-status]");
-    const button = host.querySelector("[data-toggle-quiz-audio-recording]");
-    if (clock) clock.textContent = formatAudioDuration(elapsed);
-    if (status) status.textContent = session.status || "Prêt à enregistrer.";
-    button?.classList.toggle("is-recording", Boolean(session.isRecording));
-    const icon = button?.querySelector(".dashboard-material-icon");
-    if (icon) icon.textContent = session.isRecording ? "crop_square" : "radio_button_unchecked";
-  }
-
-  function cancelInlineAudioRecording(){
-    const session = activeAudioRecording;
-    if (!session) return;
-    session.cancelled = true;
-    if (session.recorder?.state === "recording") try { session.recorder.stop(); } catch {}
-    clearInlineAudioRecording(session);
-    activeAudioRecording = null;
-  }
-
-  function openInlineAudioRecorder(widgetId){
-    cancelInlineAudioRecording();
-    activeAudioRecording = { widgetId, isRecording:false, status:"Prêt à enregistrer.", startedAt:0, chunks:[] };
-    selectedWidgetId = widgetId;
-    renderCanvas();
-  }
-
-  async function startInlineAudioRecording(widgetId){
-    const session = activeAudioRecording;
-    if (!session || session.widgetId !== widgetId || session.isRecording) return;
-    if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) {
-      session.status = "L’enregistrement audio n’est pas disponible dans ce navigateur.";
-      updateInlineAudioRecordingUi(session);
+  async function recordAudioResource(widgetId){
+    if (currentQuizIsSystem) {
+      showToast?.("L’enregistrement audio personnel est désactivé pour les quiz système.", { isError:true });
       return;
     }
-    try {
-      session.stream = await navigator.mediaDevices.getUserMedia({ audio:true });
-      if (activeAudioRecording !== session || session.cancelled) { clearInlineAudioRecording(session); return; }
-      const mimeType = getSupportedRecorderMimeType();
-      session.recorder = mimeType ? new MediaRecorder(session.stream, { mimeType }) : new MediaRecorder(session.stream);
-      session.chunks = [];
-      session.recorder.addEventListener("dataavailable", (event) => { if (event.data?.size) session.chunks.push(event.data); });
-      session.recorder.addEventListener("stop", async () => {
-        const duration = Math.max(.1, (Date.now() - session.startedAt) / 1000);
-        clearInlineAudioRecording(session);
-        if (session.cancelled || activeAudioRecording !== session) return;
-        session.status = "Sauvegarde de l’enregistrement…";
-        session.isRecording = false;
-        updateInlineAudioRecordingUi(session);
-        try {
-          const blob = new Blob(session.chunks, { type:session.recorder?.mimeType || mimeType || "audio/webm" });
-          const widget = draftWidgets.find((entry) => entry.id === widgetId);
-          const source = await saveQuizLocalAudio(blob, { name:buildAudioRecordingName(widget), kind:"local-recording", duration });
-          if (activeAudioRecording !== session) return;
-          activeAudioRecording = null;
-          setWidgetAudioSource(widget, source);
-        } catch (error) {
-          session.status = error?.message || "Impossible d’enregistrer cet audio.";
-          updateInlineAudioRecordingUi(session);
-        }
-      }, { once:true });
-      const AudioContext = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (AudioContext) {
-        session.audioContext = new AudioContext();
-        const analyser = session.audioContext.createAnalyser();
-        analyser.fftSize = 128;
-        session.audioContext.createMediaStreamSource(session.stream).connect(analyser);
-        const values = new Uint8Array(analyser.fftSize);
-        const paint = () => {
-          if (activeAudioRecording !== session || !session.isRecording) return;
-          analyser.getByteTimeDomainData(values);
-          const level = values.reduce((sum, value) => sum + Math.abs(value - 128), 0) / values.length / 128;
-          canvas?.querySelectorAll(`[data-quiz-audio-recording-widget="${CSS.escape(widgetId)}"] [data-quiz-audio-record-waveform] span`).forEach((bar, index) => {
-            const variation = .22 + ((index % 5) / 9);
-            bar.style.transform = `scaleY(${Math.min(1, .16 + level * 4 * variation)})`;
-          });
-          session.frame = window.requestAnimationFrame(paint);
-        };
-        session.paint = paint;
-      }
-      session.recorder.start();
-      session.isRecording = true;
-      session.startedAt = Date.now();
-      session.status = "Enregistrement en cours…";
-      session.timer = window.setInterval(() => updateInlineAudioRecordingUi(session), 250);
-      session.paint?.();
-      updateInlineAudioRecordingUi(session);
-    } catch (error) {
-      clearInlineAudioRecording(session);
-      session.status = error?.name === "NotAllowedError" ? "Accès au microphone refusé." : "Impossible d’utiliser le microphone.";
-      updateInlineAudioRecordingUi(session);
+    const widget = draftWidgets.find((entry) => entry.id === widgetId && entry.type === "audio");
+    if (!widget) return;
+    if (typeof ensureRecordingsResourceFolderForSpace !== "function") {
+      showToast?.("Le dossier des enregistrements n’est pas disponible.", { isError:true });
+      return;
     }
-  }
-
-  function stopInlineAudioRecording(widgetId){
-    const session = activeAudioRecording;
-    if (session?.widgetId === widgetId && session.recorder?.state === "recording") {
-      session.status = "Finalisation de l’enregistrement…";
-      updateInlineAudioRecordingUi(session);
-      try { session.recorder.stop(); } catch {}
-    }
-  }
-
-  function getSupportedRecorderMimeType(){
-    // OGG/Opus conserve un index de durée exploitable par le lecteur HTML5,
-    // contrairement à certains WebM générés par MediaRecorder qui restent
-    // lisibles mais impossibles à repositionner.
-    const candidates = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-    return candidates.find((type) => globalThis.MediaRecorder?.isTypeSupported?.(type)) || "";
-  }
-
-  async function openAudioSourceDialog(widgetId){
-    const widget = draftWidgets.find((entry) => entry.id === widgetId);
-    if (!widget || widget.type !== "audio") return;
-
-    const overlay = document.createElement("div");
-    overlay.className = "quiz-workshop-audio-picker-overlay";
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", "Choisir un audio");
-    overlay.innerHTML = `
-      <section class="quiz-workshop-audio-picker-card">
-        <header class="quiz-workshop-audio-picker-header">
-          <div>
-            <span>Widget Audio</span>
-            <h3>Choisir un audio</h3>
-          </div>
-          <button class="dashboard-material-icon-btn" type="button" data-audio-picker-close aria-label="Fermer" title="Fermer">
-            <span class="dashboard-material-icon" aria-hidden="true">close</span>
-          </button>
-        </header>
-        <div class="quiz-workshop-audio-picker-tabs" role="tablist" aria-label="Source de l’audio">
-          <button type="button" class="is-active" data-audio-picker-tab="site" aria-selected="true">Audios du site</button>
-          <button type="button" data-audio-picker-tab="import" aria-selected="false">Importer</button>
-          <button type="button" data-audio-picker-tab="record" aria-selected="false">Enregistrer</button>
-        </div>
-        <div class="quiz-workshop-audio-picker-body">
-          <section class="quiz-workshop-audio-picker-panel" data-audio-picker-panel="site">
-            <div class="quiz-workshop-audio-picker-status" data-audio-site-status>Chargement des audios…</div>
-            <div class="quiz-workshop-audio-site-list" data-audio-site-list></div>
-          </section>
-          <section class="quiz-workshop-audio-picker-panel" data-audio-picker-panel="import" hidden>
-            <div class="quiz-workshop-audio-import-box">
-              <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
-              <strong>Importer un fichier audio</strong>
-              <span>MP3, WAV, OGG, WebM ou M4A</span>
-              <button class="btn" type="button" data-audio-import-choose>Parcourir…</button>
-              <input type="file" accept="audio/*,.mp3,.wav,.ogg,.webm,.m4a,.mp4" data-audio-import-input hidden>
-            </div>
-            <div class="quiz-workshop-audio-pending" data-audio-import-preview hidden>
-              <strong data-audio-import-name></strong>
-              <audio controls preload="metadata" data-audio-import-player></audio>
-              <button class="btn primary" type="button" data-audio-import-use>Utiliser cet audio</button>
-            </div>
-          </section>
-          <section class="quiz-workshop-audio-picker-panel" data-audio-picker-panel="record" hidden>
-            <div class="quiz-workshop-audio-recording">
-              <div class="quiz-workshop-audio-record-clock" data-audio-record-clock>0:00</div>
-              <div class="quiz-workshop-audio-record-status" data-audio-record-status>Prêt à enregistrer.</div>
-              <div class="quiz-workshop-audio-record-actions">
-                <button class="btn primary" type="button" data-audio-record-start>
-                  <span class="dashboard-material-icon" aria-hidden="true">radio_button_unchecked</span>
-                  Démarrer
-                </button>
-                <button class="btn" type="button" data-audio-record-stop disabled>
-                  <span class="dashboard-material-icon" aria-hidden="true">crop_square</span>
-                  Arrêter
-                </button>
-                <button class="btn" type="button" data-audio-record-reset hidden>
-                  <span class="dashboard-material-icon" aria-hidden="true">restart_alt</span>
-                  Recommencer
-                </button>
-              </div>
-              <div class="quiz-workshop-audio-pending" data-audio-record-preview hidden>
-                <audio controls preload="metadata" data-audio-record-player></audio>
-                <button class="btn primary" type="button" data-audio-record-use>Utiliser cet enregistrement</button>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-    `;
-    document.body.appendChild(overlay);
-
-    let closed = false;
-    let importFile = null;
-    let importPreviewUrl = "";
-    let recordedBlob = null;
-    let recordedPreviewUrl = "";
-    let recordedDuration = 0;
-    let mediaStream = null;
-    let mediaRecorder = null;
-    let recordChunks = [];
-    let recordStartedAt = 0;
-    let recordTimer = null;
-    let recordLimitTimer = null;
-
-    const revokePreviewUrls = () => {
-      if (importPreviewUrl) URL.revokeObjectURL(importPreviewUrl);
-      if (recordedPreviewUrl) URL.revokeObjectURL(recordedPreviewUrl);
-      importPreviewUrl = "";
-      recordedPreviewUrl = "";
-    };
-    const stopStream = () => {
-      mediaStream?.getTracks?.().forEach((track) => track.stop());
-      mediaStream = null;
-    };
-    const clearRecordTimers = () => {
-      if (recordTimer) window.clearInterval(recordTimer);
-      if (recordLimitTimer) window.clearTimeout(recordLimitTimer);
-      recordTimer = null;
-      recordLimitTimer = null;
-    };
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      overlay.querySelectorAll("audio").forEach((audio) => {
-        try { audio.pause(); } catch {}
-      });
-      clearRecordTimers();
-      if (mediaRecorder?.state === "recording") {
-        try { mediaRecorder.stop(); } catch {}
-      }
-      stopStream();
-      revokePreviewUrls();
-      overlay.remove();
-    };
-    const useSource = (source) => {
-      setWidgetAudioSource(widget, source);
-      close();
-    };
-
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay || event.target.closest("[data-audio-picker-close]")) {
-        close();
-        return;
-      }
-      const tab = event.target.closest("[data-audio-picker-tab]");
-      if (tab) {
-        const value = tab.dataset.audioPickerTab || "site";
-        overlay.querySelectorAll("[data-audio-picker-tab]").forEach((button) => {
-          const active = button.dataset.audioPickerTab === value;
-          button.classList.toggle("is-active", active);
-          button.setAttribute("aria-selected", active ? "true" : "false");
-        });
-        overlay.querySelectorAll("[data-audio-picker-panel]").forEach((panel) => {
-          panel.hidden = panel.dataset.audioPickerPanel !== value;
-        });
-        return;
-      }
-      const siteUse = event.target.closest("[data-audio-site-use]");
-      if (siteUse) {
-        const payload = siteUse.dataset.audioSiteUse || "";
-        try { useSource(JSON.parse(payload)); } catch {}
-        return;
-      }
-      if (event.target.closest("[data-audio-import-choose]")) {
-        overlay.querySelector("[data-audio-import-input]")?.click();
-        return;
-      }
-      if (event.target.closest("[data-audio-import-use]") && importFile) {
-        const player = overlay.querySelector("[data-audio-import-player]");
-        saveQuizLocalAudio(importFile, {
-          name:importFile.name,
-          kind:"local-upload",
-          duration:Number.isFinite(player?.duration) ? player.duration : 0
-        }).then(useSource).catch((error) => window.alert(error?.message || "Impossible d’importer cet audio."));
-        return;
-      }
-      if (event.target.closest("[data-audio-record-start]")) startRecording();
-      if (event.target.closest("[data-audio-record-stop]")) stopRecording();
-      if (event.target.closest("[data-audio-record-reset]")) resetRecording();
-      if (event.target.closest("[data-audio-record-use]") && recordedBlob) {
-        saveQuizLocalAudio(recordedBlob, {
-          name:buildAudioRecordingName(widget),
-          kind:"local-recording",
-          duration:recordedDuration
-        }).then(useSource).catch((error) => window.alert(error?.message || "Impossible d’enregistrer cet audio."));
-      }
+    const teacherSpaceId = getActiveTeacherSpaceId();
+    const resource = await openAudioRecorderDialog({
+      teacherSpaceId,
+      ensureDestinationFolder:() => ensureRecordingsResourceFolderForSpace(teacherSpaceId),
+      listResourcesForSpace,
+      uploadResourceForSpace,
+      defaultTitle:createDefaultAudioRecordingTitle(),
+      showToast
     });
-    overlay.addEventListener("play", (event) => {
-      const activeAudio = event.target instanceof HTMLAudioElement ? event.target : null;
-      if (!activeAudio) return;
-      overlay.querySelectorAll("audio").forEach((audio) => {
-        if (audio === activeAudio) return;
-        try { audio.pause(); } catch {}
-      });
-    }, true);
-    overlay.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
+    if (!resource?.id) return;
+    setWidgetAudioSource(widget, {
+      kind:"resource",
+      resourceId:resource.id,
+      label:resource.title || "Enregistrement",
+      mimeType:resource.mime_type || "audio/*",
+      duration:resource.duration || 0
     });
-
-    const importInput = overlay.querySelector("[data-audio-import-input]");
-    importInput?.addEventListener("change", () => {
-      const file = importInput.files?.[0] || null;
-      if (!file) return;
-      if (file.type && !file.type.startsWith("audio/")) {
-        window.alert("Le fichier sélectionné n’est pas un audio.");
-        importInput.value = "";
-        return;
-      }
-      importFile = file;
-      if (importPreviewUrl) URL.revokeObjectURL(importPreviewUrl);
-      importPreviewUrl = URL.createObjectURL(file);
-      const preview = overlay.querySelector("[data-audio-import-preview]");
-      const player = overlay.querySelector("[data-audio-import-player]");
-      const name = overlay.querySelector("[data-audio-import-name]");
-      if (player) player.src = importPreviewUrl;
-      if (name) name.textContent = file.name;
-      if (preview) preview.hidden = false;
-    });
-
-    async function startRecording(){
-      const status = overlay.querySelector("[data-audio-record-status]");
-      if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) {
-        if (status) status.textContent = "L’enregistrement audio n’est pas disponible dans ce navigateur.";
-        return;
-      }
-      try {
-        resetRecording(false);
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-        const mimeType = getSupportedRecorderMimeType();
-        mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
-        recordChunks = [];
-        mediaRecorder.addEventListener("dataavailable", (event) => {
-          if (event.data?.size) recordChunks.push(event.data);
-        });
-        mediaRecorder.addEventListener("stop", () => {
-          clearRecordTimers();
-          if (closed) {
-            stopStream();
-            return;
-          }
-          recordedDuration = Math.max(.1, (Date.now() - recordStartedAt) / 1000);
-          recordedBlob = new Blob(recordChunks, { type:mediaRecorder?.mimeType || mimeType || "audio/webm" });
-          if (recordedPreviewUrl) URL.revokeObjectURL(recordedPreviewUrl);
-          recordedPreviewUrl = URL.createObjectURL(recordedBlob);
-          const preview = overlay.querySelector("[data-audio-record-preview]");
-          const player = overlay.querySelector("[data-audio-record-player]");
-          if (player) player.src = recordedPreviewUrl;
-          if (preview) preview.hidden = false;
-          overlay.querySelector("[data-audio-record-reset]")?.removeAttribute("hidden");
-          const startButton = overlay.querySelector("[data-audio-record-start]");
-          const stopButton = overlay.querySelector("[data-audio-record-stop]");
-          if (startButton) startButton.disabled = false;
-          if (stopButton) stopButton.disabled = true;
-          if (status) status.textContent = "Enregistrement terminé. Écoutez-le avant de l’utiliser.";
-          stopStream();
-        }, { once:true });
-        mediaRecorder.start();
-        recordStartedAt = Date.now();
-        const startButton = overlay.querySelector("[data-audio-record-start]");
-        const stopButton = overlay.querySelector("[data-audio-record-stop]");
-        if (startButton) startButton.disabled = true;
-        if (stopButton) stopButton.disabled = false;
-        if (status) status.textContent = "Enregistrement en cours…";
-        const updateClock = () => {
-          const elapsed = Math.min(300, (Date.now() - recordStartedAt) / 1000);
-          const clock = overlay.querySelector("[data-audio-record-clock]");
-          if (clock) clock.textContent = formatAudioDuration(elapsed);
-        };
-        updateClock();
-        recordTimer = window.setInterval(updateClock, 250);
-        recordLimitTimer = window.setTimeout(stopRecording, 300000);
-      } catch (error) {
-        stopStream();
-        if (status) status.textContent = error?.name === "NotAllowedError"
-          ? "Accès au microphone refusé."
-          : "Impossible d’utiliser le microphone.";
-      }
-    }
-
-    function stopRecording(){
-      if (mediaRecorder?.state === "recording") {
-        try { mediaRecorder.stop(); } catch {}
-      }
-    }
-
-    function resetRecording(resetStatus = true){
-      clearRecordTimers();
-      if (mediaRecorder?.state === "recording") {
-        try { mediaRecorder.stop(); } catch {}
-      }
-      stopStream();
-      recordedBlob = null;
-      recordedDuration = 0;
-      if (recordedPreviewUrl) URL.revokeObjectURL(recordedPreviewUrl);
-      recordedPreviewUrl = "";
-      const preview = overlay.querySelector("[data-audio-record-preview]");
-      const player = overlay.querySelector("[data-audio-record-player]");
-      if (preview) preview.hidden = true;
-      if (player) player.removeAttribute("src");
-      overlay.querySelector("[data-audio-record-reset]")?.setAttribute("hidden", "");
-      const clock = overlay.querySelector("[data-audio-record-clock]");
-      if (clock) clock.textContent = "0:00";
-      const startButton = overlay.querySelector("[data-audio-record-start]");
-      const stopButton = overlay.querySelector("[data-audio-record-stop]");
-      if (startButton) startButton.disabled = false;
-      if (stopButton) stopButton.disabled = true;
-      if (resetStatus) {
-        const status = overlay.querySelector("[data-audio-record-status]");
-        if (status) status.textContent = "Prêt à enregistrer.";
-      }
-    }
-
-    const siteStatus = overlay.querySelector("[data-audio-site-status]");
-    const siteList = overlay.querySelector("[data-audio-site-list]");
-    listToolAssets({ type:"audio" }).then((assets) => {
-      if (!siteList || !siteStatus) return;
-      if (!assets.length) {
-        siteStatus.textContent = "Aucun audio système n’est encore disponible.";
-        siteStatus.classList.add("is-empty");
-        return;
-      }
-      siteStatus.textContent = `${assets.length} audio${assets.length > 1 ? "s" : ""} disponible${assets.length > 1 ? "s" : ""}`;
-      siteList.innerHTML = assets.map((asset) => {
-        const source = normalizeQuizAudioSource({
-          kind:"site-asset",
-          assetId:asset.id,
-          src:asset.src,
-          label:asset.label,
-          mimeType:asset.mimeType || "audio/*",
-          duration:asset.duration || 0
-        });
-        return `
-          <article class="quiz-workshop-audio-site-item">
-            <div>
-              <strong>${escapeHtml(asset.label || asset.id)}</strong>
-              <span>${escapeHtml(asset.category || "Audio du site")}</span>
-            </div>
-            <audio controls preload="none" src="${escapeHtml(asset.url || "")}"></audio>
-            <button class="btn primary" type="button" data-audio-site-use="${escapeHtml(JSON.stringify(source))}">Utiliser</button>
-          </article>
-        `;
-      }).join("");
-    }).catch((error) => {
-      console.warn("Impossible de charger les audios du site.", error);
-      if (siteStatus) siteStatus.textContent = "Impossible de charger les audios du site.";
-    });
-
-    window.requestAnimationFrame(() => overlay.querySelector("[data-audio-picker-tab]")?.focus());
   }
 
   function renderCanvas(){
@@ -3090,7 +2865,6 @@ export function createQuizWorkshopViewController({
   }
 
   function closeDrawer({ restoreFocus = true } = {}){
-    cancelInlineAudioRecording();
     interactionState = null;
     editingWidgetId = "";
     editingChoiceId = "";
@@ -3462,17 +3236,17 @@ export function createQuizWorkshopViewController({
           <div class="quiz-workshop-quick-entry-example">
             <code>${escapeHtml(example)}</code>
           </div>
-          <div class="dashboard-bank-markup-help-wrap" data-quiz-quick-markup-help>
+          <div class="quiz-markup-help-wrap" data-quiz-quick-markup-help>
             <button
-              class="dashboard-bank-markup-help-btn"
+              class="quiz-markup-help-btn"
               type="button"
               data-quiz-quick-markup-help-toggle
               aria-label="Aide mise en forme"
               aria-expanded="false"
             >?</button>
-            <div class="dashboard-bank-markup-help-popup" data-quiz-quick-markup-help-popup role="dialog" aria-label="Mise en forme" hidden>
-              <div class="dashboard-bank-markup-help-title">Mise en forme</div>
-              <div class="dashboard-bank-markup-help-list">
+            <div class="quiz-markup-help-popup" data-quiz-quick-markup-help-popup role="dialog" aria-label="Mise en forme" hidden>
+              <div class="quiz-markup-help-title">Mise en forme</div>
+              <div class="quiz-markup-help-list">
                 <div><code>§</code><span>retour à la ligne</span></div>
                 <div><code>*mot*</code><span>gras</span></div>
                 <div><code>_mot_</code><span>italique</span></div>
@@ -3850,6 +3624,13 @@ export function createQuizWorkshopViewController({
       return;
     }
 
+    const chooseSiteAudioButton = event.target.closest("[data-choose-quiz-audio-site]");
+    if (chooseSiteAudioButton) {
+      event.stopPropagation();
+      void chooseAudioResource(String(chooseSiteAudioButton.dataset.chooseQuizAudioSite || ""));
+      return;
+    }
+
     const importAudioButton = event.target.closest("[data-upload-quiz-audio]");
     if (importAudioButton) {
       event.stopPropagation();
@@ -3867,16 +3648,7 @@ export function createQuizWorkshopViewController({
     const openAudioRecorderButton = event.target.closest("[data-open-quiz-audio-recorder]");
     if (openAudioRecorderButton) {
       event.stopPropagation();
-      openInlineAudioRecorder(String(openAudioRecorderButton.dataset.openQuizAudioRecorder || ""));
-      return;
-    }
-
-    const toggleAudioRecordingButton = event.target.closest("[data-toggle-quiz-audio-recording]");
-    if (toggleAudioRecordingButton) {
-      event.stopPropagation();
-      const widgetId = String(toggleAudioRecordingButton.dataset.toggleQuizAudioRecording || "");
-      if (activeAudioRecording?.widgetId === widgetId && activeAudioRecording.isRecording) stopInlineAudioRecording(widgetId);
-      else void startInlineAudioRecording(widgetId);
+      void recordAudioResource(String(openAudioRecorderButton.dataset.openQuizAudioRecorder || ""));
       return;
     }
 
@@ -4541,6 +4313,7 @@ export function createQuizWorkshopViewController({
       title: getQuizTitle() || "Quiz sans titre",
       folder_id: currentQuizFolderId,
       display_order: currentQuizDisplayOrder,
+      is_system: currentQuizIsSystem,
       created_at: currentQuizCreatedAt,
       updated_at: currentQuizUpdatedAt,
       grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
@@ -4568,6 +4341,7 @@ export function createQuizWorkshopViewController({
         currentQuizCreatedAt = String(saved.created_at || currentQuizCreatedAt);
         currentQuizUpdatedAt = String(saved.updated_at || currentQuizUpdatedAt);
         currentQuizDisplayOrder = saved.display_order ?? currentQuizDisplayOrder;
+        currentQuizIsSystem = saved.is_system === true;
         setQuizTitle(saved.title || title);
         markQuizSaved();
       }
@@ -4729,6 +4503,7 @@ export function createQuizWorkshopViewController({
     folderId = null,
     folder_id = null,
     display_order = null,
+    is_system = false,
     created_at = "",
     updated_at = "",
     grid = null,
@@ -4739,6 +4514,7 @@ export function createQuizWorkshopViewController({
     currentQuizId = String(id || "");
     currentQuizFolderId = folder_id ?? folderId ?? null;
     currentQuizDisplayOrder = display_order;
+    currentQuizIsSystem = is_system === true;
     currentQuizCreatedAt = String(created_at || "");
     currentQuizUpdatedAt = String(updated_at || "");
     const sourceColumns = normalizeGridColumnCount(grid?.columns);

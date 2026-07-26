@@ -13,7 +13,6 @@ import {
 import { getActiveToolsRegistry } from "../../../tools/registry.js";
 import { loadToolsRuntime } from "../../../shared/tool-root-runtime.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
-import { createQuestionBanksViewController } from "./question-banks-view.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
 import {
   persistAdminDraftRuntimePayload,
@@ -41,7 +40,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "general",
     label: "Général",
-    toolIds: ["quiz", "question-reponse", "qcm", "selection", "flash-question-reponse", "flash-qcm"]
+    toolIds: ["quiz"]
   },
   {
     id: "lecture",
@@ -103,61 +102,21 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   }
 ]);
 
-const ADMIN_SECTION_META = Object.freeze({
-  catalogue: {
-    label: "Catalogue",
-    title: "Admin - Catalogue",
-    subtitle: "Activités système prêtes à l’emploi, rangées comme dans le Catalogue enseignant."
-  },
-  ressources: {
-    label: "Ressources",
-    title: "Admin - Ressources",
-    subtitle: "Mots, images et contenus bruts utilisés par les outils."
-  },
-  banques: {
-    label: "Banques",
-    title: "Admin - Banques",
-    subtitle: "Banques système proposées à tous les enseignants."
-  }
-});
-
-export function createSuperAdminViewController({
-  view,
+export function createCatalogAdminViewController({
   header,
   list,
-  getIsSuperAdmin,
   getCurrentTeacherSpace,
   listCatalogActivitiesForAdmin,
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
-  listDefaultVocabularyWordsAsAdmin,
-  saveDefaultVocabularyWordAsAdmin,
-  upsertDefaultVocabularyWordsAsAdmin,
-  deleteDefaultVocabularyWordAsAdmin,
-  listEncodingResourcesAsAdmin,
-  saveImageAssetAsAdmin,
-  deleteImageAssetAsAdmin,
-  savePhonologyWordAsAdmin,
-  deletePhonologyWordAsAdmin,
-  listSystemQuestionBanksAsAdmin,
-  createSystemQuestionBankAsAdmin,
-  updateQuestionBank,
-  deleteQuestionBank,
-  listQuestionBankItems,
-  replaceQuestionBankItems,
-  showToast
+  showToast,
+  onReturnToCatalogue
 } = {}) {
   const folders = getCatalogFolders();
   const tools = getActiveToolsRegistry();
-  let isAdmin = false;
   let activities = [];
-  let vocabularyWords = [];
-  let encodingResources = { assets: [], words: [] };
-  let systemBanks = [];
-  let adminSection = "catalogue";
   let adminCatalogueFolderId = null;
-  let resourceSection = "vocabulary";
   let editingActivity = null;
   let levelDrafts = cloneJson(EMPTY_LEVELS);
   let activeLevel = LEVEL_START;
@@ -169,70 +128,111 @@ export function createSuperAdminViewController({
   let draggedAdminActivityId = "";
   let draggedAdminCategoryId = "";
   let activeAdminCatalogTestController = null;
-  let systemBanksController = null;
   const toolCollapsibleStateByTool = new Map();
 
-  async function refresh({ forceRefresh = false } = {}) {
-    if (!view || !header || !list) return;
-    header.innerHTML = renderHeader();
-    if (!forceRefresh && activities.length) {
-      await renderList();
-      return;
-    }
-    list.innerHTML = `<div class="dashboard-activity-empty-state">Chargement de l’Admin…</div>`;
-    try {
-      isAdmin = await getIsSuperAdmin?.() === true;
-      if (!isAdmin) {
-        list.innerHTML = `<div class="dashboard-activity-empty-state">Cet espace est réservé à l’Admin système.</div>`;
-        bindHeader();
-        return;
-      }
-      activities = await listCatalogActivitiesForAdmin?.() || [];
-      await renderList();
-      bindHeader();
-    } catch (err) {
-      list.innerHTML = `<div class="dashboard-activity-empty-state">${escapeHtml(err?.message || "Impossible de charger l’Admin.")}</div>`;
-      bindHeader();
-    }
+  function setCatalogueState({ activities: nextActivities = [], currentFolderId = null } = {}) {
+    activities = sortAdminActivities(nextActivities);
+    adminCatalogueFolderId = String(currentFolderId || "").trim() || null;
   }
 
-  function renderHeader() {
-    const isCatalogue = adminSection === "catalogue";
-    const isBanks = adminSection === "banques";
-    const meta = getAdminSectionMeta(adminSection);
+  function renderHeaderActions() {
+    const canStartCreation = Boolean(getAdminFolderById(adminCatalogueFolderId));
     return `
-      <div class="dashboard-config-header-main">
-        <div>
-          <div class="dashboard-section-title">${escapeHtml(meta.title)}</div>
-          <div class="dashboard-section-subtitle">${escapeHtml(meta.subtitle)}</div>
-        </div>
-        ${isBanks ? renderAdminBankTypeFilter() : ""}
-      </div>
-      <div class="dashboard-config-header-center">
-        <div class="dashboard-view-toggle super-admin-main-toggle" role="group" aria-label="Section Admin">
-          ${renderAdminSectionButton("catalogue", ADMIN_SECTION_META.catalogue.label)}
-          ${renderAdminSectionButton("ressources", ADMIN_SECTION_META.ressources.label)}
-          ${renderAdminSectionButton("banques", ADMIN_SECTION_META.banques.label)}
-        </div>
-      </div>
-      <div class="dashboard-config-header-actions">
-        <button id="btnOpenViewportTestBench" class="btn" type="button" title="Ouvrir le banc de test du runtime élève dans un nouvel onglet">
-          <span class="dashboard-material-icon" aria-hidden="true">devices</span>
-          <span>Banc runtime</span>
-        </button>
-        ${isCatalogue ? `
-          <button id="btnAdminNewCatalogActivity" class="btn primary" type="button">
-            <span class="dashboard-material-icon" aria-hidden="true">add</span>
-            <span>Créer une activité</span>
-          </button>
-        ` : ""}
-        ${isBanks ? renderAdminBankHeaderActions() : ""}
-      </div>
+      <button id="btnAdminNewCatalogActivity" class="btn primary" type="button" ${canStartCreation ? "" : "disabled"} title="${canStartCreation ? "Créer une activité dans cette partie du Catalogue" : "Sélectionne d’abord un dossier du Catalogue."}">
+        <span class="dashboard-material-icon" aria-hidden="true">add</span>
+        <span>Créer une activité</span>
+      </button>
     `;
   }
 
-  function getAdminSectionMeta(section) {
-    return ADMIN_SECTION_META[section] || ADMIN_SECTION_META.catalogue;
+  function bindHeaderActions() {
+    header?.querySelector("#btnAdminNewCatalogActivity")?.addEventListener("click", () => {
+      if (!getAdminFolderById(adminCatalogueFolderId)) return;
+      openEditor();
+    });
+  }
+
+  function getActivityTileEnhancement(activity) {
+    const normalized = normalizeCatalogActivity(activity);
+    const isPublished = normalized.status === "published";
+    const statusLabel = isPublished ? "Publié" : "Brouillon";
+    return {
+      className: `dashboard-admin-activity-tile ${isPublished ? "is-highlighted" : "is-draft"}`,
+      attributes: `draggable="true" data-admin-activity-id="${escapeAttr(normalized.id)}" data-admin-category-id="${escapeAttr(normalized.category_id || "")}" title="Glisser pour réordonner dans cette catégorie"`,
+      subtitleHtml: `<span class="dashboard-activity-tile-subtitle">${escapeHtml(getToolLabel(normalized.tool_id))} · ${escapeHtml(statusLabel)}</span>`,
+      actionsHtml: `
+        <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Modifier" aria-label="Modifier"><span class="dashboard-material-icon" aria-hidden="true">edit</span></button>
+        <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="duplicate-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Dupliquer" aria-label="Dupliquer"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
+        <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Supprimer définitivement" aria-label="Supprimer définitivement"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
+      `
+    };
+  }
+
+  function getDropzoneAttributes(folderId) {
+    const safeFolderId = String(folderId || "").trim();
+    if (!safeFolderId || !canCreateActivityInFolder(safeFolderId)) return "";
+    return `data-admin-dropzone="true" data-admin-category-id="${escapeAttr(safeFolderId)}"`;
+  }
+
+  function bindCatalogueEvents({ root = list } = {}) {
+    root?.querySelectorAll("[data-action='edit-admin-activity']").forEach((btn) => btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
+      if (activity) openEditor(activity);
+    }));
+    root?.querySelectorAll("[data-action='duplicate-admin-activity']").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
+      if (!activity) return;
+      await duplicateCatalogActivity(activity);
+    }));
+    root?.querySelectorAll("[data-action='delete-admin-activity']").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
+      if (!activity) return;
+      await confirmAndDeleteCatalogActivity(activity);
+    }));
+    bindAdminDragAndDrop();
+  }
+
+  function returnToCatalogue({ forceRefresh = false } = {}) {
+    cleanupActiveAdminCatalogTestController();
+    editingActivity = null;
+    descriptionPanelOpen = false;
+    list?.classList.remove("super-admin-editor-scroll");
+    list?.classList.add("dashboard-explorer-host");
+    if (typeof onReturnToCatalogue === "function") {
+      void Promise.resolve(onReturnToCatalogue({ forceRefresh }));
+    }
+  }
+
+  function getAdminFolderById(folderId) {
+    const safeId = String(folderId || "").trim();
+    return safeId ? folders.find((folder) => String(folder.id) === safeId) || null : null;
+  }
+
+  function getAdminChildFolders(parentId) {
+    const safeParentId = String(parentId || "").trim();
+    return folders
+      .filter((folder) => String(folder.parent_id || "").trim() === safeParentId)
+      .sort(compareAdminFolderOrder);
+  }
+
+  function canHostAdminActivity(folder) {
+    if (!folder?.id) return false;
+    if (String(folder.parent_id || "").trim()) return true;
+    return getAdminChildFolders(folder.id).length === 0;
+  }
+
+  function canCreateActivityInFolder(folderId) {
+    return canHostAdminActivity(getAdminFolderById(folderId));
+  }
+
+  function compareAdminFolderOrder(a, b) {
+    const orderA = normalizeDisplayOrder(a?.display_order);
+    const orderB = normalizeDisplayOrder(b?.display_order);
+    if (orderA !== orderB) return orderA - orderB;
+    return String(a?.name || "").localeCompare(String(b?.name || ""), "fr", { sensitivity: "base" });
   }
 
   function getAdminToolPickerGroups() {
@@ -265,267 +265,6 @@ export function createSuperAdminViewController({
     return matchingGroup?.id || groups[0]?.id || "";
   }
 
-  function renderAdminBankTypeFilter() {
-    return `
-      <div id="adminBankExplorerControls" class="super-admin-bank-header-controls">
-        <div class="dashboard-mode-pill" role="tablist" aria-label="Type de banque courant">
-          <button class="dashboard-mode-pill-btn is-active" type="button" role="tab" data-bank-type-filter="all" aria-selected="true" title="Afficher toutes les banques">Tous</button>
-          <button class="dashboard-mode-pill-btn" type="button" role="tab" data-bank-type-filter="text_answer" aria-selected="false" title="Afficher les banques texte">Texte</button>
-          <button class="dashboard-mode-pill-btn" type="button" role="tab" data-bank-type-filter="qcm" aria-selected="false" title="Afficher les banques QCM">QCM</button>
-          <button class="dashboard-mode-pill-btn" type="button" role="tab" data-bank-type-filter="selection" aria-selected="false" title="Afficher les banques Sélection">Sélection</button>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderAdminBankHeaderActions() {
-    return `
-      <button id="btnCreateBankFolder" class="dashboard-icon-btn dashboard-material-icon-btn" type="button" title="Les dossiers de banques système ne sont pas encore disponibles" aria-label="Créer un dossier" disabled>
-        <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
-      </button>
-      <button id="btnCreateBank" class="btn primary" type="button">
-        <span class="dashboard-material-icon" aria-hidden="true">add</span>
-        <span>Créer une banque</span>
-      </button>
-    `;
-  }
-
-  function renderAdminSectionButton(section, label) {
-    const active = adminSection === section;
-    return `<button class="dashboard-view-toggle-btn${active ? " is-active" : ""}" type="button" data-admin-section="${escapeAttr(section)}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(label)}</button>`;
-  }
-
-  function bindHeader() {
-    header?.querySelectorAll("[data-admin-section]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const next = String(button.dataset.adminSection || "catalogue");
-        if (next === adminSection) return;
-        adminSection = ["catalogue", "ressources", "banques"].includes(next) ? next : "catalogue";
-        renderList({ forceReload: true });
-      });
-    });
-    header?.querySelector("#btnOpenViewportTestBench")?.addEventListener("click", openViewportTestBench);
-    header?.querySelector("#btnAdminNewCatalogActivity")?.addEventListener("click", () => {
-      if (!isAdmin) return;
-      openEditor();
-    });
-  }
-
-  async function renderList({ forceReload = false } = {}) {
-    if (!list) return;
-    cleanupActiveAdminCatalogTestController();
-    descriptionPanelOpen = false;
-    if (adminSection !== "banques") {
-      destroySystemBanksController();
-    }
-    if (header) {
-      header.innerHTML = renderHeader();
-      bindHeader();
-    }
-    list.classList.add("dashboard-explorer-host");
-    list.classList.remove("super-admin-editor-scroll");
-    list.classList.remove("super-admin-banks-list-host");
-    if (!isAdmin) {
-      list.innerHTML = `<div class="dashboard-activity-empty-state">Cet espace est réservé à l’Admin système.</div>`;
-      return;
-    }
-    if (adminSection === "ressources") {
-      await renderResourcesSection({ forceReload });
-      return;
-    }
-    if (adminSection === "banques") {
-      await renderSystemBanksSection({ forceReload });
-      return;
-    }
-    renderCatalogueSection();
-  }
-
-  function renderCatalogueSection() {
-    const selectedFolder = getAdminFolderById(adminCatalogueFolderId);
-    if (adminCatalogueFolderId && !selectedFolder) {
-      adminCatalogueFolderId = null;
-    }
-    const openedFolder = selectedFolder || null;
-    const openedFolderId = String(openedFolder?.id || "");
-    const openedPathLabel = openedFolder ? getCategoryPathLabel(openedFolderId) : "Racine du catalogue";
-    const childFolders = getAdminChildFolders(openedFolderId);
-    const childActivities = getAdminActivitiesForFolder(openedFolderId);
-    const rootFolders = getAdminChildFolders("");
-    const tilesHtml = [
-      renderAdminParentTile(openedFolder),
-      ...childFolders.map(renderAdminFolderTile),
-      ...childActivities.map(renderActivityTile)
-    ].filter(Boolean).join("");
-
-    list.innerHTML = `
-      <div class="dashboard-activities-explorer dashboard-admin-explorer" style="--dashboard-tree-pane-width:18%;">
-        <aside class="dashboard-activity-tree-pane panel">
-          <div class="dashboard-activity-tree-list">
-            <div class="dashboard-activity-tree-row dashboard-activity-tree-root ${openedFolder ? "" : "is-selected"}">
-              <button class="dashboard-activity-tree-main dashboard-activity-tree-main--root" type="button" data-action="open-admin-root">
-                <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">travel_explore</span>
-                <span class="dashboard-activity-tree-node-label">Catalogue</span>
-              </button>
-            </div>
-            ${rootFolders.map((folder) => renderAdminTreeFolder(folder, 0)).join("")}
-          </div>
-        </aside>
-        <div class="dashboard-activity-splitter" role="separator" aria-orientation="vertical" aria-label="Séparateur entre les panneaux"></div>
-        <section class="dashboard-activity-tiles-pane panel dashboard-admin-tiles-pane">
-          <div class="dashboard-admin-catalogue-panel-head">
-            <div>
-              <div class="dashboard-section-title">${escapeHtml(openedFolder?.name || "Catalogue")}</div>
-              <div class="dashboard-section-subtitle">${escapeHtml(openedPathLabel)}</div>
-            </div>
-            <div class="dashboard-admin-catalogue-stats" aria-label="Contenu du dossier">
-              <span class="dashboard-mini-pill">${childFolders.length} dossier${childFolders.length > 1 ? "s" : ""}</span>
-              <span class="dashboard-mini-pill">${childActivities.length} activité${childActivities.length > 1 ? "s" : ""}</span>
-            </div>
-          </div>
-          <div class="dashboard-activity-tiles-grid-wrap">
-            <div class="dashboard-activity-tiles-grid dashboard-admin-catalogue-grid" data-admin-dropzone="true" data-admin-category-id="${escapeAttr(openedFolderId)}">
-              ${tilesHtml || `<div class="dashboard-activity-empty-state">Aucune activité dans ce dossier.</div>`}
-            </div>
-          </div>
-        </section>
-      </div>
-    `;
-    bindListEvents();
-  }
-
-  function renderAdminTreeFolder(folder, depth = 0) {
-    const selected = String(adminCatalogueFolderId || "") === String(folder.id || "");
-    return `
-      <div class="dashboard-activity-tree-row dashboard-tree-node ${selected ? "is-selected" : ""}" style="--dashboard-tree-depth:${depth};">
-        <div class="dashboard-tree-indent" aria-hidden="true"></div>
-        <span class="dashboard-tree-toggle-placeholder" aria-hidden="true"></span>
-        <button class="dashboard-activity-tree-main" type="button" data-action="open-admin-folder" data-folder-id="${escapeAttr(folder.id)}">
-          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">folder</span>
-          <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name)}</span>
-        </button>
-      </div>
-      ${getAdminChildFolders(folder.id).map((child) => renderAdminTreeFolder(child, depth + 1)).join("")}
-    `;
-  }
-
-  function renderAdminFolderTile(folder) {
-    return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder">
-        <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-admin-folder" data-folder-id="${escapeAttr(folder.id)}">
-          <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
-          <span class="dashboard-activity-tile-labelbox">
-            <span class="dashboard-activity-tile-title">${escapeHtml(folder.name)}</span>
-          </span>
-        </button>
-      </article>
-    `;
-  }
-
-  function renderAdminParentTile(selectedFolder) {
-    if (!selectedFolder) return "";
-    const parentId = String(selectedFolder.parent_id || "");
-    return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder dashboard-activity-tile--parent">
-        <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="${parentId ? "open-admin-folder" : "open-admin-root"}" ${parentId ? `data-folder-id="${escapeAttr(parentId)}"` : ""}>
-          <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">arrow_upward</span>
-          <span class="dashboard-activity-tile-labelbox">
-            <span class="dashboard-activity-tile-title">Dossier parent</span>
-          </span>
-        </button>
-      </article>
-    `;
-  }
-
-  function renderActivityTile(activity) {
-    const normalized = normalizeCatalogActivity(activity);
-    const isPublished = normalized.status === "published";
-    const statusLabel = isPublished ? "Publié" : "Brouillon";
-    return `
-      <article
-        class="dashboard-activity-tile dashboard-activity-tile--activity dashboard-activity-tile--catalog-activity dashboard-admin-activity-tile ${isPublished ? "is-highlighted" : "is-draft"}"
-        draggable="true"
-        data-admin-activity-id="${escapeAttr(normalized.id)}"
-        data-admin-category-id="${escapeAttr(normalized.category_id || "")}"
-        title="Glisser pour réordonner dans cette catégorie"
-      >
-        <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" type="button" data-action="edit-admin-activity" data-activity-id="${escapeAttr(normalized.id)}">
-          <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">extension</span>
-          <span class="dashboard-activity-tile-labelbox dashboard-activity-tile-labelbox--activity">
-            <span class="dashboard-activity-tile-title">${escapeHtml(normalized.config_name)}</span>
-            <span class="dashboard-activity-tile-subtitle">${escapeHtml(getToolLabel(normalized.tool_id))} · ${escapeHtml(statusLabel)}</span>
-          </span>
-        </button>
-        <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
-          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="duplicate-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Dupliquer"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Supprimer définitivement"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
-        </div>
-      </article>
-    `;
-  }
-
-  function bindListEvents() {
-    list?.querySelectorAll("[data-action='open-admin-root']").forEach((btn) => btn.addEventListener("click", () => {
-      adminCatalogueFolderId = null;
-      renderCatalogueSection();
-    }));
-    list?.querySelectorAll("[data-action='open-admin-folder']").forEach((btn) => btn.addEventListener("click", () => {
-      adminCatalogueFolderId = String(btn.dataset.folderId || "").trim() || null;
-      renderCatalogueSection();
-    }));
-    list?.querySelectorAll("[data-action='edit-admin-activity']").forEach((btn) => btn.addEventListener("click", () => {
-      const activity = activities.find((item) => item.id === btn.dataset.activityId);
-      openEditor(activity);
-    }));
-    list?.querySelectorAll("[data-action='duplicate-admin-activity']").forEach((btn) => btn.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
-      if (!activity) return;
-      await duplicateCatalogActivity(activity);
-    }));
-    list?.querySelectorAll("[data-action='delete-admin-activity']").forEach((btn) => btn.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
-      if (!activity) return;
-      await confirmAndDeleteCatalogActivity(activity);
-    }));
-    bindAdminDragAndDrop();
-  }
-
-  function getAdminFolderById(folderId) {
-    const safeId = String(folderId || "").trim();
-    return safeId ? folders.find((folder) => String(folder.id) === safeId) || null : null;
-  }
-
-  function getAdminChildFolders(parentId) {
-    const safeParentId = String(parentId || "").trim();
-    return folders
-      .filter((folder) => String(folder.parent_id || "").trim() === safeParentId)
-      .sort(compareAdminFolderOrder);
-  }
-
-  function getAdminActivitiesForFolder(folderId) {
-    const safeFolderId = String(folderId || "").trim();
-    if (!safeFolderId) return [];
-    return sortAdminCategoryActivities(
-      activities
-        .map(normalizeCatalogActivity)
-        .filter((activity) => String(activity.category_id || "").trim() === safeFolderId)
-    );
-  }
-
-  function canHostAdminActivity(folder) {
-    if (!folder?.id) return false;
-    if (String(folder.parent_id || "").trim()) return true;
-    return getAdminChildFolders(folder.id).length === 0;
-  }
-
-  function compareAdminFolderOrder(a, b) {
-    const orderA = normalizeDisplayOrder(a?.display_order);
-    const orderB = normalizeDisplayOrder(b?.display_order);
-    if (orderA !== orderB) return orderA - orderB;
-    return String(a?.name || "").localeCompare(String(b?.name || ""), "fr", { sensitivity: "base" });
-  }
-
   async function confirmAndDeleteCatalogActivity(activity) {
     const normalized = normalizeCatalogActivity(activity);
     let usage = null;
@@ -542,8 +281,7 @@ export function createSuperAdminViewController({
     try {
       await deleteCatalogActivityAsAdmin?.(normalized.id);
       notifyCatalogueChanged();
-      activities = await listCatalogActivitiesForAdmin?.() || [];
-      renderList({ forceReload: false });
+      activities = await listCatalogActivitiesForAdmin?.() || activities;
       showToast?.(`Activité “${normalized.config_name}” supprimée définitivement.`);
     } catch (err) {
       showToast?.(err?.message || "Suppression impossible.", { isError: true });
@@ -575,7 +313,6 @@ export function createSuperAdminViewController({
       const saved = await saveCatalogActivityAsAdmin(buildCatalogActivitySavePayload(duplicate));
       notifyCatalogueChanged();
       activities = await listCatalogActivitiesForAdmin?.() || activities;
-      renderList({ forceReload: false });
       showToast?.(`Activité “${saved?.config_name || title}” dupliquée.`);
     } catch (err) {
       showToast?.(err?.message || "Duplication impossible.", { isError: true });
@@ -738,7 +475,7 @@ export function createSuperAdminViewController({
     const isPublished = String(editingActivity?.status || "draft") === "published";
     return `
         <div class="dashboard-config-header-main super-admin-editor-header-main cfg-header-left">
-          <button class="btn cfg-back-btn super-admin-editor-back" type="button" data-action="back-admin-list" aria-label="Retour à l’Admin">↩</button>
+          <button class="btn cfg-back-btn super-admin-editor-back" type="button" data-action="back-admin-list" aria-label="Retour au Catalogue">↩</button>
           <div class="cfg-header-identity super-admin-editor-identity">
             <span class="cfg-field-label">Titre de l'activité :</span>
             <span class="cfg-config-name-display${title ? "" : " is-empty"}" title="${escapeAttr(safeTitle)}">${escapeHtml(safeTitle)}</span>
@@ -755,7 +492,7 @@ export function createSuperAdminViewController({
         <div id="superAdminMessage" class="cfg-editor-message"></div>
       </div>
       <div class="dashboard-config-header-actions cfg-header-actions">
-        <button class="btn" type="button" data-action="open-viewport-test-bench" title="Ouvrir le banc de test des résolutions"><span class="dashboard-material-icon" aria-hidden="true">devices</span><span>Banc runtime</span></button>
+        <button class="btn" type="button" data-action="open-viewport-test-bench" title="Ouvrir le banc de test des résolutions"><span class="dashboard-material-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M120-120v-520h200v-200h520v720H120Zm520-80h120v-560H400v120h240v440Zm-240 0h160v-360H400v360Zm-200 0h120v-360H200v360Zm440-440v80-80Zm-320 80Zm240 0Zm80-80Z"/></svg></span><span>Banc runtime</span></button>
         <button class="btn" type="button" data-action="test-admin-draft-activity">Tester ainsi</button>
         <button class="btn cfg-save-btn dirty" type="button" data-action="save-admin-activity">Enregistrer</button>
       </div>
@@ -763,7 +500,7 @@ export function createSuperAdminViewController({
   }
 
   function bindEditorHeader() {
-    header?.querySelector("[data-action='back-admin-list']")?.addEventListener("click", () => renderList());
+    header?.querySelector("[data-action='back-admin-list']")?.addEventListener("click", () => returnToCatalogue());
     header?.querySelector("[data-action='rename-admin-activity']")?.addEventListener("click", openAdminTitleOverlay);
     header?.querySelectorAll("[data-action='set-admin-status']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -795,7 +532,7 @@ export function createSuperAdminViewController({
         initialLevel: activeLevel
       });
 
-      const url = new URL("../dev/viewport-test.html", window.location.href);
+      const url = new URL("../_dev/viewport-test.html", window.location.href);
       url.searchParams.set("adminDraftToken", token);
 
       // Ne pas utiliser directement le feature `noopener` ici : Firefox peut
@@ -986,7 +723,7 @@ export function createSuperAdminViewController({
   }
 
   function bindEditorEvents() {
-    list?.querySelector("[data-action='back-admin-list']")?.addEventListener("click", () => renderList());
+    list?.querySelector("[data-action='back-admin-list']")?.addEventListener("click", () => returnToCatalogue());
     list?.querySelector("[data-action='open-admin-tool-picker']")?.addEventListener("click", openAdminToolPicker);
 
     list?.querySelectorAll("[data-close-admin-title]").forEach((node) => node.addEventListener("click", closeAdminTitleOverlay));
@@ -1391,12 +1128,12 @@ export function createSuperAdminViewController({
     const checkedAttr = instruction.enabled ? "checked" : "";
     const disabledAttr = instruction.enabled ? "" : "disabled";
     const normalizedLevelDraft = normalizeLevelDraft(levelDraft);
-    const bankInstruction = String(
-      normalizedLevelDraft?.settings?.bankInstruction
-        ?? normalizedLevelDraft?.settings?.bank_instruction
+    const sourceInstruction = String(
+      normalizedLevelDraft?.settings?.sourceInstruction
+        ?? normalizedLevelDraft?.settings?.source_instruction
         ?? ""
     ).trim();
-    const defaultInstruction = bankInstruction || String(tool?.defaultInstruction || "").trim();
+    const defaultInstruction = sourceInstruction || String(tool?.defaultInstruction || "").trim();
     const placeholder = defaultInstruction || "Consigne affichée uniquement pour ce niveau...";
     return `
       <div class="tv-group tv-group-inline super-admin-level-instruction-group">
@@ -1443,10 +1180,10 @@ export function createSuperAdminViewController({
       if (checkbox.checked) input.focus();
     });
 
-    container.addEventListener("questionbankchange", (event) => {
-      const bankInstruction = String(event?.detail?.instruction || "").trim();
+    container.addEventListener("toolsourceinstructionchange", (event) => {
+      const sourceInstruction = String(event?.detail?.instruction || "").trim();
       const toolDefault = String(input.dataset.toolDefaultInstruction || "").trim();
-      input.placeholder = bankInstruction || toolDefault || "Consigne affichée uniquement pour ce niveau...";
+      input.placeholder = sourceInstruction || toolDefault || "Consigne affichée uniquement pour ce niveau...";
     });
   }
 
@@ -1639,9 +1376,8 @@ export function createSuperAdminViewController({
         levels_json: levels
       }));
       notifyCatalogueChanged();
-      activities = await listCatalogActivitiesForAdmin?.() || [];
+      activities = await listCatalogActivitiesForAdmin?.() || activities;
       showToast?.(`Activité “${saved?.config_name || activityToSave.title}” enregistrée.`);
-      renderList();
     } catch (err) {
       if (message) message.textContent = err?.message || "Enregistrement impossible.";
     }
@@ -1870,26 +1606,6 @@ export function createSuperAdminViewController({
     return `${baseTitle} ${Date.now()}`;
   }
 
-  function getAdminActivityGroups() {
-    const groupsByCategory = new Map();
-    sortAdminActivities(activities).forEach((activity) => {
-      const normalized = normalizeCatalogActivity(activity);
-      const categoryId = String(normalized.category_id || "").trim();
-      if (!groupsByCategory.has(categoryId)) {
-        groupsByCategory.set(categoryId, []);
-      }
-      groupsByCategory.get(categoryId).push(normalized);
-    });
-
-    return [...groupsByCategory.entries()]
-      .map(([categoryId, rows]) => ({
-        categoryId,
-        label: getCategoryPathLabel(categoryId),
-        activities: sortAdminCategoryActivities(rows)
-      }))
-      .sort((a, b) => compareCategoryIds(a.categoryId, b.categoryId));
-  }
-
   function sortAdminActivities(rows = []) {
     return [...(Array.isArray(rows) ? rows : [])]
       .map(normalizeCatalogActivity)
@@ -2080,7 +1796,6 @@ export function createSuperAdminViewController({
     }));
     const previousActivities = activities;
     activities = mergeAdminActivities(activities, reorderedRows);
-    renderList();
 
     try {
       if (typeof saveCatalogActivityAsAdmin !== "function") {
@@ -2089,7 +1804,6 @@ export function createSuperAdminViewController({
       await Promise.all(reorderedRows.map((activity) => saveCatalogActivityAsAdmin(buildCatalogActivitySavePayload(activity))));
       notifyCatalogueChanged();
       activities = await listCatalogActivitiesForAdmin?.() || activities;
-      renderList();
       showToast?.("Ordre du Catalogue enregistré.");
     } catch (err) {
       try {
@@ -2097,7 +1811,6 @@ export function createSuperAdminViewController({
       } catch {
         activities = previousActivities;
       }
-      renderList();
       showToast?.(err?.message || "Impossible d’enregistrer le nouvel ordre.");
     }
   }
@@ -2118,541 +1831,16 @@ export function createSuperAdminViewController({
   }
 
 
-  async function renderResourcesSection({ forceReload = false } = {}) {
-    if (resourceSection === "encoding") {
-      await renderEncodingResources({ forceReload });
-      return;
-    }
-    await renderVocabularyResources({ forceReload });
-  }
 
-  function renderResourcesShell(bodyHtml) {
-    const meta = ADMIN_SECTION_META.ressources;
-    list.innerHTML = `
-      <div class="super-admin-section-shell">
-        <div class="panel super-admin-section-panel">
-          <div class="super-admin-section-head">
-            <div>
-              <div class="dashboard-section-title">${escapeHtml(meta.label)}</div>
-              <div class="dashboard-section-subtitle">${escapeHtml(meta.subtitle)}</div>
-            </div>
-            <div class="dashboard-view-toggle" role="group" aria-label="Type de ressource">
-              <button class="dashboard-view-toggle-btn${resourceSection === "vocabulary" ? " is-active" : ""}" type="button" data-resource-section="vocabulary">Vocabulaire</button>
-              <button class="dashboard-view-toggle-btn${resourceSection === "encoding" ? " is-active" : ""}" type="button" data-resource-section="encoding">Encodage</button>
-            </div>
-          </div>
-          ${bodyHtml}
-        </div>
-      </div>
-    `;
-    list.querySelectorAll("[data-resource-section]").forEach((button) => {
-      button.addEventListener("click", () => {
-        resourceSection = button.dataset.resourceSection === "encoding" ? "encoding" : "vocabulary";
-        renderList({ forceReload: true });
-      });
-    });
-  }
-
-  function parseVocabularyImportText(rawText, existingWordsList = []) {
-    const existingWords = new Set(
-      (Array.isArray(existingWordsList) ? existingWordsList : [])
-        .map((item) => String(item?.word || "").trim())
-        .filter(Boolean)
-    );
-    const importedByWord = new Map();
-    const importedOrder = [];
-    const errors = [];
-    let ignoredLines = 0;
-    let duplicateLines = 0;
-
-    String(rawText || "")
-      .replace(/\r/g, "")
-      .split("\n")
-      .forEach((rawLine, index) => {
-        const lineNumber = index + 1;
-        const line = String(rawLine || "").trim();
-        if (!line || line.startsWith("#")) {
-          ignoredLines += 1;
-          return;
-        }
-
-        const columns = line.split("|").map((part) => part.trim());
-        if (columns.length > 2) {
-          errors.push(`Ligne ${lineNumber} : format attendu mot|page.`);
-          return;
-        }
-
-        const word = columns[0] || "";
-        const pageText = columns.length > 1 ? columns[1] : "";
-        if (!word) {
-          errors.push(`Ligne ${lineNumber} : mot manquant.`);
-          return;
-        }
-
-        let dictionaryPage = null;
-        if (pageText) {
-          if (!/^[1-9]\d*$/.test(pageText)) {
-            errors.push(`Ligne ${lineNumber} : page invalide “${pageText}”.`);
-            return;
-          }
-          dictionaryPage = Number.parseInt(pageText, 10);
-        }
-
-        const item = { word, dictionary_page: dictionaryPage, lineNumber };
-        if (importedByWord.has(word)) {
-          duplicateLines += 1;
-          importedByWord.set(word, item);
-          return;
-        }
-        importedByWord.set(word, item);
-        importedOrder.push(word);
-      });
-
-    const items = importedOrder.map((word) => importedByWord.get(word)).filter(Boolean);
-    const updateCount = items.filter((item) => existingWords.has(item.word)).length;
-    const createCount = Math.max(0, items.length - updateCount);
-
-    return {
-      items,
-      errors,
-      ignoredLines,
-      duplicateLines,
-      createCount,
-      updateCount
-    };
-  }
-
-  function renderVocabularyImportPreview(target, analysis) {
-    if (!target) return;
-    const safeAnalysis = analysis || parseVocabularyImportText("", vocabularyWords);
-    const hasContent = safeAnalysis.items.length || safeAnalysis.errors.length || safeAnalysis.duplicateLines;
-    if (!hasContent) {
-      target.innerHTML = `<div class="super-admin-import-muted">Colle une liste au format <strong>mot|page</strong>, puis lance l’analyse.</div>`;
-      return;
-    }
-
-    const rows = safeAnalysis.items.slice(0, 6).map((item, index) => `
-      <div class="super-admin-vocab-import-row">
-        <span>${index + 1}</span>
-        <strong>${escapeHtml(item.word)}</strong>
-        <em>${item.dictionary_page ? `p. ${escapeHtml(item.dictionary_page)}` : "page non renseignée"}</em>
-      </div>
-    `).join("");
-    const moreCount = safeAnalysis.items.length - 6;
-    const more = moreCount > 0
-      ? `<div class="super-admin-import-muted">+ ${moreCount} autre${moreCount > 1 ? "s" : ""} mot${moreCount > 1 ? "s" : ""}</div>`
-      : "";
-    const warnings = safeAnalysis.duplicateLines
-      ? `<div class="super-admin-import-warning">${safeAnalysis.duplicateLines} doublon${safeAnalysis.duplicateLines > 1 ? "s" : ""} dans le collage : la dernière ligne est conservée.</div>`
-      : "";
-    const errorMarkup = safeAnalysis.errors.length
-      ? `<div class="super-admin-import-errors">${safeAnalysis.errors.slice(0, 5).map(escapeHtml).join("<br>")}${safeAnalysis.errors.length > 5 ? "<br>…" : ""}</div>`
-      : "";
-
-    target.innerHTML = `
-      <div class="super-admin-import-summary">
-        <strong>${safeAnalysis.items.length}</strong> mot${safeAnalysis.items.length > 1 ? "s" : ""} valide${safeAnalysis.items.length > 1 ? "s" : ""}
-        · <strong>${safeAnalysis.createCount}</strong> création${safeAnalysis.createCount > 1 ? "s" : ""}
-        · <strong>${safeAnalysis.updateCount}</strong> mise${safeAnalysis.updateCount > 1 ? "s" : ""} à jour
-      </div>
-      ${rows}
-      ${more}
-      ${warnings}
-      ${errorMarkup}
-    `;
-  }
-
-  async function renderVocabularyResources({ forceReload = false } = {}) {
-    if (forceReload || !vocabularyWords.length) {
-      list.innerHTML = `<div class="dashboard-activity-empty-state">Chargement du vocabulaire…</div>`;
-      vocabularyWords = await listDefaultVocabularyWordsAsAdmin?.() || [];
-    }
-    renderResourcesShell(`
-      <div class="super-admin-resource-grid super-admin-resource-grid--vocabulary">
-        <div class="super-admin-resource-stack">
-          <form class="super-admin-resource-form" data-action="save-vocab-word">
-            <div class="cfg-panel-title">Ajouter / modifier un mot</div>
-            <label class="super-admin-field-stack">
-              <span class="super-admin-field-label">Mot</span>
-              <input class="modal-text-input" name="word" type="text" placeholder="ex. maison" autocomplete="off">
-            </label>
-            <label class="super-admin-field-stack">
-              <span class="super-admin-field-label">Page dictionnaire</span>
-              <input class="modal-text-input" name="dictionary_page" type="number" min="1" step="1" placeholder="Optionnel">
-            </label>
-            <button class="btn primary" type="submit">Enregistrer le mot</button>
-            <div class="modal-message" id="adminVocabMessage"></div>
-          </form>
-
-          <section class="super-admin-resource-form" data-vocab-import-panel>
-            <div class="cfg-panel-title">Import en masse</div>
-            <div class="dashboard-section-subtitle">Une ligne par mot. Format : <strong>mot|page</strong>. La page est facultative.</div>
-            <textarea class="super-admin-vocab-import-input" id="adminVocabImportInput" spellcheck="false" placeholder="abeille|1&#10;absent|2&#10;accent|3&#10;douter|191"></textarea>
-            <div class="super-admin-import-actions">
-              <button class="btn" type="button" data-action="analyze-vocab-import">Analyser</button>
-              <button class="btn primary" type="button" data-action="import-vocab-bulk">Importer</button>
-            </div>
-            <div class="super-admin-vocab-import-preview" id="adminVocabImportPreview">
-              <div class="super-admin-import-muted">Colle une liste au format <strong>mot|page</strong>, puis lance l’analyse.</div>
-            </div>
-            <div class="modal-message" id="adminVocabImportMessage"></div>
-          </section>
-        </div>
-
-        <div class="super-admin-resource-list">
-          <div class="super-admin-resource-list-head">
-            <div class="cfg-panel-title">Liste de vocabulaire</div>
-            <span class="dashboard-mini-pill">${vocabularyWords.length} mot${vocabularyWords.length > 1 ? "s" : ""}</span>
-          </div>
-          <div class="super-admin-resource-items">
-            ${vocabularyWords.map((word) => `
-              <article class="super-admin-resource-row" data-vocab-id="${escapeAttr(word.id)}">
-                <div>
-                  <strong>${escapeHtml(word.word)}</strong>
-                  <span>${word.dictionary_page ? `p. ${escapeHtml(word.dictionary_page)}` : "page non renseignée"}</span>
-                </div>
-                <div class="super-admin-resource-row-actions">
-                  <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-vocab-word" data-word="${escapeAttr(word.word)}" data-page="${escapeAttr(word.dictionary_page || "")}" title="Reprendre"><span class="dashboard-material-icon">edit</span></button>
-                  <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-vocab-word" data-vocab-id="${escapeAttr(word.id)}" title="Supprimer"><span class="dashboard-material-icon">delete</span></button>
-                </div>
-              </article>
-            `).join("") || `<div class="dashboard-activity-empty-state">Aucun mot pour le moment.</div>`}
-          </div>
-        </div>
-      </div>
-    `);
-    bindVocabularyResourceEvents();
-  }
-
-  function bindVocabularyResourceEvents() {
-    const form = list.querySelector("[data-action='save-vocab-word']");
-    const message = list.querySelector("#adminVocabMessage");
-    const importInput = list.querySelector("#adminVocabImportInput");
-    const importPreview = list.querySelector("#adminVocabImportPreview");
-    const importMessage = list.querySelector("#adminVocabImportMessage");
-
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const data = new FormData(form);
-      try {
-        await saveDefaultVocabularyWordAsAdmin?.({
-          word: data.get("word"),
-          dictionary_page: data.get("dictionary_page")
-        });
-        vocabularyWords = await listDefaultVocabularyWordsAsAdmin?.() || [];
-        showToast?.("Mot enregistré.");
-        await renderVocabularyResources({ forceReload: false });
-      } catch (err) {
-        if (message) message.textContent = err?.message || "Enregistrement impossible.";
-      }
-    });
-
-    list.querySelector("[data-action='analyze-vocab-import']")?.addEventListener("click", () => {
-      const analysis = parseVocabularyImportText(importInput?.value || "", vocabularyWords);
-      renderVocabularyImportPreview(importPreview, analysis);
-      if (importMessage) {
-        importMessage.textContent = analysis.errors.length
-          ? `${analysis.errors.length} erreur${analysis.errors.length > 1 ? "s" : ""} à corriger avant import.`
-          : `${analysis.items.length} mot${analysis.items.length > 1 ? "s" : ""} prêt${analysis.items.length > 1 ? "s" : ""} à importer.`;
-      }
-    });
-
-    list.querySelector("[data-action='import-vocab-bulk']")?.addEventListener("click", async () => {
-      const analysis = parseVocabularyImportText(importInput?.value || "", vocabularyWords);
-      renderVocabularyImportPreview(importPreview, analysis);
-      if (analysis.errors.length) {
-        if (importMessage) importMessage.textContent = "Corrige les erreurs avant d’importer.";
-        return;
-      }
-      if (!analysis.items.length) {
-        if (importMessage) importMessage.textContent = "Aucun mot valide à importer.";
-        return;
-      }
-      if (typeof upsertDefaultVocabularyWordsAsAdmin !== "function") {
-        if (importMessage) importMessage.textContent = "Import en masse indisponible.";
-        return;
-      }
-      try {
-        if (importMessage) importMessage.textContent = "Import en cours…";
-        vocabularyWords = await upsertDefaultVocabularyWordsAsAdmin(analysis.items);
-        showToast?.(`${analysis.items.length} mot${analysis.items.length > 1 ? "s" : ""} importé${analysis.items.length > 1 ? "s" : ""}.`);
-        await renderVocabularyResources({ forceReload: false });
-      } catch (err) {
-        if (importMessage) importMessage.textContent = err?.message || "Import impossible.";
-      }
-    });
-
-    importInput?.addEventListener("input", () => {
-      if (importMessage) importMessage.textContent = "";
-    });
-
-    list.querySelectorAll("[data-action='edit-vocab-word']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const wordInput = form?.querySelector("[name='word']");
-        const pageInput = form?.querySelector("[name='dictionary_page']");
-        if (wordInput) wordInput.value = button.dataset.word || "";
-        if (pageInput) pageInput.value = button.dataset.page || "";
-        wordInput?.focus();
-      });
-    });
-    list.querySelectorAll("[data-action='delete-vocab-word']").forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (!confirm("Supprimer ce mot du vocabulaire système ?")) return;
-        await deleteDefaultVocabularyWordAsAdmin?.(button.dataset.vocabId);
-        vocabularyWords = await listDefaultVocabularyWordsAsAdmin?.() || [];
-        await renderVocabularyResources({ forceReload: false });
-      });
-    });
-  }
-
-  async function renderEncodingResources({ forceReload = false } = {}) {
-    if (forceReload || (!encodingResources.assets.length && !encodingResources.words.length)) {
-      list.innerHTML = `<div class="dashboard-activity-empty-state">Chargement des ressources Encodage…</div>`;
-      encodingResources = await listEncodingResourcesAsAdmin?.() || { assets: [], words: [] };
-    }
-    const assets = Array.isArray(encodingResources.assets) ? encodingResources.assets : [];
-    const words = Array.isArray(encodingResources.words) ? encodingResources.words : [];
-    renderResourcesShell(`
-      <div class="super-admin-resource-grid super-admin-resource-grid--wide">
-        <form class="super-admin-resource-form" data-action="save-encoding-entry">
-          <div class="cfg-panel-title">Ajouter / modifier une entrée Encodage</div>
-          <label class="super-admin-field-stack">
-            <span class="super-admin-field-label">Slug</span>
-            <input class="modal-text-input" name="slug" type="text" placeholder="abricot" autocomplete="off">
-          </label>
-          <label class="super-admin-field-stack">
-            <span class="super-admin-field-label">Mot affiché</span>
-            <input class="modal-text-input" name="word" type="text" placeholder="abricot" autocomplete="off">
-          </label>
-          <label class="super-admin-field-stack">
-            <span class="super-admin-field-label">Image Storage</span>
-            <input class="modal-text-input" name="storage_path" type="text" placeholder="encodage/abricot.webp" autocomplete="off">
-          </label>
-          <label class="super-admin-field-stack">
-            <span class="super-admin-field-label">Correction</span>
-            <textarea class="modal-text-input" name="units" rows="4" placeholder="JSON ou raccourci, ex. a b r i c1 o t*"></textarea>
-          </label>
-          <label class="super-admin-checkline"><input type="checkbox" name="is_active" checked> Actif</label>
-          <button class="btn primary" type="submit">Enregistrer l’entrée</button>
-          <div class="modal-message" id="adminEncodingMessage">Astuce : ajoute * après un graphème muet, par exemple <code>t*</code>.</div>
-        </form>
-        <div class="super-admin-resource-list">
-          <div class="super-admin-resource-list-head">
-            <div class="cfg-panel-title">Entrées Encodage</div>
-            <span class="dashboard-mini-pill">${words.length} mot${words.length > 1 ? "s" : ""} · ${assets.length} asset${assets.length > 1 ? "s" : ""}</span>
-          </div>
-          <div class="super-admin-resource-items">
-            ${words.map((word) => {
-              const asset = assets.find((item) => String(item.slug) === String(word.slug));
-              return `
-                <article class="super-admin-resource-row" data-encoding-slug="${escapeAttr(word.slug)}">
-                  <div>
-                    <strong>${escapeHtml(word.word)}</strong>
-                    <span>${escapeHtml(word.slug)}${asset?.storage_path ? ` · ${escapeHtml(asset.storage_path)}` : " · image non renseignée"}</span>
-                  </div>
-                  <div class="super-admin-resource-row-actions">
-                    <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-encoding-entry" data-slug="${escapeAttr(word.slug)}" title="Reprendre"><span class="dashboard-material-icon">edit</span></button>
-                    <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-encoding-entry" data-slug="${escapeAttr(word.slug)}" title="Supprimer"><span class="dashboard-material-icon">delete</span></button>
-                  </div>
-                </article>
-              `;
-            }).join("") || `<div class="dashboard-activity-empty-state">Aucune entrée Encodage pour le moment.</div>`}
-          </div>
-        </div>
-      </div>
-    `);
-    bindEncodingResourceEvents();
-  }
-
-  function bindEncodingResourceEvents() {
-    const form = list.querySelector("[data-action='save-encoding-entry']");
-    const message = list.querySelector("#adminEncodingMessage");
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const data = new FormData(form);
-      const slug = String(data.get("slug") || data.get("word") || "").trim();
-      try {
-        await savePhonologyWordAsAdmin?.({
-          slug,
-          word: data.get("word"),
-          units: data.get("units"),
-          is_active: data.get("is_active") === "on"
-        });
-        const storagePath = String(data.get("storage_path") || "").trim();
-        if (storagePath) {
-          await saveImageAssetAsAdmin?.({
-            slug,
-            storage_path: storagePath,
-            is_active: data.get("is_active") === "on"
-          });
-        }
-        encodingResources = await listEncodingResourcesAsAdmin?.() || { assets: [], words: [] };
-        showToast?.("Entrée Encodage enregistrée.");
-        await renderEncodingResources({ forceReload: false });
-      } catch (err) {
-        if (message) message.textContent = err?.message || "Enregistrement impossible.";
-      }
-    });
-    list.querySelectorAll("[data-action='edit-encoding-entry']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const slug = button.dataset.slug || "";
-        const word = (encodingResources.words || []).find((item) => String(item.slug) === slug) || null;
-        const asset = (encodingResources.assets || []).find((item) => String(item.slug) === slug) || null;
-        if (!word) return;
-        form.querySelector("[name='slug']").value = word.slug || "";
-        form.querySelector("[name='word']").value = word.word || "";
-        form.querySelector("[name='storage_path']").value = asset?.storage_path || "";
-        form.querySelector("[name='units']").value = JSON.stringify(word.units || [], null, 2);
-        const active = form.querySelector("[name='is_active']");
-        if (active) active.checked = word.is_active !== false;
-      });
-    });
-    list.querySelectorAll("[data-action='delete-encoding-entry']").forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (!confirm("Supprimer cette entrée Encodage et l’asset associé ?")) return;
-        const slug = button.dataset.slug || "";
-        await deletePhonologyWordAsAdmin?.(slug);
-        await deleteImageAssetAsAdmin?.(slug).catch(() => {});
-        encodingResources = await listEncodingResourcesAsAdmin?.() || { assets: [], words: [] };
-        await renderEncodingResources({ forceReload: false });
-      });
-    });
-  }
-
-  async function renderSystemBanksSection({ forceReload = false } = {}) {
-    destroySystemBanksController();
-    list.classList.remove("dashboard-explorer-host");
-    list.classList.add("super-admin-banks-list-host");
-    list.innerHTML = renderSystemBanksWorkbench();
-
-    const bankView = list.querySelector("[data-admin-banks-view]");
-    if (!bankView) return;
-
-    const query = (selector) => bankView.querySelector(selector);
-    systemBanksController = createQuestionBanksViewController({
-      banksView: bankView,
-      bankExplorerHeader: header,
-      bankEditorHeader: query("#bankEditorHeader"),
-      bankBreadcrumb: query("#bankBreadcrumb"),
-      banksList: query("#banksList"),
-      bankEditorHost: query("#bankEditorHost"),
-      bankEditorHeaderTitle: query("#bankEditorHeaderTitle"),
-      btnCreateBank: header?.querySelector("#btnCreateBank"),
-      btnCreateBankFolder: null,
-      btnBackBankExplorer: query("#btnBackBankExplorer"),
-      btnSaveBank: query("#btnSaveBank"),
-      importModal: query("#bankImportModal"),
-      importInput: query("#bankImportInput"),
-      importMessage: query("#bankImportMessage"),
-      importPreview: query("#bankImportPreview"),
-      btnImportCancel: query("#btnBankImportCancel"),
-      btnImportConfirm: query("#btnBankImportConfirm"),
-      getCurrentTeacherSpace,
-      requireTeacherSpace: false,
-      bankRootMode: "flat",
-      allowFolders: false,
-      allowSystemBankEditing: true,
-      rootLabel: "Banques système",
-      listQuestionBanksForSpace: async () => {
-        systemBanks = await listSystemQuestionBanksAsAdmin?.() || [];
-        return systemBanks;
-      },
-      listQuestionBankFoldersForSpace: async () => [],
-      createQuestionBankForSpace: async (_spaceId, payload = {}) => {
-        const bank = await createSystemQuestionBankAsAdmin?.({
-          title: payload.title,
-          bank_type: payload.bank_type,
-          instruction: payload.instruction || "",
-          description: payload.description || "",
-          folder_id: null,
-          display_order: payload.display_order
-        });
-        systemBanks = [];
-        return bank;
-      },
-      updateQuestionBank,
-      deleteQuestionBank,
-      listQuestionBankItems,
-      replaceQuestionBankItems,
-      showToast
-    });
-    await systemBanksController.refresh({ forceRefresh: forceReload });
-  }
-
-  function destroySystemBanksController() {
-    systemBanksController?.destroy?.();
-    systemBanksController = null;
-  }
-
-  function renderSystemBanksWorkbench() {
-    return `
-      <div class="dashboard-banks-view super-admin-banks-view" data-admin-banks-view>
-        <div id="bankExplorerHeader" class="dashboard-config-header dashboard-banks-explorer-header hidden" aria-hidden="true">
-          <nav id="bankBreadcrumb" class="dashboard-breadcrumb" aria-label="Fil d’Ariane des banques">
-            <button class="dashboard-breadcrumb-btn is-current" type="button" data-action="open-root">Banques système</button>
-          </nav>
-        </div>
-
-        <div id="bankEditorHeader" class="dashboard-config-header dashboard-banks-editor-header hidden">
-          <div class="cfg-header-left dashboard-banks-editor-header-main">
-            <button class="btn cfg-back-btn" id="btnBackBankExplorer" type="button" aria-label="Retour aux banques">↩</button>
-
-            <button id="btnToggleBankMeta" class="dashboard-bank-meta-toggle dashboard-material-icon-btn" type="button" aria-label="Afficher les informations facultatives" aria-expanded="false" aria-controls="bankEditorMetaPanel" title="Afficher matière, niveau, tags et description" disabled>
-              <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
-            </button>
-
-            <div class="cfg-header-identity">
-              <div class="cfg-config-name-wrap">
-                <div class="cfg-field-label">Titre de la banque :</div>
-                <div id="bankEditorHeaderTitle" class="cfg-config-name-display is-empty">Banque sans nom</div>
-                <button class="dashboard-icon-btn cfg-name-rename-btn" id="btnRenameBankFromHeader" type="button" aria-label="Renommer la banque" title="Renommer la banque" disabled>
-                  <span class="dashboard-material-icon cfg-name-rename-icon" aria-hidden="true">drive_file_rename_outline</span>
-                </button>
-                <div id="bankEditorTypePill" class="dashboard-bank-type-pill" hidden></div>
-              </div>
-            </div>
-          </div>
-
-          <div id="bankEditorMessage" class="cfg-editor-message"></div>
-
-          <div class="cfg-header-actions dashboard-banks-header-actions">
-            <button id="btnSaveBank" class="btn cfg-save-btn" type="button" disabled>Enregistrer</button>
-          </div>
-
-          <div id="bankEditorMetaPanel" class="dashboard-bank-header-meta-panel" hidden></div>
-        </div>
-
-        <div id="banksList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
-          <div class="dashboard-activity-empty-state">Chargement…</div>
-        </div>
-
-        <section id="bankEditorHost" class="dashboard-bank-editor-host hidden" aria-live="polite">
-          <div class="dashboard-bank-empty-state">Chargement…</div>
-        </section>
-
-        <div id="bankImportModal" class="modal hidden" aria-hidden="true">
-          <div class="modal-content modal-content-wide dashboard-bank-import-modal" role="dialog" aria-modal="true" aria-labelledby="bankImportModalTitle">
-            <div id="bankImportModalTitle" class="modal-title">Importer des questions</div>
-            <div class="dashboard-bank-import-help">
-              Colle un tableau ou une liste avec le séparateur <strong>|</strong> ou des tabulations :<br>
-              <code>Question | Réponse principale | Réponses acceptées | Explication</code>
-            </div>
-
-            <textarea id="bankImportInput" class="dashboard-bank-import-input" placeholder="Qui est le premier grand roi des Carolingiens ? | Charlemagne | Charles le Grand; Charles Ier"></textarea>
-            <div id="bankImportPreview" class="dashboard-bank-import-preview" hidden></div>
-
-            <div class="modal-actions">
-              <div id="bankImportMessage" class="modal-message">Colle une liste pour commencer.</div>
-              <button id="btnBankImportCancel" class="btn" type="button">Annuler</button>
-              <button id="btnBankImportConfirm" class="btn primary" type="button">Ajouter</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  return { refresh };
+  return {
+    setCatalogueState,
+    renderHeaderActions,
+    bindHeaderActions,
+    getActivityTileEnhancement,
+    getDropzoneAttributes,
+    bindCatalogueEvents,
+    openEditor
+  };
 }
 
 function normalizeLevelDraft(value) {

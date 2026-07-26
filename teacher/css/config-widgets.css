@@ -263,28 +263,6 @@
   gap:10px;
 }
 
-.flash-config-display-field,
-.flash-config-preparation-field{
-  width:100%;
-  flex-direction:row;
-  align-items:center;
-  justify-content:space-between;
-  gap:24px;
-}
-
-.flash-config-display-field .tv-stepper-field-label,
-.flash-config-preparation-field .tv-stepper-field-label{
-  flex:1 1 auto;
-  min-width:0;
-  font-size:20px;
-}
-
-.flash-config-display-field .tv-stepper-field-control,
-.flash-config-preparation-field .tv-stepper-field-control{
-  flex:0 0 auto;
-  justify-content:flex-end;
-}
-
 .tv-stepper-infinity-btn{
   width:38px;
   height:38px;

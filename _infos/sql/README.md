@@ -1,26 +1,36 @@
 # SQL historiques
 
-Ces fichiers sont des traces d’évolution du modèle Supabase.
+Dernière mise à jour : 2026-07-24.
 
-Ils ne constituent pas une migration propre et ne doivent pas être rejoués sans audit préalable.
+Les fichiers `01` à `10` retracent l’évolution du modèle Supabase. Ils sont conservés comme historique du projet et ne doivent pas être rejoués en bloc sur la base actuelle.
 
-Règle de patch : ne modifier ces fichiers que sur demande explicite.
+## Suppression des anciennes banques
 
-## Migration actuelle
+`10_remove_question_banks.sql` a été exécuté avec succès le 24 juillet 2026.
 
-Pour ajouter la consigne globale aux banques existantes, exécuter une fois :
+Il a supprimé définitivement :
 
-```text
-06_question_bank_instruction.sql
-```
+- `question_bank_items` ;
+- `question_banks` ;
+- `question_bank_folders` ;
+- les RPC, fonctions, politiques, triggers, contraintes et index exclusivement liés à ces tables.
 
-## Ajout Quiz + Ressources
+Le fichier reste conservé pour documenter la suppression.
 
-Pour créer la persistance Supabase des Quiz, des dossiers de ressources et le bucket privé associé, exécuter une fois :
+## Scripts obsolètes liés aux banques
 
-```text
-07_quizzes_resources.sql
-```
+Les parties relatives aux banques dans les anciens scripts, notamment :
 
-Ce script est additif et ne modifie pas les tables des anciennes banques.
+- `01_first_request.sql` ;
+- `05_superadmin_resources_banks_delete.sql` ;
+- `06_question_bank_instruction.sql` ;
 
+sont historiques et ne doivent plus être exécutées sur la base actuelle.
+
+## Quiz et ressources personnelles
+
+Les scripts `07`, `08` et `09` documentent la mise en place du modèle Quiz et de ses ressources. Ils ne dépendent pas des anciennes banques.
+
+## 11_resource_recordings_folder.sql
+
+Ajoute une métadonnée JSON aux dossiers de ressources et un rôle interne unique par espace enseignant. Le rôle `recordings` permet de retrouver le dossier automatique des enregistrements audio même s’il est renommé ou déplacé. Cette migration doit être exécutée avant le patch de gestion centralisée des enregistrements audio.

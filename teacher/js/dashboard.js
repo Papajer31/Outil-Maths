@@ -6,10 +6,6 @@ import {
   createOrGetMyTeacherSpace,
   updateMyTeacherSpace,
   markTeacherSpaceAsOpened,
-  createQuestionBankFolderForSpace,
-  updateQuestionBankFolder,
-  deleteQuestionBankFolder,
-  listQuestionBankFoldersForSpace,
   listStudentsForTeacherSpace,
   createStudentForTeacherSpace,
   updateStudent,
@@ -31,21 +27,6 @@ import {
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
-  listDefaultVocabularyWordsAsAdmin,
-  saveDefaultVocabularyWordAsAdmin,
-  upsertDefaultVocabularyWordsAsAdmin,
-  deleteDefaultVocabularyWordAsAdmin,
-  listEncodingResourcesAsAdmin,
-  saveImageAssetAsAdmin,
-  deleteImageAssetAsAdmin,
-  savePhonologyWordAsAdmin,
-  deletePhonologyWordAsAdmin,
-  listSystemQuestionBanksAsAdmin,
-  createSystemQuestionBankAsAdmin,
-  updateQuestionBank,
-  deleteQuestionBank,
-  listQuestionBankItems,
-  replaceQuestionBankItems,
   listQuizFoldersForSpace,
   createQuizFolderForSpace,
   updateQuizFolder,
@@ -55,6 +36,7 @@ import {
   deleteQuiz,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -65,7 +47,6 @@ import {
 } from "./teacher-api.js";
 import { createHeaderPopupController } from "./dashboard/header-popups.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
-import { createQuestionBanksViewController } from "./dashboard/question-banks-view.js";
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
 import { createMissionsViewController } from "./dashboard/missions-view.js";
 import { createTeacherToolsViewController } from "./dashboard/teacher-tools-view.js";
@@ -75,7 +56,6 @@ import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from ".
 import { createResourcesViewController } from "./dashboard/resources-view.js";
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
 import { getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues } from "../../tools/quiz/model.js";
-import { createSuperAdminViewController } from "./dashboard/superadmin-view.js";
 import {
   applyContextualHelpPreference,
   getContextualHelpEnabled,
@@ -107,11 +87,9 @@ const btnCloseProfileOverlay = document.getElementById("btnCloseProfileOverlay")
 const btnNavClass = document.getElementById("btnNavClass");
 const btnNavActivities = document.getElementById("btnNavActivities");
 const btnNavMissions = document.getElementById("btnNavMissions");
-const btnNavBanks = document.getElementById("btnNavBanks");
 const btnNavQuiz = document.getElementById("btnNavQuiz");
 const btnNavResources = document.getElementById("btnNavResources");
 const btnNavTeacherTools = document.getElementById("btnNavTeacherTools");
-const btnNavSuperAdmin = document.getElementById("btnNavSuperAdmin");
 const btnStudentListView = document.getElementById("btnStudentListView");
 const btnStudentTileView = document.getElementById("btnStudentTileView");
 const navHelpButtons = Array.from(document.querySelectorAll("[data-help-icon]"));
@@ -127,7 +105,6 @@ const activitiesView = document.getElementById("activitiesView");
 const missionsView = document.getElementById("missionsView");
 const missionsHeader = document.getElementById("missionsHeader");
 const missionsList = document.getElementById("missionsList");
-const banksView = document.getElementById("banksView");
 const quizView = document.getElementById("quizView");
 const quizExplorerPane = document.getElementById("quizExplorerPane");
 const quizExplorerHeader = document.getElementById("quizExplorerHeader");
@@ -154,31 +131,13 @@ const resourcesHeader = document.getElementById("resourcesHeader");
 const resourcesList = document.getElementById("resourcesList");
 const btnCreateResourceFolder = document.getElementById("btnCreateResourceFolder");
 const btnImportResources = document.getElementById("btnImportResources");
+const btnRecordResourceAudio = document.getElementById("btnRecordResourceAudio");
 const resourceFileInput = document.getElementById("resourceFileInput");
 const resourceStorageQuota = document.getElementById("resourceStorageQuota");
 const teacherToolsView = document.getElementById("teacherToolsView");
 const teacherToolsHost = document.getElementById("teacherToolsHost");
-const superAdminView = document.getElementById("superAdminView");
-const superAdminHeader = document.getElementById("superAdminHeader");
-const superAdminList = document.getElementById("superAdminList");
 
 const btnAddStudent = document.getElementById("btnAddStudent");
-const bankExplorerHeader = document.getElementById("bankExplorerHeader");
-const bankEditorHeader = document.getElementById("bankEditorHeader");
-const bankBreadcrumb = document.getElementById("bankBreadcrumb");
-const banksList = document.getElementById("banksList");
-const bankEditorHost = document.getElementById("bankEditorHost");
-const bankEditorHeaderTitle = document.getElementById("bankEditorHeaderTitle");
-const btnCreateBank = document.getElementById("btnCreateBank");
-const btnCreateBankFolder = document.getElementById("btnCreateBankFolder");
-const btnBackBankExplorer = document.getElementById("btnBackBankExplorer");
-const btnSaveBank = document.getElementById("btnSaveBank");
-const bankImportModal = document.getElementById("bankImportModal");
-const bankImportInput = document.getElementById("bankImportInput");
-const bankImportMessage = document.getElementById("bankImportMessage");
-const bankImportPreview = document.getElementById("bankImportPreview");
-const btnBankImportCancel = document.getElementById("btnBankImportCancel");
-const btnBankImportConfirm = document.getElementById("btnBankImportConfirm");
 const btnQuizAddQuestion = document.getElementById("btnQuizAddQuestion");
 const btnQuizSave = document.getElementById("btnQuizSave");
 const btnQuizTest = document.getElementById("btnQuizTest");
@@ -214,41 +173,34 @@ let currentUser = null;
 let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
-let currentDashboardSection = "activities"; // "activities" | "missions" | "class" | "banks" | "quiz" | "resources" | "teacher-tools" | "super-admin"
+let currentDashboardSection = "activities"; // "activities" | "missions" | "class" | "quiz" | "resources" | "teacher-tools"
 let showDashboardHelpIcons = getContextualHelpEnabled();
 let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
 let hasMountedClassView = false;
 let hasMountedActivitiesView = false;
 let hasMountedMissionsView = false;
-let hasMountedBanksView = false;
 let hasMountedQuizView = false;
 let hasMountedResourcesView = false;
 let hasMountedTeacherToolsView = false;
-let hasMountedSuperAdminView = false;
 let currentUserIsSuperAdmin = false;
 let mountedClassTeacherSpaceId = "";
 let mountedActivitiesTeacherSpaceId = "";
 let mountedMissionsTeacherSpaceId = "";
-let mountedBanksTeacherSpaceId = "";
 let mountedQuizTeacherSpaceId = "";
 let mountedResourcesTeacherSpaceId = "";
 let mountedTeacherToolsTeacherSpaceId = "";
-let mountedSuperAdminTeacherSpaceId = "";
 let dashboardToast = null;
 let dashboardToastTimer = null;
 
 const studentNotesDrafts = new Map();
-const legacyActivityQuarantineSet = new Set();
 let activitiesViewController = null;
 let missionsViewController = null;
-let banksViewController = null;
 let quizExplorerViewController = null;
 let quizWorkshopViewController = null;
 let quizSeriesViewController = null;
 let resourcesViewController = null;
 let teacherToolsViewController = null;
-let superAdminViewController = null;
 let studentController = null;
 const helpPopoverController = initContextualHelpSystem({ root: document });
 
@@ -299,10 +251,6 @@ studentController = createStudentDashboardController({
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
-  setCachedActivities: () => {},
-  setCachedActivityFolders: () => {},
-  getCollapsedActivityFolderIds: () => legacyActivityQuarantineSet,
-  getKnownActivityFolderIds: () => legacyActivityQuarantineSet,
   studentNotesDrafts,
   showToast: showDashboardShareToast
 });
@@ -311,8 +259,13 @@ activitiesViewController = createActivitiesViewController({
   configHeader,
   configsList,
   getCurrentTeacherSpace: () => currentTeacherSpace,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listCatalogActivitiesForTeacherSpace,
   setCatalogActivityVisibility,
+  listCatalogActivitiesForAdmin,
+  saveCatalogActivityAsAdmin,
+  deleteCatalogActivityAsAdmin,
+  getCatalogActivityUsageAsAdmin,
   showToast: showDashboardShareToast
 });
 
@@ -331,32 +284,6 @@ missionsViewController = createMissionsViewController({
   saveMissionForSpace,
   deleteMission,
   listCatalogActivitiesForTeacherSpace
-});
-
-banksViewController = createQuestionBanksViewController({
-  banksView,
-  bankExplorerHeader,
-  bankEditorHeader,
-  bankBreadcrumb,
-  banksList,
-  bankEditorHost,
-  bankEditorHeaderTitle,
-  btnCreateBank,
-  btnCreateBankFolder,
-  btnBackBankExplorer,
-  btnSaveBank,
-  createQuestionBankFolderForSpace,
-  updateQuestionBankFolder,
-  deleteQuestionBankFolder,
-  listQuestionBankFoldersForSpace,
-  importModal: bankImportModal,
-  importInput: bankImportInput,
-  importMessage: bankImportMessage,
-  importPreview: bankImportPreview,
-  btnImportCancel: btnBankImportCancel,
-  btnImportConfirm: btnBankImportConfirm,
-  getCurrentTeacherSpace: () => currentTeacherSpace,
-  showToast: showDashboardShareToast
 });
 
 function testQuizSnapshot(snapshot) {
@@ -420,6 +347,7 @@ quizWorkshopViewController = createQuizWorkshopViewController({
   getCurrentTeacherSpace: () => currentTeacherSpace,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  ensureRecordingsResourceFolderForSpace,
   listResourcesForSpace,
   uploadResourceForSpace,
   createResourceSignedUrl,
@@ -443,7 +371,7 @@ function showQuizExplorer(){
   quizExplorerViewController?.render?.();
 }
 
-function showQuizWorkshop({ quiz = null, folderId = null } = {}){
+function showQuizWorkshop({ quiz = null, folderId = null, isSystem = false } = {}){
   quizExplorerPane?.classList.add("hidden");
   quizSeriesView?.classList.add("hidden");
   quizWorkshopView?.classList.remove("hidden");
@@ -451,10 +379,10 @@ function showQuizWorkshop({ quiz = null, folderId = null } = {}){
   quizView?.classList.add("is-quiz-workshop-open");
   quizWorkshopViewController?.render?.();
   if (quiz) quizWorkshopViewController?.loadQuiz?.(quiz);
-  else quizWorkshopViewController?.resetQuiz?.({ folderId, title: "" });
+  else quizWorkshopViewController?.resetQuiz?.({ folderId, title: "", is_system: isSystem });
 }
 
-function showQuizSeries({ quiz = null, folderId = null, modelId = "", instruction = "", title = "" } = {}){
+function showQuizSeries({ quiz = null, folderId = null, modelId = "", instruction = "", title = "", isSystem = false } = {}){
   quizExplorerPane?.classList.add("hidden");
   quizWorkshopView?.classList.add("hidden");
   quizSeriesView?.classList.remove("hidden");
@@ -463,7 +391,7 @@ function showQuizSeries({ quiz = null, folderId = null, modelId = "", instructio
   quizSeriesViewController?.render?.();
   try {
     if (quiz) quizSeriesViewController?.loadQuiz?.(quiz);
-    else quizSeriesViewController?.resetSeries?.({ folderId, modelId, instruction, title });
+    else quizSeriesViewController?.resetSeries?.({ folderId, modelId, instruction, title, isSystem });
   } catch (error) {
     showDashboardShareToast(error?.message || "Impossible d’ouvrir cette série.", { isError:true });
     showQuizExplorer();
@@ -501,11 +429,11 @@ quizExplorerViewController = createQuizExplorerViewController({
   createQuizButton: btnCreateQuiz,
   createSeriesButton: btnCreateQuizSeries,
   createFolderButton: btnCreateQuizFolder,
-  onCreateQuiz: ({ folderId } = {}) => showQuizWorkshop({ folderId }),
-  onCreateSeries: ({ folderId } = {}) => {
+  onCreateQuiz: ({ folderId, isSystem = false } = {}) => showQuizWorkshop({ folderId, isSystem }),
+  onCreateSeries: ({ folderId, isSystem = false } = {}) => {
     openQuizSeriesCreationOverlay({
       onConfirm: ({ modelId, title, instruction, action }) => {
-        showQuizSeries({ folderId, modelId, title, instruction });
+        showQuizSeries({ folderId, modelId, title, instruction, isSystem });
         if (action === "import") {
           window.requestAnimationFrame(() => {
             quizSeriesViewController?.openImportDrawer?.({ source:"creation" });
@@ -515,10 +443,15 @@ quizExplorerViewController = createQuizExplorerViewController({
     });
   },
   onOpenQuiz: (quiz) => {
+    if (quiz?.is_system === true && !currentUserIsSuperAdmin) {
+      testQuizSnapshot(quiz);
+      return;
+    }
     if (String(quiz?.editorMode || "") === "series") showQuizSeries({ quiz });
     else showQuizWorkshop({ quiz });
   },
   getCurrentTeacherSpace: () => currentTeacherSpace,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listQuizFoldersForSpace,
   createQuizFolderForSpace,
   updateQuizFolder,
@@ -535,12 +468,14 @@ resourcesViewController = createResourcesViewController({
   list: resourcesList,
   createFolderButton: btnCreateResourceFolder,
   importResourcesButton: btnImportResources,
+  recordAudioButton: btnRecordResourceAudio,
   resourceFileInput,
   storageQuotaElement: resourceStorageQuota,
   showToast: showDashboardShareToast,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -555,34 +490,6 @@ teacherToolsViewController = createTeacherToolsViewController({
   host: teacherToolsHost,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   getCurrentStudents: () => currentStudents,
-  showToast: showDashboardShareToast
-});
-
-superAdminViewController = createSuperAdminViewController({
-  view: superAdminView,
-  header: superAdminHeader,
-  list: superAdminList,
-  getIsSuperAdmin: () => currentUserIsSuperAdmin,
-  getCurrentTeacherSpace: () => currentTeacherSpace,
-  listCatalogActivitiesForAdmin,
-  saveCatalogActivityAsAdmin,
-  deleteCatalogActivityAsAdmin,
-  getCatalogActivityUsageAsAdmin,
-  listDefaultVocabularyWordsAsAdmin,
-  saveDefaultVocabularyWordAsAdmin,
-  upsertDefaultVocabularyWordsAsAdmin,
-  deleteDefaultVocabularyWordAsAdmin,
-  listEncodingResourcesAsAdmin,
-  saveImageAssetAsAdmin,
-  deleteImageAssetAsAdmin,
-  savePhonologyWordAsAdmin,
-  deletePhonologyWordAsAdmin,
-  listSystemQuestionBanksAsAdmin,
-  createSystemQuestionBankAsAdmin,
-  updateQuestionBank,
-  deleteQuestionBank,
-  listQuestionBankItems,
-  replaceQuestionBankItems,
   showToast: showDashboardShareToast
 });
 
@@ -709,27 +616,31 @@ async function ensureMissionsViewMounted({ forceRefresh = false } = {}){
   await missionsViewController?.renderMissionsView?.({ forceRefresh: true });
 }
 
-async function ensureBanksViewMounted({ forceRefresh = false } = {}){
-  const teacherSpaceId = String(currentTeacherSpace?.id || "");
-  if (!forceRefresh && hasMountedBanksView && mountedBanksTeacherSpaceId === teacherSpaceId) return;
-  await banksViewController?.refresh({ forceRefresh });
-  hasMountedBanksView = true;
-  mountedBanksTeacherSpaceId = teacherSpaceId;
-}
-
 async function ensureQuizViewMounted(){
   const teacherSpaceId = String(currentTeacherSpace?.id || "");
-  await quizExplorerViewController?.refresh?.();
-  if (!hasMountedQuizView || mountedQuizTeacherSpaceId !== teacherSpaceId) {
+  const isSameTeacherSpace = hasMountedQuizView && mountedQuizTeacherSpaceId === teacherSpaceId;
+  const isEditingQuiz = quizView?.classList.contains("is-quiz-workshop-open")
+    || quizView?.classList.contains("is-quiz-series-open");
+
+  if (!isSameTeacherSpace) {
+    await quizExplorerViewController?.refresh?.();
     quizWorkshopViewController?.render?.();
     hasMountedQuizView = true;
     mountedQuizTeacherSpaceId = teacherSpaceId;
+    showQuizExplorer();
+    return;
   }
-  showQuizExplorer();
+
+  // Une vue d’édition ouverte garde son DOM, son tiroir et ses brouillons
+  // lorsqu’on consulte temporairement un autre onglet.
+  if (isEditingQuiz) return;
+
+  await quizExplorerViewController?.refresh?.();
 }
 
 async function ensureResourcesViewMounted({ forceRefresh = false } = {}){
   const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedResourcesView && mountedResourcesTeacherSpaceId === teacherSpaceId) return;
   await resourcesViewController?.refresh?.({ forceRefresh });
   hasMountedResourcesView = true;
   mountedResourcesTeacherSpaceId = teacherSpaceId;
@@ -738,20 +649,11 @@ async function ensureResourcesViewMounted({ forceRefresh = false } = {}){
 async function ensureTeacherToolsViewMounted({ forceRefresh = false } = {}){
   const teacherSpaceId = String(currentTeacherSpace?.id || "");
   if (!forceRefresh && hasMountedTeacherToolsView && mountedTeacherToolsTeacherSpaceId === teacherSpaceId) {
-    teacherToolsViewController?.refresh?.();
     return;
   }
   teacherToolsViewController?.render?.();
   hasMountedTeacherToolsView = true;
   mountedTeacherToolsTeacherSpaceId = teacherSpaceId;
-}
-
-async function ensureSuperAdminViewMounted({ forceRefresh = false } = {}){
-  const teacherSpaceId = String(currentTeacherSpace?.id || "");
-  if (!forceRefresh && hasMountedSuperAdminView && mountedSuperAdminTeacherSpaceId === teacherSpaceId) return;
-  await superAdminViewController?.refresh?.({ forceRefresh: true });
-  hasMountedSuperAdminView = true;
-  mountedSuperAdminTeacherSpaceId = teacherSpaceId;
 }
 
 function buildDashboardHistoryState(){
@@ -787,22 +689,16 @@ function renderDashboardShellState(){
   btnNavActivities?.classList.toggle("is-active", currentDashboardSection === "activities");
   btnNavMissions?.classList.toggle("is-active", currentDashboardSection === "missions");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
-  btnNavBanks?.classList.toggle("is-active", currentDashboardSection === "banks");
   btnNavQuiz?.classList.toggle("is-active", currentDashboardSection === "quiz");
   btnNavResources?.classList.toggle("is-active", currentDashboardSection === "resources");
   btnNavTeacherTools?.classList.toggle("is-active", currentDashboardSection === "teacher-tools");
-  btnNavSuperAdmin?.classList.toggle("is-active", currentDashboardSection === "super-admin");
-  btnNavSuperAdmin?.classList.toggle("hidden", !currentUserIsSuperAdmin);
 
   activitiesView?.classList.toggle("hidden", currentDashboardSection !== "activities");
   missionsView?.classList.toggle("hidden", currentDashboardSection !== "missions");
   classView?.classList.toggle("hidden", currentDashboardSection !== "class");
-  banksView?.classList.toggle("hidden", currentDashboardSection !== "banks");
   quizView?.classList.toggle("hidden", currentDashboardSection !== "quiz");
   resourcesView?.classList.toggle("hidden", currentDashboardSection !== "resources");
   teacherToolsView?.classList.toggle("hidden", currentDashboardSection !== "teacher-tools");
-  if (currentDashboardSection !== "quiz") quizWorkshopViewController?.close?.();
-  superAdminView?.classList.toggle("hidden", currentDashboardSection !== "super-admin");
 
   navHelpButtons.forEach((button) => {
     button.classList.toggle("is-hidden", !showDashboardHelpIcons);
@@ -856,12 +752,8 @@ btnNavClass?.addEventListener("click", async () => {
   renderDashboardShellState();
   await ensureClassViewMounted();
 });
-btnNavBanks?.addEventListener("click", async () => {
-  currentDashboardSection = "banks";
-  renderDashboardShellState();
-  await ensureBanksViewMounted();
-});
 btnNavQuiz?.addEventListener("click", async () => {
+  if (currentDashboardSection === "quiz") return;
   currentDashboardSection = "quiz";
   renderDashboardShellState();
   await ensureQuizViewMounted();
@@ -878,12 +770,6 @@ btnNavTeacherTools?.addEventListener("click", async () => {
   currentDashboardSection = "teacher-tools";
   renderDashboardShellState();
   await ensureTeacherToolsViewMounted();
-});
-btnNavSuperAdmin?.addEventListener("click", async () => {
-  if (!currentUserIsSuperAdmin) return;
-  currentDashboardSection = "super-admin";
-  renderDashboardShellState();
-  await ensureSuperAdminViewMounted();
 });
 btnStudentListView?.addEventListener("click", async () => {
   if (studentViewMode === "list") return;
@@ -934,13 +820,6 @@ window.addEventListener("popstate", () => {
 });
 window.addEventListener("resize", () => {
   syncDashboardViewportSizing();
-});
-window.addEventListener("beforeunload", (event) => {
-  const hasBankChanges = banksViewController?.hasPendingChanges?.() === true;
-  if (!hasBankChanges) return;
-
-  event.preventDefault();
-  event.returnValue = "";
 });
 window.visualViewport?.addEventListener?.("resize", syncDashboardViewportSizing);
 configsList?.addEventListener("scroll", () => {

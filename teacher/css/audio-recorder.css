@@ -1,0 +1,225 @@
+.dashboard-audio-recorder-overlay{
+  position:fixed;
+  inset:0;
+  z-index:260;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:rgba(5,8,13,.76);
+  backdrop-filter:blur(5px);
+}
+
+.dashboard-audio-recorder-card{
+  width:min(720px, calc(100vw - 48px));
+  max-height:calc(100vh - 48px);
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:18px;
+  background:#171b24;
+  color:#fff;
+  box-shadow:0 24px 80px rgba(0,0,0,.48);
+}
+
+.dashboard-audio-recorder-header{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) minmax(180px, 1fr) auto;
+  align-items:center;
+  gap:16px;
+  padding:18px 24px;
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+
+.dashboard-audio-recorder-header h2{
+  margin:0;
+  font-size:25px;
+  line-height:1.15;
+}
+
+.dashboard-audio-recorder-header > .dashboard-icon-btn{
+  width:36px;
+  height:36px;
+  border-radius:10px;
+}
+
+.dashboard-audio-recorder-header > .dashboard-icon-btn .dashboard-material-icon{
+  font-size:20px;
+}
+
+.dashboard-audio-recorder-body{
+  display:grid;
+  gap:18px;
+  padding:22px 24px;
+}
+
+.dashboard-audio-recorder-stage{
+  display:grid;
+  justify-items:center;
+  gap:16px;
+  padding:0;
+}
+
+.dashboard-audio-recorder-meter{
+  width:min(520px, 100%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+}
+
+.dashboard-audio-recorder-meter[hidden],
+.dashboard-audio-recorder-preview[hidden]{
+  display:none;
+}
+
+.dashboard-audio-recorder-clock{
+  flex:0 0 auto;
+  font-size:30px;
+  font-weight:600;
+  font-variant-numeric:tabular-nums;
+  line-height:1;
+}
+
+.dashboard-audio-recorder-waveform{
+  min-width:0;
+  flex:1 1 300px;
+  height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  overflow:hidden;
+}
+
+.dashboard-audio-recorder-waveform span{
+  width:5px;
+  height:40px;
+  border-radius:999px;
+  background:#dc3c43;
+  transform:scaleY(.12);
+  transition:transform .12s ease-out;
+}
+
+.dashboard-audio-recorder-controls{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:10px;
+}
+
+.dashboard-audio-recorder-preview{
+  width:min(520px, 100%);
+  display:grid;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:center;
+  gap:12px;
+}
+
+.dashboard-audio-recorder-preview audio{
+  display:none;
+}
+
+.dashboard-audio-recorder-preview > .dashboard-icon-btn{
+  width:36px;
+  height:36px;
+  border-radius:50%;
+}
+
+.dashboard-audio-recorder-progress{
+  width:100%;
+  min-width:0;
+  accent-color:#dc3c43;
+  cursor:pointer;
+}
+
+.dashboard-audio-recorder-player-time{
+  color:#c9d1e2;
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+.dashboard-audio-recorder-name{
+  display:grid;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:center;
+  gap:10px;
+  color:#e8ecf7;
+  font-size:13px;
+  font-weight:750;
+}
+
+.dashboard-audio-recorder-name input{
+  width:100%;
+  min-height:44px;
+  padding:9px 12px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:10px;
+  background:#0f131b;
+  color:#fff;
+  font:inherit;
+}
+
+.dashboard-audio-recorder-name input:disabled{
+  opacity:1;
+  cursor:default;
+}
+
+.dashboard-audio-recorder-name > .dashboard-icon-btn{
+  width:34px;
+  height:34px;
+  border-radius:9px;
+}
+
+.dashboard-audio-recorder-name input:focus{
+  outline:2px solid rgba(80,132,255,.62);
+  outline-offset:1px;
+}
+
+.dashboard-audio-recorder-message{
+  min-width:0;
+  color:#b9c4d8;
+  font-size:13px;
+  font-weight:650;
+  line-height:1.35;
+  text-align:center;
+}
+
+.dashboard-audio-recorder-message.is-error{
+  color:#ff9aa0;
+}
+
+.dashboard-audio-recorder-overlay.is-busy .dashboard-audio-recorder-card{
+  cursor:progress;
+}
+
+@media (max-width:720px){
+  .dashboard-audio-recorder-overlay{ padding:12px; }
+  .dashboard-audio-recorder-card{ width:100%; max-height:calc(100vh - 24px); }
+  .dashboard-audio-recorder-header,
+  .dashboard-audio-recorder-body{ padding-left:16px; padding-right:16px; }
+  .dashboard-audio-recorder-header{
+    grid-template-columns:minmax(0, 1fr) auto;
+  }
+  .dashboard-audio-recorder-message{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+  .dashboard-audio-recorder-meter{
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .dashboard-audio-recorder-waveform{
+    flex-basis:100%;
+  }
+  .dashboard-audio-recorder-preview{
+    grid-template-columns:auto minmax(0, 1fr);
+  }
+  .dashboard-audio-recorder-player-time{
+    grid-column:2;
+  }
+  .dashboard-audio-recorder-name{
+    grid-template-columns:auto minmax(0, 1fr) auto;
+    gap:6px;
+  }
+}

@@ -651,6 +651,7 @@ export function createQuizSeriesViewController({
   let isMounted = false;
   let currentQuizId = "";
   let currentFolderId = null;
+  let currentQuizIsSystem = false;
   let currentDisplayOrder = null;
   let currentCreatedAt = "";
   let currentUpdatedAt = "";
@@ -1204,17 +1205,17 @@ export function createQuizSeriesViewController({
     }
     let draftIndexes = normalizeQuizSelectionIndexes(row.selections?.[column.widgetIndex], wordCount);
     const overlay = document.createElement("div");
-    overlay.className = "dashboard-selection-picker-overlay";
+    overlay.className = "quiz-series-selection-picker-overlay";
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.innerHTML = `
-      <div class="dashboard-selection-picker-card">
-        <div class="dashboard-selection-picker-header">
-          <div class="dashboard-selection-picker-title">Cliquez sur les mots attendus</div>
+      <div class="quiz-series-selection-picker-card">
+        <div class="quiz-series-selection-picker-header">
+          <div class="quiz-series-selection-picker-title">Cliquez sur les mots attendus</div>
         </div>
-        <div class="dashboard-selection-picker-text" data-selection-picker-text></div>
-        <div class="dashboard-selection-picker-footer">
-          <div class="dashboard-selection-picker-actions">
+        <div class="quiz-series-selection-picker-text" data-selection-picker-text></div>
+        <div class="quiz-series-selection-picker-footer">
+          <div class="quiz-series-selection-picker-actions">
             <button class="btn" type="button" data-selection-picker-action="clear">Effacer</button>
             <button class="btn primary" type="button" data-selection-picker-action="apply">Valider la sélection</button>
           </div>
@@ -1437,6 +1438,7 @@ export function createQuizSeriesViewController({
       instruction:instructionParsed.text,
       folder_id:currentFolderId,
       display_order:currentDisplayOrder,
+      is_system:currentQuizIsSystem,
       created_at:currentCreatedAt,
       updated_at:currentUpdatedAt,
       editorMode:"series",
@@ -1504,13 +1506,14 @@ export function createQuizSeriesViewController({
     });
   }
 
-  function resetSeries({ folderId = null, modelId = "", instruction = "", title = "" } = {}){
+  function resetSeries({ folderId = null, modelId = "", instruction = "", title = "", isSystem = false } = {}){
     mount();
     const model = getQuestionModelById(modelId);
     const analysis = model ? analyzeSeriesQuestionModel(model) : null;
     if (!model || !analysis?.compatible) throw new Error("Modèle de série incompatible.");
     currentQuizId = "";
     currentFolderId = folderId || null;
+    currentQuizIsSystem = isSystem === true;
     currentDisplayOrder = null;
     currentCreatedAt = "";
     currentUpdatedAt = "";
@@ -1537,6 +1540,7 @@ export function createQuizSeriesViewController({
     if (!question || !model || !analysis?.compatible) throw new Error("Cette série ne correspond plus à un modèle compatible.");
     currentQuizId = String(quiz.id || "");
     currentFolderId = quiz.folder_id || null;
+    currentQuizIsSystem = quiz.is_system === true;
     currentDisplayOrder = quiz.display_order ?? null;
     currentCreatedAt = String(quiz.created_at || "");
     currentUpdatedAt = String(quiz.updated_at || "");
@@ -1565,6 +1569,7 @@ export function createQuizSeriesViewController({
         currentQuizId = String(saved.id || currentQuizId);
         currentFolderId = saved.folder_id ?? currentFolderId;
         currentDisplayOrder = saved.display_order ?? currentDisplayOrder;
+        currentQuizIsSystem = saved.is_system === true;
         currentCreatedAt = String(saved.created_at || currentCreatedAt);
         currentUpdatedAt = String(saved.updated_at || currentUpdatedAt);
         if (titleInput) titleInput.value = String(saved.title || titleInput.value || "");

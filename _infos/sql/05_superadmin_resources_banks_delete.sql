@@ -1,3 +1,5 @@
+-- HISTORIQUE UNIQUEMENT — NE PAS REJOUER SUR LA BASE ACTUELLE.
+-- Les sections relatives aux banques sont obsolètes depuis leur suppression du 24/07/2026.
 -- =========================================================
 -- PATCH 05 — SUPER-ADMIN : SUPPRESSION CATALOGUE + RESSOURCES + BANQUES SYSTÈME
 -- À exécuter dans Supabase v2 APRÈS 04_student_progression_exploration.sql.

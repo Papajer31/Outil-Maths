@@ -166,13 +166,13 @@ function renderCommonToolSettings(draft, context = {}) {
   const showInstructionField = safeTool?.supportsCustomInstruction !== false;
   const instructionState = getCommonInstructionState(safeDraft.settings);
   const successGoalSettings = getCommonSuccessGoalSettings(safeDraft);
-  const bankInstructionText = String(
-    safeDraft?.settings?.bankInstruction
-      ?? safeDraft?.settings?.bank_instruction
+  const sourceInstructionText = String(
+    safeDraft?.settings?.sourceInstruction
+      ?? safeDraft?.settings?.source_instruction
       ?? ""
   ).trim();
   const toolDefaultInstructionText = String(safeTool?.defaultInstruction || "").trim();
-  const defaultInstructionText = bankInstructionText || toolDefaultInstructionText;
+  const defaultInstructionText = sourceInstructionText || toolDefaultInstructionText;
   const passationProfile = normalizePassationProfile({
     activityMode: context?.activityMode ?? context?.activity_mode ?? context?.mode,
     responseUi: context?.responseUi ?? context?.response_ui,
@@ -424,7 +424,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     onChange: () => onDirty?.()
   });
 
-  container.addEventListener("questionbankchange", (event) => {
+  container.addEventListener("toolsourceinstructionchange", (event) => {
     if (!instructionCurrentText) return;
     const instruction = String(event?.detail?.instruction || "").trim();
     const toolDefault = String(instructionCurrentText.dataset.toolDefaultInstruction || "").trim();

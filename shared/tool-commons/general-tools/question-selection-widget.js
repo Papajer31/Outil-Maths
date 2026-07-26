@@ -18,7 +18,7 @@ export function renderQuestionSelectionWidget({
   renderRow = defaultRenderQuestionSelectionRow,
   emptyMessage = "Aucune question à afficher.",
   loadingMessage = "Chargement…",
-  listAriaLabel = "Questions de la banque"
+  listAriaLabel = "Questions disponibles"
 } = {}) {
   ensureQuestionSelectionStyles();
 

@@ -1,18 +1,31 @@
 # Backlog consolidé
 
-Dernière mise à jour : 2026-06-27.
+Dernière mise à jour : 2026-07-24.
 
 ## Priorités proches
 
-- Finaliser la création/édition de Missions après enrichissement et stabilisation du Catalogue.
-- Stabiliser le parcours Banques personnelles / Banques système dans l’explorateur.
-- Tester et documenter la duplication d’une banque système vers les banques personnelles : la fonction existe dans le code, mais le parcours doit rester vérifié en usage réel.
-- Améliorer progressivement le guidage enseignant, façon découverte progressive des possibilités.
+- Finaliser et stabiliser la création/édition de Missions.
+- Continuer les tests de bout en bout du Catalogue et de l’Atelier Quiz.
+- Améliorer progressivement le guidage enseignant, avec une découverte simple des possibilités.
+- Créer plus tard un outil technique indépendant pour importer les données système dans Supabase.
+
+## Quiz
+
+- Réintroduire le comportement Flash directement dans l’Atelier Quiz.
+- Ajouter deux éléments explicites pour l’utilisateur : **Texte flash** et **Image flash**.
+- Réutiliser en interne les moteurs Texte et Image existants avec un comportement Flash, sans créer de nouveaux formats de données ni de second éditeur.
+- Conserver l’élément Audio normal ; ne pas créer d’« Audio flash » tant qu’un besoin clair n’est pas défini.
 
 ## Catalogue
 
-- Décider si les outils actifs absents du catalogue de secours doivent être ajoutés à `shared/catalogue.js` ou rester uniquement alimentés par Supabase / les banques.
 - Vérifier régulièrement la cohérence entre `tools/registry.js`, `shared/catalogue.js` et les activités réellement présentes dans Supabase.
+- Décider si `nombres-lettres`, `conjugaison` ou `quiz` doivent un jour recevoir une activité dans le catalogue local de secours.
+
+## Ressources
+
+- Conserver les ressources système locales et alignées sur `shared/tool-assets/manifest.json`.
+- Conserver les ressources personnelles dans Supabase avec leur quota.
+- Prévoir un outil technique hors dashboard pour gérer les imports dans `image_assets`, `phonology_words` et `vocabulary_default_words`.
 
 ## Tableau
 
@@ -22,24 +35,20 @@ Dernière mise à jour : 2026-06-27.
 
 ## Outils élèves
 
-- Garder l’approche MVP : un outil simple, fonctionnel, puis amélioration.
+- Garder l’approche MVP : un outil simple et fonctionnel, puis amélioration.
 - Éviter les outils trop génériques dont l’action élève devient floue.
-- Ne pas restaurer `operations-trous` : l’outil a été supprimé du registre legacy.
-- Factoriser en priorité les familles dont les fichiers sont quasi identiques : représentations décimales, opérations à trous, droites numériques.
+- Factoriser seulement lorsque plusieurs outils stabilisés montrent une duplication réelle.
 
 ## Dette à surveiller
 
-- Nettoyer progressivement les références mortes restantes dans la documentation.
-- Factoriser seulement quand plusieurs outils stabilisés montrent une duplication réelle.
+- Maintenir la documentation au même état que le code.
 - Ne pas rejouer les SQL historiques sans migration propre.
-- Remplacer les confirmations natives restantes par des modales/toasts maison quand le parcours utilisateur le justifie.
+- Remplacer les confirmations natives restantes par des modales ou toasts maison lorsque le parcours le justifie.
 
+## Idée à conserver — enregistrement audio système
 
-## Idée à conserver — Système super-admin d’enregistrement audio
-
-Prévoir dans l’onglet super-admin un outil d’enregistrement audio intégré. Objectif : enregistrer une voix humaine directement depuis l’interface, nommer automatiquement le fichier selon le contexte, puis l’associer au texte concerné. Le système devra couvrir les textes fixes du site ainsi que les contenus des outils : consignes, énoncés, corrections et réponses audio éventuelles. Cette piste est privilégiée au TTS pour garantir une prononciation contrôlée, naturelle et adaptée aux élèves.
-
+Prévoir un outil technique d’enregistrement audio humain : nommage automatique selon le contexte, association aux textes fixes et aux contenus pédagogiques, puis sauvegarde ou téléchargement immédiat. Cette piste reste privilégiée au TTS pour garantir une prononciation contrôlée et adaptée aux élèves.
 
 ## Découpage restant de Monnaie
 
-`monnaie-representation` couvre maintenant Lire une somme et Composer une somme. Les modes encore à extraire depuis le legacy `monnaie` sont : comparer des sommes, acheter des objets, trouver plusieurs façons et rendre la monnaie.
+`monnaie-representation` couvre Lire une somme et Composer une somme. Les modes restant éventuellement à créer comme outils autonomes sont : comparer des sommes, acheter des objets, trouver plusieurs façons et rendre la monnaie.

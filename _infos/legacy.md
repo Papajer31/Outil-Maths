@@ -1,27 +1,45 @@
 # Legacy — ce qui ne doit plus piloter le projet
 
-Dernière mise à jour : 2026-06-27.
+Dernière mise à jour : 2026-07-24.
 
 ## Ancien éditeur d’activités personnelles
 
-L’ancien modèle `activity_configs` / `activity_folders` n’est plus le modèle produit actif. Le dashboard actuel s’appuie sur Catalogue, Missions, Banques, Tableau et Admin.
+Le modèle `activity_configs` / `activity_folders` n’est plus le modèle produit actif. Le dashboard s’appuie sur le Catalogue système, les Missions et les Quiz.
 
-Dans cette vague de nettoyage, le gros bloc HTML `editorView` et les anciens modules JS d’édition personnelle ont été retirés du code actif.
+Les anciens modules d’édition personnelle ne doivent pas être réintroduits.
 
-## API legacy
+## Anciennes banques de questions
 
-Les fonctions exportées depuis `teacher-api.js` pour manipuler les anciennes activités personnelles ont été retirées afin d’éviter une fausse compatibilité qui inviterait à rebrancher l’ancien modèle.
+Le modèle suivant a été supprimé de l’application et de Supabase :
 
-## Outils legacy
+- `question_banks` ;
+- `question_bank_items` ;
+- `question_bank_folders`.
 
-- `monnaie` reste temporairement listé comme outil legacy de réserve. La partie Lire une somme / Composer une somme a été extraite dans `monnaie-representation`.
-- `operations-trous` a été supprimé du registre legacy et du dossier `tools/`.
+Les outils entièrement dépendants de ce modèle ont également été supprimés :
 
-## Règle
+- `question-reponse` ;
+- `qcm` ;
+- `selection` ;
+- `flash-question-reponse` ;
+- `flash-qcm`.
 
-Un élément legacy peut rester documenté pour mémoire, mais il ne doit pas être utilisé comme point d’appui pour les nouveaux développements.
+Aucune rétrocompatibilité n’est prévue. Les futurs comportements équivalents doivent être développés dans l’Atelier Quiz.
 
+## SQL historiques
+
+Les fichiers SQL ayant créé ou modifié les anciennes banques sont conservés pour témoigner de l’historique du projet. Ils sont obsolètes et ne doivent pas être rejoués.
+
+La suppression physique a été réalisée avec `10_remove_question_banks.sql`.
+
+## Registre legacy
+
+Le registre actif ne contient plus de registre legacy parallèle. Un ancien code peut rester documenté pour mémoire, mais il ne doit pas être exposé par `tools/registry.js`.
 
 ## Monnaie
 
-Depuis le patch `monnaie-representation`, l’ancien outil `monnaie` ne doit plus être considéré comme un bloc à réactiver tel quel. Il sert de réserve pour les modes non encore migrés : comparer des sommes, acheter des objets, trouver plusieurs façons et rendre la monnaie.
+L’ancien outil monolithique `monnaie` n’est plus présent. `monnaie-representation` couvre Lire une somme et Composer une somme. Les autres usages éventuels devront être créés sous forme d’outils autonomes.
+
+## Règle
+
+Un élément legacy peut rester documenté ou archivé, mais il ne doit pas servir de point d’appui implicite aux nouveaux développements.

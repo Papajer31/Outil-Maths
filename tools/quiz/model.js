@@ -1,5 +1,5 @@
 import { normalizeQuizImageSource } from "../../shared/quiz-local-image-store.js";
-import { normalizeQuizAudioSource } from "../../shared/quiz-local-audio-store.js";
+import { normalizeQuizAudioSource } from "../../shared/quiz-audio-source.js";
 import {
   formatQuizSelectionIndexes,
   getQuizSelectionWordCount,
@@ -48,9 +48,9 @@ export function normalizeSettings(settings = {}){
     ? String(safe.drawMode || safe.draw_mode).trim()
     : DEFAULT_DRAW_MODE;
   const snapshot = normalizeQuizSnapshot(safe.quizSnapshot || safe.quiz_snapshot || safe.snapshot || {});
-  const bankInstruction = String(
-    safe.bankInstruction
-    ?? safe.bank_instruction
+  const sourceInstruction = String(
+    safe.sourceInstruction
+    ?? safe.source_instruction
     ?? safe.quizInstruction
     ?? safe.quiz_instruction
     ?? snapshot.instruction
@@ -62,7 +62,7 @@ export function normalizeSettings(settings = {}){
     ...safe,
     quizId: String(safe.quizId || safe.quiz_id || snapshot.id || "").trim(),
     quizTitle: String(safe.quizTitle || safe.quiz_title || snapshot.title || "").trim(),
-    bankInstruction,
+    sourceInstruction,
     drawMode,
     questionSelection: normalizeQuestionSelection(safe.questionSelection || safe.question_selection || {}),
     quizSnapshot: snapshot

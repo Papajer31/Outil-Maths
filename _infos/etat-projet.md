@@ -1,81 +1,80 @@
 # État actuel du projet — Site d’outils
 
-Dernière mise à jour : 2026-07-04.
+Dernière mise à jour : 2026-07-24.
 
 ## Intention générale
 
 Le site est une plateforme web d’outils pédagogiques pour la classe.
 
 - Côté élève : accès simple à des activités lisibles, manipulables et adaptées.
-- Côté enseignant : Catalogue, Missions, Banques, Classe et Tableau projetable.
-- Côté super-admin : création et maintenance des activités, ressources et banques système.
+- Côté enseignant : Classe, Catalogue, Missions, Quiz, Ressources et Tableau projetable.
+- Côté super-admin : fonctions supplémentaires intégrées au Catalogue et aux Quiz système.
 
-La logique produit actuelle est **tools-first** : un outil visible doit correspondre à une action élève claire. Les activités du Catalogue sont des configurations ciblées de ces outils. Les Missions assemblent ensuite des activités du Catalogue dans un parcours attribuable.
+Il n’existe plus d’onglet Admin ni d’onglet Banques.
+
+La logique produit reste **tools-first** : un outil visible correspond à une action élève claire. Les activités du Catalogue configurent ces outils. Les Missions assemblent des activités, tandis que l’Atelier Quiz permet de créer directement des questions composées.
 
 ## Vocabulaire produit
 
 Côté élève :
 
 - **Exploration** : accès libre aux activités visibles du Catalogue.
-- **Aventure** : progression adaptative personnelle, individuelle, avec code élève.
-- **Mission** : parcours attribué explicitement par l’enseignant.
+- **Aventure** : progression adaptative personnelle avec code élève.
+- **Mission** : parcours attribué par l’enseignant.
 
 Côté enseignant :
 
 - **Classe** : élèves, niveaux, codes et informations de classe.
-- **Catalogue** : activités système consultables, testables et visibles/masquées dans Exploration.
+- **Catalogue** : activités système consultables, testables et visibles ou masquées dans Exploration.
 - **Missions** : parcours attribuables.
-- **Banques** : contenus réutilisables personnels ou système.
+- **Quiz** : Quiz personnels et Quiz système.
+- **Ressources** : ressources personnelles Supabase et ressources système locales.
 - **Tableau** : widgets projetables.
-- **Admin** : gestion système réservée au super-admin.
 
 ## Catalogue
 
-Le Catalogue est le socle prêt à l’emploi du site.
+Le Catalogue est l’interface commune à tous les enseignants.
 
-Un enseignant normal peut consulter, tester, afficher ou masquer une activité. Le super-admin peut créer, modifier ou supprimer les activités système.
+Un enseignant normal peut consulter, tester, afficher ou masquer une activité. Le super-admin utilise le même explorateur et dispose en plus des actions de création, modification, duplication, suppression, publication et réorganisation.
 
-Chaque activité peut comporter cinq niveaux fonctionnels : grande difficulté, petite difficulté, normal, réussite, grande réussite. Le niveau 3 est le point de départ normal. Ces niveaux ne sont pas affichés à l’élève.
+Chaque activité peut comporter cinq niveaux fonctionnels : grande difficulté, petite difficulté, normal, réussite et grande réussite. Le niveau 3 est le point de départ normal.
 
 ### Catalogue de secours
 
-Le fichier `shared/catalogue.js` contient un catalogue de secours local (`CATALOG_ACTIVITIES`). Il ne remplace pas Supabase : il sert de réserve si la table `catalog_activities` n’est pas encore disponible ou pour un usage hors Supabase.
+`shared/catalogue.js` contient 26 activités locales couvrant 26 des 29 outils actifs. Il sert uniquement hors Supabase ou si le Catalogue système est indisponible.
 
-État au 2026-07-05 : 22 activités locales pour 29 outils actifs. Les outils `nombres-lettres`, `conjugaison`, `question-reponse`, `qcm`, `flash-question-reponse`, `flash-qcm` et `selection` sont actifs dans `tools/registry.js`, mais ne sont pas représentés dans ce catalogue de secours.
+Les outils actifs absents du catalogue local sont :
 
-## Exploration
-
-Exploration utilise les activités visibles du Catalogue. Les réglages de référence sont :
-
-- nombre fixe de questions : 5 ;
-- temps par question : infini ;
-- temps d’affichage de réponse : infini ou réglage explicite ;
-- temps entre questions : 0 ;
-- durée maximale : infini ;
-- consigne : priorité à la consigne de niveau, puis générale, puis défaut outil.
+- `nombres-lettres` ;
+- `conjugaison` ;
+- `quiz`.
 
 ## Missions
 
-Une Mission est un parcours construit par l’enseignant à partir d’activités du Catalogue. Elle n’est pas une ancienne activité personnelle renommée.
+Une Mission est un parcours construit à partir d’activités du Catalogue. Elle n’est pas une ancienne activité personnelle renommée.
 
-État transitoire : l’arborescence et les références Catalogue existent, mais la création de nouvelles Missions reste volontairement encadrée pour éviter de reconstruire trop tôt un ancien éditeur libre.
+## Quiz
 
-## Banques
+Les Quiz personnels sont modifiables par leur enseignant. Les Quiz système sont visibles par tous et modifiables uniquement par le super-admin.
 
-Deux racines métier doivent rester distinctes :
+Le document du Quiz contient directement les questions, variantes et widgets. Il ne dépend d’aucune banque de questions.
 
-- **Banques personnelles** : modifiables par l’enseignant.
-- **Banques système** : protégées en écriture, duplicables dans les banques personnelles.
+Les Quiz système ne doivent utiliser que des ressources système locales issues du manifest.
 
-Types actuels : Texte, QCM, Sélection. Les outils Flash réutilisent les banques Texte et QCM, sans créer de type de banque supplémentaire.
+## Ressources
+
+- Les ressources système restent dans le projet et sont indexées par `shared/tool-assets/manifest.json`.
+- Les ressources personnelles sont stockées dans Supabase et le bucket privé associé.
+- Les enregistrements audio réalisés depuis Ressources ou depuis un widget Audio de Quiz deviennent immédiatement des ressources personnelles. Le Quiz conserve leur UUID, jamais leur chemin Storage.
+- Le dossier logique `Enregistrements` est retrouvé grâce à `resource_folders.metadata.system_role = "recordings"`, même s’il est renommé ou déplacé.
+- Les données techniques `image_assets`, `phonology_words` et `vocabulary_default_words` restent en base, mais ne possèdent plus d’interface Admin.
+
+## Suppression des banques
+
+Les anciennes banques et les cinq outils qui en dépendaient ont été supprimés fonctionnellement. Les tables Supabase correspondantes ont été supprimées le 24 juillet 2026 avec `10_remove_question_banks.sql`.
+
+Les fichiers SQL antérieurs sont conservés comme historique et ne doivent pas être rejoués.
 
 ## Tableau
 
-Le Tableau fonctionne avec des widgets. L’arrière-plan est désormais traité comme un widget système obligatoire : il apparait dans la colonne des widgets, mais n’est ni supprimable, ni duplicable, ni projeté comme un cadre manipulable.
-
-
-## Dernier patch métier : Monnaie — Représentation
-
-Un nouvel outil actif `monnaie-representation` extrait du legacy `monnaie` les modes Lire une somme et Composer une somme. Il est branché au registre actif et au catalogue de secours. L’ancien outil `monnaie` reste dans le registre legacy pour les autres modes à découper plus tard.
-
-Un nouvel outil actif `plus-moins-autant` a été ajouté pour comparer deux collections par correspondance terme à terme. Il utilise des objets rouges/bleus déplaçables librement, avec réponse Rouge / Autant / Bleu et correction animée par mise en paires.
+Le Tableau fonctionne avec des widgets. L’arrière-plan est un widget système obligatoire : visible dans la colonne des widgets, mais non supprimable, non duplicable et non projeté comme cadre manipulable.

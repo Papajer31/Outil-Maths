@@ -15,10 +15,10 @@
   <link rel="stylesheet" href="../shared/tool-assets/asset-picker.css">
   <link rel="stylesheet" href="../shared/help-popover.css">
   <link rel="stylesheet" href="../student/css/student-core.css">
-  <link rel="stylesheet" href="./css/question-banks.css">
   <link rel="stylesheet" href="./css/quiz-workshop.css">
   <link rel="stylesheet" href="./css/quiz-series.css">
   <link rel="stylesheet" href="./css/resources.css">
+  <link rel="stylesheet" href="./css/audio-recorder.css">
   <link rel="stylesheet" href="./css/teacher-tools.css">
 </head>
 
@@ -77,11 +77,6 @@
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
-                <button id="btnNavBanks" class="dashboard-nav-main dashboard-nav-main--header" type="button">
-                  <span class="dashboard-nav-label">Banques</span>
-                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
-                </button>
-
                 <button id="btnNavQuiz" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Quiz</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
@@ -94,11 +89,6 @@
 
                 <button id="btnNavTeacherTools" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Tableau</span>
-                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
-                </button>
-
-                <button id="btnNavSuperAdmin" class="dashboard-nav-main dashboard-nav-main--header hidden" type="button">
-                  <span class="dashboard-nav-label">Admin</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
               </div>
@@ -179,159 +169,25 @@
               </div>
             </div>
 
-            <div id="superAdminView" class="dashboard-content-view hidden">
-              <div id="superAdminHeader" class="dashboard-config-header"></div>
-
-              <div id="superAdminList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host">
-                <div class="dashboard-activity-empty-state">Chargement…</div>
-              </div>
-            </div>
-
-            <div id="banksView" class="dashboard-content-view dashboard-banks-view hidden">
-              <div id="bankExplorerHeader" class="dashboard-config-header dashboard-banks-explorer-header">
-                <div class="dashboard-config-header-main">
-                  <div class="dashboard-section-title">Banques</div>
-
-                  <div class="dashboard-mode-pill" role="tablist" aria-label="Type de banque courant">
-                    <button
-                      class="dashboard-mode-pill-btn is-active"
-                      type="button"
-                      role="tab"
-                      data-bank-type-filter="all"
-                      aria-selected="true"
-                      title="Afficher toutes les banques"
-                    >
-                      Tous
-                    </button>
-                    <button
-                      class="dashboard-mode-pill-btn"
-                      type="button"
-                      role="tab"
-                      data-bank-type-filter="text_answer"
-                      aria-selected="false"
-                      title="Afficher les banques texte"
-                    >
-                      Texte
-                    </button>
-                    <button
-                      class="dashboard-mode-pill-btn"
-                      type="button"
-                      role="tab"
-                      data-bank-type-filter="qcm"
-                      aria-selected="false"
-                      title="Afficher les banques QCM"
-                    >
-                      QCM
-                    </button>
-                    <button
-                      class="dashboard-mode-pill-btn"
-                      type="button"
-                      role="tab"
-                      data-bank-type-filter="selection"
-                      aria-selected="false"
-                      title="Afficher les banques Sélection"
-                    >
-                      Sélection
-                    </button>
-                  </div>
-                </div>
-
-                <div class="dashboard-config-header-center">
-                  <nav id="bankBreadcrumb" class="dashboard-breadcrumb" aria-label="Fil d’Ariane des banques">
-                    <button class="dashboard-breadcrumb-btn is-current" type="button" data-action="open-root">Banques</button>
-                  </nav>
-                </div>
-
-                <div class="dashboard-config-header-actions dashboard-banks-header-actions">
-                  <button
-                    id="btnCreateBankFolder"
-                    class="dashboard-icon-btn dashboard-material-icon-btn"
-                    type="button"
-                    title="Créer un dossier"
-                    aria-label="Créer un dossier"
-                  >
-                    <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
-                  </button>
-
-                  <button id="btnCreateBank" class="btn primary" type="button">
-                    <span class="dashboard-material-icon" aria-hidden="true">add</span>
-                    <span>Créer une banque</span>
-                  </button>
-                </div>
-              </div>
-
-              <div id="bankEditorHeader" class="dashboard-config-header dashboard-banks-editor-header hidden">
-                <div class="cfg-header-left dashboard-banks-editor-header-main">
-                  <button class="btn cfg-back-btn" id="btnBackBankExplorer" type="button" aria-label="Retour aux banques">↩</button>
-
-                  <button
-                    id="btnToggleBankMeta"
-                    class="dashboard-bank-meta-toggle dashboard-material-icon-btn"
-                    type="button"
-                    aria-label="Afficher les informations facultatives"
-                    aria-expanded="false"
-                    aria-controls="bankEditorMetaPanel"
-                    title="Afficher matière, niveau, tags et description"
-                    disabled
-                  >
-                    <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
-                  </button>
-
-                  <div class="cfg-header-identity">
-                    <div class="cfg-config-name-wrap">
-                      <div class="cfg-field-label">Titre de la banque :</div>
-                      <div id="bankEditorHeaderTitle" class="cfg-config-name-display is-empty">Banque sans nom</div>
-                      <button
-                        class="dashboard-icon-btn cfg-name-rename-btn"
-                        id="btnRenameBankFromHeader"
-                        type="button"
-                        aria-label="Renommer la banque"
-                        title="Renommer la banque"
-                        disabled
-                      >
-                        <span class="dashboard-material-icon cfg-name-rename-icon" aria-hidden="true">drive_file_rename_outline</span>
-                      </button>
-                      <div id="bankEditorTypePill" class="dashboard-bank-type-pill" hidden></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div id="bankEditorMessage" class="cfg-editor-message"></div>
-
-                <div class="cfg-header-actions dashboard-banks-header-actions">
-                  <button id="btnSaveBank" class="btn cfg-save-btn" type="button" disabled>Enregistrer</button>
-                </div>
-
-                <div id="bankEditorMetaPanel" class="dashboard-bank-header-meta-panel" hidden></div>
-              </div>
-
-              <div id="banksList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
-                <div class="dashboard-activity-empty-state">Chargement…</div>
-              </div>
-
-              <section id="bankEditorHost" class="dashboard-bank-editor-host hidden" aria-live="polite">
-                <div class="dashboard-bank-empty-state">Chargement…</div>
-              </section>
-            </div>
-
-            <div id="quizView" class="dashboard-content-view dashboard-banks-view hidden">
+            <div id="quizView" class="dashboard-content-view dashboard-explorer-view hidden">
               <div id="quizExplorerPane" class="dashboard-quiz-explorer-pane">
-                <div id="quizExplorerHeader" class="dashboard-config-header dashboard-banks-explorer-header">
+                <div id="quizExplorerHeader" class="dashboard-config-header dashboard-explorer-header">
                   <div class="dashboard-config-header-main">
                     <div class="dashboard-section-title">Quiz</div>
                   </div>
 
                   <div class="dashboard-config-header-center" aria-hidden="true"></div>
 
-                  <div class="dashboard-config-header-actions dashboard-banks-header-actions">
+                  <div class="dashboard-config-header-actions dashboard-explorer-header-actions">
                     <button
                       id="btnCreateQuizFolder"
-                      class="dashboard-icon-btn dashboard-material-icon-btn"
+                      class="btn"
                       type="button"
                       title="Créer un dossier"
                       aria-label="Créer un dossier"
                     >
                       <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
+                      <span>Créer un dossier</span>
                     </button>
 
                     <button id="btnCreateQuizSeries" class="btn primary" type="button">
@@ -346,7 +202,7 @@
                   </div>
                 </div>
 
-                <div id="quizList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
+                <div id="quizList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-explorer-list-host">
                   <div class="dashboard-activity-empty-state">Chargement…</div>
                 </div>
               </div>
@@ -749,8 +605,8 @@
   
             </div>
 
-            <div id="resourcesView" class="dashboard-content-view dashboard-banks-view dashboard-resources-view hidden">
-              <div id="resourcesHeader" class="dashboard-config-header dashboard-banks-explorer-header dashboard-resources-header">
+            <div id="resourcesView" class="dashboard-content-view dashboard-explorer-view dashboard-resources-view hidden">
+              <div id="resourcesHeader" class="dashboard-config-header dashboard-explorer-header dashboard-resources-header">
                 <div class="dashboard-config-header-main">
                   <div class="dashboard-section-title">Ressources</div>
                   <div
@@ -771,26 +627,39 @@
 
                 <div class="dashboard-config-header-center" aria-hidden="true"></div>
 
-                <div class="dashboard-config-header-actions dashboard-banks-header-actions">
+                <div class="dashboard-config-header-actions dashboard-explorer-header-actions">
                   <button
                     id="btnCreateResourceFolder"
-                    class="dashboard-icon-btn dashboard-material-icon-btn"
+                    class="btn"
                     type="button"
                     title="Créer un dossier personnel"
                     aria-label="Créer un dossier personnel"
                     disabled
                   >
                     <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
+                    <span>Créer un dossier</span>
+                  </button>
+                  <button
+                    id="btnRecordResourceAudio"
+                    class="btn"
+                    type="button"
+                    title="Enregistrer un audio personnel"
+                    aria-label="Enregistrer un audio personnel"
+                    disabled
+                  >
+                    <span class="dashboard-material-icon" aria-hidden="true">mic</span>
+                    <span>Enregistrer un audio</span>
                   </button>
                   <button
                     id="btnImportResources"
-                    class="dashboard-icon-btn dashboard-material-icon-btn"
+                    class="btn"
                     type="button"
                     title="Importer des images ou des fichiers audio"
                     aria-label="Importer des images ou des fichiers audio"
                     disabled
                   >
                     <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
+                    <span>Importer une ressource</span>
                   </button>
                   <input
                     id="resourceFileInput"
@@ -802,7 +671,7 @@
                 </div>
               </div>
 
-              <div id="resourcesList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-banks-explorer-host">
+              <div id="resourcesList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-explorer-list-host">
                 <div class="dashboard-activity-empty-state">Chargement…</div>
               </div>
             </div>
@@ -879,24 +748,6 @@
     </div>
   </div>
 
-  <div id="bankImportModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-content modal-content-wide dashboard-bank-import-modal" role="dialog" aria-modal="true" aria-labelledby="bankImportModalTitle">
-      <div id="bankImportModalTitle" class="modal-title">Importer des questions</div>
-      <div class="dashboard-bank-import-help">
-        Colle un tableau ou une liste avec le séparateur <strong>|</strong> ou des tabulations :<br>
-        <code>Question | Réponse principale | Réponses acceptées | Explication</code>
-      </div>
-
-      <textarea id="bankImportInput" class="dashboard-bank-import-input" placeholder="Qui est le premier grand roi des Carolingiens ? | Charlemagne | Charles le Grand; Charles Ier"></textarea>
-      <div id="bankImportPreview" class="dashboard-bank-import-preview" hidden></div>
-
-      <div class="modal-actions">
-        <div id="bankImportMessage" class="modal-message">Colle une liste pour commencer.</div>
-        <button id="btnBankImportCancel" class="btn" type="button">Annuler</button>
-        <button id="btnBankImportConfirm" class="btn primary" type="button">Ajouter</button>
-      </div>
-    </div>
-  </div>
 
 
 </body>

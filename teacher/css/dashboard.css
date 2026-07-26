@@ -576,6 +576,19 @@
   color: #f0f0f0;
 }
 
+/* Variante commune des boutons libellés accompagnés d’une icône. */
+.btn.dashboard-btn-with-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+
+.btn.dashboard-btn-with-icon > .dashboard-material-icon{
+  flex:0 0 auto;
+  font-size:1.15em;
+}
+
 /* Ligne des informations secondaires sous le titre */
 .dashboard-config-meta{
   display:flex;
@@ -1396,11 +1409,6 @@ body .dashboard-share-popup.cfg-share-popup{
   font-weight:900;
 }
 
-/* Le lien Admin est présent dans le DOM, mais réservé au super-admin. */
-.dashboard-nav-main.hidden{
-  display:none !important;
-}
-
 .dashboard-nav-main.is-active{
   background:rgba(0,0,0,.16);
 }
@@ -1866,12 +1874,6 @@ body .dashboard-share-popup.cfg-share-popup{
   flex-direction:column;
 }
 
-#superAdminView{
-  padding:0;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
 
 #configHeader{
   flex:0 0 auto;
@@ -1881,20 +1883,7 @@ body .dashboard-share-popup.cfg-share-popup{
   flex:0 0 auto;
 }
 
-#superAdminHeader{
-  flex:0 0 auto;
-}
 
-#superAdminHeader .cfg-save-btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:auto;
-  min-height:42px;
-  padding:0 18px;
-  font-size:16px;
-  line-height:1;
-}
 
 #configsList{
   flex:1 1 auto;
@@ -1922,10 +1911,6 @@ body .dashboard-share-popup.cfg-share-popup{
   min-height:0;
 }
 
-#superAdminList{
-  flex:1 1 auto;
-  min-height:0;
-}
 
 #activitiesView .dashboard-config-header-actions .btn{
   display:inline-flex;
@@ -1941,24 +1926,9 @@ body .dashboard-share-popup.cfg-share-popup{
   min-height:42px;
 }
 
-#superAdminView .dashboard-config-header-actions .btn{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  min-height:42px;
-}
 
-#superAdminView .dashboard-config-header{
-  margin-top:6px;
-}
 
-#superAdminView .dashboard-config-header-actions.cfg-header-actions{
-  padding-right:22px;
-}
 
-#superAdminView .dashboard-config-header-actions .cfg-save-btn{
-  min-height:42px;
-}
 
 .dashboard-config-header{
   display:grid;
@@ -3959,284 +3929,7 @@ body .dashboard-share-popup.cfg-share-popup{
   }
 }
 
-/* Super-admin — sections Catalogue / Ressources / Banques */
-.super-admin-main-toggle{
-  justify-self:center;
-}
-
-.super-admin-bank-header-controls{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:0;
-}
-
-.super-admin-banks-list-host{
-  padding:0 !important;
-  overflow:hidden !important;
-}
-
-.super-admin-banks-view{
-  width:100%;
-  height:100%;
-  min-height:0;
-  padding:0;
-  display:flex;
-  flex-direction:column;
-}
-
-.super-admin-banks-view .dashboard-banks-explorer-host{
-  flex:1 1 auto;
-  min-height:0;
-}
-
-.super-admin-section-shell{
-  width:100%;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  padding:18px;
-}
-
-.super-admin-section-panel{
-  flex:1 1 auto;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-  padding:18px;
-  overflow:auto;
-}
-
-.super-admin-section-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  flex-wrap:wrap;
-}
-
-.super-admin-resource-grid{
-  display:grid;
-  grid-template-columns:minmax(280px, 360px) minmax(0, 1fr);
-  gap:16px;
-  min-height:0;
-}
-
-.super-admin-resource-grid--wide{
-  grid-template-columns:minmax(320px, 420px) minmax(0, 1fr);
-}
-
-.super-admin-resource-grid--vocabulary{
-  grid-template-columns:minmax(340px, 480px) minmax(0, 1fr);
-}
-
-.super-admin-resource-stack{
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-  min-width:0;
-}
-
-.super-admin-resource-form,
-.super-admin-resource-list{
-  border:1px solid rgba(255,255,255,.11);
-  background:rgba(255,255,255,.045);
-  border-radius:18px;
-  padding:14px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  min-width:0;
-}
-
-.super-admin-resource-form .modal-text-input,
-.super-admin-bank-modal-card .modal-text-input{
-  width:100%;
-}
-
-.super-admin-vocab-import-input{
-  width:100%;
-  min-height:190px;
-  resize:vertical;
-  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  line-height:1.45;
-}
-
-.super-admin-import-actions{
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap:8px;
-  flex-wrap:wrap;
-}
-
-.super-admin-vocab-import-preview{
-  border:1px solid rgba(255,255,255,.09);
-  border-radius:14px;
-  background:rgba(4,10,24,.28);
-  padding:10px;
-  display:flex;
-  flex-direction:column;
-  gap:7px;
-  min-height:44px;
-}
-
-.super-admin-import-summary{
-  color:var(--text);
-  font-weight:750;
-  font-size:.92rem;
-}
-
-.super-admin-vocab-import-row{
-  display:grid;
-  grid-template-columns:32px minmax(0, 1fr) auto;
-  align-items:center;
-  gap:8px;
-  border-radius:10px;
-  padding:6px 8px;
-  background:rgba(255,255,255,.045);
-}
-
-.super-admin-vocab-import-row span{
-  color:var(--muted);
-  font-size:.82rem;
-  font-weight:800;
-}
-
-.super-admin-vocab-import-row strong{
-  color:var(--text);
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-
-.super-admin-vocab-import-row em{
-  color:var(--text-muted);
-  font-style:normal;
-  font-size:.86rem;
-}
-
-.super-admin-import-muted,
-.super-admin-import-warning,
-.super-admin-import-errors{
-  color:var(--text-muted);
-  font-size:.88rem;
-  line-height:1.35;
-}
-
-.super-admin-import-warning{
-  color:#f7d67a;
-}
-
-.super-admin-import-errors{
-  color:#ffaaa8;
-}
-
-.super-admin-field-stack{
-  min-width:0;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-}
-
-.super-admin-field-label{
-  color:var(--muted);
-  font-size:13px;
-  font-weight:800;
-  line-height:1.2;
-}
-
-.super-admin-checkline{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  color:var(--text-muted);
-  font-weight:700;
-}
-
-.super-admin-resource-list-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.super-admin-resource-items{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  overflow:auto;
-  min-height:0;
-}
-
-.super-admin-resource-row,
-.super-admin-system-bank-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  border:1px solid rgba(255,255,255,.09);
-  background:rgba(4,10,24,.36);
-  border-radius:14px;
-  padding:10px 12px;
-}
-
-.super-admin-resource-row strong,
-.super-admin-system-bank-row strong{
-  display:block;
-  color:var(--text);
-  font-weight:800;
-}
-
-.super-admin-resource-row span,
-.super-admin-system-bank-row span{
-  display:block;
-  color:var(--text-muted);
-  font-size:.88rem;
-  margin-top:2px;
-}
-
-.super-admin-resource-row-actions{
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap:6px;
-  flex:0 0 auto;
-}
-
-.super-admin-bank-list{
-  display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
-  gap:10px;
-}
-
-.super-admin-system-bank-row{
-  min-height:76px;
-}
-
-.super-admin-bank-modal-card{
-  max-width:min(920px, calc(100vw - 48px));
-}
-
-.super-admin-bank-modal-body{
-  display:grid;
-  grid-template-columns:1fr 180px;
-  gap:10px;
-}
-
-.super-admin-bank-modal-body textarea[name="description"],
-.super-admin-bank-items-textarea,
-.super-admin-bank-modal-body .modal-message{
-  grid-column:1 / -1;
-}
-
-.super-admin-bank-items-textarea{
-  min-height:260px;
-  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  line-height:1.45;
-}
-
+/* Suppression définitive d’une activité du Catalogue. */
 .super-admin-delete-card{
   max-width:min(560px, calc(100vw - 40px));
   text-align:center;
@@ -4314,22 +4007,6 @@ body .dashboard-share-popup.cfg-share-popup{
   color:white;
 }
 
-.dashboard-bank-root-tile .dashboard-activity-tile-surface{
-  border-style:solid;
-  background:linear-gradient(135deg, rgba(91,155,255,.18), rgba(255,255,255,.045));
-}
-
-@media (max-width: 980px){
-  .super-admin-resource-grid,
-  .super-admin-resource-grid--wide,
-  .super-admin-resource-grid--vocabulary{
-    grid-template-columns:1fr;
-  }
-
-  .super-admin-bank-modal-body{
-    grid-template-columns:1fr;
-  }
-}
 
 /* ========================================
    MODE TEST CATALOGUE NATIF
@@ -4658,9 +4335,43 @@ body.dashboard-catalog-test-fullscreen-lock{
   box-shadow:inset 0 1px 0 rgba(23, 119, 65, .46);
 }
 
-/* Banc runtime : garde les pictos alignés dans les boutons d'en-tête. */
-#superAdminView .dashboard-config-header-actions .btn .dashboard-material-icon{
-  width:1.15em;
-  height:1.15em;
-  font-size:22px;
+/* Explorateurs partagés : Quiz et Ressources. */
+.dashboard-explorer-view{
+  padding:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.dashboard-explorer-header{
+  flex:0 0 auto;
+}
+
+.dashboard-explorer-list-host{
+  flex:1 1 auto;
+  min-height:0;
+}
+
+.dashboard-explorer-header-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.dashboard-explorer-header-actions .btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+}
+
+.dashboard-explorer-view .hidden{
+  display:none !important;
+}
+
+.dashboard-mission-editor-host{
+  min-height:0;
+  width:100%;
+  box-sizing:border-box;
 }

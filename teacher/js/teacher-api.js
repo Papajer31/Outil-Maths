@@ -538,660 +538,6 @@ export async function replaceStudentsForClass(teacherClassId, students) {
   return data;
 }
 
-/* =========================
-   QUESTION BANKS
-   ========================= */
-
-const QUESTION_BANK_TYPE_TEXT_ANSWER = "text_answer";
-const QUESTION_BANK_TYPE_QCM = "qcm";
-const QUESTION_BANK_TYPE_SELECTION = "selection";
-
-const QUESTION_BANK_FOLDER_FIELDS = `
-  id,
-  teacher_space_id,
-  parent_id,
-  name,
-  display_order,
-  created_at,
-  updated_at
-`;
-
-const QUESTION_BANK_FIELDS = `
-  id,
-  teacher_space_id,
-  source_bank_id,
-  folder_id,
-  display_order,
-  bank_type,
-  title,
-  title_normalized,
-  instruction,
-  description,
-  subject,
-  grade_level,
-  tags,
-  is_system,
-  share_code,
-  created_at,
-  updated_at
-`;
-
-const QUESTION_BANK_ITEM_FIELDS = `
-  id,
-  bank_id,
-  item_type,
-  prompt,
-  payload_json,
-  position,
-  is_active,
-  created_at,
-  updated_at
-`;
-
-export function normalizeQuestionBankTitle(title) {
-  return normalizeConfigName(title);
-}
-
-function normalizeQuestionBankType(type) {
-  const value = String(type || "text_answer").trim().toLowerCase();
-  return value || "text_answer";
-}
-
-function normalizeQuestionBankTags(tags) {
-  if (Array.isArray(tags)) {
-    return tags
-      .map((tag) => String(tag || "").trim())
-      .filter(Boolean)
-      .filter((tag, index, list) => list.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) === index)
-      .slice(0, 24);
-  }
-
-  return String(tags || "")
-    .split(/[;,]/g)
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .filter((tag, index, list) => list.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) === index)
-    .slice(0, 24);
-}
-
-function normalizeQuestionBankRecord(record, fallbackOrder = 0) {
-  if (!record) return null;
-  const displayOrderValue = Number(record.display_order);
-  return {
-    ...record,
-    folder_id: String(record.folder_id ?? "").trim() || null,
-    display_order: Number.isFinite(displayOrderValue)
-      ? Math.max(0, Math.trunc(displayOrderValue))
-      : Math.max(0, Math.trunc(Number(fallbackOrder) || 0)),
-    bank_type: normalizeQuestionBankType(record.bank_type),
-    title: cleanDisplayName(record.title) || "Banque sans titre",
-    instruction: String(record.instruction || "").trim(),
-    description: String(record.description || ""),
-    subject: String(record.subject || ""),
-    grade_level: String(record.grade_level || ""),
-    tags: normalizeQuestionBankTags(record.tags),
-    is_system: record.is_system === true
-  };
-}
-
-function sortQuestionBanksByMeta(banks = []) {
-  return [...banks].sort((a, b) => {
-    if (a?.is_system !== b?.is_system) {
-      return a?.is_system ? 1 : -1;
-    }
-
-    const orderA = Number(a?.display_order);
-    const orderB = Number(b?.display_order);
-    if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) {
-      return orderA - orderB;
-    }
-
-    const titleCompare = String(a?.title || "").localeCompare(String(b?.title || ""), "fr", { sensitivity: "base" });
-    if (titleCompare !== 0) return titleCompare;
-
-    return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
-  });
-}
-
-function normalizeQuestionBankItem(item, index = 0) {
-  const itemType = normalizeQuestionBankType(item?.item_type ?? item?.type);
-  const payload = item?.payload_json && typeof item.payload_json === "object" && !Array.isArray(item.payload_json)
-    ? item.payload_json
-    : (item?.payload && typeof item.payload === "object" && !Array.isArray(item.payload) ? item.payload : {});
-
-  let normalizedPayload = { ...payload };
-
-  if (itemType === QUESTION_BANK_TYPE_TEXT_ANSWER) {
-    const acceptedAnswersSource = payload.acceptedAnswers
-      ?? payload.accepted_answers
-      ?? item?.acceptedAnswers
-      ?? item?.accepted_answers
-      ?? [];
-
-    normalizedPayload = {
-      ...payload,
-      mainAnswer: String(payload.mainAnswer ?? payload.main_answer ?? item?.mainAnswer ?? item?.main_answer ?? ""),
-      acceptedAnswers: Array.isArray(acceptedAnswersSource)
-        ? acceptedAnswersSource.map((value) => String(value || "").trim()).filter(Boolean)
-        : String(acceptedAnswersSource || "")
-          .split(/[;\n]/g)
-          .map((value) => value.trim())
-          .filter(Boolean),
-      explanation: String(payload.explanation ?? item?.explanation ?? "")
-    };
-  } else if (itemType === QUESTION_BANK_TYPE_QCM) {
-    const distractorsSource = payload.distractors
-      ?? payload.distractorAnswers
-      ?? payload.distractor_answers
-      ?? item?.distractors
-      ?? item?.distractorAnswers
-      ?? item?.distractor_answers
-      ?? [
-        payload.distractor1,
-        payload.distractor2,
-        payload.distractor3,
-        payload.distractor4,
-        payload.distractor5,
-        item?.distractor1,
-        item?.distractor2,
-        item?.distractor3,
-        item?.distractor4,
-        item?.distractor5
-      ];
-
-    const distractors = (Array.isArray(distractorsSource) ? distractorsSource : String(distractorsSource || "").split(/[;\n]/g))
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .slice(0, 5);
-
-    normalizedPayload = {
-      ...payload,
-      correctAnswer: String(payload.correctAnswer ?? payload.correct_answer ?? payload.mainAnswer ?? payload.main_answer ?? item?.correctAnswer ?? item?.correct_answer ?? ""),
-      distractors,
-      explanation: String(payload.explanation ?? item?.explanation ?? "")
-    };
-
-    for (let index = 0; index < 5; index += 1) {
-      normalizedPayload[`distractor${index + 1}`] = String(distractors[index] || "");
-    }
-  } else if (itemType === QUESTION_BANK_TYPE_SELECTION) {
-    const indexesSource = payload.expectedTokenIndexes
-      ?? payload.expected_token_indexes
-      ?? payload.selectedTokenIndexes
-      ?? payload.selected_token_indexes
-      ?? [];
-    const expectedTokenIndexes = (Array.isArray(indexesSource) ? indexesSource : String(indexesSource || "").split(/[;,.\s]+/g))
-      .map((value) => Math.trunc(Number(value)))
-      .filter((value) => Number.isFinite(value) && value >= 0)
-      .filter((value, index, list) => list.indexOf(value) === index)
-      .sort((a, b) => a - b);
-
-    const {
-      instruction: _instruction,
-      consigne: _consigne,
-      promptInstruction: _promptInstruction,
-      prompt_instruction: _prompt_instruction,
-      itemInstruction: _itemInstruction,
-      item_instruction: _item_instruction,
-      ...selectionPayload
-    } = payload;
-
-    normalizedPayload = {
-      ...selectionPayload,
-      expectedTokenIndexes,
-      expectedSelectionText: String(payload.expectedSelectionText ?? payload.expected_selection_text ?? item?.expectedSelectionText ?? ""),
-      explanation: String(payload.explanation ?? item?.explanation ?? "")
-    };
-  }
-
-  return {
-    id: item?.id ?? null,
-    bank_id: item?.bank_id ?? null,
-    item_type: itemType,
-    prompt: String(item?.prompt ?? payload.prompt ?? ""),
-    payload_json: normalizedPayload,
-    position: Math.max(0, Math.trunc(Number(item?.position ?? index) || 0)),
-    is_active: item?.is_active !== false,
-    created_at: item?.created_at ?? null,
-    updated_at: item?.updated_at ?? null
-  };
-}
-function hasMeaningfulQuestionBankItem(item) {
-  const prompt = String(item?.prompt || "").trim();
-  const payload = item?.payload_json && typeof item.payload_json === "object" && !Array.isArray(item.payload_json)
-    ? item.payload_json
-    : {};
-
-  if (item?.item_type === QUESTION_BANK_TYPE_TEXT_ANSWER) {
-    return Boolean(prompt || String(payload.mainAnswer || "").trim());
-  }
-
-  if (item?.item_type === QUESTION_BANK_TYPE_QCM) {
-    return Boolean(
-      prompt
-      || String(payload.correctAnswer || "").trim()
-      || (Array.isArray(payload.distractors) && payload.distractors.some((value) => String(value || "").trim()))
-    );
-  }
-
-  if (item?.item_type === QUESTION_BANK_TYPE_SELECTION) {
-    return Boolean(
-      prompt
-      || (Array.isArray(payload.expectedTokenIndexes) && payload.expectedTokenIndexes.length)
-      || String(payload.explanation || "").trim()
-    );
-  }
-
-  return Boolean(prompt || Object.keys(payload).length);
-}
-function buildQuestionBankItemPayload(item) {
-  const payload = item?.payload_json && typeof item.payload_json === "object" && !Array.isArray(item.payload_json)
-    ? item.payload_json
-    : {};
-
-  if (item?.item_type === QUESTION_BANK_TYPE_TEXT_ANSWER) {
-    return {
-      ...payload,
-      mainAnswer: String(payload.mainAnswer || "").trim(),
-      acceptedAnswers: Array.isArray(payload.acceptedAnswers)
-        ? payload.acceptedAnswers.map((value) => String(value || "").trim()).filter(Boolean)
-        : [],
-      explanation: String(payload.explanation || "").trim()
-    };
-  }
-
-  if (item?.item_type === QUESTION_BANK_TYPE_QCM) {
-    const distractors = Array.isArray(payload.distractors)
-      ? payload.distractors
-      : [payload.distractor1, payload.distractor2, payload.distractor3, payload.distractor4, payload.distractor5];
-
-    return {
-      ...payload,
-      correctAnswer: String(payload.correctAnswer || "").trim(),
-      distractors: distractors
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .slice(0, 5),
-      explanation: String(payload.explanation || "").trim()
-    };
-  }
-
-  if (item?.item_type === QUESTION_BANK_TYPE_SELECTION) {
-    const indexes = Array.isArray(payload.expectedTokenIndexes)
-      ? payload.expectedTokenIndexes
-      : String(payload.expectedTokenIndexes || "").split(/[;,.\s]+/g);
-    const {
-      instruction: _instruction,
-      consigne: _consigne,
-      promptInstruction: _promptInstruction,
-      prompt_instruction: _prompt_instruction,
-      itemInstruction: _itemInstruction,
-      item_instruction: _item_instruction,
-      ...selectionPayload
-    } = payload;
-
-    return {
-      ...selectionPayload,
-      expectedTokenIndexes: indexes
-        .map((value) => Math.trunc(Number(value)))
-        .filter((value) => Number.isFinite(value) && value >= 0)
-        .filter((value, index, list) => list.indexOf(value) === index)
-        .sort((a, b) => a - b),
-      expectedSelectionText: String(payload.expectedSelectionText || "").trim(),
-      explanation: String(payload.explanation || "").trim()
-    };
-  }
-
-  return { ...payload };
-}
-function isMissingQuestionBankReplaceRpcError(error) {
-  const message = String(error?.message || error?.details || "").toLowerCase();
-  return error?.code === "42883"
-    || error?.code === "PGRST202"
-    || message.includes("could not find the function");
-}
-
-export async function listQuestionBankFoldersForSpace(teacherSpaceId) {
-  const spaceId = Number(teacherSpaceId);
-  if (!Number.isFinite(spaceId) || spaceId <= 0) return [];
-
-  const { data, error } = await supabase
-    .from("question_bank_folders")
-    .select(QUESTION_BANK_FOLDER_FIELDS)
-    .eq("teacher_space_id", spaceId)
-    .order("display_order", { ascending: true })
-    .order("name", { ascending: true });
-
-  if (error) throw error;
-  const normalizedFolders = (Array.isArray(data) ? data : []).map((folder, index) => normalizeFolderRecord(folder, index));
-  return sortFoldersByMeta(normalizedFolders);
-}
-
-export async function createQuestionBankFolderForSpace(teacherSpaceId, { name, parent_id = null } = {}) {
-  const spaceId = Number(teacherSpaceId);
-  if (!Number.isFinite(spaceId) || spaceId <= 0) {
-    throw new Error("Espace enseignant invalide.");
-  }
-
-  const displayName = cleanDisplayName(name);
-  if (!displayName) {
-    throw new Error("Nom de dossier vide.");
-  }
-
-  const folders = await listQuestionBankFoldersForSpace(spaceId);
-  const safeParentId = folders.some((folder) => String(folder.id) === String(parent_id ?? ""))
-    ? String(parent_id)
-    : null;
-  const banks = await listQuestionBanksForSpace(spaceId, { includeSystem: false });
-  const siblingFolders = folders.filter((folder) => String(folder.parent_id ?? "") === String(safeParentId ?? ""));
-  const siblingBanks = banks.filter((bank) => String(bank.folder_id ?? "") === String(safeParentId ?? ""));
-  const nextOrder = [...siblingFolders, ...siblingBanks]
-    .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
-
-  const { data, error } = await supabase
-    .from("question_bank_folders")
-    .insert({
-      teacher_space_id: spaceId,
-      parent_id: safeParentId,
-      name: displayName,
-      display_order: nextOrder,
-      updated_at: new Date().toISOString()
-    })
-    .select(QUESTION_BANK_FOLDER_FIELDS)
-    .single();
-
-  if (error) throw error;
-  return normalizeFolderRecord(data, nextOrder);
-}
-
-export async function updateQuestionBankFolder(folderId, updates = {}) {
-  const id = String(folderId || "").trim();
-  if (!id) throw new Error("Dossier introuvable.");
-
-  const payload = {
-    updated_at: new Date().toISOString()
-  };
-
-  if ("name" in updates) {
-    const displayName = cleanDisplayName(updates.name);
-    if (!displayName) throw new Error("Nom de dossier vide.");
-    payload.name = displayName;
-  }
-
-  if ("parent_id" in updates) {
-    payload.parent_id = String(updates.parent_id ?? "").trim() || null;
-  }
-
-  if ("display_order" in updates) {
-    const displayOrder = Number(updates.display_order);
-    if (!Number.isFinite(displayOrder)) throw new Error("Ordre de dossier invalide.");
-    payload.display_order = Math.max(0, Math.trunc(displayOrder));
-  }
-
-  const { data, error } = await supabase
-    .from("question_bank_folders")
-    .update(payload)
-    .eq("id", id)
-    .select(QUESTION_BANK_FOLDER_FIELDS)
-    .single();
-
-  if (error) throw error;
-  return normalizeFolderRecord(data);
-}
-
-export async function deleteQuestionBankFolder(folderId) {
-  const id = String(folderId || "").trim();
-  if (!id) throw new Error("Dossier introuvable.");
-
-  const { error } = await supabase
-    .from("question_bank_folders")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw error;
-}
-
-export async function listQuestionBanksForSpace(teacherSpaceId, { includeSystem = true } = {}) {
-  const spaceId = Number(teacherSpaceId);
-  if (!Number.isFinite(spaceId) || spaceId <= 0) return [];
-
-  let query = supabase
-    .from("question_banks")
-    .select(QUESTION_BANK_FIELDS)
-    .order("is_system", { ascending: true })
-    .order("display_order", { ascending: true })
-    .order("title", { ascending: true });
-
-  if (includeSystem) {
-    query = query.or(`teacher_space_id.eq.${spaceId},is_system.eq.true`);
-  } else {
-    query = query.eq("teacher_space_id", spaceId);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return sortQuestionBanksByMeta((Array.isArray(data) ? data : []).map(normalizeQuestionBankRecord).filter(Boolean));
-}
-
-export async function createQuestionBankForSpace(teacherSpaceId, bank = {}) {
-  const spaceId = Number(teacherSpaceId);
-  if (!Number.isFinite(spaceId) || spaceId <= 0) {
-    throw new Error("Espace enseignant invalide.");
-  }
-
-  const title = cleanDisplayName(bank.title) || "Nouvelle banque";
-  const titleNormalized = normalizeQuestionBankTitle(title);
-  if (!titleNormalized) {
-    throw new Error("Titre de banque invalide.");
-  }
-
-  const folders = await listQuestionBankFoldersForSpace(spaceId);
-  const safeFolderId = folders.some((folder) => String(folder.id) === String(bank.folder_id ?? ""))
-    ? String(bank.folder_id)
-    : null;
-  const siblingFolders = folders.filter((folder) => String(folder.parent_id ?? "") === String(safeFolderId ?? ""));
-  const siblingBanks = await listQuestionBanksForSpace(spaceId, { includeSystem: false });
-  const displayOrderValue = Number(bank.display_order);
-  const nextOrder = Number.isFinite(displayOrderValue)
-    ? Math.max(0, Math.trunc(displayOrderValue))
-    : [...siblingFolders, ...siblingBanks.filter((item) => String(item.folder_id ?? "") === String(safeFolderId ?? ""))]
-      .reduce((maxOrder, item) => Math.max(maxOrder, Number(item.display_order) || 0), -1) + 1;
-
-  const now = new Date().toISOString();
-  const payload = {
-    teacher_space_id: spaceId,
-    source_bank_id: String(bank.source_bank_id || "").trim() || null,
-    folder_id: safeFolderId,
-    display_order: nextOrder,
-    bank_type: normalizeQuestionBankType(bank.bank_type),
-    title,
-    title_normalized: titleNormalized,
-    instruction: String(bank.instruction || "").trim(),
-    description: String(bank.description || "").trim(),
-    subject: String(bank.subject || "").trim(),
-    grade_level: String(bank.grade_level || "").trim(),
-    tags: normalizeQuestionBankTags(bank.tags),
-    is_system: false,
-    updated_at: now,
-    created_at: now
-  };
-
-  const { data, error } = await supabase
-    .from("question_banks")
-    .insert(payload)
-    .select(QUESTION_BANK_FIELDS)
-    .single();
-
-  if (error) throw error;
-  return normalizeQuestionBankRecord(data, nextOrder);
-}
-
-export async function updateQuestionBank(bankId, updates = {}) {
-  const id = String(bankId || "").trim();
-  if (!id) throw new Error("Banque introuvable.");
-
-  const payload = {
-    updated_at: new Date().toISOString()
-  };
-
-  if ("title" in updates) {
-    const title = cleanDisplayName(updates.title);
-    if (!title) throw new Error("Titre de banque vide.");
-    payload.title = title;
-    payload.title_normalized = normalizeQuestionBankTitle(title);
-  }
-
-  if ("instruction" in updates) {
-    const instruction = String(updates.instruction || "").trim();
-    if (!instruction) throw new Error("Consigne de banque vide.");
-    payload.instruction = instruction;
-  }
-  if ("description" in updates) payload.description = String(updates.description || "").trim();
-  if ("subject" in updates) payload.subject = String(updates.subject || "").trim();
-  if ("grade_level" in updates) payload.grade_level = String(updates.grade_level || "").trim();
-  if ("tags" in updates) payload.tags = normalizeQuestionBankTags(updates.tags);
-  if ("bank_type" in updates) payload.bank_type = normalizeQuestionBankType(updates.bank_type);
-  if ("source_bank_id" in updates) payload.source_bank_id = String(updates.source_bank_id || "").trim() || null;
-  if ("folder_id" in updates) payload.folder_id = String(updates.folder_id ?? "").trim() || null;
-  if ("display_order" in updates) {
-    const displayOrder = Number(updates.display_order);
-    if (!Number.isFinite(displayOrder)) throw new Error("Ordre de banque invalide.");
-    payload.display_order = Math.max(0, Math.trunc(displayOrder));
-  }
-  if ("share_code" in updates) payload.share_code = String(updates.share_code || "").trim().toUpperCase() || null;
-
-  const { data, error } = await supabase
-    .from("question_banks")
-    .update(payload)
-    .eq("id", id)
-    .select(QUESTION_BANK_FIELDS)
-    .single();
-
-  if (error) throw error;
-  return normalizeQuestionBankRecord(data);
-}
-
-export async function deleteQuestionBank(bankId) {
-  const id = String(bankId || "").trim();
-  if (!id) throw new Error("Banque introuvable.");
-
-  const { error } = await supabase
-    .from("question_banks")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw error;
-}
-
-export async function listQuestionBankItems(bankId) {
-  const id = String(bankId || "").trim();
-  if (!id) return [];
-
-  const { data, error } = await supabase
-    .from("question_bank_items")
-    .select(QUESTION_BANK_ITEM_FIELDS)
-    .eq("bank_id", id)
-    .order("position", { ascending: true })
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map(normalizeQuestionBankItem);
-}
-
-export async function replaceQuestionBankItems(bankId, items = []) {
-  const id = String(bankId || "").trim();
-  if (!id) throw new Error("Banque introuvable.");
-  if (!Array.isArray(items)) throw new Error("Liste de questions invalide.");
-
-  const normalizedItems = items
-    .map(normalizeQuestionBankItem)
-    .filter(hasMeaningfulQuestionBankItem)
-    .map((item, index) => ({
-      bank_id: id,
-      item_type: normalizeQuestionBankType(item.item_type),
-      prompt: String(item.prompt || "").trim(),
-      payload_json: buildQuestionBankItemPayload(item),
-      position: index,
-      is_active: item.is_active !== false,
-      updated_at: new Date().toISOString()
-    }));
-
-  const { error: rpcError } = await supabase.rpc("replace_question_bank_items", {
-    p_bank_id: id,
-    p_items: normalizedItems
-  });
-
-  if (!rpcError) {
-    return await listQuestionBankItems(id);
-  }
-
-  if (!isMissingQuestionBankReplaceRpcError(rpcError)) {
-    throw rpcError;
-  }
-
-  const { error: deleteError } = await supabase
-    .from("question_bank_items")
-    .delete()
-    .eq("bank_id", id);
-
-  if (deleteError) throw deleteError;
-
-  if (normalizedItems.length) {
-    const { error: insertError } = await supabase
-      .from("question_bank_items")
-      .insert(normalizedItems);
-
-    if (insertError) throw insertError;
-  }
-
-  return await listQuestionBankItems(id);
-}
-
-export async function copyQuestionBankToSpace(sourceBankId, teacherSpaceId, { title = "", folder_id = null, display_order = null } = {}) {
-  const sourceId = String(sourceBankId || "").trim();
-  const spaceId = Number(teacherSpaceId);
-  if (!sourceId) throw new Error("Banque source introuvable.");
-  if (!Number.isFinite(spaceId) || spaceId <= 0) throw new Error("Espace enseignant invalide.");
-
-  const { data: sourceBank, error: sourceError } = await supabase
-    .from("question_banks")
-    .select(QUESTION_BANK_FIELDS)
-    .eq("id", sourceId)
-    .single();
-
-  if (sourceError) throw sourceError;
-
-  const createdBank = await createQuestionBankForSpace(spaceId, {
-    title: cleanDisplayName(title) || sourceBank?.title || "Banque copiée",
-    bank_type: sourceBank?.bank_type || "text_answer",
-    instruction: sourceBank?.instruction || "",
-    description: sourceBank?.description || "",
-    subject: sourceBank?.subject || "",
-    grade_level: sourceBank?.grade_level || "",
-    tags: sourceBank?.tags || [],
-    folder_id,
-    display_order
-  });
-
-  const updatedBank = createdBank?.source_bank_id
-    ? createdBank
-    : await updateQuestionBank(createdBank.id, { source_bank_id: sourceId }).catch(() => createdBank);
-
-  const sourceItems = await listQuestionBankItems(sourceId);
-  const copiedItems = sourceItems.map((item) => ({
-    item_type: item.item_type,
-    prompt: item.prompt,
-    payload_json: item.payload_json,
-    is_active: item.is_active
-  }));
-  await replaceQuestionBankItems(createdBank.id, copiedItems);
-  return {
-    bank: updatedBank,
-    items: await listQuestionBankItems(createdBank.id)
-  };
-}
-
-
 function normalizeStudentCode(value) {
   const safe = String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
   return safe || null;
@@ -1487,49 +833,6 @@ export async function deleteCatalogActivityAsAdmin(activityId) {
   if (error) throw error;
 }
 
-function makeVocabularyExactKey(value) {
-  // Pour le vocabulaire, on ne normalise pas les accents ni la casse :
-  // "marche" et "marché" sont deux mots différents.
-  return cleanDisplayName(value);
-}
-
-function normalizeVocabularyDictionaryPage(value) {
-  if (value == null || value === "") return null;
-  const page = Number(value);
-  return Number.isFinite(page) && page > 0 ? Math.trunc(page) : null;
-}
-
-async function ensureDefaultVocabularyExactKeys() {
-  const { data, error } = await supabase
-    .from("vocabulary_default_words")
-    .select("id, word, word_normalized");
-  if (error) throw error;
-
-  const rows = Array.isArray(data) ? data : [];
-  for (const row of rows) {
-    const exactKey = makeVocabularyExactKey(row?.word);
-    if (!row?.id || !exactKey || row.word_normalized === exactKey) continue;
-    const { error: updateError } = await supabase
-      .from("vocabulary_default_words")
-      .update({ word_normalized: exactKey, updated_at: new Date().toISOString() })
-      .eq("id", row.id);
-    if (updateError) throw updateError;
-  }
-}
-
-function normalizeSystemSlug(value, fallback = "item") {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[’']/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    || fallback;
-}
-
 export async function listDefaultVocabularyWordsAsAdmin() {
   const { data, error } = await supabase
     .from("vocabulary_default_words")
@@ -1540,222 +843,13 @@ export async function listDefaultVocabularyWordsAsAdmin() {
   return Array.isArray(data) ? data : [];
 }
 
-export async function saveDefaultVocabularyWordAsAdmin(item = {}) {
-  const word = cleanDisplayName(item.word);
-  if (!word) throw new Error("Mot vide.");
-  await ensureDefaultVocabularyExactKeys();
-  const payload = {
-    word,
-    word_normalized: makeVocabularyExactKey(word),
-    dictionary_page: normalizeVocabularyDictionaryPage(item.dictionary_page),
-    updated_at: new Date().toISOString()
-  };
-  let query;
-  if (item.id) {
-    query = supabase.from("vocabulary_default_words").update(payload).eq("id", item.id);
-  } else {
-    query = supabase.from("vocabulary_default_words").upsert(payload, { onConflict: "word_normalized" });
-  }
-  const { data, error } = await query
-    .select("id, word, word_normalized, dictionary_page, created_at, updated_at")
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function upsertDefaultVocabularyWordsAsAdmin(items = []) {
-  if (!Array.isArray(items)) throw new Error("Import vocabulaire invalide.");
-  await ensureDefaultVocabularyExactKeys();
-
-  const now = new Date().toISOString();
-  const payloads = items
-    .map((item) => {
-      const word = cleanDisplayName(item?.word);
-      if (!word) return null;
-      return {
-        word,
-        word_normalized: makeVocabularyExactKey(word),
-        dictionary_page: normalizeVocabularyDictionaryPage(item?.dictionary_page),
-        updated_at: now
-      };
-    })
-    .filter(Boolean);
-
-  if (!payloads.length) throw new Error("Aucun mot valide à importer.");
-
-  const chunkSize = 400;
-  for (let index = 0; index < payloads.length; index += chunkSize) {
-    const chunk = payloads.slice(index, index + chunkSize);
-    const { error } = await supabase
-      .from("vocabulary_default_words")
-      .upsert(chunk, { onConflict: "word_normalized" });
-    if (error) throw error;
-  }
-
-  return await listDefaultVocabularyWordsAsAdmin();
-}
-
-export async function deleteDefaultVocabularyWordAsAdmin(wordId) {
-  const id = Number(wordId);
-  if (!Number.isFinite(id) || id <= 0) throw new Error("Mot introuvable.");
-  const { error } = await supabase.from("vocabulary_default_words").delete().eq("id", id);
-  if (error) throw error;
-}
-
-export async function listEncodingResourcesAsAdmin() {
-  const [assetsResult, wordsResult] = await Promise.all([
-    supabase.from("image_assets").select("slug, storage_path, tags, notes, is_active, created_at, updated_at").order("slug", { ascending: true }),
-    supabase.from("phonology_words").select("slug, word, units, is_active, created_at, updated_at").order("slug", { ascending: true })
-  ]);
-  if (assetsResult.error) throw assetsResult.error;
-  if (wordsResult.error) throw wordsResult.error;
-  return {
-    assets: Array.isArray(assetsResult.data) ? assetsResult.data : [],
-    words: Array.isArray(wordsResult.data) ? wordsResult.data : []
-  };
-}
-
-export async function saveImageAssetAsAdmin(asset = {}) {
-  const slug = normalizeSystemSlug(asset.slug || asset.word || asset.storage_path, "asset");
-  const storagePath = String(asset.storage_path || "").trim();
-  if (!slug) throw new Error("Slug d’asset vide.");
-  if (!storagePath) throw new Error("Chemin Storage vide.");
-  const tags = Array.isArray(asset.tags)
-    ? asset.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
-    : String(asset.tags || "").split(/[;,]/g).map((tag) => tag.trim()).filter(Boolean);
-  const payload = {
-    slug,
-    storage_path: storagePath,
-    tags,
-    notes: String(asset.notes || "").trim(),
-    is_active: asset.is_active !== false,
-    updated_at: new Date().toISOString()
-  };
-  const { data, error } = await supabase
-    .from("image_assets")
-    .upsert(payload, { onConflict: "slug" })
-    .select("slug, storage_path, tags, notes, is_active, created_at, updated_at")
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteImageAssetAsAdmin(slug) {
-  const id = normalizeSystemSlug(slug, "");
-  if (!id) throw new Error("Asset introuvable.");
-  const { error } = await supabase.from("image_assets").delete().eq("slug", id);
-  if (error) throw error;
-}
-
-export async function savePhonologyWordAsAdmin(entry = {}) {
-  const slug = normalizeSystemSlug(entry.slug || entry.word, "mot");
-  const word = cleanDisplayName(entry.word);
-  if (!slug) throw new Error("Slug du mot vide.");
-  if (!word) throw new Error("Mot Encodage vide.");
-  const units = normalizePhonologyUnitsForAdmin(entry.units ?? entry.correction ?? entry.units_text);
-  const payload = {
-    slug,
-    word,
-    units,
-    is_active: entry.is_active !== false,
-    updated_at: new Date().toISOString()
-  };
-  const { data, error } = await supabase
-    .from("phonology_words")
-    .upsert(payload, { onConflict: "slug" })
-    .select("slug, word, units, is_active, created_at, updated_at")
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function deletePhonologyWordAsAdmin(slug) {
-  const id = normalizeSystemSlug(slug, "");
-  if (!id) throw new Error("Mot Encodage introuvable.");
-  const { error } = await supabase.from("phonology_words").delete().eq("slug", id);
-  if (error) throw error;
-}
-
-function normalizePhonologyUnitsForAdmin(value) {
-  if (Array.isArray(value)) {
-    return value.map(normalizePhonologyUnit).filter(Boolean);
-  }
-  const text = String(value || "").trim();
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) return parsed.map(normalizePhonologyUnit).filter(Boolean);
-  } catch {}
-  return text.split(/\s+/g).map((token) => {
-    const clean = String(token || "").trim();
-    if (!clean) return null;
-    const silent = clean.endsWith("*") || clean.endsWith("°");
-    return { graph: silent ? clean.slice(0, -1) : clean, isSilent: silent };
-  }).filter((unit) => unit?.graph);
-}
-
-function normalizePhonologyUnit(unit) {
-  if (!unit || typeof unit !== "object") return null;
-  const graph = String(unit.graph || unit.value || "").trim();
-  if (!graph) return null;
-  return {
-    graph,
-    isSilent: unit.isSilent === true || unit.silent === true
-  };
-}
-
-export async function listSystemQuestionBanksAsAdmin() {
-  const { data, error } = await supabase
-    .from("question_banks")
-    .select(QUESTION_BANK_FIELDS)
-    .eq("is_system", true)
-    .order("bank_type", { ascending: true })
-    .order("display_order", { ascending: true })
-    .order("title", { ascending: true });
-  if (error) throw error;
-  return sortQuestionBanksByMeta((Array.isArray(data) ? data : []).map(normalizeQuestionBankRecord).filter(Boolean));
-}
-
-export async function createSystemQuestionBankAsAdmin(bank = {}) {
-  const title = cleanDisplayName(bank.title) || "Nouvelle banque système";
-  const existing = await listSystemQuestionBanksAsAdmin();
-  const nextOrder = existing
-    .filter((item) => normalizeQuestionBankType(item.bank_type) === normalizeQuestionBankType(bank.bank_type))
-    .reduce((max, item) => Math.max(max, Number(item.display_order) || 0), -1) + 1;
-  const now = new Date().toISOString();
-  const payload = {
-    teacher_space_id: null,
-    source_bank_id: null,
-    folder_id: null,
-    bank_type: normalizeQuestionBankType(bank.bank_type),
-    title,
-    title_normalized: normalizeQuestionBankTitle(title),
-    instruction: String(bank.instruction || "").trim(),
-    description: String(bank.description || "").trim(),
-    subject: String(bank.subject || "").trim(),
-    grade_level: String(bank.grade_level || "").trim(),
-    tags: normalizeQuestionBankTags(bank.tags),
-    is_system: true,
-    display_order: nextOrder,
-    created_at: now,
-    updated_at: now
-  };
-  const { data, error } = await supabase
-    .from("question_banks")
-    .insert(payload)
-    .select(QUESTION_BANK_FIELDS)
-    .single();
-  if (error) throw error;
-  return normalizeQuestionBankRecord(data, nextOrder);
-}
-
 /* =========================
    QUIZ SUPABASE
    ========================= */
 
 const QUIZ_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, display_order, is_system, created_at, updated_at";
 const QUIZ_FIELDS = "id, teacher_space_id, folder_id, title, document, schema_version, display_order, is_system, created_at, updated_at";
-const RESOURCE_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, display_order, is_system, created_at, updated_at";
+const RESOURCE_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, metadata, display_order, is_system, created_at, updated_at";
 const RESOURCE_FIELDS = "id, teacher_space_id, folder_id, title, resource_type, storage_bucket, storage_path, mime_type, size_bytes, width, height, duration_seconds, alt_text, tags, metadata, display_order, is_system, created_at, updated_at";
 const TEACHER_RESOURCE_BUCKET = "teacher-resources";
 
@@ -1796,6 +890,35 @@ function collectQuizResourceIds(document) {
   };
   visit(document);
   return Array.from(result);
+}
+
+function hasForbiddenSystemQuizSource(document) {
+  const forbiddenKinds = new Set([
+    "resource",
+    "supabase-resource",
+    "personal-resource",
+    "system-resource",
+    "local-upload",
+    "local-recording",
+    "local-file",
+    "blob"
+  ]);
+  let forbidden = false;
+  const visit = (value) => {
+    if (forbidden || !value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    const kind = String(value.kind || "").trim().toLowerCase();
+    if (forbiddenKinds.has(kind)) {
+      forbidden = true;
+      return;
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(document);
+  return forbidden;
 }
 
 async function syncQuizResourceLinks(quizId, document) {
@@ -1865,7 +988,8 @@ export async function listQuizFoldersForSpace(teacherSpaceId) {
 }
 
 export async function createQuizFolderForSpace(teacherSpaceId, folder = {}) {
-  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const isSystem = folder?.is_system === true;
+  const spaceId = isSystem ? null : normalizePositiveTeacherSpaceId(teacherSpaceId);
   const name = cleanDisplayName(folder.name);
   if (!name) throw new Error("Nom de dossier vide.");
 
@@ -1876,7 +1000,7 @@ export async function createQuizFolderForSpace(teacherSpaceId, folder = {}) {
       parent_id: normalizeNullableUuid(folder.parent_id),
       name,
       display_order: Number.isFinite(Number(folder.display_order)) ? Number(folder.display_order) : 0,
-      is_system: false
+      is_system: isSystem
     })
     .select(QUIZ_FOLDER_FIELDS)
     .single();
@@ -1888,6 +1012,7 @@ export async function createQuizFolderForSpace(teacherSpaceId, folder = {}) {
 export async function updateQuizFolder(folderId, updates = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de quiz invalide.");
+  const isSystem = updates?.is_system === true;
 
   const payload = {};
   if ("name" in updates) {
@@ -1902,7 +1027,7 @@ export async function updateQuizFolder(folderId, updates = {}) {
     .from("quiz_folders")
     .update(payload)
     .eq("id", id)
-    .eq("is_system", false)
+    .eq("is_system", isSystem)
     .select(QUIZ_FOLDER_FIELDS)
     .single();
 
@@ -1910,14 +1035,14 @@ export async function updateQuizFolder(folderId, updates = {}) {
   return normalizeQuizFolderRecord(data);
 }
 
-export async function deleteQuizFolder(folderId) {
+export async function deleteQuizFolder(folderId, options = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de quiz invalide.");
   const { error } = await supabase
     .from("quiz_folders")
     .delete()
     .eq("id", id)
-    .eq("is_system", false);
+    .eq("is_system", options?.is_system === true);
   if (error) throw error;
 }
 
@@ -1936,7 +1061,8 @@ export async function listQuizzesForSpace(teacherSpaceId) {
 }
 
 export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
-  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const isSystem = quiz?.is_system === true;
+  const spaceId = isSystem ? null : normalizePositiveTeacherSpaceId(teacherSpaceId);
   const title = cleanDisplayName(quiz.title) || "Quiz sans titre";
   const existingId = normalizeUuid(quiz.id);
   const now = new Date().toISOString();
@@ -1944,8 +1070,13 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
   const document = cloneJsonValue({
     ...quiz,
     version: schemaVersion,
-    title
+    title,
+    is_system: isSystem
   });
+  const linkedResourceIds = collectQuizResourceIds(document);
+  if (isSystem && (linkedResourceIds.length || hasForbiddenSystemQuizSource(document))) {
+    throw new Error("Un quiz système ne peut utiliser que les ressources système locales du manifest.");
+  }
 
   const payload = {
     teacher_space_id: spaceId,
@@ -1954,7 +1085,7 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
     document,
     schema_version: schemaVersion,
     display_order: Number.isFinite(Number(quiz.display_order)) ? Number(quiz.display_order) : 0,
-    is_system: false,
+    is_system: isSystem,
     updated_at: now
   };
 
@@ -1964,8 +1095,8 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
       .from("quizzes")
       .update(payload)
       .eq("id", existingId)
-      .eq("teacher_space_id", spaceId)
-      .eq("is_system", false);
+      .eq("is_system", isSystem);
+    if (!isSystem) query = query.eq("teacher_space_id", spaceId);
   } else {
     query = supabase
       .from("quizzes")
@@ -1975,18 +1106,18 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
   const { data, error } = await query.select(QUIZ_FIELDS).single();
   if (error) throw error;
   const saved = normalizeQuizRecord(data);
-  await syncQuizResourceLinks(saved.id, saved.document || document);
+  await syncQuizResourceLinks(saved.id, isSystem ? {} : (saved.document || document));
   return saved;
 }
 
-export async function deleteQuiz(quizId) {
+export async function deleteQuiz(quizId, options = {}) {
   const id = normalizeUuid(quizId);
   if (!id) throw new Error("Quiz invalide.");
   const { error } = await supabase
     .from("quizzes")
     .delete()
     .eq("id", id)
-    .eq("is_system", false);
+    .eq("is_system", options?.is_system === true);
   if (error) throw error;
 }
 
@@ -2000,6 +1131,9 @@ function normalizeResourceFolderRecord(row = {}, index = 0) {
     teacher_space_id: row.teacher_space_id == null ? null : Number(row.teacher_space_id),
     parent_id: row.parent_id ? String(row.parent_id) : null,
     name: cleanDisplayName(row.name) || "Dossier sans nom",
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? cloneJsonValue(row.metadata)
+      : {},
     display_order: Number.isFinite(Number(row.display_order)) ? Number(row.display_order) : index,
     is_system: row.is_system === true,
     created_at: String(row.created_at || ""),
@@ -2058,6 +1192,9 @@ export async function createResourceFolderForSpace(teacherSpaceId, folder = {}) 
       teacher_space_id: spaceId,
       parent_id: normalizeNullableUuid(folder.parent_id),
       name,
+      metadata: folder.metadata && typeof folder.metadata === "object" && !Array.isArray(folder.metadata)
+        ? cloneJsonValue(folder.metadata)
+        : {},
       display_order: Number.isFinite(Number(folder.display_order)) ? Number(folder.display_order) : 0,
       is_system: false
     })
@@ -2065,6 +1202,41 @@ export async function createResourceFolderForSpace(teacherSpaceId, folder = {}) 
     .single();
   if (error) throw error;
   return normalizeResourceFolderRecord(data);
+}
+
+export async function ensureRecordingsResourceFolderForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const findExisting = async () => {
+    const { data, error } = await supabase
+      .from("resource_folders")
+      .select(RESOURCE_FOLDER_FIELDS)
+      .eq("teacher_space_id", spaceId)
+      .eq("is_system", false)
+      .contains("metadata", { system_role: "recordings" })
+      .limit(1);
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : null;
+    return row ? normalizeResourceFolderRecord(row) : null;
+  };
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  const folders = await listResourceFoldersForSpace(spaceId);
+  const rootFolders = folders.filter((folder) => folder?.is_system !== true && !folder?.parent_id);
+  try {
+    return await createResourceFolderForSpace(spaceId, {
+      name: "Enregistrements",
+      parent_id: null,
+      display_order: rootFolders.length,
+      metadata: { system_role: "recordings" }
+    });
+  } catch (error) {
+    if (String(error?.code || "") !== "23505") throw error;
+    const concurrent = await findExisting();
+    if (concurrent) return concurrent;
+    throw error;
+  }
 }
 
 export async function updateResourceFolder(folderId, updates = {}) {
@@ -2078,6 +1250,11 @@ export async function updateResourceFolder(folderId, updates = {}) {
   }
   if ("parent_id" in updates) payload.parent_id = normalizeNullableUuid(updates.parent_id);
   if ("display_order" in updates) payload.display_order = Number(updates.display_order) || 0;
+  if ("metadata" in updates) {
+    payload.metadata = updates.metadata && typeof updates.metadata === "object" && !Array.isArray(updates.metadata)
+      ? cloneJsonValue(updates.metadata)
+      : {};
+  }
   const { data, error } = await supabase
     .from("resource_folders")
     .update(payload)

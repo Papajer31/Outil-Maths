@@ -9,7 +9,7 @@ import {
   normalizeSettings
 } from "./model.js";
 import { resolveQuizImageSourceUrl } from "../../shared/quiz-local-image-store.js";
-import { resolveQuizAudioSourceUrl } from "../../shared/quiz-local-audio-store.js";
+import { resolveQuizAudioSourceUrl } from "../../shared/quiz-audio-source.js";
 import { ensureToolUiStyles } from "../../shared/tool-ui/tool-ui.js";
 import { bindNumericKeypadEvents, renderNumericKeypad } from "../../shared/tool-ui/numeric-keypad.js";
 import {

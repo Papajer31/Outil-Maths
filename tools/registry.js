@@ -212,44 +212,7 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     description: "Questions composées librement sur un canevas de widgets.",
     tags: ["quiz", "question", "reponse", "texte", "canevas", "projection"]
   },
-  {
-    id: "question-reponse",
-    label: "Question/Réponse",
-    entry: "../tools/question-reponse/tool.js",
-    description: "Questions à réponse textuelle courte issues d’une banque de contenus.",
-    tags: ["question", "reponse", "texte", "banque", "projection"]
-  },
-  {
-    id: "qcm",
-    label: "QCM",
-    entry: "../tools/qcm/tool.js",
-    description: "Questionnaires à choix unique issus d’une banque QCM.",
-    tags: ["qcm", "question", "choix", "banque", "projection"]
-  },
-  {
-    id: "flash-question-reponse",
-    label: "Flash-Question/Réponse",
-    entry: "../tools/flash-question-reponse/tool.js",
-    description: "Question/Réponse en mode flash avec item affiché brièvement puis masqué.",
-    tags: ["flash", "questions", "reponses", "texte", "banque", "projection"]
-  },
-  {
-    id: "flash-qcm",
-    label: "Flash-QCM",
-    entry: "../tools/flash-qcm/tool.js",
-    description: "QCM en mode flash avec item affiché brièvement puis masqué.",
-    tags: ["flash", "qcm", "question", "choix", "banque", "projection"]
-  },
-  {
-    id: "selection",
-    label: "Sélection",
-    entry: "../tools/selection/tool.js",
-    description: "Sélectionner des mots dans un énoncé issu d’une banque de contenus.",
-    tags: ["selection", "mots", "grammaire", "banque", "projection"]
-  }
 ]);
-
-const LEGACY_TOOLS_REGISTRY = Object.freeze([]);
 
 export function getToolRegistryMeta() {
   return ROOT_TOOLS_META;
@@ -259,6 +222,3 @@ export function getActiveToolsRegistry() {
   return [...ACTIVE_TOOLS_REGISTRY];
 }
 
-export function getLegacyToolsRegistry() {
-  return [...LEGACY_TOOLS_REGISTRY];
-}

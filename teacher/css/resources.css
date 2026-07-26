@@ -171,13 +171,6 @@
   gap:16px;
 }
 
-.dashboard-resource-detail-scope{
-  margin-top:4px;
-  color:var(--muted);
-  font-size:13px;
-  font-weight:650;
-}
-
 .dashboard-resource-detail-preview{
   min-height:280px;
   max-height:430px;
@@ -189,6 +182,11 @@
   overflow:hidden;
 }
 
+.dashboard-resource-detail-preview.is-audio{
+  min-height:120px;
+  background:rgba(255,255,255,.035);
+}
+
 .dashboard-resource-detail-image{
   display:block;
   max-width:100%;
@@ -196,8 +194,36 @@
   object-fit:contain;
 }
 
-.dashboard-resource-detail-audio{
+.dashboard-resource-detail-audio-player{
   width:min(560px, 100%);
+  display:grid;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:center;
+  gap:12px;
+}
+
+.dashboard-resource-detail-audio-player > .dashboard-icon-btn{
+  width:36px;
+  height:36px;
+  border-radius:50%;
+}
+
+.dashboard-resource-detail-audio-player audio{
+  display:none;
+}
+
+.dashboard-resource-detail-audio-progress{
+  width:100%;
+  min-width:0;
+  accent-color:#dc3c43;
+  cursor:pointer;
+}
+
+.dashboard-resource-detail-audio-time{
+  color:#c9d1e2;
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
 }
 
 .dashboard-resource-detail-unavailable{
@@ -205,53 +231,133 @@
   font-weight:700;
 }
 
-.dashboard-resource-detail-list{
+.dashboard-resource-detail-properties{
   display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
   gap:0;
   margin:0;
-  border:1px solid rgba(255,255,255,.10);
 }
 
-.dashboard-resource-detail-list > div{
+.dashboard-resource-detail-properties.is-system{
+  grid-template-columns:max-content;
+}
+
+.dashboard-resource-detail-properties > div{
   min-width:0;
-  display:grid;
-  grid-template-columns:130px minmax(0, 1fr);
-  gap:12px;
+  display:flex;
+  flex-direction:row;
+  align-items:baseline;
+  gap:4px;
   padding:10px 12px;
-  border-bottom:1px solid rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:0;
+  background:rgba(255,255,255,.035);
 }
 
-.dashboard-resource-detail-list > div:last-child{
-  border-bottom:0;
+.dashboard-resource-detail-properties > div + div{
+  border-left:0;
 }
 
-.dashboard-resource-detail-list dt{
+.dashboard-resource-detail-properties dt{
   color:var(--muted);
   font-size:13px;
   font-weight:750;
 }
 
-.dashboard-resource-detail-list dd{
+.dashboard-resource-detail-properties dt::after,
+.dashboard-resource-detail-tags-panel h3::after{
+  content:"\00a0:";
+}
+
+.dashboard-resource-detail-properties dd{
   min-width:0;
   margin:0;
   color:#fff;
   font-size:13px;
+  font-weight:750;
   overflow-wrap:anywhere;
 }
 
+.dashboard-resource-detail-tags-panel{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:12px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:0;
+  background:rgba(255,255,255,.035);
+}
+
+.dashboard-resource-detail-tags-panel h3{
+  margin:0;
+  color:#fff;
+  font-size:13px;
+  font-weight:800;
+}
+
 .dashboard-resource-detail-tags{
+  min-width:0;
+  flex:1 1 auto;
   display:flex;
   flex-wrap:wrap;
+  align-items:center;
   gap:6px;
+}
+
+.dashboard-resource-detail-tag-list{
+  display:contents;
 }
 
 .dashboard-resource-detail-tag{
   display:inline-flex;
+  align-items:center;
+  gap:4px;
   padding:3px 8px;
+  border:0;
   border-radius:999px;
   background:rgba(255,255,255,.08);
   color:#e8ecf7;
   font-size:12px;
+  font:inherit;
+}
+
+button.dashboard-resource-detail-tag{
+  cursor:pointer;
+}
+
+button.dashboard-resource-detail-tag:hover,
+button.dashboard-resource-detail-tag:focus-visible{
+  background:rgba(255,255,255,.16);
+  outline:none;
+}
+
+.dashboard-resource-detail-tag .dashboard-material-icon{
+  font-size:14px;
+}
+
+.dashboard-resource-detail-tag-form{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.dashboard-resource-detail-tag-form input{
+  min-width:0;
+  width:150px;
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:9px;
+  background:#0f131b;
+  color:#fff;
+  font:inherit;
+  font-size:13px;
+}
+
+.dashboard-resource-detail-tag-form > .dashboard-icon-btn{
+  width:34px;
+  height:34px;
+  border-radius:9px;
 }
 
 .dashboard-resource-detail-muted{
@@ -262,6 +368,7 @@
   .dashboard-resource-tiles-grid{
     --dashboard-resource-tile-width:240px;
   }
+
 }
 
 /* Quota de stockage personnel affiché dans le header Ressources. */
