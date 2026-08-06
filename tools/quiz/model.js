@@ -24,6 +24,7 @@ const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
 const QCM_MAX_CHOICES = 6;
 const CORRECTION_VISIBILITY_MODES = new Set(["visible", "correct", "incorrect", "hidden"]);
+const normalizedQuizSnapshots = new WeakSet();
 
 export function getDefaultSettings(){
   return {
@@ -70,6 +71,9 @@ export function normalizeSettings(settings = {}){
 }
 
 export function normalizeQuizSnapshot(snapshot = {}){
+  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && normalizedQuizSnapshots.has(snapshot)) {
+    return snapshot;
+  }
   const safe = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) ? snapshot : {};
   const sourceColumns = Math.max(1, Math.trunc(Number(safe.grid?.columns) || GRID_COLUMNS));
   const questions = (Array.isArray(safe.questions) ? safe.questions : [])
@@ -84,7 +88,7 @@ export function normalizeQuizSnapshot(snapshot = {}){
     ?? ""
   ).trim();
 
-  return {
+  const normalized = {
     version: Math.max(1, Math.trunc(Number(safe.version) || 1)),
     id: String(safe.id || "").trim(),
     title: String(safe.title || "").trim(),
@@ -100,6 +104,8 @@ export function normalizeQuizSnapshot(snapshot = {}){
     grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
     questions
   };
+  normalizedQuizSnapshots.add(normalized);
+  return normalized;
 }
 
 function getSeriesInstructionFromQuestions(questions = []){
@@ -652,6 +658,67 @@ export function filterQuizQuestionsBySelection(questions = [], selection = {}){
   return filterItemsByQuestionSelection(normalizedQuestions, selection, {
     itemKeyGetter: getQuizQuestionSelectionKey
   });
+}
+
+// Chaque variante est une unité sélectionnable et tirable par l’activité. Cela
+// vaut autant pour les séries que pour les quiz composés dans l’Atelier : une
+// question peut elle aussi posséder plusieurs variantes.
+export function getQuizSelectionItems(snapshot = {}){
+  const normalizedSnapshot = normalizeQuizSnapshot(snapshot);
+  const questions = normalizedSnapshot.questions;
+  return questions.flatMap((question) => {
+    const variants = Array.isArray(question.variants) && question.variants.length
+      ? question.variants
+      : normalizeQuizVariants([], question.widgets);
+    const sourceQuestionKey = getQuizQuestionSelectionKey(question);
+    return variants.map((variant, variantIndex) => ({
+      ...question,
+      // Une seule variante est conservée afin que le runtime ne refasse pas
+      // un tirage aléatoire parmi les variantes de cette question.
+      variants:[variant],
+      variantCount:1,
+      selectionKey:`variant:${question.id}:${variant.id || variantIndex}`,
+      sourceQuestionKey,
+      sourceQuestionId:question.id,
+      sourceVariantIndex:variantIndex,
+      sourceVariantId:String(variant.id || "")
+    }));
+  });
+}
+
+export function normalizeQuizSelectionForSnapshot(snapshot = {}, selection = {}){
+  const normalizedSelection = normalizeQuestionSelection(selection);
+  if (normalizedSelection.mode !== "custom") return normalizedSelection;
+
+  const selectedKeys = new Set(normalizedSelection.questionKeys);
+  const items = getQuizSelectionItems(snapshot);
+  return {
+    ...normalizedSelection,
+    // Les anciennes activités sélectionnaient la question conteneur. Cette clé
+    // continue donc de sélectionner toutes ses variantes.
+    questionKeys:items
+      .filter((item, index) => selectedKeys.has(getQuizQuestionSelectionKey(item, index)) || selectedKeys.has(item.sourceQuestionKey))
+      .map((item, index) => getQuizQuestionSelectionKey(item, index))
+  };
+}
+
+export function filterQuizSnapshotBySelection(snapshot = {}, selection = {}){
+  const items = getQuizSelectionItems(snapshot);
+  const normalizedSelection = normalizeQuizSelectionForSnapshot(snapshot, selection);
+  return filterItemsByQuestionSelection(items, normalizedSelection, {
+    itemKeyGetter:getQuizQuestionSelectionKey
+  });
+}
+
+export function getQuizSelectionItemCount(snapshot = {}){
+  const normalizedSnapshot = normalizeQuizSnapshot(snapshot);
+  const questions = normalizedSnapshot.questions;
+  return questions.reduce((total, question) => {
+    const count = Array.isArray(question?.variants) && question.variants.length
+      ? question.variants.length
+      : 1;
+    return total + count;
+  }, 0);
 }
 
 export function getQuestionSelectionSignature(selection = {}){

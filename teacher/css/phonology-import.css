@@ -1,0 +1,253 @@
+.phonology-import-card{
+  width:min(1500px, calc(100vw - 48px));
+  height:min(900px, calc(100vh - 48px));
+  max-height:none;
+  overflow:hidden;
+  gap:14px;
+}
+
+.phonology-import-header{
+  flex:0 0 auto;
+}
+
+.phonology-import-toolbar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:0 0 auto;
+}
+
+.phonology-import-file-name{
+  min-width:0;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.phonology-import-layout{
+  min-height:0;
+  flex:1 1 auto;
+  display:grid;
+  grid-template-columns:minmax(440px, 1fr) minmax(500px, 1.15fr);
+  gap:14px;
+}
+
+.phonology-import-source-panel,
+.phonology-import-report-panel{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:rgba(255,255,255,.035);
+}
+
+.phonology-import-panel-title{
+  font-size:18px;
+  font-weight:800;
+}
+
+.phonology-import-format-hint{
+  display:block;
+  margin:-2px 0 2px;
+  color:var(--muted, #667085);
+  font-size:12px;
+  line-height:1.35;
+}
+
+.phonology-import-source{
+  min-height:0;
+  height:100%;
+  resize:none;
+  font-family:ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size:15px;
+  line-height:1.45;
+  white-space:pre;
+}
+
+.phonology-import-report{
+  min-height:0;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding-right:4px;
+}
+
+.phonology-import-summary{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:8px;
+}
+
+.phonology-import-summary > div{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height:86px;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-soft, rgba(255,255,255,.045));
+  text-align:center;
+}
+
+.phonology-import-summary strong{
+  font-size:27px;
+  line-height:1;
+}
+
+.phonology-import-summary span{
+  margin-top:5px;
+  color:var(--muted);
+  font-size:13px;
+}
+
+.phonology-import-summary.is-valid > div:nth-child(3) strong{
+  color:#70d995;
+}
+
+.phonology-import-summary.is-invalid > div:nth-child(3) strong{
+  color:#ff7c7c;
+}
+
+.phonology-import-valid-message,
+.phonology-import-sync-result,
+.phonology-import-sync-error,
+.phonology-import-pending{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  padding:11px 13px;
+  border-radius:12px;
+  line-height:1.35;
+}
+
+.phonology-import-valid-message,
+.phonology-import-sync-result{
+  background:rgba(52, 178, 104, .15);
+  border:1px solid rgba(82, 215, 135, .4);
+}
+
+.phonology-import-sync-error{
+  flex-direction:column;
+  background:rgba(210, 58, 58, .16);
+  border:1px solid rgba(255, 102, 102, .42);
+}
+
+.phonology-import-pending{
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--line);
+}
+
+.phonology-import-issue-section,
+.phonology-import-warning-section,
+.phonology-import-coverage{
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:rgba(255,255,255,.025);
+}
+
+.phonology-import-issue-section h3,
+.phonology-import-coverage h3{
+  margin:0 0 8px;
+  font-size:16px;
+}
+
+.phonology-import-issue-section ul,
+.phonology-import-warning-section ul{
+  margin:0;
+  padding-left:20px;
+  display:grid;
+  gap:6px;
+}
+
+.phonology-import-warning-section summary{
+  cursor:pointer;
+  font-weight:800;
+}
+
+.phonology-import-warning-section[open] summary{
+  margin-bottom:9px;
+}
+
+.phonology-import-coverage-grid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:7px;
+}
+
+.phonology-import-coverage-grid span{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:7px 9px;
+  border-radius:9px;
+  background:rgba(255,255,255,.05);
+}
+
+.phonology-import-coverage-grid small{
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+.phonology-import-sync-option{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:11px 13px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+  flex:0 0 auto;
+}
+
+.phonology-import-sync-option input{
+  width:20px;
+  height:20px;
+  margin-top:1px;
+}
+
+.phonology-import-sync-option span{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.phonology-import-sync-option small{
+  color:var(--muted);
+}
+
+.phonology-import-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:0 0 auto;
+}
+
+.phonology-import-actions-spacer{
+  flex:1;
+}
+
+.phonology-import-actions .is-loading{
+  opacity:.7;
+  pointer-events:none;
+}
+
+@media (max-width:1100px){
+  .phonology-import-layout{
+    grid-template-columns:1fr;
+    grid-template-rows:minmax(280px, 1fr) minmax(300px, 1fr);
+  }
+}
+
+.phonology-import-format-hint + .phonology-import-format-hint{
+  margin-top:2px;
+}

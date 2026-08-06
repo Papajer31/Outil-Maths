@@ -1,7 +1,7 @@
 import {
   createQuestionDeck,
   evaluateAnswer,
-  filterQuizQuestionsBySelection,
+  filterQuizSnapshotBySelection,
   getQuestionSelectionSignature,
   getWidgetView,
   materializeQuizQuestionVariant,
@@ -158,7 +158,7 @@ function ensureQuestionsLoaded(state, settings){
   // Le runtime ne dépend pas des champs récapitulatifs calculés par l’Atelier.
   // Il relit les vrais widgets afin que la question survive intacte aux étapes
   // de clonage et de normalisation du moteur de séance.
-  state.questions = filterQuizQuestionsBySelection(snapshot.questions, settings.questionSelection)
+  state.questions = filterQuizSnapshotBySelection(snapshot, settings.questionSelection)
     .map(buildRunnableQuestion)
     .filter(Boolean);
   state.deck = createQuestionDeck(state.questions, settings.drawMode);

@@ -1,0 +1,252 @@
+# ============================================================
+# RÉFÉRENTIEL PÉDAGOGIQUE DES PHONÈMES DU PROJET
+# phonème = graphies visibles possibles
+# Les graphies rares ou lexicales devront être vérifiées
+# dans chaque mot de la banque.
+# ============================================================
+
+# ------------------------------------------------------------
+# VOYELLES ORALES
+# ------------------------------------------------------------
+
+[a]|(a)
+graphies = a/à/â/e
+codes = a/e_a
+
+[i]|(i)
+graphies = i/î/ï/y
+codes = i/y_i
+
+[y]|(u)
+graphies = u/û/ü/eu/eû
+codes = u/eu_u
+
+[u]|(ou)
+graphies = ou/où/oû/aou/oo
+codes = ou/aou/oo_ou
+
+[e]|(é)
+graphies = é/e/er/ez/es/et/ai
+codes = e_aigu/e_ferme/er/ez/es_ferme/et_ferme/ai_ferme
+
+[ɛ]|(è)
+graphies = è/ê/ë/e/ai/ei/et/ey
+codes = e_grave/e_circonflexe/e_ouvert/ai_ouvert/ei/et_ouvert/ey
+
+[ə]|(e)
+graphies = e/ai/on
+codes = e_caduc/ai_caduc/on_caduc
+
+[ø];[œ]|(eu)
+graphies = eu/œu/œ/eû/u
+codes = eu/oeu/oe/u_eu
+
+[o];[ɔ]|(o)
+graphies = o/ô/au/eau/oo/u
+codes = o/au/eau/oo_o/u_o
+
+# ------------------------------------------------------------
+# VOYELLES NASALES
+# ------------------------------------------------------------
+
+[ɑ̃]|(an)
+graphies = an/am/en/em/aon
+codes = an/am/en_an/em/aon
+
+[ɔ̃]|(on)
+graphies = on/om
+codes = on/om
+
+[ɛ̃]|(in)
+graphies = in/im/ain/aim/ein/eim/en/yn/ym
+codes = in/im/ain/aim/ein/eim/en_in/yn/ym
+
+[œ̃]|(un)
+graphies = un/um
+codes = un/um
+
+
+# ------------------------------------------------------------
+# SEMI-VOYELLES
+# ------------------------------------------------------------
+
+[j]|(y)
+graphies = i/ï/y/il/ill
+codes = i_yod/y_yod/il_yod/ill
+
+[ɥ]|(uw)
+graphies = u
+codes = u_glisse
+
+[w]|(ouw)
+graphies = ou/w
+codes = ou_glisse/w_w
+
+# ------------------------------------------------------------
+# CONSONNES
+# ------------------------------------------------------------
+
+[p]|(p)
+graphies = p/pp
+codes = p
+
+[b]|(b)
+graphies = b/bb
+codes = b
+
+[t]|(t)
+graphies = t/tt/th
+codes = t/th
+
+[d]|(d)
+graphies = d/dd
+codes = d
+
+[k]|(k)
+graphies = c/k/q/qu/cc/ck/cqu/ch
+codes = c_k/k/q/qu/ck/cqu/ch_k
+
+[g]|(g)
+graphies = g/gu/gg/c/gh
+codes = g_g/gu/c_g/gh
+
+[f]|(f)
+graphies = f/ff/ph
+codes = f/ph
+
+[v]|(v)
+graphies = v/w
+codes = v/w_v
+
+[s]|(s)
+graphies = s/ss/c/ç/sc/t/x
+codes = s_s/c_s/ç/sc/t_s/x_s
+
+[z]|(z)
+graphies = z/s/x/zz
+codes = z/s_z/x_z
+
+[ʃ]|(ch)
+graphies = ch/sch/sh
+codes = ch/sch/sh
+
+[ʒ]|(j)
+graphies = j/g/ge
+codes = j/g_j/ge
+
+[m]|(m)
+graphies = m/mm
+codes = m
+
+[n]|(n)
+graphies = n/nn
+codes = n
+
+[ɲ]|(gn)
+graphies = gn
+codes = gn
+
+[l]|(l)
+graphies = l/ll
+codes = l
+
+[ʁ]|(r)
+graphies = r/rr
+codes = r
+
+# ------------------------------------------------------------
+# GRAPHIES POLYPHONÉMIQUES
+# Une seule unité graphique code plusieurs phonèmes.
+# ------------------------------------------------------------
+
+[k]+[s]|(ks)
+graphies = x
+codes = x_ks
+
+[g]+[z]|(gz)
+graphies = x
+codes = x_gz
+
+# ------------------------------------------------------------
+# COMPOSITIONS PHONOLOGIQUES ET PÉDAGOGIQUES
+# Ce ne sont pas des phonèmes simples.
+#
+# "decomposition" indique les codes phonémiques fins lorsque
+# la graphie peut réellement être segmentée de cette manière.
+# Les éventuelles lettres muettes ne sont pas indiquées.
+# ------------------------------------------------------------
+
+[w]+[a]|(oi)
+graphies = oi
+codes = oi
+
+[w]+[a]+[j]|(oy)
+graphies = oy
+codes = oy
+
+[ɛ]+[j]|(ay)
+graphies = ay
+codes = ay
+
+[w]+[ɛ̃]|(oin)
+graphies = oin
+codes = oin
+
+[ɥ]+[i]|(ui)
+graphies = ui
+codes = ui
+decomposition = u_glisse+i
+
+[j]+[ɛ̃]|(ien)
+graphies = ien
+codes = ien
+decomposition = i_yod+en_in
+
+[j]+[ɔ̃]|(ion)
+graphies = ion
+codes = ion
+decomposition = i_yod+on
+
+[i]+[j]|(ill)
+graphies = ill
+codes = ill_ij
+
+[u]+[j]|(ouil)
+graphies = ouil
+codes = ouil
+decomposition = ou+il_yod
+
+[u]+[j]|(ouille)
+graphies = ouille
+codes = ouille
+decomposition = ou+ill
+
+[a]+[j]|(ail)
+graphies = ail
+codes = ail
+decomposition = a+il_yod
+
+[a]+[j]|(aille)
+graphies = aille
+codes = aille
+decomposition = a+ill
+
+[ɛ]+[j]|(eil)
+graphies = eil
+codes = eil
+decomposition = e_ouvert+il_yod
+
+[ɛ]+[j]|(eille)
+graphies = eille
+codes = eille
+decomposition = e_ouvert+ill
+
+[œ]+[j]|(euil)
+graphies = euil
+codes = euil
+decomposition = eu+il_yod
+
+[œ]+[j]|(euille)
+graphies = euille
+codes = euille
+decomposition = eu+ill

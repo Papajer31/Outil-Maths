@@ -5,6 +5,12 @@ import {
 } from "./question-selection.js";
 
 let stylesInjected = false;
+let questionSelectionRenderId = 0;
+const pendingQuestionSelectionStates = new Map();
+const boundQuestionSelectionStates = new WeakMap();
+const LARGE_SELECTION_THRESHOLD = 80;
+const VIRTUAL_SELECTION_ROW_HEIGHT = 40;
+const VIRTUAL_SELECTION_OVERSCAN = 8;
 
 export function renderQuestionSelectionWidget({
   idPrefix = "question",
@@ -32,9 +38,21 @@ export function renderQuestionSelectionWidget({
   const quickValue = mode === "custom" ? formatQuestionRanges(safeItems, selectedKeys, itemKeyGetter) : "";
   const customHidden = mode !== "custom";
   const prefix = normalizeIdPrefix(idPrefix);
+  const renderId = `question-selection-${++questionSelectionRenderId}`;
+  const isLargeSelection = !loading && safeItems.length >= LARGE_SELECTION_THRESHOLD;
+  pendingQuestionSelectionStates.set(renderId, {
+    items:safeItems,
+    selectedKeys,
+    itemKeyGetter,
+    renderRow,
+    isLargeSelection,
+    virtualFrame:0,
+    virtualStart:-1,
+    virtualEnd:-1
+  });
 
   return `
-    <div class="tv-group general-question-selection${mode === "custom" ? " is-custom" : ""}" data-question-selection="${escapeHtml(prefix)}" data-question-selection-loading="${loading ? "true" : "false"}" data-question-selection-singular="${escapeHtml(itemSingular)}" data-question-selection-plural="${escapeHtml(itemPlural)}">
+    <div class="tv-group general-question-selection${mode === "custom" ? " is-custom" : ""}" data-question-selection="${escapeHtml(prefix)}" data-question-selection-render-id="${escapeHtml(renderId)}" data-question-selection-loading="${loading ? "true" : "false"}" data-question-selection-singular="${escapeHtml(itemSingular)}" data-question-selection-plural="${escapeHtml(itemPlural)}">
       <div class="general-question-selection-header">
         <div class="general-question-selection-title-line">
           <div class="tv-group-title">${escapeHtml(title)}</div>
@@ -72,8 +90,8 @@ export function renderQuestionSelectionWidget({
             <button class="btn general-question-selection-action" type="button" data-question-selection-action="none" ${loading ? "disabled" : ""}>Tout décocher</button>
           </div>
         </div>
-        <div class="general-question-selection-list" role="list" aria-label="${escapeHtml(listAriaLabel)}">
-          ${renderQuestionSelectionRows({
+        <div class="general-question-selection-list" role="list" aria-label="${escapeHtml(listAriaLabel)}" data-question-selection-list>
+          ${isLargeSelection ? renderVirtualQuestionSelectionList(safeItems.length) : renderQuestionSelectionRows({
             items: safeItems,
             selectedKeys,
             loading,
@@ -92,42 +110,75 @@ export function bindQuestionSelectionWidget(host, { idPrefix = "question" } = {}
   const root = getQuestionSelectionRoot(host, idPrefix);
   if (!root) return;
   const prefix = normalizeIdPrefix(idPrefix);
+  const renderId = String(root.dataset.questionSelectionRenderId || "");
+  const state = pendingQuestionSelectionStates.get(renderId) || null;
+  pendingQuestionSelectionStates.delete(renderId);
+  if (state) boundQuestionSelectionStates.set(root, state);
 
   root.querySelectorAll(`input[name="${cssEscape(prefix)}_questionSelectionMode"]`).forEach((radio) => {
     radio.addEventListener("change", () => {
-      if (getQuestionSelectionMode(root, prefix) === "custom" && !getCheckedQuestionKeys(root).length) {
-        setAllQuestionChecks(root, true);
+      if (getQuestionSelectionMode(root, prefix) === "custom" && state && !state.selectedKeys.size) {
+        setAllQuestionKeys(state, true);
       }
-      updateQuickInputFromChecks(root, prefix);
+      if (getQuestionSelectionMode(root, prefix) === "custom") renderVirtualQuestionRows(root, state, { force:true });
+      syncRenderedQuestionChecks(root, state);
+      updateQuickInputFromChecks(root, prefix, state);
       updateQuestionSelectionUi(host, { idPrefix });
     });
   });
 
   root.querySelector(`#${cssEscape(prefix)}_questionSelectionQuick`)?.addEventListener("input", (event) => {
     const input = event.currentTarget;
-    const selectedIndexes = parseQuestionRangeInput(input?.value || "", root.querySelectorAll(".general-question-selection-check").length);
-    root.querySelectorAll(".general-question-selection-check").forEach((checkbox, index) => {
-      checkbox.checked = selectedIndexes.has(index + 1);
-    });
+    const selectedIndexes = parseQuestionRangeInput(input?.value || "", state?.items.length || root.querySelectorAll(".general-question-selection-check").length);
+    if (state) {
+      state.selectedKeys = new Set(state.items
+        .filter((item, index) => selectedIndexes.has(index + 1))
+        .map((item, index) => state.itemKeyGetter(item, index)));
+      syncRenderedQuestionChecks(root, state);
+    } else {
+      root.querySelectorAll(".general-question-selection-check").forEach((checkbox, index) => {
+        checkbox.checked = selectedIndexes.has(index + 1);
+      });
+    }
     updateQuestionSelectionUi(host, { idPrefix, preserveQuickInput: true });
   });
 
-  root.querySelectorAll(".general-question-selection-check").forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      updateQuickInputFromChecks(root, prefix);
-      updateQuestionSelectionUi(host, { idPrefix });
-    });
+  root.addEventListener("change", (event) => {
+    const checkbox = event.target?.closest?.(".general-question-selection-check");
+    if (!checkbox || !root.contains(checkbox)) return;
+    if (state) {
+      const key = String(checkbox.dataset.questionKey || "").trim();
+      if (checkbox.checked) state.selectedKeys.add(key);
+      else state.selectedKeys.delete(key);
+      checkbox.closest(".general-question-selection-row")?.classList.toggle("is-selected", checkbox.checked);
+    }
+    updateQuickInputFromChecks(root, prefix, state);
+    updateQuestionSelectionUi(host, { idPrefix });
   });
 
-  root.querySelectorAll("[data-question-selection-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const action = String(button.dataset.questionSelectionAction || "");
+  root.addEventListener("click", (event) => {
+    const button = event.target?.closest?.("[data-question-selection-action]");
+    if (!button || !root.contains(button)) return;
+    const action = String(button.dataset.questionSelectionAction || "");
+    if (state) {
+      if (action === "all") setAllQuestionKeys(state, true);
+      if (action === "none") setAllQuestionKeys(state, false);
+      syncRenderedQuestionChecks(root, state);
+    } else {
       if (action === "all") setAllQuestionChecks(root, true);
       if (action === "none") setAllQuestionChecks(root, false);
-      updateQuickInputFromChecks(root, prefix);
-      updateQuestionSelectionUi(host, { idPrefix });
-    });
+    }
+    updateQuickInputFromChecks(root, prefix, state);
+    updateQuestionSelectionUi(host, { idPrefix });
   });
+
+  root.querySelector("[data-question-selection-list]")?.addEventListener("scroll", () => {
+    renderVirtualQuestionRows(root, state);
+  }, { passive:true });
+
+  if (state && getQuestionSelectionMode(root, prefix) === "custom") {
+    renderVirtualQuestionRows(root, state, { force:true });
+  }
 }
 
 export function updateQuestionSelectionUi(host, { idPrefix = "question", preserveQuickInput = false } = {}) {
@@ -135,16 +186,18 @@ export function updateQuestionSelectionUi(host, { idPrefix = "question", preserv
   if (!root) return;
   const prefix = normalizeIdPrefix(idPrefix);
   const mode = getQuestionSelectionMode(root, prefix);
+  const state = boundQuestionSelectionStates.get(root) || null;
   const isCustom = mode === "custom";
   const panel = root.querySelector("[data-question-selection-panel]");
-  const total = root.querySelectorAll(".general-question-selection-check").length;
-  const selected = getCheckedQuestionKeys(root).length;
+  const total = state?.items.length ?? root.querySelectorAll(".general-question-selection-check").length;
+  const selected = state?.selectedKeys.size ?? getCheckedQuestionKeys(root).length;
   const loading = root.dataset.questionSelectionLoading === "true";
   const itemSingular = root.dataset.questionSelectionSingular || "question";
   const itemPlural = root.dataset.questionSelectionPlural || `${itemSingular}s`;
 
   root.classList.toggle("is-custom", isCustom);
   if (panel) panel.hidden = !isCustom;
+  if (isCustom) renderVirtualQuestionRows(root, state);
   const summary = root.querySelector("[data-question-selection-summary]");
   if (summary) {
     summary.textContent = renderSelectionSummary({
@@ -156,7 +209,7 @@ export function updateQuestionSelectionUi(host, { idPrefix = "question", preserv
       itemPlural
     });
   }
-  if (!preserveQuickInput) updateQuickInputFromChecks(root, prefix);
+  if (!preserveQuickInput) updateQuickInputFromChecks(root, prefix, state);
 }
 
 export function readQuestionSelection(container, { idPrefix = "question", fallback = null, allowEmpty = false } = {}) {
@@ -169,7 +222,8 @@ export function readQuestionSelection(container, { idPrefix = "question", fallba
     return { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] };
   }
 
-  const questionKeys = getCheckedQuestionKeys(root);
+  const state = boundQuestionSelectionStates.get(root) || null;
+  const questionKeys = state ? Array.from(state.selectedKeys) : getCheckedQuestionKeys(root);
   if (!questionKeys.length && allowEmpty && fallback) {
     return normalizeQuestionSelection(fallback);
   }
@@ -211,7 +265,9 @@ function renderQuestionSelectionRows({
   loadingMessage = "Chargement…",
   emptyMessage = "Aucune question à afficher.",
   itemKeyGetter = getItemSelectionKey,
-  renderRow = defaultRenderQuestionSelectionRow
+  renderRow = defaultRenderQuestionSelectionRow,
+  startIndex = 0,
+  endIndex = Infinity
 } = {}) {
   const safeItems = Array.isArray(items) ? items : [];
   if (loading) {
@@ -221,18 +277,56 @@ function renderQuestionSelectionRows({
     return `<div class="general-question-selection-empty">${escapeHtml(emptyMessage)}</div>`;
   }
 
-  return safeItems.map((item, index) => {
+  return safeItems.slice(startIndex, endIndex).map((item, offset) => {
+    const index = startIndex + offset;
     const key = itemKeyGetter(item, index);
     const checked = selectedKeys.has(key);
     return renderRow({ item, index, key, checked, escapeHtml });
   }).join("");
 }
 
+function renderVirtualQuestionSelectionList(itemCount = 0) {
+  const totalHeight = Math.max(0, Math.trunc(Number(itemCount) || 0)) * VIRTUAL_SELECTION_ROW_HEIGHT;
+  return `
+    <div class="general-question-selection-virtual-spacer" data-question-selection-virtual-spacer style="height:${totalHeight}px">
+      <div class="general-question-selection-virtual-rows" data-question-selection-virtual-rows></div>
+    </div>
+  `;
+}
+
+function renderVirtualQuestionRows(root, state, { force = false } = {}){
+  if (!state?.isLargeSelection) return;
+  const list = root.querySelector("[data-question-selection-list]");
+  if (!list || state.virtualFrame) return;
+  state.virtualFrame = window.requestAnimationFrame(() => {
+    state.virtualFrame = 0;
+    if (!list.isConnected) return;
+    const viewportHeight = Math.max(list.clientHeight || 0, VIRTUAL_SELECTION_ROW_HEIGHT * 8);
+    const visibleRows = Math.ceil(viewportHeight / VIRTUAL_SELECTION_ROW_HEIGHT);
+    const startIndex = Math.max(0, Math.floor(list.scrollTop / VIRTUAL_SELECTION_ROW_HEIGHT) - VIRTUAL_SELECTION_OVERSCAN);
+    const endIndex = Math.min(state.items.length, startIndex + visibleRows + (VIRTUAL_SELECTION_OVERSCAN * 2));
+    if (!force && state.virtualStart === startIndex && state.virtualEnd === endIndex) return;
+    const rows = list.querySelector("[data-question-selection-virtual-rows]");
+    if (!rows) return;
+    rows.style.transform = `translateY(${startIndex * VIRTUAL_SELECTION_ROW_HEIGHT}px)`;
+    rows.innerHTML = renderQuestionSelectionRows({
+      items:state.items,
+      selectedKeys:state.selectedKeys,
+      itemKeyGetter:state.itemKeyGetter,
+      renderRow:state.renderRow,
+      startIndex,
+      endIndex
+    });
+    state.virtualStart = startIndex;
+    state.virtualEnd = endIndex;
+  });
+}
+
 function defaultRenderQuestionSelectionRow({ item = {}, index = 0, key = "", checked = false }) {
   const prompt = String(item?.prompt || item?.title || item?.label || `Question ${index + 1}`).trim();
   const answer = String(item?.mainAnswer || item?.answer || item?.expectedAnswer || item?.payload_json?.expectedSelectionText || "").trim();
   return `
-    <label class="general-question-selection-row" role="listitem">
+    <label class="general-question-selection-row${checked ? " is-selected" : ""}" role="listitem">
       <input class="general-question-selection-check" type="checkbox" data-question-key="${escapeHtml(key)}" ${checked ? "checked" : ""}>
       <span class="general-question-selection-index">${index + 1}</span>
       <span class="general-question-selection-preview general-question-selection-preview--question">
@@ -272,15 +366,33 @@ function setAllQuestionChecks(root, checked) {
   });
 }
 
-function updateQuickInputFromChecks(root, idPrefix = "question") {
+function updateQuickInputFromChecks(root, idPrefix = "question", state = null) {
   const prefix = normalizeIdPrefix(idPrefix);
   const input = root.querySelector(`#${cssEscape(prefix)}_questionSelectionQuick`);
   if (!input) return;
+  if (state) {
+    input.value = formatQuestionRanges(state.items, state.selectedKeys, state.itemKeyGetter);
+    return;
+  }
   const selectedIndexes = new Set();
   root.querySelectorAll(".general-question-selection-check").forEach((checkbox, index) => {
     if (checkbox.checked) selectedIndexes.add(index + 1);
   });
   input.value = formatRangesFromIndexes(selectedIndexes);
+}
+
+function setAllQuestionKeys(state, checked) {
+  state.selectedKeys = checked
+    ? new Set(state.items.map((item, index) => state.itemKeyGetter(item, index)))
+    : new Set();
+}
+
+function syncRenderedQuestionChecks(root, state) {
+  if (!state) return;
+  root.querySelectorAll(".general-question-selection-check").forEach((checkbox) => {
+    checkbox.checked = state.selectedKeys.has(String(checkbox.dataset.questionKey || "").trim());
+    checkbox.closest(".general-question-selection-row")?.classList.toggle("is-selected", checkbox.checked);
+  });
 }
 
 function formatRangesFromIndexes(selectedIndexes = new Set()) {

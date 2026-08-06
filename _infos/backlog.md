@@ -1,13 +1,49 @@
 # Backlog consolidé
 
-Dernière mise à jour : 2026-07-24.
+Dernière mise à jour : 2026-08-04.
 
 ## Priorités proches
 
-- Finaliser et stabiliser la création/édition de Missions.
-- Continuer les tests de bout en bout du Catalogue et de l’Atelier Quiz.
-- Améliorer progressivement le guidage enseignant, avec une découverte simple des possibilités.
-- Créer plus tard un outil technique indépendant pour importer les données système dans Supabase.
+- Exécuter et valider `20_adventure_engine_foundations.sql`.
+- Brancher un premier passage obligatoire Aventure de bout en bout.
+- Ajouter ensuite la sélection par Objectif, la matrice lente et la reprise des six passages.
+- Générer les quatre passages adaptatifs seulement après stabilisation des passages obligatoires.
+- Construire l’interface élève Aventure complète avant la rentrée.
+- Remplir au minimum les premiers menus réellement nécessaires ; les suivants pourront être complétés semaine après semaine.
+- Reporter Missions, l’étude du code, les audios système et les extensions du Tableau tant que le MVP Aventure n’est pas fiable.
+
+## Aventure
+
+### Patch 20 — fondations
+
+- [x] Curseur Menu/Jour par classe et par niveau.
+- [x] Jauge 0–50 propre à chaque palier d’un OdApp.
+- [x] Journée élève unique par niveau, menu et jour.
+- [x] Six passages obligatoires figés à la première ouverture.
+- [x] Quatre emplacements adaptatifs figés pour la reprise.
+- [x] RPC publique sécurisée d’ouverture/reprise.
+- [x] Lecture publique sécurisée des jauges de l’élève.
+
+### À enchaîner avant la rentrée
+
+- [ ] Sélectionner et lancer une activité précise depuis un passage obligatoire.
+- [ ] Sélectionner une activité compatible avec le palier pour une case Objectif.
+- [ ] Séparer le niveau de difficulté Aventure de celui d’Exploration et de Missions.
+- [ ] Appliquer la matrice lente question par question, y compris les retraits.
+- [ ] Relier une tentative d’historique à son passage Aventure.
+- [ ] Finaliser un passage sans double comptage.
+- [ ] Reprendre automatiquement le premier passage non terminé.
+- [ ] Terminer une journée après dix passages.
+- [ ] Générer les quatre adaptatives uniquement depuis les OdApp déjà rencontrés.
+- [ ] Remplacer la tuile élève « Bientôt » par l’interface Aventure.
+- [ ] Tester classes multi-niveaux, changements de curseur et rechargements.
+
+### Après stabilisation du MVP
+
+- [ ] Vieillissement au-dessus de 40 avec plancher 30.
+- [ ] Rangs de maîtrise et reconfirmations.
+- [ ] Reporting enseignant.
+- [ ] Réglages super-admin de la matrice et des seuils.
 
 ## Quiz
 
@@ -23,9 +59,10 @@ Dernière mise à jour : 2026-07-24.
 
 ## Ressources
 
-- Conserver les ressources système locales et alignées sur `shared/tool-assets/manifest.json`.
+- Conserver temporairement les ressources système locales alignées sur `shared/tool-assets/manifest.json` pendant leur migration progressive.
+- Les images pédagogiques importées dans `image_assets` sont visibles et classables dans les ressources système Supabase ; migrer ensuite chaque consommateur avant de supprimer ses fichiers statiques.
 - Conserver les ressources personnelles dans Supabase avec leur quota.
-- Prévoir un outil technique hors dashboard pour gérer les imports dans `image_assets`, `phonology_words` et `vocabulary_default_words`.
+- Les imports `phonology_words` et `image_assets` sont disponibles dans le tableau de bord super-admin. Il reste à prévoir l’outil technique pour `vocabulary_default_words`.
 
 ## Tableau
 

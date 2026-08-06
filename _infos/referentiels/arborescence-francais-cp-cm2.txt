@@ -1,0 +1,929 @@
+Français
+	Lecture
+		Étude du code
+			Le graphème « a »
+				CP
+				CE1
+			Le graphème « i »
+				CP
+				CE1
+			Le graphème « r »
+				CP
+				CE1
+			Le graphème « l »
+				CP
+				CE1
+			Le graphème « o » fermé
+				CP
+				CE1
+			Le graphème « s »
+				CP
+				CE1
+			Le graphème « é »
+				CP
+				CE1
+			Le graphème « u »
+				CP
+				CE1
+			Le graphème « f »
+				CP
+				CE1
+			Le graphème « e »
+				CP
+				CE1
+			Le graphème « ch »
+				CP
+				CE1
+			Le graphème « m »
+				CP
+				CE1
+			Le graphème « ou »
+				CP
+				CE1
+			Le graphème « v »
+				CP
+				CE1
+			Les graphèmes « è » et « ê »
+				CP
+				CE1
+			Le graphème « n »
+				CP
+				CE1
+			Le graphème « an »
+				CP
+				CE1
+			Le graphème « t »
+				CP
+				CE1
+			Le graphème « oi »
+				CP
+				CE1
+			Le graphème « c »
+				CP
+				CE1
+			Le graphème « en »
+				CP
+				CE1
+			Le graphème « p »
+				CP
+				CE1
+			Le graphème « o » ouvert
+				CP
+				CE1
+			Le graphème « d »
+				CP
+				CE1
+			Le graphème « on »
+				CP
+				CE1
+			Le graphème « z »
+				CP
+				CE1
+			Le graphème « ai »
+				CP
+				CE1
+			Le graphème « b »
+				CP
+				CE1
+			Le graphème « y » prononcé [i]
+				CP
+				CE1
+			Le graphème « ô »
+				CP
+				CE1
+			Les graphèmes « au » et « eau »
+				CP
+				CE1
+			Le graphème « j »
+				CP
+				CE1
+			Le graphème « in »
+				CP
+				CE1
+			Les graphèmes « vr », « pr », « fr », « tr », « dr », « br » et « cr »
+				CP
+				CE1
+			Le graphème « ss »
+				CP
+				CE1
+			Le graphème « s » prononcé [z]
+				CP
+				CE1
+			Les graphèmes « g » et « gu » pour le son [g]
+				CP
+				CE1
+			Les graphèmes « er », « ez » et « es » prononcés [é]
+				CP
+				CE1
+			Les graphèmes « c », « ç » et « sc » pour le son [s]
+				CP
+				CE1
+			Les graphèmes « ei » et « et »
+				CP
+				CE1
+			Les graphèmes « am », « em », « im » et « om »
+				CP
+				CE1
+			Les graphèmes « qu », « q » et « k » pour le son [k]
+				CP
+				CE1
+			Les graphèmes « eu » et « œu »
+				CP
+				CE1
+			Les graphèmes « g » et « ge » pour le son [j]
+				CP
+				CE1
+			Les graphèmes « es », « el », « ef », « ec » et « er » prononcés [è]
+				CP
+				CE1
+			Le graphème « h »
+				CP
+				CE1
+			Le graphème « ph »
+				CP
+				CE1
+			Les graphèmes « ette », « esse », « elle », « erre » et « enne »
+				CP
+				CE1
+			Les graphèmes « sl », « vl », « pl », « gl », « fl », « cl » et « bl »
+				CP
+				CE1
+			Le graphème « gn »
+				CP
+				CE1
+			Les graphèmes « ain » et « ein »
+				CP
+				CE1
+			Le graphème « ui »
+				CP
+				CE1
+			Le graphème « ill »
+				CP
+				CE1
+			Les graphèmes « ail », « aille », « eil », « eille », « euil », « euille », « ouil » et « ouille »
+				CP
+				CE1
+			Les graphèmes « ion », « ien », « ieu », « ian » et « ier »
+				CP
+				CE1
+			Le graphème « y » et sa valeur de double « i »
+				CP
+				CE1
+			Les graphèmes « eur », « euf », « eul », « œuf » et « œur »
+				CP
+				CE1
+			Le graphème « x »
+				CP
+				CE1
+			Les graphèmes « un » et « um »
+				CP
+				CE1
+			Le graphème « oin »
+				CP
+				CE1
+			Le graphème « w »
+				CP
+				CE1
+			Les graphèmes « tion », « tie », « tien », « tial », « tiel » et « tieu »
+				CP
+				CE1
+		Lecture à voix haute
+			Lire à voix haute avec fluidité
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Lire à voix haute de manière expressive
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+		Compréhension de textes
+			Dégager le sens global d’un texte
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer et organiser les informations explicites d’un texte
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre les mots et les expressions en contexte
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier ce que désignent les mots de reprise
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre les informations implicites
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Justifier une réponse ou une interprétation en s’appuyant sur le texte
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier le genre d’un texte et ses principales caractéristiques
+				CE1
+				CE2
+				CM1
+				CM2
+			Lire et interpréter un document composite
+				CM1
+				CM2
+			Mettre en relation des informations issues de plusieurs documents
+				CM2
+		Devenir lecteur
+			Découvrir des œuvres et des genres variés
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Choisir un livre et s’engager dans sa lecture
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Relier ses lectures à son expérience et à ses connaissances
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Partager et justifier ses impressions de lecture
+				CE1
+				CE2
+				CM1
+				CM2
+	Écriture
+		Écriture cursive
+			Former et enchaîner les lettres minuscules cursives
+				CP
+				CE1
+				CE2
+			Transcrire du script en cursive
+				CP
+				CE1
+				CE2
+			Former les lettres majuscules cursives
+				CE1
+				CE2
+			Écrire à la main de manière fluide, lisible et efficace
+				CE1
+				CE2
+				CM1
+				CM2
+		Encodage et dictée
+			Encoder des syllabes et des mots réguliers
+				CP
+				CE1
+			Écrire des mots et des phrases sous la dictée
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Relire et corriger une dictée
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+		Copie
+			Copier un texte avec exactitude en respectant sa ponctuation et sa mise en page
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Copier avec fluidité
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser des stratégies de copie
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+		Écrits de travail
+			Prélever, trier et organiser des informations par écrit
+				CM1
+				CM2
+			Reformuler ou résumer l’essentiel d’une leçon ou d’un document
+				CM1
+				CM2
+			Expliquer ou justifier un point de vue dans un écrit réflexif court
+				CM1
+				CM2
+		Production d’écrits
+			Produire une phrase à partir d’un modèle
+				CP
+				CE1
+			Produire un court texte cohérent et porteur de sens
+				CP
+				CE1
+				CE2
+			Raconter par écrit
+				CE1
+				CE2
+				CM1
+				CM2
+			Décrire par écrit
+				CE2
+				CM1
+				CM2
+			Expliquer ou informer par écrit
+				CE2
+				CM1
+				CM2
+			Produire un dialogue
+				CE2
+				CM1
+				CM2
+			Exprimer et justifier un avis par écrit
+				CM1
+				CM2
+			Organiser et relier les idées d’un texte
+				CE1
+				CE2
+				CM1
+				CM2
+			Préparer un écrit à l’aide d’un brouillon
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Relire, corriger et améliorer un écrit
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+	Oral
+		Compréhension orale
+			Comprendre et exécuter une consigne orale
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer et mémoriser des informations entendues
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Classer, ordonner et relier des informations entendues
+				CE1
+				CE2
+				CM1
+				CM2
+			Reformuler l’essentiel d’un message ou d’un texte entendu
+				CE2
+				CM1
+				CM2
+			Identifier le genre d’un discours oral et ses principales caractéristiques
+				CM1
+				CM2
+		Expression orale
+			Raconter oralement
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Décrire oralement
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Expliquer ou présenter oralement
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Argumenter et justifier un point de vue oralement
+				CE2
+				CM1
+				CM2
+			Restituer un texte mémorisé en tenant compte de l’auditoire
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Organiser et adapter une prise de parole préparée
+				CE1
+				CE2
+				CM1
+				CM2
+			Évaluer et améliorer une prestation orale
+				CE1
+				CE2
+				CM1
+				CM2
+		Échanges oraux
+			Participer à un échange en respectant les règles de communication
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Exprimer et justifier son accord ou son désaccord
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Tenir compte des propos d’autrui pour faire progresser l’échange
+				CE1
+				CE2
+				CM1
+				CM2
+			Adapter son registre de langue à la situation de communication
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+	Vocabulaire
+		Champs lexicaux
+			Employer des verbes d’action précis
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Décrire une personne
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire du temps
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire de l'espace
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire des émotions
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire des livres
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire de l'école
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire de l'histoire
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire de la géographie
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire des arts
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire des sciences
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire du corps
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser le vocabulaire du sport
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+		Structuration du lexique
+			Utiliser l’ordre alphabétique
+				CP
+				CE1
+				CE2
+			Utiliser un dictionnaire et se repérer dans un article
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et utiliser des synonymes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et utiliser des antonymes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Classer des mots génériques et spécifiques
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre et utiliser la polysémie
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Distinguer le sens propre et le sens figuré
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Distinguer et utiliser les niveaux de langue
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et construire des familles de mots
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre et utiliser les préfixes et les suffixes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+	Grammaire
+		La phrase
+			Distinguer un texte, une phrase et une ligne
+				CP
+			Reconnaître et produire une phrase simple
+				CP
+				CE1
+				CE2
+			Reconnaître et produire les types de phrases
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et produire les formes négative et exclamative
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les principaux constituants d’une phrase simple
+				CE1
+				CE2
+			Manipuler une phrase par déplacement, suppression, substitution ou ajout
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer et ponctuer le discours direct
+				CE2
+				CM1
+				CM2
+			Distinguer une phrase simple d’une phrase complexe
+				CM2
+		Les fonctions dans la phrase
+			Identifier le groupe sujet et son noyau
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les compléments du verbe sans les distinguer
+				CE1
+				CE2
+			Distinguer le complément d’objet direct et le complément d’objet indirect
+				CM1
+				CM2
+			Identifier les compléments circonstanciels
+				CM1
+				CM2
+			Distinguer les compléments circonstanciels de temps, de lieu et de cause
+				CM2
+			Identifier l’attribut du sujet
+				CM2
+			Distinguer la nature et la fonction d’un mot ou d’un groupe de mots
+				CM1
+				CM2
+		Les classes de mots
+			Identifier les noms et distinguer noms communs et noms propres
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les déterminants
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les adjectifs
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les verbes comme classe de mots
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les pronoms personnels sujets
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les pronoms personnels compléments
+				CM1
+				CM2
+			Identifier les adverbes
+				CE2
+				CM1
+				CM2
+			Identifier les conjonctions de coordination
+				CM1
+				CM2
+			Identifier les prépositions
+				CM2
+			Identifier les conjonctions de subordination
+				CM2
+			Distinguer les mots variables et invariables
+				CE2
+				CM1
+				CM2
+		Le groupe nominal
+			Identifier le groupe nominal et ses constituants
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier le nom noyau du groupe nominal
+				CM1
+				CM2
+			Identifier les expansions du nom
+				CM1
+				CM2
+			Distinguer l’adjectif épithète et l’attribut du sujet
+				CM2
+			Identifier le genre d’un groupe nominal
+				CP
+				CE1
+				CE2
+			Identifier le nombre d’un groupe nominal
+				CP
+				CE1
+				CE2
+	Orthographe
+		Orthographe lexicale
+			Mémoriser l’orthographe des mots fréquents
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Mémoriser l’orthographe des mots invariables
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Utiliser correctement les accents
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Maîtriser les valeurs de la lettre c
+				CP
+				CE1
+				CE2
+			Maîtriser les valeurs de la lettre g
+				CP
+				CE1
+				CE2
+			Maîtriser les valeurs de la lettre s
+				CP
+				CE1
+				CE2
+			Appliquer la règle du m devant b, m et p
+				CP
+				CE1
+				CE2
+			Déduire une lettre muette finale à l’aide de la famille du mot
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			S’appuyer sur la morphologie et les analogies pour orthographier les mots
+				CE1
+				CE2
+				CM1
+				CM2
+		Orthographe grammaticale
+			Former le féminin des noms et des adjectifs
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Former le pluriel des noms et des adjectifs
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Réaliser les accords dans le groupe nominal
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Accorder le sujet et le verbe
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Accorder le participe passé employé avec l’auxiliaire être
+				CM1
+				CM2
+			Accorder le participe passé employé avec l’auxiliaire avoir
+				CM2
+			Accorder le sujet et l’attribut du sujet
+				CM2
+	Conjugaison
+		Le verbe
+			Identifier le verbe conjugué dans une phrase
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Distinguer l’infinitif et la forme conjuguée d’un verbe
+				CE1
+				CE2
+				CM1
+				CM2
+			Retrouver l’infinitif d’un verbe conjugué
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier le radical et la terminaison d’un verbe
+				CE1
+				CE2
+				CM1
+				CM2
+			Identifier les marques de temps et de personne dans une terminaison
+				CM1
+				CM2
+			Situer une action dans le passé, le présent ou le futur
+				CP
+				CE1
+				CE2
+		Les temps de l’indicatif
+			Conjuguer les verbes du premier groupe au présent
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer être et avoir au présent
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du deuxième groupe au présent
+				CM1
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés au présent
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du premier groupe à l’imparfait
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer être et avoir à l’imparfait
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du deuxième groupe à l’imparfait
+				CM1
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés à l’imparfait
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du premier groupe au futur
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer être et avoir au futur
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du deuxième groupe au futur
+				CM1
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés au futur
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du premier groupe au passé composé
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer être et avoir au passé composé
+				CE1
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du deuxième groupe au passé composé
+				CM1
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés au passé composé
+				CE2
+				CM1
+				CM2
+			Conjuguer les verbes du premier groupe au passé simple
+				CM2
+			Conjuguer être et avoir au passé simple
+				CM2
+			Conjuguer les verbes du deuxième groupe au passé simple
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés au passé simple
+				CM2
+			Conjuguer les verbes du premier groupe au plus-que-parfait
+				CM2
+			Conjuguer être et avoir au plus-que-parfait
+				CM2
+			Conjuguer les verbes du deuxième groupe au plus-que-parfait
+				CM2
+			Conjuguer les huit verbes irréguliers étudiés au plus-que-parfait
+				CM2

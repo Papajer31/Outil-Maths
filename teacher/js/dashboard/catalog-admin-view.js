@@ -1,8 +1,8 @@
 import {
   CATALOG_LEVELS,
   EXPLORATION_DEFAULTS,
-  getCatalogFolders,
-  normalizeCatalogActivity
+  normalizeCatalogActivity,
+  normalizePedagogicalNode
 } from "../../../shared/catalogue.js";
 import { TOOL_LIMITS, clampInt } from "../../../shared/activity-config.js";
 import {
@@ -14,6 +14,7 @@ import { getActiveToolsRegistry } from "../../../tools/registry.js";
 import { loadToolsRuntime } from "../../../shared/tool-root-runtime.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
+import { openCatalogTreeAdminDialog } from "./catalog-tree-admin-dialog.js";
 import {
   persistAdminDraftRuntimePayload,
   removeAdminDraftRuntimePayload
@@ -45,7 +46,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "lecture",
     label: "Lecture",
-    toolIds: ["encodage"]
+    toolIds: ["encodage", "reperage-graphemes", "nuage-lettres"]
   },
   {
     id: "ecriture",
@@ -110,10 +111,14 @@ export function createCatalogAdminViewController({
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
+  listPedagogicalNodesForAdmin,
+  createPedagogicalNodeAsAdmin,
+  updatePedagogicalNodeAsAdmin,
+  deletePedagogicalNodeAsAdmin,
   showToast,
   onReturnToCatalogue
 } = {}) {
-  const folders = getCatalogFolders();
+  let folders = [];
   const tools = getActiveToolsRegistry();
   let activities = [];
   let adminCatalogueFolderId = null;
@@ -130,15 +135,20 @@ export function createCatalogAdminViewController({
   let activeAdminCatalogTestController = null;
   const toolCollapsibleStateByTool = new Map();
 
-  function setCatalogueState({ activities: nextActivities = [], currentFolderId = null } = {}) {
+  function setCatalogueState({ activities: nextActivities = [], folders: nextFolders = [], currentFolderId = null } = {}) {
     activities = sortAdminActivities(nextActivities);
+    folders = (Array.isArray(nextFolders) ? nextFolders : []).map(normalizePedagogicalNode);
     adminCatalogueFolderId = String(currentFolderId || "").trim() || null;
   }
 
   function renderHeaderActions() {
-    const canStartCreation = Boolean(getAdminFolderById(adminCatalogueFolderId));
+    const canStartCreation = canCreateActivityInFolder(adminCatalogueFolderId);
     return `
-      <button id="btnAdminNewCatalogActivity" class="btn primary" type="button" ${canStartCreation ? "" : "disabled"} title="${canStartCreation ? "Créer une activité dans cette partie du Catalogue" : "Sélectionne d’abord un dossier du Catalogue."}">
+      <button id="btnAdminCatalogTree" class="btn dashboard-btn-with-icon" type="button" title="Créer, déplacer et régler les nœuds pédagogiques">
+        <span class="dashboard-material-icon" aria-hidden="true">account_tree</span>
+        <span>Arborescence</span>
+      </button>
+      <button id="btnAdminNewCatalogActivity" class="btn primary dashboard-btn-with-icon" type="button" ${canStartCreation ? "" : "disabled"} title="${canStartCreation ? "Créer une activité dans cette partie d’Exploration" : "Sélectionne d’abord un dossier de niveau dans l’arborescence."}">
         <span class="dashboard-material-icon" aria-hidden="true">add</span>
         <span>Créer une activité</span>
       </button>
@@ -146,6 +156,18 @@ export function createCatalogAdminViewController({
   }
 
   function bindHeaderActions() {
+    header?.querySelector("#btnAdminCatalogTree")?.addEventListener("click", async () => {
+      const result = await openCatalogTreeAdminDialog({
+        folders,
+        activities,
+        listPedagogicalNodesForAdmin,
+        createPedagogicalNodeAsAdmin,
+        updatePedagogicalNodeAsAdmin,
+        deletePedagogicalNodeAsAdmin,
+        showToast
+      });
+      if (result?.changed) notifyCatalogueChanged();
+    });
     header?.querySelector("#btnAdminNewCatalogActivity")?.addEventListener("click", () => {
       if (!getAdminFolderById(adminCatalogueFolderId)) return;
       openEditor();
@@ -156,10 +178,18 @@ export function createCatalogAdminViewController({
     const normalized = normalizeCatalogActivity(activity);
     const isPublished = normalized.status === "published";
     const statusLabel = isPublished ? "Publié" : "Brouillon";
+    const tier = normalizeAdventureTier(normalized.adventure_tier);
     return {
       className: `dashboard-admin-activity-tile ${isPublished ? "is-highlighted" : "is-draft"}`,
-      attributes: `draggable="true" data-admin-activity-id="${escapeAttr(normalized.id)}" data-admin-category-id="${escapeAttr(normalized.category_id || "")}" title="Glisser pour réordonner dans cette catégorie"`,
+      attributes: `data-admin-activity-id="${escapeAttr(normalized.id)}" data-admin-category-id="${escapeAttr(normalized.pedagogical_node_id || "")}" data-admin-tier="${tier}"`,
+      dragHandleHtml: `
+        <button class="dashboard-activity-row-drag-handle dashboard-material-icon-btn" type="button" draggable="true" data-admin-activity-drag-handle="true" title="Déplacer l’activité" aria-label="Déplacer l’activité">
+          <span class="dashboard-material-icon" aria-hidden="true">drag_indicator</span>
+        </button>
+      `,
       subtitleHtml: `<span class="dashboard-activity-tile-subtitle">${escapeHtml(getToolLabel(normalized.tool_id))} · ${escapeHtml(statusLabel)}</span>`,
+      statusLabel,
+      toolLabel: getToolLabel(normalized.tool_id),
       actionsHtml: `
         <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Modifier" aria-label="Modifier"><span class="dashboard-material-icon" aria-hidden="true">edit</span></button>
         <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="duplicate-admin-activity" data-activity-id="${escapeAttr(normalized.id)}" title="Dupliquer" aria-label="Dupliquer"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
@@ -172,6 +202,18 @@ export function createCatalogAdminViewController({
     const safeFolderId = String(folderId || "").trim();
     if (!safeFolderId || !canCreateActivityInFolder(safeFolderId)) return "";
     return `data-admin-dropzone="true" data-admin-category-id="${escapeAttr(safeFolderId)}"`;
+  }
+
+  function getTierDropzoneAttributes(folderId, tier) {
+    const safeFolderId = String(folderId || "").trim();
+    if (!safeFolderId || !canCreateActivityInFolder(safeFolderId)) return "";
+    return `data-admin-tier-dropzone="true" data-admin-category-id="${escapeAttr(safeFolderId)}" data-admin-tier="${normalizeAdventureTier(tier)}"`;
+  }
+
+  function getFolderDropTargetAttributes(folderId) {
+    const safeFolderId = String(folderId || "").trim();
+    if (!safeFolderId || !canCreateActivityInFolder(safeFolderId)) return "";
+    return `data-admin-folder-dropzone="true" data-admin-category-id="${escapeAttr(safeFolderId)}" title="Déposer une activité dans ce nœud"`;
   }
 
   function bindCatalogueEvents({ root = list } = {}) {
@@ -219,9 +261,7 @@ export function createCatalogAdminViewController({
   }
 
   function canHostAdminActivity(folder) {
-    if (!folder?.id) return false;
-    if (String(folder.parent_id || "").trim()) return true;
-    return getAdminChildFolders(folder.id).length === 0;
+    return !!folder?.id && folder.is_active !== false && folder.node_type === "grade_level";
   }
 
   function canCreateActivityInFolder(folderId) {
@@ -267,6 +307,10 @@ export function createCatalogAdminViewController({
 
   async function confirmAndDeleteCatalogActivity(activity) {
     const normalized = normalizeCatalogActivity(activity);
+    if (!canRemoveActivityWithoutTierGap(normalized)) {
+      showToast?.("Ce palier ne peut pas devenir vide tant qu’un palier supérieur contient des activités.", { isError: true });
+      return;
+    }
     let usage = null;
     try {
       usage = await getCatalogActivityUsageAsAdmin?.(normalized.id);
@@ -299,7 +343,7 @@ export function createCatalogAdminViewController({
     const title = buildDuplicateActivityTitle(normalized);
     const duplicate = {
       ...normalized,
-      id: buildUniqueCatalogActivityId(normalized.category_id, title),
+      id: buildUniqueCatalogActivityId(normalized.pedagogical_node_id, title),
       title,
       config_name: title,
       status: "draft",
@@ -392,10 +436,11 @@ export function createCatalogAdminViewController({
       id: "",
       title: "",
       config_name: "",
-      category_id: getDefaultAdminActivityFolderId(),
+      pedagogical_node_id: getDefaultAdminActivityFolderId(),
       tool_id: "",
       description: "",
       default_question_count: EXPLORATION_DEFAULTS.questionCount,
+      adventure_tier: 1,
       display_order: null,
       status: "draft",
       default_visible: true,
@@ -411,7 +456,7 @@ export function createCatalogAdminViewController({
       .find((folder) => canHostAdminActivity(folder));
     if (childHost) return childHost.id;
 
-    return folders.find((folder) => canHostAdminActivity(folder))?.id || "francais.lecture";
+    return folders.find((folder) => canHostAdminActivity(folder))?.id || "";
   }
 
   function renderEditor() {
@@ -451,8 +496,8 @@ export function createCatalogAdminViewController({
             <div class="cfg-settings-header super-admin-settings-header">
               <div class="cfg-panel-title" id="adminLevelTitle">Niveau ${escapeHtml(activeLevel)} — ${escapeHtml(getLevelLabel(activeLevel))}</div>
               <div class="super-admin-level-actions">
-                <button class="btn" type="button" data-action="copy-current-level">Copier le niveau ${escapeHtml(activeLevel)} partout</button>
-                <button class="btn" type="button" data-action="reset-current-level">Réinitialiser le niveau courant</button>
+                <button class="btn dashboard-btn-with-icon" type="button" data-action="copy-current-level"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span><span>Copier le niveau ${escapeHtml(activeLevel)} partout</span></button>
+                <button class="btn dashboard-btn-with-icon" type="button" data-action="reset-current-level"><span class="dashboard-material-icon" aria-hidden="true">restart_alt</span><span>Réinitialiser le niveau courant</span></button>
               </div>
             </div>
             <div id="superAdminToolMessage" class="modal-message super-admin-tool-message"></div>
@@ -475,7 +520,7 @@ export function createCatalogAdminViewController({
     const isPublished = String(editingActivity?.status || "draft") === "published";
     return `
         <div class="dashboard-config-header-main super-admin-editor-header-main cfg-header-left">
-          <button class="btn cfg-back-btn super-admin-editor-back" type="button" data-action="back-admin-list" aria-label="Retour au Catalogue">↩</button>
+          <button class="btn cfg-back-btn super-admin-editor-back dashboard-btn-with-icon" type="button" data-action="back-admin-list" aria-label="Retour à Exploration" title="Retour à Exploration"><span class="dashboard-material-icon" aria-hidden="true">arrow_back</span></button>
           <div class="cfg-header-identity super-admin-editor-identity">
             <span class="cfg-field-label">Titre de l'activité :</span>
             <span class="cfg-config-name-display${title ? "" : " is-empty"}" title="${escapeAttr(safeTitle)}">${escapeHtml(safeTitle)}</span>
@@ -492,9 +537,9 @@ export function createCatalogAdminViewController({
         <div id="superAdminMessage" class="cfg-editor-message"></div>
       </div>
       <div class="dashboard-config-header-actions cfg-header-actions">
-        <button class="btn" type="button" data-action="open-viewport-test-bench" title="Ouvrir le banc de test des résolutions"><span class="dashboard-material-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M120-120v-520h200v-200h520v720H120Zm520-80h120v-560H400v120h240v440Zm-240 0h160v-360H400v360Zm-200 0h120v-360H200v360Zm440-440v80-80Zm-320 80Zm240 0Zm80-80Z"/></svg></span><span>Banc runtime</span></button>
-        <button class="btn" type="button" data-action="test-admin-draft-activity">Tester ainsi</button>
-        <button class="btn cfg-save-btn dirty" type="button" data-action="save-admin-activity">Enregistrer</button>
+        <button class="btn dashboard-btn-with-icon" type="button" data-action="open-viewport-test-bench" title="Ouvrir le banc de test des résolutions"><span class="dashboard-material-icon" aria-hidden="true">dashboard</span><span>Banc runtime</span></button>
+        <button class="btn dashboard-btn-with-icon" type="button" data-action="test-admin-draft-activity"><span class="dashboard-material-icon" aria-hidden="true">play_arrow</span><span>Tester ainsi</span></button>
+        <button class="btn cfg-save-btn dirty dashboard-btn-with-icon" type="button" data-action="save-admin-activity"><span class="dashboard-material-icon" aria-hidden="true">save</span><span>Enregistrer</span></button>
       </div>
     `;
   }
@@ -571,11 +616,11 @@ export function createCatalogAdminViewController({
       <label class="cfg-duration-card super-admin-info-card super-admin-select-card">
         <span class="cfg-duration-summary">
           <span class="cfg-duration-icon cfg-material-icon super-admin-info-card-icon" aria-hidden="true">folder</span>
-          <span class="cfg-duration-summary-main">Catégorie : <strong id="adminCategoryDisplay">${escapeHtml(getCategoryPathLabel(editingActivity?.category_id))}</strong></span>
+          <span class="cfg-duration-summary-main">Adresse pédagogique : <strong id="adminCategoryDisplay">${escapeHtml(getCategoryPathLabel(editingActivity?.pedagogical_node_id))}</strong></span>
           <span class="cfg-duration-chevron cfg-material-icon super-admin-tile-chevron" aria-hidden="true">expand_more</span>
         </span>
-        <select class="super-admin-card-select" data-field="category_id" aria-label="Catégorie de l’activité">
-          ${renderCategoryOptions(editingActivity.category_id)}
+        <select class="super-admin-card-select" data-field="pedagogical_node_id" aria-label="Dossier de niveau de l’activité">
+          ${renderCategoryOptions(editingActivity.pedagogical_node_id)}
         </select>
       </label>
     `;
@@ -640,7 +685,7 @@ export function createCatalogAdminViewController({
           <div class="cfg-modal-header">
             <div>
               <div id="adminTitleModalTitle" class="cfg-modal-title">Renommer l’activité</div>
-              <div class="cfg-modal-subtitle">Ce titre est affiché dans le Catalogue et dans l’éditeur.</div>
+              <div class="cfg-modal-subtitle">Ce titre est affiché dans Exploration et dans l’éditeur.</div>
             </div>
             <button class="btn cfg-modal-close" type="button" data-close-admin-title="true" aria-label="Fermer">✕</button>
           </div>
@@ -705,7 +750,7 @@ export function createCatalogAdminViewController({
 
   function renderCategoryOptions(selectedId) {
     return folders
-      .filter((folder) => canHostAdminActivity(folder))
+      .filter((folder) => canHostAdminActivity(folder) || String(folder.id) === String(selectedId || ""))
       .map((folder) => `<option value="${escapeAttr(folder.id)}" ${folder.id === selectedId ? "selected" : ""}>${escapeHtml(getCategoryPathLabel(folder.id))}</option>`)
       .join("");
   }
@@ -744,10 +789,10 @@ export function createCatalogAdminViewController({
       field.addEventListener("change", readEditorFields);
     });
 
-    list?.querySelector("[data-field='category_id']")?.addEventListener("change", () => {
+    list?.querySelector("[data-field='pedagogical_node_id']")?.addEventListener("change", () => {
       readEditorFields();
       const display = list.querySelector("#adminCategoryDisplay");
-      if (display) display.textContent = getCategoryPathLabel(editingActivity?.category_id);
+      if (display) display.textContent = getCategoryPathLabel(editingActivity?.pedagogical_node_id);
     });
 
     bindStepperField(list, "adminActivityQuestionCount", {
@@ -995,7 +1040,7 @@ export function createCatalogAdminViewController({
       activeToolModule = mod;
       activeToolId = toolId;
       const tool = mod.default || {};
-      const settings = getSettingsForLevel(activeLevel, tool);
+      const settings = getSettingsForLevel(activeLevel, tool, { clone:false });
       const levelDraft = normalizeLevelDraft(levelDrafts[String(activeLevel)]);
 
       host.innerHTML = `
@@ -1013,7 +1058,7 @@ export function createCatalogAdminViewController({
 
       const settingsHost = host.querySelector("#adminLevelSpecificSettingsHost");
       if (typeof tool.renderToolSettings === "function") {
-        tool.renderToolSettings(settingsHost, cloneJson(settings), getToolEditorContext(activeLevel));
+        tool.renderToolSettings(settingsHost, settings, getToolEditorContext(activeLevel));
         restoreActiveToolCollapsibleState(settingsHost);
         bindActiveToolCollapsibleStateMemory(settingsHost);
       } else {
@@ -1364,11 +1409,23 @@ export function createCatalogAdminViewController({
       persistActiveLevelSettings();
       const activityQuestionCount = getActivityQuestionCount(editingActivity);
       const levels = normalizeLevelsForSave(levelDrafts, { questionCount: activityQuestionCount });
+      const existingActivity = activities
+        .map(normalizeCatalogActivity)
+        .find((activity) => String(activity.id) === String(editingActivity.id || "")) || null;
+      const targetCategoryId = String(editingActivity.pedagogical_node_id || "").trim();
+      const categoryChanged = !!existingActivity
+        && String(existingActivity.pedagogical_node_id || "") !== targetCategoryId;
+      const activityTier = categoryChanged
+        ? 1
+        : normalizeAdventureTier(editingActivity.adventure_tier);
       const activityToSave = {
         ...editingActivity,
         default_question_count: activityQuestionCount,
         id: getStableIdForSave(editingActivity),
-        display_order: getDisplayOrderForSave(editingActivity)
+        adventure_tier: activityTier,
+        display_order: categoryChanged
+          ? getNextDisplayOrderForCategory(targetCategoryId, 1)
+          : getDisplayOrderForSave({ ...editingActivity, adventure_tier: activityTier })
       };
       const saved = await saveCatalogActivityAsAdmin?.(buildCatalogActivitySavePayload({
         ...activityToSave,
@@ -1433,8 +1490,8 @@ export function createCatalogAdminViewController({
       id: "__admin_draft_test__",
       title,
       config_name: title,
-      category_id: editingActivity?.category_id || getDefaultAdminActivityFolderId(),
-      folder_id: editingActivity?.category_id || getDefaultAdminActivityFolderId(),
+      pedagogical_node_id: editingActivity?.pedagogical_node_id || getDefaultAdminActivityFolderId(),
+      folder_id: editingActivity?.pedagogical_node_id || getDefaultAdminActivityFolderId(),
       tool_id: toolId,
       description: String(editingActivity?.description || "").trim(),
       default_question_count: questionCount,
@@ -1474,10 +1531,13 @@ export function createCatalogAdminViewController({
   }
 
 
-  function getSettingsForLevel(levelKey, tool = null) {
-    const normalized = normalizeLevelDraft(levelDrafts[String(levelKey)]);
-    if (isPlainObject(normalized.settings) && Object.keys(normalized.settings).length) {
-      return cloneJson(normalized.settings);
+  function getSettingsForLevel(levelKey, tool = null, { clone = true } = {}) {
+    const draft = levelDrafts[String(levelKey)];
+    const settings = isPlainObject(draft?.settings)
+      ? draft.settings
+      : (isPlainObject(draft?.tool_settings) ? draft.tool_settings : null);
+    if (settings && Object.keys(settings).length) {
+      return clone ? cloneJson(settings) : settings;
     }
     return getDefaultToolSettings(tool || activeToolModule?.default || null);
   }
@@ -1523,7 +1583,7 @@ export function createCatalogAdminViewController({
     const existingId = String(editingActivity.id || "").trim();
     if (existingId) return existingId;
     const title = String(editingActivity.title || editingActivity.config_name || "").trim();
-    const categoryId = String(editingActivity.category_id || "").trim();
+    const categoryId = String(editingActivity.pedagogical_node_id || "").trim();
     if (!title || !categoryId) return "";
     return buildUniqueCatalogActivityId(categoryId, title);
   }
@@ -1531,7 +1591,7 @@ export function createCatalogAdminViewController({
   function getStableIdForSave(activity) {
     const existingId = String(activity?.id || "").trim();
     if (existingId) return existingId;
-    return buildUniqueCatalogActivityId(activity?.category_id, activity?.title || activity?.config_name);
+    return buildUniqueCatalogActivityId(activity?.pedagogical_node_id, activity?.title || activity?.config_name);
   }
 
   function buildUniqueCatalogActivityId(categoryId, title) {
@@ -1554,13 +1614,18 @@ export function createCatalogAdminViewController({
   function getDisplayOrderForSave(activity) {
     const existingId = String(activity?.id || "").trim();
     if (existingId) return normalizeDisplayOrder(activity?.display_order);
-    return getNextDisplayOrderForCategory(activity?.category_id);
+    return getNextDisplayOrderForCategory(activity?.pedagogical_node_id, activity?.adventure_tier);
   }
 
-  function getNextDisplayOrderForCategory(categoryId) {
+  function getNextDisplayOrderForCategory(categoryId, tier = 1) {
     const safeCategoryId = String(categoryId || "").trim();
+    const safeTier = normalizeAdventureTier(tier);
     const maxOrder = activities
-      .filter((activity) => String(activity?.category_id || activity?.folder_id || "").trim() === safeCategoryId)
+      .map(normalizeCatalogActivity)
+      .filter((activity) => (
+        String(activity?.pedagogical_node_id || activity?.folder_id || "").trim() === safeCategoryId
+        && normalizeAdventureTier(activity?.adventure_tier) === safeTier
+      ))
       .reduce((max, activity) => Math.max(max, normalizeDisplayOrder(activity?.display_order)), 0);
     return maxOrder + 10;
   }
@@ -1570,7 +1635,10 @@ export function createCatalogAdminViewController({
     const rows = sortAdminCategoryActivities(
       activities
         .map(normalizeCatalogActivity)
-        .filter((item) => String(item.category_id || "") === String(normalized.category_id || ""))
+        .filter((item) => (
+          String(item.pedagogical_node_id || "") === String(normalized.pedagogical_node_id || "")
+          && normalizeAdventureTier(item.adventure_tier) === normalizeAdventureTier(normalized.adventure_tier)
+        ))
     );
     const sourceIndex = rows.findIndex((item) => String(item.id) === String(normalized.id));
     const sourceOrder = normalizeDisplayOrder(normalized.display_order);
@@ -1582,7 +1650,9 @@ export function createCatalogAdminViewController({
       return sourceOrder + Math.floor((nextOrder - sourceOrder) / 2);
     }
 
-    return sourceOrder > 0 ? sourceOrder + 1 : getNextDisplayOrderForCategory(normalized.category_id);
+    return sourceOrder > 0
+      ? sourceOrder + 1
+      : getNextDisplayOrderForCategory(normalized.pedagogical_node_id, normalized.adventure_tier);
   }
 
   function buildDuplicateActivityTitle(activity) {
@@ -1591,7 +1661,7 @@ export function createCatalogAdminViewController({
     const titles = new Set(
       activities
         .map(normalizeCatalogActivity)
-        .filter((item) => String(item.category_id || "") === String(normalized.category_id || ""))
+        .filter((item) => String(item.pedagogical_node_id || "") === String(normalized.pedagogical_node_id || ""))
         .map((item) => normalizeCatalogLabel(item.config_name || item.title))
         .filter(Boolean)
     );
@@ -1610,7 +1680,7 @@ export function createCatalogAdminViewController({
     return [...(Array.isArray(rows) ? rows : [])]
       .map(normalizeCatalogActivity)
       .sort((a, b) => {
-        const byCategory = compareCategoryIds(a.category_id, b.category_id);
+        const byCategory = compareCategoryIds(a.pedagogical_node_id, b.pedagogical_node_id);
         if (byCategory !== 0) return byCategory;
         return compareAdminActivityOrder(a, b);
       });
@@ -1621,6 +1691,9 @@ export function createCatalogAdminViewController({
   }
 
   function compareAdminActivityOrder(a, b) {
+    const tierA = normalizeAdventureTier(a?.adventure_tier);
+    const tierB = normalizeAdventureTier(b?.adventure_tier);
+    if (tierA !== tierB) return tierA - tierB;
     const orderA = normalizeDisplayOrder(a?.display_order);
     const orderB = normalizeDisplayOrder(b?.display_order);
     if (orderA !== orderB) return orderA - orderB;
@@ -1648,21 +1721,32 @@ export function createCatalogAdminViewController({
       trail.unshift(cursor.name);
       cursor = folders.find((folder) => String(folder.id) === String(cursor?.parent_id || "")) || null;
     }
-    return trail.length ? trail.join(" / ") : (safeId || "Sans catégorie");
+    return trail.length ? trail.join(" / ") : (safeId || "Sans adresse pédagogique");
   }
 
   function bindAdminDragAndDrop() {
-    list?.querySelectorAll("[data-admin-activity-id]").forEach((tile) => {
-      tile.addEventListener("dragstart", handleAdminDragStart);
-      tile.addEventListener("dragover", handleAdminTileDragOver);
-      tile.addEventListener("dragleave", handleAdminDragLeave);
-      tile.addEventListener("drop", (event) => {
-        void handleAdminTileDrop(event);
-      });
-      tile.addEventListener("dragend", handleAdminDragEnd);
+    list?.querySelectorAll("[data-admin-activity-drag-handle]").forEach((handle) => {
+      handle.addEventListener("dragstart", handleAdminDragStart);
+      handle.addEventListener("dragend", handleAdminDragEnd);
     });
 
-    list?.querySelectorAll("[data-admin-dropzone]").forEach((dropzone) => {
+    list?.querySelectorAll("[data-admin-activity-id]").forEach((row) => {
+      row.addEventListener("dragover", handleAdminTileDragOver);
+      row.addEventListener("dragleave", handleAdminDragLeave);
+      row.addEventListener("drop", (event) => {
+        void handleAdminTileDrop(event);
+      });
+    });
+
+    list?.querySelectorAll("[data-admin-tier-dropzone]").forEach((dropzone) => {
+      dropzone.addEventListener("dragover", handleAdminTierDragOver);
+      dropzone.addEventListener("dragleave", handleAdminTierDragLeave);
+      dropzone.addEventListener("drop", (event) => {
+        void handleAdminTierDrop(event);
+      });
+    });
+
+    list?.querySelectorAll("[data-admin-dropzone], [data-admin-folder-dropzone]").forEach((dropzone) => {
       dropzone.addEventListener("dragover", handleAdminDropzoneDragOver);
       dropzone.addEventListener("dragleave", handleAdminDropzoneDragLeave);
       dropzone.addEventListener("drop", (event) => {
@@ -1672,8 +1756,9 @@ export function createCatalogAdminViewController({
   }
 
   function handleAdminDragStart(event) {
-    const tile = event.currentTarget;
-    if (event.target?.closest?.(".dashboard-activity-tile-actions")) {
+    const handle = event.currentTarget;
+    const tile = handle.closest?.("[data-admin-activity-id]");
+    if (!tile) {
       event.preventDefault();
       return;
     }
@@ -1692,6 +1777,7 @@ export function createCatalogAdminViewController({
     const tile = event.currentTarget;
     if (!canDropAdminActivity(tile.dataset.adminCategoryId)) return;
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     clearAdminDropMarkers();
     tile.classList.add(getAdminDropPlacement(event, tile) === "after" ? "is-admin-drop-after" : "is-admin-drop-before");
@@ -1712,14 +1798,47 @@ export function createCatalogAdminViewController({
       tile.dataset.adminCategoryId,
       draggedAdminActivityId,
       tile.dataset.adminActivityId,
-      placement === "after"
+      placement === "after",
+      tile.dataset.adminTier
+    );
+  }
+
+  function handleAdminTierDragOver(event) {
+    const dropzone = event.currentTarget;
+    if (!canDropAdminActivity(dropzone.dataset.adminCategoryId)) return;
+    if (event.target?.closest?.("[data-admin-activity-id]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    clearAdminDropMarkers();
+    dropzone.classList.add("is-admin-tier-dropzone-active");
+  }
+
+  function handleAdminTierDragLeave(event) {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    event.currentTarget.classList.remove("is-admin-tier-dropzone-active");
+  }
+
+  async function handleAdminTierDrop(event) {
+    const dropzone = event.currentTarget;
+    if (!canDropAdminActivity(dropzone.dataset.adminCategoryId)) return;
+    if (event.target?.closest?.("[data-admin-activity-id]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearAdminDropMarkers();
+    await reorderAdminCategory(
+      dropzone.dataset.adminCategoryId,
+      draggedAdminActivityId,
+      "",
+      true,
+      dropzone.dataset.adminTier
     );
   }
 
   function handleAdminDropzoneDragOver(event) {
     const dropzone = event.currentTarget;
     if (!canDropAdminActivity(dropzone.dataset.adminCategoryId)) return;
-    if (event.target?.closest?.("[data-admin-activity-id]")) return;
+    if (event.target?.closest?.("[data-admin-activity-id], [data-admin-tier-dropzone]")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     dropzone.classList.add("is-admin-dropzone-active");
@@ -1733,10 +1852,11 @@ export function createCatalogAdminViewController({
   async function handleAdminDropzoneDrop(event) {
     const dropzone = event.currentTarget;
     if (!canDropAdminActivity(dropzone.dataset.adminCategoryId)) return;
-    if (event.target?.closest?.("[data-admin-activity-id]")) return;
+    if (event.target?.closest?.("[data-admin-activity-id], [data-admin-tier-dropzone]")) return;
     event.preventDefault();
     clearAdminDropMarkers();
-    await reorderAdminCategory(dropzone.dataset.adminCategoryId, draggedAdminActivityId, "", true);
+    // Un déplacement vers un autre OdApp repart toujours du palier 1.
+    await reorderAdminCategory(dropzone.dataset.adminCategoryId, draggedAdminActivityId, "", true, 1);
   }
 
   function handleAdminDragEnd() {
@@ -1746,72 +1866,140 @@ export function createCatalogAdminViewController({
   }
 
   function canDropAdminActivity(categoryId) {
-    return !!draggedAdminActivityId && String(categoryId || "").trim() === draggedAdminCategoryId;
+    const targetCategoryId = String(categoryId || "").trim();
+    return !!draggedAdminActivityId && !!targetCategoryId && canCreateActivityInFolder(targetCategoryId);
   }
 
   function getAdminDropPlacement(event, tile) {
     const rect = tile.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    if (Math.abs(event.clientY - centerY) < rect.height * 0.35) {
-      return event.clientX > centerX ? "after" : "before";
-    }
     return event.clientY > centerY ? "after" : "before";
   }
 
   function clearAdminDropMarkers() {
-    list?.querySelectorAll(".is-admin-drop-before, .is-admin-drop-after, .is-admin-dropzone-active")
-      .forEach((node) => node.classList.remove("is-admin-drop-before", "is-admin-drop-after", "is-admin-dropzone-active"));
+    list?.querySelectorAll(".is-admin-drop-before, .is-admin-drop-after, .is-admin-dropzone-active, .is-admin-tier-dropzone-active")
+      .forEach((node) => node.classList.remove("is-admin-drop-before", "is-admin-drop-after", "is-admin-dropzone-active", "is-admin-tier-dropzone-active"));
   }
 
-  async function reorderAdminCategory(categoryId, sourceId, targetId = "", placeAfter = true) {
+  function canRemoveActivityWithoutTierGap(activity) {
+    const normalized = normalizeCatalogActivity(activity);
+    const categoryId = String(normalized.pedagogical_node_id || "");
+    const remaining = activities
+      .map(normalizeCatalogActivity)
+      .filter((item) => String(item.id) !== String(normalized.id));
+    return areOccupiedTiersContiguous(remaining, categoryId);
+  }
+
+  function areOccupiedTiersContiguous(rows, categoryId) {
+    const tiers = Array.from(new Set(
+      (Array.isArray(rows) ? rows : [])
+        .filter((activity) => String(activity.pedagogical_node_id || "") === String(categoryId || ""))
+        .map((activity) => normalizeAdventureTier(activity.adventure_tier))
+    )).sort((a, b) => a - b);
+
+    if (!tiers.length) return true;
+    return tiers.every((tier, index) => tier === index + 1);
+  }
+
+  async function reorderAdminCategory(categoryId, sourceId, targetId = "", placeAfter = true, targetTier = 1) {
     const safeCategoryId = String(categoryId || "").trim();
     const safeSourceId = String(sourceId || "").trim();
     const safeTargetId = String(targetId || "").trim();
-    if (!safeCategoryId || !safeSourceId || safeSourceId === safeTargetId) return;
+    const safeTargetTier = normalizeAdventureTier(targetTier);
+    if (!safeCategoryId || !safeSourceId) return;
 
-    const currentRows = sortAdminCategoryActivities(
-      activities
-        .map(normalizeCatalogActivity)
-        .filter((activity) => String(activity.category_id || "") === safeCategoryId)
-    );
-    const moving = currentRows.find((activity) => String(activity.id) === safeSourceId);
+    const normalizedActivities = activities.map(normalizeCatalogActivity);
+    const moving = normalizedActivities.find((activity) => String(activity.id) === safeSourceId);
     if (!moving) return;
+    const sourceCategoryId = String(moving.pedagogical_node_id || "");
+    const sourceTier = normalizeAdventureTier(moving.adventure_tier);
+    if (
+      safeSourceId === safeTargetId
+      && sourceCategoryId === safeCategoryId
+      && sourceTier === safeTargetTier
+    ) return;
 
-    const nextRows = currentRows.filter((activity) => String(activity.id) !== safeSourceId);
-    let insertIndex = nextRows.length;
+    const hypothetical = normalizedActivities.map((activity) => (
+      String(activity.id) === safeSourceId
+        ? {
+            ...activity,
+            pedagogical_node_id: safeCategoryId,
+            folder_id: safeCategoryId,
+            adventure_tier: safeTargetTier
+          }
+        : activity
+    ));
+    const categoriesToValidate = new Set([sourceCategoryId, safeCategoryId]);
+    const invalidCategory = Array.from(categoriesToValidate)
+      .find((id) => !areOccupiedTiersContiguous(hypothetical, id));
+    if (invalidCategory) {
+      showToast?.("Un palier précédent ne peut pas rester vide. Déplace d’abord ses activités ou conserve-en au moins une.", { isError: true });
+      return;
+    }
+
+    const targetRows = sortAdminCategoryActivities(
+      normalizedActivities.filter((activity) => (
+        String(activity.pedagogical_node_id || "") === safeCategoryId
+        && normalizeAdventureTier(activity.adventure_tier) === safeTargetTier
+        && String(activity.id) !== safeSourceId
+      ))
+    );
+    let insertIndex = targetRows.length;
     if (safeTargetId) {
-      const targetIndex = nextRows.findIndex((activity) => String(activity.id) === safeTargetId);
+      const targetIndex = targetRows.findIndex((activity) => String(activity.id) === safeTargetId);
       if (targetIndex >= 0) insertIndex = targetIndex + (placeAfter ? 1 : 0);
     }
-    nextRows.splice(insertIndex, 0, moving);
+    targetRows.splice(insertIndex, 0, {
+      ...moving,
+      pedagogical_node_id: safeCategoryId,
+      folder_id: safeCategoryId,
+      adventure_tier: safeTargetTier
+    });
 
-    const previousIds = currentRows.map((activity) => String(activity.id)).join("|");
-    const nextIds = nextRows.map((activity) => String(activity.id)).join("|");
-    if (previousIds === nextIds) return;
-
-    const reorderedRows = nextRows.map((activity, index) => ({
+    const reorderedTargetRows = targetRows.map((activity, index) => ({
       ...activity,
+      pedagogical_node_id: safeCategoryId,
+      folder_id: safeCategoryId,
+      adventure_tier: safeTargetTier,
       display_order: (index + 1) * 10
     }));
+    const sourceRows = sourceCategoryId === safeCategoryId && sourceTier === safeTargetTier
+      ? []
+      : sortAdminCategoryActivities(
+          normalizedActivities.filter((activity) => (
+            String(activity.pedagogical_node_id || "") === sourceCategoryId
+            && normalizeAdventureTier(activity.adventure_tier) === sourceTier
+            && String(activity.id) !== safeSourceId
+          ))
+        ).map((activity, index) => ({
+          ...activity,
+          adventure_tier: sourceTier,
+          display_order: (index + 1) * 10
+        }));
+
+    const updatedRows = [...reorderedTargetRows, ...sourceRows];
     const previousActivities = activities;
-    activities = mergeAdminActivities(activities, reorderedRows);
+    activities = mergeAdminActivities(activities, updatedRows);
 
     try {
-      if (typeof saveCatalogActivityAsAdmin !== "function") {
-        throw new Error("Sauvegarde Admin indisponible.");
-      }
-      await Promise.all(reorderedRows.map((activity) => saveCatalogActivityAsAdmin(buildCatalogActivitySavePayload(activity))));
+      if (typeof saveCatalogActivityAsAdmin !== "function") throw new Error("Sauvegarde Admin indisponible.");
+      await Promise.all(updatedRows.map((activity) => saveCatalogActivityAsAdmin(buildCatalogActivitySavePayload(activity))));
       notifyCatalogueChanged();
       activities = await listCatalogActivitiesForAdmin?.() || activities;
-      showToast?.("Ordre du Catalogue enregistré.");
+      if (sourceCategoryId !== safeCategoryId) {
+        showToast?.("Activité déplacée dans l’arborescence et replacée au palier 1.");
+      } else if (sourceTier !== safeTargetTier) {
+        showToast?.(`Activité déplacée vers le palier ${safeTargetTier}.`);
+      } else {
+        showToast?.("Ordre des activités enregistré.");
+      }
     } catch (err) {
       try {
         activities = await listCatalogActivitiesForAdmin?.() || previousActivities;
       } catch {
         activities = previousActivities;
       }
-      showToast?.(err?.message || "Impossible d’enregistrer le nouvel ordre.");
+      showToast?.(err?.message || "Impossible d’enregistrer le nouvel ordre.", { isError: true });
     }
   }
 
@@ -1838,6 +2026,8 @@ export function createCatalogAdminViewController({
     bindHeaderActions,
     getActivityTileEnhancement,
     getDropzoneAttributes,
+    getTierDropzoneAttributes,
+    getFolderDropTargetAttributes,
     bindCatalogueEvents,
     openEditor
   };
@@ -1920,6 +2110,11 @@ function buildCatalogActivityId(categoryId, title) {
     .filter(Boolean)
     .join(".") || "catalogue";
   return `${categoryKey}.${slugify(title)}`.toLowerCase();
+}
+
+function normalizeAdventureTier(value) {
+  const number = Math.trunc(Number(value));
+  return Number.isFinite(number) && number >= 1 ? number : 1;
 }
 
 function normalizeDisplayOrder(value) {

@@ -227,6 +227,31 @@
   position:relative;
   overflow:auto;
 }
+
+.quiz-series-table-loading{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:96px;
+  color:#c9d2e4;
+  background:rgba(12,16,24,.78);
+  font-size:13px;
+  font-weight:750;
+  pointer-events:none;
+}
+
+.quiz-series-table-loading .dashboard-material-icon{
+  font-size:20px;
+  animation:quiz-series-table-spinner .8s linear infinite;
+}
+
+@keyframes quiz-series-table-spinner{
+  to{ transform:rotate(360deg); }
+}
 .quiz-series-row{
   position:relative;
   min-height:34px;

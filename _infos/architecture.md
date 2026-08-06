@@ -1,12 +1,12 @@
 # Architecture — repères actuels
 
-Dernière mise à jour : 2026-07-24.
+Dernière mise à jour : 2026-07-30.
 
 ## Entrées principales
 
 - `index.html` : entrée générale.
 - `student/` : interface élève.
-- `teacher/` : dashboard enseignant avec Classe, Catalogue, Missions, Quiz, Ressources et Tableau.
+- `teacher/` : dashboard enseignant avec Classe, Exploration, Missions, Quiz, Ressources et Tableau.
 - `shared/` : logique partagée entre élève, enseignant et runtimes.
 - `tools/` : outils d’activité côté élève.
 - `teacher/js/teacher-tools/` : widgets du Tableau enseignant.
@@ -21,15 +21,27 @@ Il n’existe plus d’onglet Admin ni d’onglet Banques.
 4. Les ressources système sont locales et indexées par `shared/tool-assets/manifest.json`.
 5. Les ressources personnelles sont stockées dans Supabase et son Storage.
 6. Le Tableau manipule des widgets projetables.
-7. Les fonctions super-admin sont intégrées aux écrans métier concernés, principalement Catalogue et Quiz.
+7. Les fonctions super-admin sont intégrées aux écrans métier concernés, principalement Exploration et Quiz.
 
 Les anciennes activités personnelles et les anciennes banques de questions ne doivent pas être réintroduites comme modèles produit actifs.
 
-## Catalogue et super-admin
+## Exploration et super-admin
 
-`teacher/js/dashboard/activities-view.js` reste l’explorateur commun du Catalogue.
+`teacher/js/dashboard/activities-view.js` reste l’explorateur commun d’Exploration.
 
-`teacher/js/dashboard/catalog-admin-view.js` complète cet explorateur pour le super-admin : création, édition, duplication, suppression, publication et réorganisation. Il ne construit pas un second Catalogue parallèle.
+`pedagogical_nodes` porte l’arborescence pédagogique unique et rigide :
+
+```text
+discipline > domain > theme > learning_objective > grade_level
+```
+
+Le dossier `grade_level` est nommé `CP`, `CE1`, `CE2`, `CM1` ou `CM2`. Les activités système sont rattachées uniquement à ce dernier niveau par `catalog_activities.pedagogical_node_id`.
+
+Les anciennes portées `grade_scope_mode` / `grade_levels` et leur héritage sont abandonnés. Le niveau d’une activité est désormais déterminé uniquement par son dossier de niveau. Les parents deviennent visibles lorsqu’ils possèdent un descendant correspondant au niveau filtré.
+
+Cette structure organise Exploration et constitue la base d’Aventure. Voir `aventure.md`.
+
+`teacher/js/dashboard/catalog-admin-view.js` complète cet explorateur pour le super-admin : création et édition des activités. `catalog-tree-admin-dialog.js` gère les nœuds pédagogiques. Il n’existe pas de second explorateur parallèle.
 
 ## Quiz
 
@@ -40,6 +52,8 @@ Un Quiz système ne doit utiliser que des ressources système locales. Il ne doi
 ## Runtime élève
 
 Le runtime consomme une configuration normalisée : outil, questions, temps, consigne, feedback et phases de réponse. Le réglage `answer_display_seconds = 0` signifie : ne pas afficher de phase de réponse automatique.
+
+Le même moteur ouvre une tentative pour chaque activité Catalogue individuelle, enregistre chaque question dans l’ordre puis finalise la tentative. Le contrat est indépendant du contexte `exploration`, `mission` ou futur `adventure`. Les outils peuvent fournir `getHistorySnapshot(stage, container, context)` ; un instantané DOM compact sert de repli.
 
 ## Tableau enseignant
 

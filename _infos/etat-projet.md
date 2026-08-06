@@ -1,13 +1,13 @@
 # État actuel du projet — Site d’outils
 
-Dernière mise à jour : 2026-07-24.
+Dernière mise à jour : 2026-08-04.
 
 ## Intention générale
 
 Le site est une plateforme web d’outils pédagogiques pour la classe.
 
 - Côté élève : accès simple à des activités lisibles, manipulables et adaptées.
-- Côté enseignant : Classe, Catalogue, Missions, Quiz, Ressources et Tableau projetable.
+- Côté enseignant : Classe, Aventure, Exploration, Missions, Quiz, Ressources et Tableau projetable.
 - Côté super-admin : fonctions supplémentaires intégrées au Catalogue et aux Quiz système.
 
 Il n’existe plus d’onglet Admin ni d’onglet Banques.
@@ -25,11 +25,33 @@ Côté élève :
 Côté enseignant :
 
 - **Classe** : élèves, niveaux, codes et informations de classe.
-- **Catalogue** : activités système consultables, testables et visibles ou masquées dans Exploration.
+- **Aventure** : menus hebdomadaires, curseur Menu/Jour par classe et préparation du parcours adaptatif.
+- **Exploration** : activités système consultables, testables et visibles ou masquées pour les élèves.
 - **Missions** : parcours attribuables.
 - **Quiz** : Quiz personnels et Quiz système.
 - **Ressources** : ressources personnelles Supabase et ressources système locales.
 - **Tableau** : widgets projetables.
+
+
+
+## Arborescence pédagogique
+
+Le code applicatif est aligné sur la structure définitive :
+
+```text
+Discipline
+    Domaine
+        Thème
+            Objectif d’apprentissage
+                Dossier de niveau
+                    Activités
+```
+
+Les activités ne portent plus de niveau propre : elles héritent du dossier `CP`, `CE1`, `CE2`, `CM1` ou `CM2` qui les contient.
+
+Le fichier non numéroté `_infos/sql/seed_pedagogical_tree_cp_cm2.sql` reconstruit la table `pedagogical_nodes` à partir des référentiels français et mathématiques conservés dans `_infos/referentiels/`. Il doit être exécuté séparément des migrations historiques.
+
+Le moteur Aventure élève n’est pas encore branché à l’interface, mais ses fondations sont désormais définies par `_infos/sql/20_adventure_engine_foundations.sql` : curseur Menu/Jour par classe et par niveau, jauges 0–50 propres à chaque palier, journées figées et passages reprenables. L’écran enseignant des 34 menus est déjà opérationnel.
 
 ## Catalogue
 
@@ -53,6 +75,12 @@ Les outils actifs absents du catalogue local sont :
 
 Une Mission est un parcours construit à partir d’activités du Catalogue. Elle n’est pas une ancienne activité personnelle renommée.
 
+## Historique des activités
+
+Le runtime individuel dispose d’un contrat commun de tentative pour Exploration, Missions et le contexte Aventure. Chaque réponse enregistre le niveau présenté, le niveau suivant, le résultat, la durée et des instantanés compacts de la question, de la réponse et de la correction. La progression légère d’Exploration reste indépendante des futures jauges Aventure.
+
+Aucune interface enseignant de consultation n’est encore fournie dans ce premier socle. Voir `_infos/historique-activites.md`.
+
 ## Quiz
 
 Les Quiz personnels sont modifiables par leur enseignant. Les Quiz système sont visibles par tous et modifiables uniquement par le super-admin.
@@ -67,7 +95,8 @@ Les Quiz système ne doivent utiliser que des ressources système locales issues
 - Les ressources personnelles sont stockées dans Supabase et le bucket privé associé.
 - Les enregistrements audio réalisés depuis Ressources ou depuis un widget Audio de Quiz deviennent immédiatement des ressources personnelles. Le Quiz conserve leur UUID, jamais leur chemin Storage.
 - Le dossier logique `Enregistrements` est retrouvé grâce à `resource_folders.metadata.system_role = "recordings"`, même s’il est renommé ou déplacé.
-- Les données techniques `image_assets`, `phonology_words` et `vocabulary_default_words` restent en base, mais ne possèdent plus d’interface Admin.
+- Les données techniques `image_assets`, `phonology_words` et `vocabulary_default_words` restent en base. `image_assets` et `phonology_words` possèdent un importateur super-admin dans l’onglet Ressources ; `vocabulary_default_words` n’a pas encore d’interface dédiée.
+- Les images de `image_assets` sont également exposées comme ressources système dans `Ressources système > Images > À classer`. Le super-admin peut créer des dossiers, déplacer les images, renommer leur libellé visible et gérer leurs tags sans modifier leur slug ni leur chemin Storage. Les assets locaux issus de `shared/tool-assets/manifest.json` restent affichés en lecture seule pendant la migration progressive.
 
 ## Suppression des banques
 

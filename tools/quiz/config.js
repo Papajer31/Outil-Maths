@@ -13,11 +13,14 @@ import {
 import {
   DEFAULT_DRAW_MODE,
   DEFAULT_QUESTION_SELECTION_MODE,
-  filterQuizQuestionsBySelection,
+  filterQuizSnapshotBySelection,
   getDefaultSettings,
+  getQuizSelectionItemCount,
   getQuizQuestionSelectionKey,
+  getQuizSelectionItems,
   getWidgetView,
   materializeQuizQuestionVariant,
+  normalizeQuizSelectionForSnapshot,
   normalizeQuizSnapshot,
   normalizeSettings
 } from "./model.js";
@@ -44,7 +47,7 @@ export function renderToolSettings(container, settings, context = {}){
         ${renderQuizPicker({
           quizzes: initialQuizzes,
           value: initialQuizId,
-          count: initialSnapshot.questions.length,
+          count: getQuizSelectionItemCount(initialSnapshot),
           disabled: true,
           emptyLabel: initialQuizId ? (initialQuizTitle || "Quiz sélectionné") : "Chargement des quiz…"
         })}
@@ -53,14 +56,14 @@ export function renderToolSettings(container, settings, context = {}){
       <div id="quiz_questionSelectionHost">
         ${renderQuestionSelectionWidget({
           idPrefix: "quiz",
-          items: initialSnapshot.questions,
-          selection: initialSelection,
+          items: getQuizSelectionItems(initialSnapshot),
+          selection: normalizeQuizSelectionForSnapshot(initialSnapshot, initialSelection),
           itemKeyGetter: getQuizQuestionSelectionKey,
           renderRow: (args) => renderQuizQuestionSelectionRow({ ...args, quizInstruction:initialSnapshot.instruction }),
-          itemSingular: "question",
-          itemPlural: "questions",
-          emptyMessage: "Aucune question à afficher.",
-          listAriaLabel: "Questions du quiz"
+          itemSingular: "variante",
+          itemPlural: "variantes",
+          emptyMessage: "Aucune variante à afficher.",
+          listAriaLabel: "Variantes du quiz"
         })}
       </div>
     `,
@@ -90,7 +93,7 @@ export function renderToolSettings(container, settings, context = {}){
       disabled: true,
       title: "Impossible de charger les quiz",
       value: initialQuizId,
-      count: initialSnapshot.questions.length
+      count: getQuizSelectionItemCount(initialSnapshot)
     });
     setEditorStatus(context, error?.message || "Impossible de charger les quiz.", true);
   });
@@ -104,9 +107,9 @@ export function readToolSettings(container, settings = {}){
   const quizTitle = String(input?.dataset?.quizTitle || previous.quizTitle || "").trim();
   const drawMode = readRadio(container, "quiz_drawMode", DEFAULT_DRAW_MODE);
   const quizSnapshot = readSnapshot(snapshotEl?.value || "{}");
-  const questionSelection = readQuestionSelection(container, {
+  const questionSelection = normalizeQuizSelectionForSnapshot(quizSnapshot, readQuestionSelection(container, {
     idPrefix: "quiz"
-  });
+  }));
 
   if (!quizId) {
     throw new Error("Sélectionne un quiz.");
@@ -120,7 +123,7 @@ export function readToolSettings(container, settings = {}){
     throw new Error("Sélectionne au moins une question pour ce niveau.");
   }
 
-  const selectedQuestions = filterQuizQuestionsBySelection(quizSnapshot.questions, questionSelection);
+  const selectedQuestions = filterQuizSnapshotBySelection(quizSnapshot, questionSelection);
   if (!selectedQuestions.length) {
     throw new Error("La sélection ne contient aucune question.");
   }
@@ -128,9 +131,9 @@ export function readToolSettings(container, settings = {}){
   const incompleteIndex = selectedQuestions.findIndex((question) => !isQuestionRunnable(question));
   if (incompleteIndex >= 0) {
     const question = selectedQuestions[incompleteIndex];
-    const sourceIndex = quizSnapshot.questions.findIndex((item) => item.id === question.id);
-    const displayIndex = sourceIndex >= 0 ? sourceIndex + 1 : incompleteIndex + 1;
-    throw new Error(`La question ${displayIndex} doit contenir un unique widget de réponse exécutable (réponse, QCM ou sélection de mots).`);
+    const isVariant = Number.isFinite(Number(question.sourceVariantIndex));
+    const displayIndex = isVariant ? Number(question.sourceVariantIndex) + 1 : incompleteIndex + 1;
+    throw new Error(`La ${isVariant ? "variante" : "question"} ${displayIndex} doit contenir un unique widget de réponse exécutable (réponse, QCM ou sélection de mots).`);
   }
 
   return normalizeSettings({
@@ -163,7 +166,7 @@ async function setupQuizPicker(container, {
       disabled: true,
       title: "Espace enseignant introuvable",
       value: selectedQuizId,
-      count: normalizeQuizSnapshot(cfg.quizSnapshot || {}).questions.length
+      count: getQuizSelectionItemCount(cfg.quizSnapshot || {})
     });
     setEditorStatus(context, "Impossible de lister les quiz sans espace enseignant.", true);
     return;
@@ -173,13 +176,13 @@ async function setupQuizPicker(container, {
     disabled: true,
     title: selectedQuizId ? (selectedQuizTitle || "Quiz sélectionné") : "Chargement des quiz…",
     value: selectedQuizId,
-    count: selectedQuizId ? normalizeQuizSnapshot(cfg.quizSnapshot || {}).questions.length : null
+    count: selectedQuizId ? getQuizSelectionItemCount(cfg.quizSnapshot || {}) : null
   });
   setEditorStatus(context, "Chargement des quiz…", false);
 
   const api = await import("../../teacher/js/teacher-api.js");
   const [rawQuizzes, rawFolders] = await Promise.all([
-    api.listQuizzesForSpace(teacherSpaceId),
+    api.listQuizSummariesForSpace(teacherSpaceId),
     typeof api.listQuizFoldersForSpace === "function"
       ? api.listQuizFoldersForSpace(teacherSpaceId)
       : Promise.resolve([])
@@ -192,9 +195,9 @@ async function setupQuizPicker(container, {
   renderQuizPickerInto(container, {
     quizzes,
     value: selectedQuiz?.id || selectedQuizId,
-    count: selectedQuiz
-      ? normalizeQuizSnapshot(selectedQuiz).questions.length
-      : normalizeQuizSnapshot(cfg.quizSnapshot || {}).questions.length,
+    count: selectedQuiz && String(selectedQuiz.id || "") === String(selectedQuizId || "")
+      ? getQuizSelectionItemCount(cfg.quizSnapshot || {})
+      : null,
     disabled: quizzes.length === 0
   });
 
@@ -208,12 +211,30 @@ async function setupQuizPicker(container, {
       quizzes,
       folders,
       selectedQuizId: input.value,
-      onSelect: (quiz) => {
-        applyQuizSelection(container, quiz, {
-          initialQuizId: selectedQuizId,
-          initialSelection
+      onSelect: async (quizSummary) => {
+        setQuizPickerState(container, {
+          disabled:true,
+          title:String(quizSummary?.title || "Quiz sélectionné"),
+          value:quizSummary?.id,
+          count:null
         });
-        clearEditorStatus(context);
+        setEditorStatus(context, "Chargement du quiz…", false);
+        try {
+          const quiz = await api.getQuizForSpace(teacherSpaceId, quizSummary?.id);
+          applyQuizSelection(container, quiz, {
+            initialQuizId: selectedQuizId,
+            initialSelection
+          });
+          clearEditorStatus(context);
+        } catch (error) {
+          setQuizPickerState(container, {
+            disabled:false,
+            title:String(selectedQuiz?.title || selectedQuizTitle || "Aucun quiz sélectionné"),
+            value:selectedQuiz?.id || selectedQuizId,
+            count:getQuizSelectionItemCount(cfg.quizSnapshot || {})
+          });
+          setEditorStatus(context, error?.message || "Impossible de charger ce quiz.", true);
+        }
       }
     });
   });
@@ -224,7 +245,8 @@ async function setupQuizPicker(container, {
   }
 
   if (selectedQuiz) {
-    applyQuizSelection(container, selectedQuiz, {
+    const quiz = await api.getQuizForSpace(teacherSpaceId, selectedQuiz.id);
+    applyQuizSelection(container, quiz, {
       initialQuizId: selectedQuizId,
       initialSelection
     });
@@ -281,7 +303,7 @@ function applyQuizSelection(container, quiz, {
   input.dataset.quizTitle = quizTitle;
   snapshotEl.value = JSON.stringify(snapshot);
   if (nameEl) nameEl.textContent = quizTitle;
-  if (countEl) countEl.textContent = renderQuestionCount(snapshot.questions.length);
+  if (countEl) countEl.textContent = renderQuestionCount(getQuizSelectionItemCount(snapshot));
   if (button) {
     button.textContent = "+ Changer de quiz";
     button.classList.add("quiz-picker-button--change");
@@ -291,9 +313,8 @@ function applyQuizSelection(container, quiz, {
   const sameInitialQuiz = quizId === String(initialQuizId || "").trim();
   refreshQuestionSelectionWidget(
     container,
-    snapshot.questions,
-    sameInitialQuiz ? initialSelection : { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
-    snapshot.instruction
+    snapshot,
+    sameInitialQuiz ? initialSelection : { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] }
   );
   container.dispatchEvent(new CustomEvent("toolsourceinstructionchange", {
     bubbles:true,
@@ -301,19 +322,20 @@ function applyQuizSelection(container, quiz, {
   }));
 }
 
-function refreshQuestionSelectionWidget(container, questions = [], selection = null, quizInstruction = ""){
+function refreshQuestionSelectionWidget(container, snapshot = {}, selection = null){
   const host = container.querySelector("#quiz_questionSelectionHost");
   if (!host) return;
+  const normalizedSnapshot = normalizeQuizSnapshot(snapshot);
   host.innerHTML = renderQuestionSelectionWidget({
     idPrefix: "quiz",
-    items: questions,
-    selection: selection || { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    items: getQuizSelectionItems(normalizedSnapshot),
+    selection: normalizeQuizSelectionForSnapshot(normalizedSnapshot, selection || { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] }),
     itemKeyGetter: getQuizQuestionSelectionKey,
-    renderRow: (args) => renderQuizQuestionSelectionRow({ ...args, quizInstruction }),
-    itemSingular: "question",
-    itemPlural: "questions",
-    emptyMessage: "Aucune question à afficher.",
-    listAriaLabel: "Questions du quiz"
+    renderRow: (args) => renderQuizQuestionSelectionRow({ ...args, quizInstruction:normalizedSnapshot.instruction }),
+    itemSingular: "variante",
+    itemPlural: "variantes",
+    emptyMessage: "Aucune variante à afficher.",
+    listAriaLabel: "Variantes du quiz"
   });
   bindQuestionSelectionWidget(host, { idPrefix: "quiz" });
   updateQuestionSelectionUi(host, { idPrefix: "quiz" });
@@ -483,7 +505,9 @@ function renderQuizFolderNode({ folder, folders, quizzes, selectedQuizId, depth,
 
 function renderQuizNode({ quiz, selectedQuizId, depth, system = false }){
   const quizId = String(quiz.id || "").trim();
-  const questionCount = normalizeQuizSnapshot(quiz).questions.length;
+  const questionCount = Array.isArray(quiz?.questions)
+    ? getQuizSelectionItemCount(quiz)
+    : null;
   const selected = quizId && quizId === String(selectedQuizId || "").trim();
   return `
     <button
@@ -494,7 +518,7 @@ function renderQuizNode({ quiz, selectedQuizId, depth, system = false }){
     >
       <span class="quiz-picker-item-icon" aria-hidden="true">${system ? "★" : "•"}</span>
       <span class="quiz-picker-item-title">${escapeHtml(quiz.title || "Quiz sans titre")}</span>
-      <span class="quiz-picker-item-badge quiz-picker-count-badge">${escapeHtml(renderQuestionCount(questionCount))}</span>
+      ${questionCount === null ? "" : `<span class="quiz-picker-item-badge quiz-picker-count-badge">${escapeHtml(renderQuestionCount(questionCount))}</span>`}
     </button>
   `;
 }
@@ -503,7 +527,7 @@ function renderQuizQuestionSelectionRow({ item, index, key, checked, quizInstruc
   const prompt = getQuestionPromptPreview(item, index, quizInstruction);
   const answer = getQuestionAnswerPreview(item);
   return `
-    <label class="general-question-selection-row" role="listitem">
+    <label class="general-question-selection-row${checked ? " is-selected" : ""}" role="listitem">
       <input class="general-question-selection-check" type="checkbox" data-question-key="${escapeHtml(key)}" ${checked ? "checked" : ""}>
       <span class="general-question-selection-index">${index + 1}</span>
       <span class="general-question-selection-preview general-question-selection-preview--question">
@@ -540,6 +564,15 @@ function getQuestionPromptPreview(question, index, quizInstruction = ""){
 function getQuestionAnswerPreview(question){
   const variant = materializeQuizQuestionVariant(question, 0);
   const answer = String(variant.expectedAnswerLabel || "").trim();
+  if (variant.responseType === "qcm-text") {
+    const qcm = (variant.widgets || []).find((widget) => widget?.type === "qcm-text");
+    const distractors = (qcm?.qcmChoices || [])
+      .filter((choice) => choice?.isCorrect !== true)
+      .map((choice) => String(choice?.text || "").trim())
+      .filter(Boolean);
+    if (!answer) return "Réponse à définir";
+    return distractors.length ? `${answer} - (${distractors.join("/")})` : answer;
+  }
   if (variant.responseType === "selection-words") {
     return answer.split(";").map((word) => word.trim()).filter(Boolean).join(" - ") || "Réponse à définir";
   }

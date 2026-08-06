@@ -665,6 +665,8 @@ export function createQuizSeriesViewController({
   let validationIssues = [];
   let importDrawerCloseTimer = 0;
   let importDrawerTrigger = null;
+  let tableRenderToken = 0;
+  let tableRenderFrame = 0;
 
   function getColumns(){
     return currentAnalysis ? buildSeriesColumns(currentAnalysis, qcmChoiceCount) : [];
@@ -1018,12 +1020,16 @@ export function createQuizSeriesViewController({
 
       validationIssues = [];
       markDirty();
-      renderTable();
       closeImportDrawer({ restoreFocus:false });
       setMessage(`${importedRows.length} question${importedRows.length > 1 ? "s ont été importées" : " a été importée"}.`);
+      // Laisse le navigateur afficher la fermeture du volet avant d’amorcer le
+      // rendu potentiellement volumineux du tableau.
       window.requestAnimationFrame(() => {
-        const firstImportedIndex = importMode === "append" ? Math.max(0, rows.length - importedRows.length) : 0;
-        tableHost?.querySelector(`[data-series-row-index="${firstImportedIndex}"] textarea`)?.focus?.();
+        window.requestAnimationFrame(() => {
+          renderTable();
+          const firstImportedIndex = importMode === "append" ? Math.max(0, rows.length - importedRows.length) : 0;
+          tableHost?.querySelector(`[data-series-row-index="${firstImportedIndex}"] textarea`)?.focus?.();
+        });
       });
     };
     importDrawer.querySelector('[data-series-import-action="apply-append"]')?.addEventListener("click", () => applyImport("append"));
@@ -1088,8 +1094,61 @@ export function createQuizSeriesViewController({
     return ["48px", ...widths, "148px"].join(" ");
   }
 
+  function renderTableRow(row, rowIndex, columns){
+    return `
+      <div class="quiz-series-row" data-series-row-id="${escapeAttr(row.id)}" role="row">
+        <div class="quiz-series-row-index" role="rowheader">${rowIndex + 1}</div>
+          ${columns.map((column, columnIndex) => {
+            const issue = getIssue(rowIndex, column.key);
+            if (column.kind === "selection-picker") {
+              const summary = getSelectionSummary(row, column);
+              return `
+                <div class="quiz-series-cell-wrap ${getColumnWidthClass(column)}${issue ? " is-invalid" : ""}" title="${escapeAttr(issue?.message || "")}" role="cell">
+                  <button
+                    class="quiz-series-selection-button${summary ? " has-selection" : ""}"
+                    type="button"
+                    data-series-action="pick-selection"
+                    data-series-row-index="${rowIndex}"
+                    data-series-column-key="${escapeAttr(column.key)}"
+                    data-series-col-index="${columnIndex}"
+                  >
+                    <span class="dashboard-material-icon quiz-series-selection-icon" aria-hidden="true">touch_app</span>
+                    <span class="quiz-series-selection-label">${summary ? escapeHtml(summary) : "Choisir…"}</span>
+                  </button>
+                </div>
+              `;
+            }
+            return `
+              <div class="quiz-series-cell-wrap ${getColumnWidthClass(column)}${issue ? " is-invalid" : ""}" title="${escapeAttr(issue?.message || "")}" role="cell">
+                <textarea
+                  class="quiz-series-cell"
+                  rows="1"
+                  spellcheck="true"
+                  data-series-row-index="${rowIndex}"
+                  data-series-column-key="${escapeAttr(column.key)}"
+                  data-series-col-index="${columnIndex}"
+                  placeholder="${escapeAttr(column.label)}"
+                  aria-label="${escapeAttr(`${column.label}, question ${rowIndex + 1}`)}"
+                  ${issue ? 'aria-invalid="true"' : ""}
+                >${escapeHtml(getColumnValue(row, column))}</textarea>
+              </div>
+            `;
+          }).join("")}
+          <div class="quiz-series-row-actions" role="cell">
+            <button class="dashboard-material-icon-btn" type="button" data-series-action="move-up" data-series-row-index="${rowIndex}" title="Monter" aria-label="Monter la question" ${rowIndex === 0 ? "disabled" : ""}><span class="dashboard-material-icon" aria-hidden="true">arrow_upward</span></button>
+            <button class="dashboard-material-icon-btn" type="button" data-series-action="move-down" data-series-row-index="${rowIndex}" title="Descendre" aria-label="Descendre la question" ${rowIndex === rows.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon" aria-hidden="true">arrow_downward</span></button>
+            <button class="dashboard-material-icon-btn" type="button" data-series-action="duplicate" data-series-row-index="${rowIndex}" title="Dupliquer" aria-label="Dupliquer la question"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
+            <button class="dashboard-material-icon-btn is-danger" type="button" data-series-action="delete" data-series-row-index="${rowIndex}" title="Supprimer" aria-label="Supprimer la question"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
+          </div>
+        </div>
+      `;
+  }
+
   function renderTable(){
     if (!tableHost) return;
+    const renderToken = ++tableRenderToken;
+    if (tableRenderFrame) window.cancelAnimationFrame(tableRenderFrame);
+    tableRenderFrame = 0;
     const columns = getColumns();
     if (!currentAnalysis || !columns.length) {
       tableHost.innerHTML = '<div class="quiz-series-empty">Aucun modèle de série actif.</div>';
@@ -1098,6 +1157,7 @@ export function createQuizSeriesViewController({
     if (!rows.length) rows = [createEmptyRow()];
 
     const gridTemplate = getTableGridTemplate(columns);
+    const isLargeSeries = rows.length >= 80;
     tableHost.innerHTML = `
       <div class="quiz-series-table" style="--quiz-series-table-columns:${gridTemplate}">
         <div class="quiz-series-table-head" role="row">
@@ -1110,59 +1170,35 @@ export function createQuizSeriesViewController({
           `).join("")}
           <div><span class="sr-only">Actions</span></div>
         </div>
-        <div class="quiz-series-table-body" role="rowgroup">
-          ${rows.map((row, rowIndex) => `
-            <div class="quiz-series-row" data-series-row-id="${escapeAttr(row.id)}" role="row">
-              <div class="quiz-series-row-index" role="rowheader">${rowIndex + 1}</div>
-                ${columns.map((column, columnIndex) => {
-                  const issue = getIssue(rowIndex, column.key);
-                  if (column.kind === "selection-picker") {
-                    const summary = getSelectionSummary(row, column);
-                    return `
-                      <div class="quiz-series-cell-wrap ${getColumnWidthClass(column)}${issue ? " is-invalid" : ""}" title="${escapeAttr(issue?.message || "")}" role="cell">
-                        <button
-                          class="quiz-series-selection-button${summary ? " has-selection" : ""}"
-                          type="button"
-                          data-series-action="pick-selection"
-                          data-series-row-index="${rowIndex}"
-                          data-series-column-key="${escapeAttr(column.key)}"
-                          data-series-col-index="${columnIndex}"
-                        >
-                          <span class="dashboard-material-icon quiz-series-selection-icon" aria-hidden="true">touch_app</span>
-                          <span class="quiz-series-selection-label">${summary ? escapeHtml(summary) : "Choisir…"}</span>
-                        </button>
-                      </div>
-                    `;
-                  }
-                  return `
-                    <div class="quiz-series-cell-wrap ${getColumnWidthClass(column)}${issue ? " is-invalid" : ""}" title="${escapeAttr(issue?.message || "")}" role="cell">
-                      <textarea
-                        class="quiz-series-cell"
-                        rows="1"
-                        spellcheck="true"
-                        data-series-row-index="${rowIndex}"
-                        data-series-column-key="${escapeAttr(column.key)}"
-                        data-series-col-index="${columnIndex}"
-                        placeholder="${escapeAttr(column.label)}"
-                        aria-label="${escapeAttr(`${column.label}, question ${rowIndex + 1}`)}"
-                        ${issue ? 'aria-invalid="true"' : ""}
-                      >${escapeHtml(getColumnValue(row, column))}</textarea>
-                    </div>
-                  `;
-                }).join("")}
-                <div class="quiz-series-row-actions" role="cell">
-                  <button class="dashboard-material-icon-btn" type="button" data-series-action="move-up" data-series-row-index="${rowIndex}" title="Monter" aria-label="Monter la question" ${rowIndex === 0 ? "disabled" : ""}><span class="dashboard-material-icon" aria-hidden="true">arrow_upward</span></button>
-                  <button class="dashboard-material-icon-btn" type="button" data-series-action="move-down" data-series-row-index="${rowIndex}" title="Descendre" aria-label="Descendre la question" ${rowIndex === rows.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon" aria-hidden="true">arrow_downward</span></button>
-                  <button class="dashboard-material-icon-btn" type="button" data-series-action="duplicate" data-series-row-index="${rowIndex}" title="Dupliquer" aria-label="Dupliquer la question"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
-                  <button class="dashboard-material-icon-btn is-danger" type="button" data-series-action="delete" data-series-row-index="${rowIndex}" title="Supprimer" aria-label="Supprimer la question"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
-                </div>
-              </div>
-            `).join("")}
+        <div class="quiz-series-table-body" role="rowgroup" ${isLargeSeries ? 'aria-busy="true"' : ""}>
+          ${isLargeSeries ? '<div class="quiz-series-table-loading" data-series-table-loading><span class="dashboard-material-icon" aria-hidden="true">progress_activity</span><span>Chargement des questions…</span></div>' : ""}
         </div>
       </div>
     `;
-    tableHost.querySelectorAll("textarea").forEach(resizeTextarea);
     updateHeader();
+    const body = tableHost.querySelector(".quiz-series-table-body");
+    if (!body) return;
+    let nextRowIndex = 0;
+    const chunkSize = isLargeSeries ? 16 : rows.length;
+    const renderChunk = () => {
+      if (renderToken !== tableRenderToken || !body.isConnected) return;
+      const endIndex = Math.min(rows.length, nextRowIndex + chunkSize);
+      body.insertAdjacentHTML("beforeend", rows.slice(nextRowIndex, endIndex)
+        .map((row, index) => renderTableRow(row, nextRowIndex + index, columns))
+        .join(""));
+      if (!isLargeSeries) {
+        Array.from(body.querySelectorAll("textarea")).forEach(resizeTextarea);
+      }
+      nextRowIndex = endIndex;
+      if (nextRowIndex < rows.length) {
+        tableRenderFrame = window.requestAnimationFrame(renderChunk);
+        return;
+      }
+      tableRenderFrame = 0;
+      body.removeAttribute("aria-busy");
+      body.querySelector("[data-series-table-loading]")?.remove();
+    };
+    renderChunk();
   }
 
   function addRow(afterIndex = rows.length - 1, source = null){

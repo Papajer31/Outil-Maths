@@ -4,6 +4,7 @@ import {
   GRAPH_UNITS,
   FALLBACKS
 } from "./graphs-data.js";
+import { GRAPH_COMPOSITIONS } from "./compositions-data.js";
 
 export const INPUT_MODES = Object.freeze({
   GRAPHEMES: "graphemes",
@@ -198,25 +199,27 @@ export function normalizeSettings(settings) {
 
 export function getWordPool(settings) {
   const cfg = normalizeSettings(settings);
+  const selectedGraphs = new Set(cfg.graphOrder);
+  const resolvedCatalog = WORD_CATALOG.map((word) => resolveWordCompositions(word, selectedGraphs));
 
   if (cfg.inputMode === INPUT_MODES.LETTERS) {
-    const letterPlayable = WORD_CATALOG.filter((word) => isWordLetterPlayable(word));
+    const letterPlayable = resolvedCatalog.filter((word) => isWordLetterPlayable(word));
     if (!cfg.graphOrder.length) {
       return cloneData(letterPlayable);
     }
 
-    const selectedGraphs = new Set(cfg.graphOrder);
     return cloneData(letterPlayable.filter((word) => isWordGraphPlayable(word, selectedGraphs)));
   }
 
-  const selectedGraphs = new Set(cfg.graphOrder);
-  return cloneData(WORD_CATALOG.filter((word) => isWordGraphPlayable(word, selectedGraphs)));
+  return cloneData(resolvedCatalog.filter((word) => isWordGraphPlayable(word, selectedGraphs)));
 }
 
 export function getSelectedGraphUsageStats(settings) {
   const cfg = normalizeSettings(settings);
   const selectedGraphs = new Set(cfg.graphOrder);
-  const pool = WORD_CATALOG.filter((word) => isWordGraphPlayable(word, selectedGraphs));
+  const pool = WORD_CATALOG
+    .map((word) => resolveWordCompositions(word, selectedGraphs))
+    .filter((word) => isWordGraphPlayable(word, selectedGraphs));
   const counts = new Map(cfg.graphOrder.map((graph) => [graph, 0]));
 
   for (const word of pool) {
@@ -732,9 +735,71 @@ function normalizeWordUnits(units) {
   return (Array.isArray(units) ? units : [])
     .map((unit) => ({
       graph: String(unit?.graph || "").trim(),
+      text: String(unit?.text || "").trim().normalize("NFC"),
       isSilent: unit?.isSilent === true
     }))
     .filter((unit) => unit.graph);
+}
+
+function resolveWordCompositions(word, selectedGraphs) {
+  const units = resolveCompositionUnits(word?.units, selectedGraphs);
+  return {
+    ...word,
+    units
+  };
+}
+
+function resolveCompositionUnits(units, selectedGraphs) {
+  const source = Array.isArray(units) ? units : [];
+  if (!(selectedGraphs instanceof Set) || selectedGraphs.size === 0) {
+    return source.map((unit) => ({ ...unit }));
+  }
+
+  const availableCompositions = GRAPH_COMPOSITIONS
+    .filter((composition) => selectedGraphs.has(composition.id))
+    .sort((left, right) => right.parts.length - left.parts.length);
+  if (!availableCompositions.length) {
+    return source.map((unit) => ({ ...unit }));
+  }
+
+  const resolved = [];
+  let index = 0;
+  while (index < source.length) {
+    const composition = availableCompositions.find((candidate) => {
+      return candidate.parts.every((part, partIndex) => {
+        const unit = source[index + partIndex];
+        return unitMatchesCompositionPart(unit, part);
+      });
+    });
+
+    if (!composition) {
+      resolved.push({ ...source[index] });
+      index += 1;
+      continue;
+    }
+
+    const matchedUnits = source.slice(index, index + composition.parts.length);
+    resolved.push({
+      graph: composition.id,
+      text: matchedUnits.map((unit) => String(unit?.text || "")).join(""),
+      isSilent: false
+    });
+    index += composition.parts.length;
+  }
+
+  return resolved;
+}
+
+function unitMatchesCompositionPart(unit, part) {
+  if (!unit || !part) return false;
+  if (String(unit.graph || "").trim() !== String(part.graph || "").trim()) return false;
+  if (typeof part.isSilent === "boolean" && (unit.isSilent === true) !== part.isSilent) return false;
+  if (part.text) {
+    const unitText = String(unit.text || "").normalize("NFC").toLocaleLowerCase("fr-FR");
+    const expectedText = String(part.text).normalize("NFC").toLocaleLowerCase("fr-FR");
+    if (unitText !== expectedText) return false;
+  }
+  return true;
 }
 
 function getGraphsForStarterSelection() {

@@ -12,6 +12,11 @@ export const CARRY_MODES = Object.freeze({
   BOTH: "both"
 });
 
+export const NUMBER_DISPLAY_MODES = Object.freeze({
+  DIGITS: "digits",
+  WORDS: "words"
+});
+
 export const TERM_COUNT_OPTIONS = Object.freeze([2, 3, 4]);
 
 export const ADDITION_LIMITS = Object.freeze({
@@ -27,6 +32,7 @@ export function getDefaultSettings() {
     generationMode: GENERATION_MODES.RANDOM,
     termCounts: [2],
     carryMode: CARRY_MODES.BOTH,
+    numberDisplayMode: NUMBER_DISPLAY_MODES.DIGITS,
     termRanges: {
       t1: createDefaultRange(0, ADDITION_LIMITS.defaultTermMax),
       t2: createDefaultRange(0, ADDITION_LIMITS.defaultTermMax),
@@ -55,6 +61,7 @@ export function normalizeSettings(settings = {}) {
     generationMode: normalizeGenerationMode(base.generationMode),
     termCounts: normalizeTermCounts(base.termCounts),
     carryMode: normalizeCarryMode(base.carryMode),
+    numberDisplayMode: normalizeNumberDisplayMode(base.numberDisplayMode),
     termRanges: {
       t1: normalizeCalculationRange(termRanges.t1, { defaultMin: 0, defaultMax: ADDITION_LIMITS.defaultTermMax }),
       t2: normalizeCalculationRange(termRanges.t2, { defaultMin: 0, defaultMax: ADDITION_LIMITS.defaultTermMax }),
@@ -135,17 +142,17 @@ export function questionKey(question) {
   ].join("|");
 }
 
-export function formatQuestion(question) {
+export function formatQuestion(question, numberDisplayMode = NUMBER_DISPLAY_MODES.DIGITS) {
   if (!question) return "";
   if (Array.isArray(question.terms) && question.terms.length >= 2) {
-    return question.terms.map(formatIntegerForDisplay).join(" + ");
+    return question.terms.map((term) => formatNumberForQuestion(term, numberDisplayMode)).join(" + ");
   }
   return "";
 }
 
-export function formatAnswer(question) {
+export function formatAnswer(question, numberDisplayMode = NUMBER_DISPLAY_MODES.DIGITS) {
   if (!question) return "";
-  return `${formatQuestion(question)} = ${formatIntegerForDisplay(question.result)}`;
+  return `${formatQuestion(question, numberDisplayMode)} = ${formatIntegerForDisplay(question.result)}`;
 }
 
 export function parseFixedListRaw(rawText) {
@@ -368,6 +375,57 @@ function normalizeCarryMode(value) {
   if (safeValue === CARRY_MODES.WITHOUT) return CARRY_MODES.WITHOUT;
   if (safeValue === CARRY_MODES.WITH) return CARRY_MODES.WITH;
   return CARRY_MODES.BOTH;
+}
+
+function normalizeNumberDisplayMode(value) {
+  return String(value || "").trim() === NUMBER_DISPLAY_MODES.WORDS
+    ? NUMBER_DISPLAY_MODES.WORDS
+    : NUMBER_DISPLAY_MODES.DIGITS;
+}
+
+function formatNumberForQuestion(value, numberDisplayMode) {
+  if (numberDisplayMode !== NUMBER_DISPLAY_MODES.WORDS) return formatIntegerForDisplay(value);
+  return numberToFrenchWords(value);
+}
+
+function numberToFrenchWords(value) {
+  const safeValue = Math.max(0, Math.min(ADDITION_LIMITS.resultMax, Math.floor(Number(value) || 0)));
+  if (safeValue < 1000) return numberUnderOneThousandToFrenchWords(safeValue);
+
+  const thousands = Math.floor(safeValue / 1000);
+  const remainder = safeValue % 1000;
+  const thousandLabel = thousands === 1
+    ? "mille"
+    : `${numberUnderOneThousandToFrenchWords(thousands)}-mille`;
+  return remainder ? `${thousandLabel}-${numberUnderOneThousandToFrenchWords(remainder)}` : thousandLabel;
+}
+
+function numberUnderOneThousandToFrenchWords(value) {
+  const safeValue = Math.max(0, Math.min(999, Math.floor(Number(value) || 0)));
+  if (safeValue < 100) return numberUnderOneHundredToFrenchWords(safeValue);
+
+  const hundreds = Math.floor(safeValue / 100);
+  const remainder = safeValue % 100;
+  let label = hundreds === 1 ? "cent" : `${numberUnderOneHundredToFrenchWords(hundreds)}-cent`;
+  if (remainder === 0 && hundreds > 1) label += "s";
+  return remainder ? `${label}-${numberUnderOneHundredToFrenchWords(remainder)}` : label;
+}
+
+function numberUnderOneHundredToFrenchWords(value) {
+  const simple = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"];
+  const tens = { 20:"vingt", 30:"trente", 40:"quarante", 50:"cinquante", 60:"soixante" };
+  if (value < 20) return simple[value];
+  if (value < 70) {
+    const ten = Math.floor(value / 10) * 10;
+    const unit = value % 10;
+    return unit === 0 ? tens[ten] : unit === 1 ? `${tens[ten]}-et-un` : `${tens[ten]}-${simple[unit]}`;
+  }
+  if (value < 80) {
+    const remainder = value - 60;
+    return remainder === 10 ? "soixante-dix" : remainder === 11 ? "soixante-et-onze" : `soixante-${numberUnderOneHundredToFrenchWords(remainder)}`;
+  }
+  const remainder = value - 80;
+  return remainder === 0 ? "quatre-vingts" : remainder === 1 ? "quatre-vingt-un" : `quatre-vingt-${numberUnderOneHundredToFrenchWords(remainder)}`;
 }
 
 function normalizeTermCounts(value) {

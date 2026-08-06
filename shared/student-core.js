@@ -20,6 +20,13 @@ import {
   getToolRuntimeCapabilities
 } from "./tool-contract.js";
 import { getCatalogLevelConfig, normalizeCatalogDifficultyLevel } from "./catalogue.js";
+import {
+  captureActivityHistorySnapshot,
+  createActivityAttemptClientId,
+  createActivityHistoryConfigSnapshot,
+  normalizeActivityAttemptStatus,
+  normalizeActivityHistoryContext
+} from "./activity-history.js";
 
 export function createSessionEngine({
   els,
@@ -32,6 +39,9 @@ export function createSessionEngine({
   onFatalError,
   onStateChange,
   onSessionFinished,
+  onActivityAttemptStarted,
+  onActivityQuestionRecorded,
+  onActivityAttemptFinished,
   manualControlsEnabled = true,
   runMode = "student",
   activityMode = DEFAULT_ACTIVITY_MODE,
@@ -280,6 +290,12 @@ export function createSessionEngine({
     paused = false;
     pausedPhase = null;
     isSessionRunning = true;
+
+    const previousItem = session[currentToolIndex] || null;
+    if (previousItem && previousItem.historyFinalized !== true) {
+      finalizeOpenHistoryQuestion(previousItem, "unanswered");
+      await finalizeActivityAttempt(previousItem, "abandoned");
+    }
 
     if (activeRuntime?.unmount) {
       try {
@@ -693,7 +709,13 @@ export function createSessionEngine({
     return paused;
   }
 
-  function stop() {
+  function stop({ attemptStatus = "interrupted" } = {}) {
+    const item = session[currentToolIndex] || null;
+    if (item && item.historyFinalized !== true) {
+      finalizeOpenHistoryQuestion(item, "unanswered");
+      void finalizeActivityAttempt(item, normalizeActivityAttemptStatus(attemptStatus));
+    }
+
     stopAllTimers();
     stopFinalChallengeTicker();
     stopToolMaxTimeTicker();
@@ -758,6 +780,12 @@ export function createSessionEngine({
     stopAllTimers();
     stopToolMaxTimeTicker();
 
+    const previousItem = session[currentToolIndex] || null;
+    if (previousItem && previousItem.historyFinalized !== true) {
+      finalizeOpenHistoryQuestion(previousItem, "unanswered");
+      await finalizeActivityAttempt(previousItem, "completed");
+    }
+
     if (activeRuntime?.unmount) {
       try {
         await activeRuntime.unmount(els.workArea, getToolContext(session[currentToolIndex]));
@@ -817,6 +845,9 @@ export function createSessionEngine({
 
     refreshComputedSessionValuesWithTool(item, activeTool);
     startToolClock();
+    if (item.historyFinalized === true) {
+      resetActivityAttemptState(item);
+    }
 
     if (isFinalChallengeItem(item)) {
       ensureFinalChallengeStarted(item);
@@ -838,6 +869,7 @@ export function createSessionEngine({
     applyWorkAreaLayout(activeTool);
 
     await activeRuntime.mount(els.workArea, ctx);
+    startActivityAttempt(item);
     startToolMaxTimeTicker();
 
     await nextQuestion(item, true);
@@ -895,6 +927,7 @@ export function createSessionEngine({
     if (paused) return;
 
     const snap = captureCurrentPhase();
+    pauseHistoryQuestion(session[currentToolIndex]);
     pausedPhase = snap.kind === "QUESTION"
       ? { ...snap, gaugeScale: getGaugeScale() }
       : snap;
@@ -955,6 +988,9 @@ export function createSessionEngine({
 
     const snap = pausedPhase ?? createPhase("IDLE");
     pausedPhase = null;
+    if (snap.kind === "QUESTION") {
+      resumeHistoryQuestion(item);
+    }
 
     switch (snap.kind) {
       case "QUESTION":
@@ -1006,6 +1042,7 @@ export function createSessionEngine({
 
 
     if (generateQuestion) {
+      beginHistoryQuestion(item);
       const runProfile = getToolRunProfile(activeTool, item);
       if (runProfile.blockingMessage) {
         onFatalError?.(runProfile.blockingMessage);
@@ -1031,6 +1068,8 @@ export function createSessionEngine({
               void enforceCurrentToolMaxTime();
               return;
             }
+            captureHistoryStage(item, "question");
+            startHistoryQuestionTimer(item);
             beginQuestionPhase(item, remainingMs, {
               generateQuestion: false,
               initialGaugeScale
@@ -1041,6 +1080,9 @@ export function createSessionEngine({
           });
         return;
       }
+
+      captureHistoryStage(item, "question");
+      startHistoryQuestionTimer(item);
     }
 
     engineState = "RUNNING_QUESTION";
@@ -1091,6 +1133,8 @@ export function createSessionEngine({
     hideManualAction();
 
     const remainingMs = clampPhaseDuration(durationMs);
+    pauseHistoryQuestion(item);
+    captureHistoryStage(item, "answer");
     if (showAnswerNow) {
       const showCtx = getToolContext(item);
       const maybePromise = activeRuntime?.showAnswer?.(els.workArea, showCtx);
@@ -1098,11 +1142,14 @@ export function createSessionEngine({
         Promise.resolve(maybePromise)
           .then(() => {
             if (!isSessionRunning) return;
+            captureHistoryStage(item, "correction");
             emitStateChange();
           })
           .catch((err) => {
             onFatalError?.(err?.message || "Erreur pendant la séance.");
           });
+      } else {
+        captureHistoryStage(item, "correction");
       }
     }
 
@@ -1365,7 +1412,10 @@ export function createSessionEngine({
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
         settings,
         catalogActivityId,
+        catalogActivityTitle: String(item.catalog_activity_title || item.catalogActivityTitle || "").trim(),
         catalogContext,
+        missionId: String(item.mission_id || item.missionId || "").trim(),
+        missionStepId: String(item.mission_step_id || item.missionStepId || "").trim(),
         catalogLevels: item.catalog_levels && typeof item.catalog_levels === "object" && !Array.isArray(item.catalog_levels) ? cloneData(item.catalog_levels) : null,
         catalogAdaptive,
         catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? 3),
@@ -1374,7 +1424,14 @@ export function createSessionEngine({
         progressSessionStats: { questions: 0, correct: 0 },
         currentQuestionResolvedCorrectly: false,
         currentQuestionOutcomeCommitted: false,
-        lastQuestionOutcome: "pending"
+        lastQuestionOutcome: "pending",
+        historyClientAttemptId: createActivityAttemptClientId(),
+        historyAttemptPromise: null,
+        historyAttemptId: "",
+        historyWriteQueue: Promise.resolve(),
+        historyCurrentQuestion: null,
+        historyStartedAt: 0,
+        historyFinalized: false
       };
 
       const baseToolContext = {
@@ -1736,6 +1793,12 @@ export function createSessionEngine({
   }
 
   function finishSession({ title = null } = {}) {
+    const currentItem = session[currentToolIndex] || null;
+    if (currentItem && currentItem.historyFinalized !== true) {
+      finalizeOpenHistoryQuestion(currentItem, "unanswered");
+      void finalizeActivityAttempt(currentItem, "completed");
+    }
+
     const finalTitle = title || (sessionProgressMode === "practice" ? "Entrainement terminé." : "Bravo, la séance est terminée.");
     const finishedSummary = buildSessionSummary();
     notifySessionFinishedOnce(finishedSummary);
@@ -1757,6 +1820,241 @@ export function createSessionEngine({
       buttonLabel: "Retour aux activités",
       onClick: onExitToActivities
     });
+  }
+
+
+  function canRecordActivityHistory(item) {
+    if (!item || runMode === "projected-teacher") return false;
+    if (String(item.catalogContext || "").trim().toLowerCase() === "test") return false;
+    if (!String(item.catalogActivityId || "").trim()) return false;
+    return typeof onActivityAttemptStarted === "function";
+  }
+
+  function startActivityAttempt(item) {
+    if (!canRecordActivityHistory(item) || item.historyAttemptPromise) return;
+
+    item.historyStartedAt = performance.now();
+    item.historyFinalized = false;
+    const context = normalizeActivityHistoryContext(item.catalogContext || "exploration");
+    const configSnapshot = {
+      version: 1,
+      toolId: item.id,
+      toolInstanceId: item.instanceId,
+      questionFlowMode: item.questionFlowMode,
+      questionCount: item.questionCount,
+      timePerQ: item.timePerQ,
+      infiniteTimePerQ: item.infiniteTimePerQ === true,
+      answerTime: item.answerTime,
+      infiniteAnswerTime: item.infiniteAnswerTime === true,
+      questionTransitionSec: item.questionTransitionSec,
+      toolMaxTimeMin: item.toolMaxTimeMin,
+      toolMaxTimeInfinite: item.toolMaxTimeInfinite === true,
+      settings: createActivityHistoryConfigSnapshot(item.settings ?? {})
+    };
+
+    const metadata = {
+      version: 1,
+      activityMode: sessionActivityMode,
+      responseUi: sessionResponseUi,
+      progressMode: sessionProgressMode,
+      runMode,
+      moduleKey,
+      configName
+    };
+
+    item.historyAttemptPromise = Promise.resolve(onActivityAttemptStarted({
+      clientAttemptId: item.historyClientAttemptId,
+      catalogActivityId: item.catalogActivityId,
+      context,
+      missionId: item.missionId || "",
+      missionStepId: item.missionStepId || "",
+      toolId: item.id,
+      toolInstanceId: item.instanceId,
+      activityTitle: item.catalogActivityTitle || item.title || configName,
+      startedLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
+      metadata,
+      configSnapshot
+    }))
+      .then((result) => {
+        const attemptId = typeof result === "string"
+          ? result
+          : String(result?.attemptId || result?.id || "").trim();
+        item.historyAttemptId = attemptId;
+        return attemptId;
+      })
+      .catch((error) => {
+        console.warn("Impossible d’ouvrir la tentative d’activité.", error);
+        return "";
+      });
+  }
+
+  function beginHistoryQuestion(item) {
+    if (!item || !canRecordActivityHistory(item)) return;
+
+    if (item.historyCurrentQuestion && item.currentQuestionOutcomeCommitted !== true) {
+      finalizeHistoryQuestion(item, {
+        outcome: "unanswered",
+        isCorrect: null,
+        levelAfter: item.historyCurrentQuestion.levelPresented,
+        pointsAwarded: 0
+      });
+    }
+
+    item.historyCurrentQuestion = {
+      questionIndex: Math.max(0, currentQuestionIndex),
+      startedAt: performance.now(),
+      activeStartedAt: null,
+      elapsedActiveMs: 0,
+      levelPresented: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
+      questionSnapshot: null,
+      answerSnapshot: null,
+      correctionSnapshot: null,
+      finalized: false
+    };
+  }
+
+  function startHistoryQuestionTimer(item) {
+    const current = item?.historyCurrentQuestion;
+    if (!current || current.finalized === true || Number.isFinite(current.activeStartedAt)) return;
+    current.activeStartedAt = performance.now();
+  }
+
+  function pauseHistoryQuestion(item) {
+    const current = item?.historyCurrentQuestion;
+    if (!current || current.finalized === true || !Number.isFinite(current.activeStartedAt)) return;
+    current.elapsedActiveMs = Math.max(0, Number(current.elapsedActiveMs) || 0)
+      + Math.max(0, performance.now() - current.activeStartedAt);
+    current.activeStartedAt = null;
+  }
+
+  function resumeHistoryQuestion(item) {
+    const current = item?.historyCurrentQuestion;
+    if (!current || current.finalized === true || Number.isFinite(current.activeStartedAt)) return;
+    current.activeStartedAt = performance.now();
+  }
+
+  function getHistoryQuestionActiveDurationMs(current) {
+    if (!current) return 0;
+    let duration = Math.max(0, Number(current.elapsedActiveMs) || 0);
+    if (Number.isFinite(current.activeStartedAt)) {
+      duration += Math.max(0, performance.now() - current.activeStartedAt);
+    }
+    return Math.max(0, Math.round(duration));
+  }
+
+  function captureHistoryStage(item, stage) {
+    const current = item?.historyCurrentQuestion;
+    if (!current || current.finalized === true) return;
+    const safeStage = String(stage || "question").trim().toLowerCase();
+    const key = safeStage === "answer"
+      ? "answerSnapshot"
+      : safeStage === "correction"
+        ? "correctionSnapshot"
+        : "questionSnapshot";
+
+    current[key] = captureActivityHistorySnapshot({
+      runtime: activeRuntime,
+      container: els.workArea,
+      context: getToolContext(item),
+      stage: safeStage
+    });
+  }
+
+  function finalizeOpenHistoryQuestion(item, fallbackOutcome = "unanswered") {
+    if (!item?.historyCurrentQuestion || item.historyCurrentQuestion.finalized === true) return;
+
+    if (phase.kind === "ANSWER" && item.currentQuestionOutcomeCommitted !== true) {
+      commitCurrentQuestionOutcomeOnce(item);
+      return;
+    }
+
+    finalizeHistoryQuestion(item, {
+      outcome: fallbackOutcome,
+      isCorrect: null,
+      levelAfter: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
+      pointsAwarded: 0
+    });
+  }
+
+  function finalizeHistoryQuestion(item, {
+    outcome = "unanswered",
+    isCorrect = null,
+    levelAfter = null,
+    pointsAwarded = 0
+  } = {}) {
+    const current = item?.historyCurrentQuestion;
+    if (!current || current.finalized === true) return;
+
+    if (!current.questionSnapshot) captureHistoryStage(item, "question");
+    if (!current.answerSnapshot) captureHistoryStage(item, "answer");
+    if (!current.correctionSnapshot) captureHistoryStage(item, "correction");
+
+    current.finalized = true;
+    item.historyCurrentQuestion = null;
+
+    const payload = {
+      questionIndex: current.questionIndex,
+      levelPresented: current.levelPresented,
+      levelAfter: normalizeCatalogDifficultyLevel(levelAfter ?? current.levelPresented),
+      outcome: String(outcome || "unanswered").trim().toLowerCase(),
+      isCorrect: isCorrect === true ? true : isCorrect === false ? false : null,
+      pointsAwarded: Math.max(0, Math.trunc(Number(pointsAwarded) || 0)),
+      durationMs: getHistoryQuestionActiveDurationMs(current),
+      questionSnapshot: current.questionSnapshot || {},
+      answerSnapshot: current.answerSnapshot || {},
+      correctionSnapshot: current.correctionSnapshot || {}
+    };
+
+    if (typeof onActivityQuestionRecorded !== "function" || !item.historyAttemptPromise) return;
+
+    item.historyWriteQueue = Promise.resolve(item.historyWriteQueue)
+      .catch(() => undefined)
+      .then(async () => {
+        const attemptId = await item.historyAttemptPromise;
+        if (!attemptId) return null;
+        return await onActivityQuestionRecorded({
+          attemptId,
+          catalogActivityId: item.catalogActivityId,
+          context: normalizeActivityHistoryContext(item.catalogContext || "exploration"),
+          toolId: item.id,
+          toolInstanceId: item.instanceId,
+          ...payload
+        });
+      })
+      .catch((error) => {
+        console.warn("Impossible d’enregistrer le résultat d’une question.", error);
+        return null;
+      });
+  }
+
+  async function finalizeActivityAttempt(item, status = "interrupted") {
+    if (!item || item.historyFinalized === true) return null;
+    item.historyFinalized = true;
+    const finalDurationMs = Math.max(0, Math.round(getToolElapsedMs()));
+
+    if (!item.historyAttemptPromise || typeof onActivityAttemptFinished !== "function") {
+      return null;
+    }
+
+    try {
+      const attemptId = await item.historyAttemptPromise;
+      await Promise.resolve(item.historyWriteQueue).catch(() => undefined);
+      if (!attemptId) return null;
+
+      const result = await onActivityAttemptFinished({
+        attemptId,
+        catalogActivityId: item.catalogActivityId,
+        context: normalizeActivityHistoryContext(item.catalogContext || "exploration"),
+        status: normalizeActivityAttemptStatus(status),
+        endedLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),
+        durationMs: finalDurationMs
+      });
+
+      return result || null;
+    } catch (error) {
+      console.warn("Impossible de finaliser la tentative d’activité.", error);
+      return null;
+    }
   }
 
 
@@ -1799,6 +2097,17 @@ export function createSessionEngine({
     };
   }
 
+  function resetActivityAttemptState(item) {
+    if (!item) return;
+    item.historyClientAttemptId = createActivityAttemptClientId();
+    item.historyAttemptPromise = null;
+    item.historyAttemptId = "";
+    item.historyWriteQueue = Promise.resolve();
+    item.historyCurrentQuestion = null;
+    item.historyStartedAt = 0;
+    item.historyFinalized = false;
+  }
+
   function resetSessionGaugeStates() {
     session.forEach((item) => {
       item.evaluationGauge = createEvaluationGaugeState(item);
@@ -1812,6 +2121,7 @@ export function createSessionEngine({
       item.lastQuestionOutcome = "pending";
       item.catalogCurrentLevel = normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? item.catalogCurrentLevel ?? 3);
       item.progressSessionStats = { questions: 0, correct: 0 };
+      resetActivityAttemptState(item);
     });
   }
 
@@ -1871,7 +2181,13 @@ export function createSessionEngine({
       incrementFinalChallengeCorrectCount(item);
     }
 
-    recordCatalogProgressQuestionOutcome(item, isCorrect);
+    const levelTransition = recordCatalogProgressQuestionOutcome(item, isCorrect);
+    finalizeHistoryQuestion(item, {
+      outcome: isCorrect ? "correct" : "incorrect",
+      isCorrect,
+      levelAfter: levelTransition.levelAfter,
+      pointsAwarded: 0
+    });
 
     if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
       if (item) item.currentQuestionResolvedCorrectly = false;
@@ -1942,8 +2258,10 @@ export function createSessionEngine({
 
 
   function recordCatalogProgressQuestionOutcome(item, isCorrect) {
-    if (!item || runMode === "projected-teacher") return;
-    if (!item.catalogActivityId) return;
+    const levelBefore = normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3);
+    if (!item || runMode === "projected-teacher" || !item.catalogActivityId) {
+      return { levelBefore, levelAfter: levelBefore };
+    }
 
     const stats = item.progressSessionStats || { questions: 0, correct: 0 };
     stats.questions = Math.max(0, Math.floor(Number(stats.questions) || 0)) + 1;
@@ -1955,6 +2273,11 @@ export function createSessionEngine({
     if (item.catalogAdaptive === true) {
       applyCatalogAdaptiveLevelAfterOutcome(item, isCorrect);
     }
+
+    return {
+      levelBefore,
+      levelAfter: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? levelBefore)
+    };
   }
 
   function applyCatalogAdaptiveLevelAfterOutcome(item, isCorrect) {
@@ -2115,7 +2438,10 @@ export function createSessionEngine({
       globals: cloneData(activityGlobals),
       questionFlowMode: item.questionFlowMode || "fixed",
       catalogActivityId: item.catalogActivityId || "",
+      catalogActivityTitle: item.catalogActivityTitle || "",
       catalogContext: item.catalogContext || "",
+      missionId: item.missionId || "",
+      missionStepId: item.missionStepId || "",
       catalogAdaptive: item.catalogAdaptive === true,
       catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3),
       catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),

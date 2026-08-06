@@ -1,6 +1,6 @@
 import {
   CATALOG_ROOT_LABEL,
-  getCatalogFolders
+  getPedagogicalNodes
 } from "../../../shared/catalogue.js";
 import {
   escapeAttr,
@@ -14,6 +14,11 @@ export function createActivitiesViewController({
   configsList,
   getCurrentTeacherSpace,
   getIsSuperAdmin,
+  listPedagogicalNodesForTeacher,
+  listPedagogicalNodesForAdmin,
+  createPedagogicalNodeAsAdmin,
+  updatePedagogicalNodeAsAdmin,
+  deletePedagogicalNodeAsAdmin,
   listCatalogActivitiesForTeacherSpace,
   setCatalogActivityVisibility,
   listCatalogActivitiesForAdmin,
@@ -29,7 +34,11 @@ export function createActivitiesViewController({
   let currentRenderIsSuperAdmin = false;
   let catalogueChangeListenerAttached = false;
   let activeCatalogTestController = null;
-  const folders = getCatalogFolders();
+  let folders = getPedagogicalNodes();
+  let cachedTeacherCatalogFolders = null;
+  let cachedAdminCatalogFolders = null;
+  const collapsedFolderIds = new Set();
+  const knownFolderIds = new Set();
 
   const catalogAdminViewController = createCatalogAdminViewController({
     header: configHeader,
@@ -39,6 +48,10 @@ export function createActivitiesViewController({
     saveCatalogActivityAsAdmin,
     deleteCatalogActivityAsAdmin,
     getCatalogActivityUsageAsAdmin,
+    listPedagogicalNodesForAdmin,
+    createPedagogicalNodeAsAdmin,
+    updatePedagogicalNodeAsAdmin,
+    deletePedagogicalNodeAsAdmin,
     showToast,
     onReturnToCatalogue: ({ forceRefresh = false } = {}) => renderActivitiesForSpace({ forceRefresh })
   });
@@ -100,25 +113,75 @@ export function createActivitiesViewController({
     ));
   }
 
+  function syncKnownFolders(){
+    const folderIds = new Set(folders.map((folder) => String(folder.id || "")).filter(Boolean));
+    for (const id of Array.from(collapsedFolderIds)) {
+      if (!folderIds.has(id)) collapsedFolderIds.delete(id);
+    }
+    for (const id of Array.from(knownFolderIds)) {
+      if (!folderIds.has(id)) knownFolderIds.delete(id);
+    }
+
+    folders.forEach((folder) => {
+      const id = String(folder.id || "").trim();
+      if (!id || knownFolderIds.has(id)) return;
+      knownFolderIds.add(id);
+      // À l'ouverture, seuls les dossiers racine sont dépliés : on révèle un
+      // unique niveau de sous-dossiers sans encombrer l'arborescence.
+      if (String(folder.parent_id || "").trim()) collapsedFolderIds.add(id);
+    });
+  }
+
+  function openFolder(folderId = null){
+    const safeFolderId = String(folderId || "").trim();
+    currentOpenFolderId = safeFolderId || null;
+    let cursor = safeFolderId ? getFolderById(safeFolderId) : null;
+    while (cursor) {
+      collapsedFolderIds.delete(String(cursor.id));
+      cursor = getFolderById(cursor.parent_id);
+    }
+  }
+
   function renderConfigHeader({ isSuperAdmin = false } = {}){
     if (!configHeader) return;
     const breadcrumb = getBreadcrumb();
-    const breadcrumbHtml = [
-      `<button class="dashboard-breadcrumb-btn${breadcrumb.length ? "" : " is-current"}" type="button" data-action="open-root">Catalogue</button>`,
-      ...breadcrumb.map((folder, index) => `
-        <span class="dashboard-breadcrumb-separator" aria-hidden="true">/</span>
-        <button class="dashboard-breadcrumb-btn${index === breadcrumb.length - 1 ? " is-current" : ""}" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
-          ${escapeHtml(folder.name)}
-        </button>
-      `)
-    ].join("");
+    const renderRootCrumb = ({ current = false } = {}) => `
+      <button class="dashboard-breadcrumb-btn${current ? " is-current" : ""}" type="button" data-action="open-root">Exploration</button>
+    `;
+    const renderFolderCrumb = (folder, { current = false } = {}) => `
+      <button class="dashboard-breadcrumb-btn${current ? " is-current" : ""}" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
+        ${escapeHtml(folder.name)}
+      </button>
+    `;
+    const renderSeparator = () => '<span class="dashboard-breadcrumb-separator" aria-hidden="true">›</span>';
+    const breadcrumbHtml = breadcrumb.length > 2
+      ? [
+          `<details class="dashboard-breadcrumb-overflow">
+            <summary class="dashboard-breadcrumb-btn dashboard-breadcrumb-overflow-trigger" aria-label="Afficher le chemin complet" title="Afficher le chemin complet">…</summary>
+            <div class="dashboard-breadcrumb-overflow-menu">
+              ${renderRootCrumb()}
+              ${breadcrumb.map((folder, index) => renderFolderCrumb(folder, { current:index === breadcrumb.length - 1 })).join("")}
+            </div>
+          </details>`,
+          renderSeparator(),
+          renderFolderCrumb(breadcrumb[breadcrumb.length - 2]),
+          renderSeparator(),
+          renderFolderCrumb(breadcrumb[breadcrumb.length - 1], { current:true })
+        ].join(" ")
+      : [
+          renderRootCrumb({ current:!breadcrumb.length }),
+          ...breadcrumb.flatMap((folder, index) => [
+            renderSeparator(),
+            renderFolderCrumb(folder, { current:index === breadcrumb.length - 1 })
+          ])
+        ].join(" ");
 
     configHeader.innerHTML = `
       <div class="dashboard-config-header-main">
-        <div class="dashboard-section-title">Catalogue</div>
+        <div class="dashboard-section-title">Exploration</div>
       </div>
       <div class="dashboard-config-header-center">
-        <nav class="dashboard-breadcrumb" aria-label="Fil d’Ariane du catalogue">
+        <nav class="dashboard-breadcrumb" aria-label="Fil d’Ariane d’Exploration">
           ${breadcrumbHtml}
         </nav>
       </div>
@@ -129,14 +192,14 @@ export function createActivitiesViewController({
 
     configHeader.querySelectorAll("[data-action='open-root']").forEach((btn) => {
       btn.addEventListener("click", () => {
-        currentOpenFolderId = null;
+        openFolder();
         void renderActivitiesForSpace();
       });
     });
 
     configHeader.querySelectorAll("[data-action='open-folder']").forEach((btn) => {
       btn.addEventListener("click", () => {
-        currentOpenFolderId = String(btn.dataset.folderId || "").trim() || null;
+        openFolder(btn.dataset.folderId);
         void renderActivitiesForSpace();
       });
     });
@@ -146,27 +209,38 @@ export function createActivitiesViewController({
     }
   }
 
-  function renderTreeFolder(folder, usefulFolderIds, depth = 0){
+  function renderTreeFolder(folder, visibleFolderIds, usefulFolderIds, depth = 0){
     const selected = String(currentOpenFolderId || "") === String(folder.id);
+    const isEmptyPath = currentRenderIsSuperAdmin && !usefulFolderIds.has(String(folder.id));
+    const childFolders = getVisibleChildFolders(folder.id, visibleFolderIds).sort(compareByOrderAndName);
+    const hasChildFolders = childFolders.length > 0;
+    const isCollapsed = hasChildFolders && collapsedFolderIds.has(String(folder.id));
     return `
-      <div class="dashboard-activity-tree-row dashboard-tree-node ${selected ? "is-selected" : ""}" style="--dashboard-tree-depth:${depth};">
+      <div class="dashboard-activity-tree-row dashboard-tree-node ${selected ? "is-selected" : ""} ${isEmptyPath ? "is-catalog-empty-path" : ""}" style="--dashboard-tree-depth:${depth};" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
         <div class="dashboard-tree-indent" aria-hidden="true"></div>
-        <span class="dashboard-tree-toggle-placeholder" aria-hidden="true"></span>
+        ${hasChildFolders ? `
+          <button
+            class="dashboard-folder-toggle-btn dashboard-material-icon-btn"
+            type="button"
+            data-action="toggle-folder"
+            data-folder-id="${escapeAttr(folder.id)}"
+            title="${isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
+            aria-label="${isCollapsed ? "Déplier le dossier" : "Replier le dossier"}"
+          ><span class="dashboard-material-icon" aria-hidden="true">${isCollapsed ? "chevron_right" : "expand_more"}</span></button>
+        ` : '<span class="dashboard-tree-toggle-placeholder" aria-hidden="true"></span>'}
         <button class="dashboard-activity-tree-main" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">folder</span>
           <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name)}</span>
         </button>
       </div>
-      ${getVisibleChildFolders(folder.id, usefulFolderIds)
-        .sort(compareByOrderAndName)
-        .map((child) => renderTreeFolder(child, usefulFolderIds, depth + 1))
-        .join("")}
+      ${isCollapsed ? "" : childFolders.map((child) => renderTreeFolder(child, visibleFolderIds, usefulFolderIds, depth + 1)).join("")}
     `;
   }
 
-  function renderFolderTile(folder){
+  function renderFolderTile(folder, usefulFolderIds){
+    const isEmptyPath = currentRenderIsSuperAdmin && !usefulFolderIds.has(String(folder.id));
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder">
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder ${isEmptyPath ? "is-catalog-empty-path" : ""}" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
           <span class="dashboard-activity-tile-labelbox">
@@ -208,6 +282,7 @@ export function createActivitiesViewController({
 
     return `
       <article class="${tileClasses}" ${adminEnhancement?.attributes || ""}>
+        ${adminEnhancement?.dragHandleHtml || ""}
         <div class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" style="cursor:default;">
           <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">extension</span>
           <span class="dashboard-activity-tile-labelbox dashboard-activity-tile-labelbox--activity">
@@ -231,32 +306,143 @@ export function createActivitiesViewController({
     `;
   }
 
-  function renderShell(activities, { isSuperAdmin = false } = {}){
-    const usefulFolderIds = getFolderIdsLeadingToActivities(activities, { includeAllFolders: isSuperAdmin });
-    const selectedFolder = getFolderById(currentOpenFolderId);
-    const parentId = selectedFolder ? String(selectedFolder.id) : null;
-    const childFolders = getVisibleChildFolders(parentId, usefulFolderIds).sort(compareByOrderAndName);
-    const childActivities = (activities || [])
-      .filter((activity) => getActivityFolderId(activity) === String(parentId || ""))
-      .sort(compareByOrderAndName);
-    const rootFolders = getVisibleChildFolders(null, usefulFolderIds).sort(compareByOrderAndName);
-    const treeHtml = rootFolders.map((folder) => renderTreeFolder(folder, usefulFolderIds, 0)).join("");
-    const tilesHtml = [
-      renderParentTile(selectedFolder),
-      ...childFolders.map(renderFolderTile),
-      ...childActivities.map((activity) => renderActivityTile(activity, { isSuperAdmin }))
-    ].filter(Boolean).join("");
-    const adminGridClass = isSuperAdmin ? " dashboard-admin-catalogue-grid" : "";
-    const adminDropzoneAttributes = isSuperAdmin
-      ? catalogAdminViewController.getDropzoneAttributes(parentId)
-      : "";
-    const rightPaneHtml = `
-      <div class="dashboard-activity-tiles-grid-wrap">
-        <div class="dashboard-activity-tiles-grid${adminGridClass}" ${adminDropzoneAttributes}>
-          ${tilesHtml || `<div class="dashboard-activity-empty-state">Aucune activité dans cette catégorie.</div>`}
+  function renderActivityRow(activity, rank, { isSuperAdmin = false } = {}){
+    const isPublished = String(activity?.status || "published") === "published";
+    const visible = isPublished && activity?.is_visible !== false;
+    const adminEnhancement = isSuperAdmin
+      ? catalogAdminViewController.getActivityTileEnhancement(activity)
+      : null;
+    const rowClasses = [
+      "dashboard-activity-row",
+      "dashboard-activity-row--catalog",
+      visible || !isPublished ? "" : "is-hidden",
+      adminEnhancement?.className || ""
+    ].filter(Boolean).join(" ");
+    const description = String(activity?.description || "").trim();
+    const meta = isSuperAdmin
+      ? `${escapeHtml(adminEnhancement?.toolLabel || activity?.tool_id || "Outil")} · ${escapeHtml(adminEnhancement?.statusLabel || (isPublished ? "Publié" : "Brouillon"))}`
+      : (description ? escapeHtml(description) : "Activité");
+
+    return `
+      <article class="${rowClasses}" ${adminEnhancement?.attributes || ""}>
+        <span class="dashboard-activity-row-rank" aria-label="Rang ${rank}">${rank}</span>
+        ${adminEnhancement?.dragHandleHtml || ""}
+        <span class="dashboard-material-icon dashboard-activity-row-icon" aria-hidden="true">extension</span>
+        <div class="dashboard-activity-row-main">
+          <span class="dashboard-activity-row-title">${escapeHtml(activity?.config_name || activity?.title || "Activité")}</span>
+          <span class="dashboard-activity-row-meta">${meta}</span>
+        </div>
+        <div class="dashboard-activity-row-actions">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="test-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Tester" aria-label="Tester">
+            <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
+          </button>
+          ${isPublished ? `
+            <button class="dashboard-icon-btn dashboard-material-icon-btn ${visible ? "" : "is-muted"}" type="button" data-action="toggle-catalog-visible" data-catalog-activity-id="${escapeAttr(activity.id)}" title="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}" aria-label="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}">
+              <span class="dashboard-material-icon" aria-hidden="true">${visible ? "visibility" : "visibility_off"}</span>
+            </button>
+          ` : ""}
+          ${adminEnhancement?.actionsHtml || ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderActivityTiers(activities, folderId, { isSuperAdmin = false } = {}){
+    const rows = [...(Array.isArray(activities) ? activities : [])].sort(compareByOrderAndName);
+    const highestOccupiedTier = rows.reduce(
+      (max, activity) => Math.max(max, getActivityTier(activity)),
+      0
+    );
+    const renderedTierCount = isSuperAdmin
+      ? Math.max(1, highestOccupiedTier + 1)
+      : Math.max(1, highestOccupiedTier);
+    const panels = [];
+
+    for (let tier = 1; tier <= renderedTierCount; tier += 1) {
+      const tierRows = rows
+        .filter((activity) => getActivityTier(activity) === tier)
+        .sort(compareByOrderAndName);
+      if (!isSuperAdmin && !tierRows.length) continue;
+      const isNextTier = isSuperAdmin && highestOccupiedTier > 0 && tier === highestOccupiedTier + 1;
+      const dropzoneAttributes = isSuperAdmin
+        ? catalogAdminViewController.getTierDropzoneAttributes(folderId, tier)
+        : "";
+      panels.push(`
+        <section class="dashboard-activity-tier-panel${tierRows.length ? "" : " is-empty"}${isNextTier ? " is-next-tier" : ""}" ${dropzoneAttributes}>
+          <header class="dashboard-activity-tier-header">
+            <div class="dashboard-activity-tier-heading">
+              <span class="dashboard-activity-tier-title">Palier ${tier}</span>
+              ${isNextTier ? '<span class="dashboard-activity-tier-next-label">Prochain palier</span>' : ""}
+            </div>
+            <span class="dashboard-activity-tier-count">${tierRows.length} activité${tierRows.length > 1 ? "s" : ""}</span>
+          </header>
+          <div class="dashboard-activity-tier-list">
+            ${tierRows.length
+              ? tierRows.map((activity, index) => renderActivityRow(activity, index + 1, { isSuperAdmin })).join("")
+              : `<div class="dashboard-activity-tier-empty">${isSuperAdmin ? "Dépose une activité ici." : "Aucune activité disponible."}</div>`}
+          </div>
+        </section>
+      `);
+    }
+
+    return `
+      <div class="dashboard-activity-tiers-wrap">
+        <div class="dashboard-activity-tiers">
+          ${panels.join("")}
         </div>
       </div>
     `;
+  }
+
+  function renderShell(activities, { isSuperAdmin = false } = {}){
+    const usefulFolderIds = getFolderIdsLeadingToActivities(activities);
+    const visibleFolderIds = isSuperAdmin
+      ? getFolderIdsLeadingToActivities(activities, { includeAllFolders: true })
+      : usefulFolderIds;
+    const selectedFolder = getFolderById(currentOpenFolderId);
+    const parentId = selectedFolder ? String(selectedFolder.id) : null;
+    const childFolders = getVisibleChildFolders(parentId, visibleFolderIds).sort(compareByOrderAndName);
+    const folderLevelLabel = childFolders.length
+      ? getFolderNodeTypeLabel(childFolders[0])
+      : "";
+    const childActivities = (activities || [])
+      .filter((activity) => getActivityFolderId(activity) === String(parentId || ""))
+      .sort(compareByOrderAndName);
+    const rootFolders = getVisibleChildFolders(null, visibleFolderIds).sort(compareByOrderAndName);
+    const treeHtml = rootFolders.map((folder) => renderTreeFolder(folder, visibleFolderIds, usefulFolderIds, 0)).join("");
+    const isActivityHost = selectedFolder?.node_type === "grade_level";
+
+    let rightPaneHtml = "";
+    if (isActivityHost) {
+      rightPaneHtml = `
+        <div class="dashboard-activity-tiles-pane-header dashboard-activity-tier-pane-header">
+          <span class="dashboard-activity-tiles-pane-level">Activités par paliers</span>
+        </div>
+        ${renderActivityTiers(childActivities, parentId, { isSuperAdmin })}
+      `;
+    } else {
+      const tilesHtml = [
+        renderParentTile(selectedFolder),
+        ...childFolders.map((folder) => renderFolderTile(folder, usefulFolderIds)),
+        ...childActivities.map((activity) => renderActivityTile(activity, { isSuperAdmin }))
+      ].filter(Boolean).join("");
+      const adminGridClass = isSuperAdmin ? " dashboard-admin-catalogue-grid" : "";
+      const adminDropzoneAttributes = isSuperAdmin
+        ? catalogAdminViewController.getDropzoneAttributes(parentId)
+        : "";
+      rightPaneHtml = `
+        ${currentRenderIsSuperAdmin && folderLevelLabel ? `
+          <div class="dashboard-activity-tiles-pane-header">
+            <span class="dashboard-activity-tiles-pane-level">${escapeHtml(folderLevelLabel)}</span>
+          </div>
+        ` : ""}
+        <div class="dashboard-activity-tiles-grid-wrap">
+          <div class="dashboard-activity-tiles-grid${adminGridClass}" ${adminDropzoneAttributes}>
+            ${tilesHtml || `<div class="dashboard-activity-empty-state">Aucun contenu dans ce nœud.</div>`}
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="dashboard-activities-explorer" style="--dashboard-tree-pane-width:18%;">
@@ -282,14 +468,25 @@ export function createActivitiesViewController({
   function bindEvents({ isSuperAdmin = false } = {}){
     configsList?.querySelectorAll("[data-action='open-root']").forEach((btn) => {
       btn.addEventListener("click", () => {
-        currentOpenFolderId = null;
+        openFolder();
         void renderActivitiesForSpace();
       });
     });
 
     configsList?.querySelectorAll("[data-action='open-folder']").forEach((btn) => {
       btn.addEventListener("click", () => {
-        currentOpenFolderId = String(btn.dataset.folderId || "").trim() || null;
+        openFolder(btn.dataset.folderId);
+        void renderActivitiesForSpace();
+      });
+    });
+
+    configsList?.querySelectorAll("[data-action='toggle-folder']").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const folderId = String(btn.dataset.folderId || "").trim();
+        if (!folderId || btn.disabled) return;
+        if (collapsedFolderIds.has(folderId)) collapsedFolderIds.delete(folderId);
+        else collapsedFolderIds.add(folderId);
         void renderActivitiesForSpace();
       });
     });
@@ -336,7 +533,7 @@ export function createActivitiesViewController({
     const currentTeacherSpace = getCurrentTeacherSpace?.();
 
     if (!activity) {
-      showToast?.("Activité de catalogue introuvable.", { isError: true });
+      showToast?.("Activité d’Exploration introuvable.", { isError: true });
       return;
     }
 
@@ -371,6 +568,12 @@ export function createActivitiesViewController({
     attachCatalogueChangeListener();
     if (!configsList) return;
 
+    const previousScroll = {
+      host: configsList.scrollTop,
+      tree: configsList.querySelector(".dashboard-activity-tree-list")?.scrollTop || 0,
+      tiles: (configsList.querySelector(".dashboard-activity-tiles-grid-wrap") || configsList.querySelector(".dashboard-activity-tiers-wrap"))?.scrollTop || 0
+    };
+
     const isSuperAdmin = await getIsSuperAdmin?.() === true;
     const currentTeacherSpace = getCurrentTeacherSpace?.();
     currentRenderIsSuperAdmin = isSuperAdmin;
@@ -387,29 +590,44 @@ export function createActivitiesViewController({
       && (forceRefresh || !cachedTeacherCatalogActivities);
     const needsAdminActivities = isSuperAdmin
       && (forceRefresh || !cachedAdminCatalogActivities);
+    const needsTeacherFolders = !isSuperAdmin && (forceRefresh || !cachedTeacherCatalogFolders);
+    const needsAdminFolders = isSuperAdmin && (forceRefresh || !cachedAdminCatalogFolders);
 
-    if (needsTeacherActivities || needsAdminActivities) {
+    if (needsTeacherActivities || needsAdminActivities || needsTeacherFolders || needsAdminFolders) {
       configsList.classList.add("dashboard-explorer-host");
       configsList.classList.remove("super-admin-editor-scroll");
       cleanupActiveCatalogTestController();
-      configsList.innerHTML = `<div class="dashboard-activity-empty-state">Chargement du catalogue…</div>`;
+      configsList.innerHTML = `<div class="dashboard-activity-empty-state">Chargement d’Exploration…</div>`;
 
-      const [teacherActivities, adminActivities] = await Promise.all([
+      const [teacherActivities, adminActivities, teacherFolders, adminFolders] = await Promise.all([
         needsTeacherActivities
           ? listCatalogActivitiesForTeacherSpace?.(currentTeacherSpace.id)
           : Promise.resolve(cachedTeacherCatalogActivities || []),
         needsAdminActivities
           ? listCatalogActivitiesForAdmin?.()
-          : Promise.resolve(cachedAdminCatalogActivities || [])
+          : Promise.resolve(cachedAdminCatalogActivities || []),
+        needsTeacherFolders
+          ? listPedagogicalNodesForTeacher?.()
+          : Promise.resolve(cachedTeacherCatalogFolders || []),
+        needsAdminFolders
+          ? listPedagogicalNodesForAdmin?.()
+          : Promise.resolve(cachedAdminCatalogFolders || [])
       ]);
 
       if (needsTeacherActivities) cachedTeacherCatalogActivities = teacherActivities || [];
       if (needsAdminActivities) cachedAdminCatalogActivities = adminActivities || [];
+      if (needsTeacherFolders) cachedTeacherCatalogFolders = teacherFolders || [];
+      if (needsAdminFolders) cachedAdminCatalogFolders = adminFolders || [];
     }
 
     if (!currentTeacherSpace?.id) {
       cachedTeacherCatalogActivities = [];
     }
+
+    folders = isSuperAdmin
+      ? (cachedAdminCatalogFolders || getPedagogicalNodes())
+      : (cachedTeacherCatalogFolders || getPedagogicalNodes());
+    syncKnownFolders();
 
     const activities = isSuperAdmin
       ? mergeAdminAndTeacherActivities(cachedAdminCatalogActivities || [], cachedTeacherCatalogActivities || [])
@@ -419,6 +637,7 @@ export function createActivitiesViewController({
     syncCurrentOpenFolderWithActivities(activities, { includeAllFolders: isSuperAdmin });
     catalogAdminViewController.setCatalogueState({
       activities: cachedAdminCatalogActivities || [],
+      folders,
       currentFolderId: currentOpenFolderId
     });
 
@@ -428,6 +647,14 @@ export function createActivitiesViewController({
     renderConfigHeader({ isSuperAdmin });
     configsList.innerHTML = renderShell(activities, { isSuperAdmin });
     bindEvents({ isSuperAdmin });
+    requestAnimationFrame(() => {
+      if (!configsList?.isConnected) return;
+      configsList.scrollTop = previousScroll.host;
+      const tree = configsList.querySelector(".dashboard-activity-tree-list");
+      const tiles = configsList.querySelector(".dashboard-activity-tiles-grid-wrap") || configsList.querySelector(".dashboard-activity-tiers-wrap");
+      if (tree) tree.scrollTop = previousScroll.tree;
+      if (tiles) tiles.scrollTop = previousScroll.tiles;
+    });
   }
 
   function attachCatalogueChangeListener(){
@@ -437,8 +664,21 @@ export function createActivitiesViewController({
       cachedTeacherCatalogActivities = null;
       cachedAdminCatalogActivities = null;
       cachedRenderedCatalogActivities = null;
+      cachedTeacherCatalogFolders = null;
+      cachedAdminCatalogFolders = null;
       void renderActivitiesForSpace({ forceRefresh: true });
     });
+  }
+
+  function getFolderNodeTypeLabel(folder = {}){
+    const typeLabels = {
+      discipline: "Discipline",
+      domain: "Domaine",
+      theme: "Thème",
+      learning_objective: "Objectif d’apprentissage",
+      grade_level: "Dossier de niveau"
+    };
+    return typeLabels[folder?.node_type] || "Dossier";
   }
 
   return {
@@ -484,6 +724,9 @@ function compareByOrderAndName(a, b){
   if (folderA !== folderB) {
     return folderA.localeCompare(folderB, "fr", { sensitivity: "base" });
   }
+  const tierA = getActivityTier(a);
+  const tierB = getActivityTier(b);
+  if (tierA !== tierB) return tierA - tierB;
   const orderA = Number(a?.display_order) || 0;
   const orderB = Number(b?.display_order) || 0;
   if (orderA !== orderB) return orderA - orderB;
@@ -494,6 +737,11 @@ function compareByOrderAndName(a, b){
   );
 }
 
+function getActivityTier(activity){
+  const tier = Math.trunc(Number(activity?.adventure_tier));
+  return Number.isFinite(tier) && tier >= 1 ? tier : 1;
+}
+
 function getActivityFolderId(activity){
-  return String(activity?.folder_id ?? activity?.category_id ?? "").trim();
+  return String(activity?.folder_id ?? activity?.pedagogical_node_id ?? "").trim();
 }

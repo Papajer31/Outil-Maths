@@ -1,0 +1,206 @@
+.nl-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.nl-config-root .tv-radio-options{
+  flex-wrap:wrap;
+}
+
+.nl-target-group,
+.nl-length-group{
+  align-items:stretch;
+  gap:10px;
+}
+
+.nl-target-select{
+  width:100%;
+  min-height:42px;
+}
+
+.nl-target-preview{
+  min-height:42px;
+  color:var(--muted, #667085);
+  font-size:.92rem;
+}
+
+.nl-target-preview__line{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+}
+
+.nl-target-preview__spellings{
+  display:block;
+  margin-top:4px;
+  font-size:.84rem;
+}
+
+.nl-sound-bubble{
+  display:inline-flex;
+  width:62px;
+  height:44px;
+  vertical-align:middle;
+}
+
+.nl-sound-bubble svg{
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+
+.nl-sound-bubble__shape{
+  fill:#fff7cc;
+  stroke:#d7a51a;
+  stroke-width:2.4;
+}
+
+.nl-sound-bubble__text{
+  fill:#251c2a;
+  font-family:"Andika", system-ui, sans-serif;
+  font-weight:700;
+  text-anchor:middle;
+  dominant-baseline:middle;
+}
+
+.nl-sound-bubble--config{
+  width:54px;
+  height:38px;
+}
+
+.nl-spelling-selector{
+  padding:12px;
+  border:1px solid rgba(15, 23, 42, .12);
+  border-radius:12px;
+  background:rgba(255, 255, 255, .62);
+}
+
+.nl-spelling-selector__header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.nl-spelling-selector__title{
+  color:var(--text, #263244);
+  font-weight:750;
+}
+
+.nl-spelling-selector__hint{
+  margin-top:3px;
+  color:var(--muted, #667085);
+  font-size:.86rem;
+  line-height:1.3;
+}
+
+.nl-spelling-selector__actions{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:6px;
+}
+
+.nl-spelling-selector__actions button{
+  min-height:30px;
+  padding:4px 9px;
+  border:1px solid rgba(15, 23, 42, .16);
+  border-radius:8px;
+  background:#fff;
+  color:var(--text, #263244);
+  font:inherit;
+  font-size:.82rem;
+  font-weight:650;
+  cursor:pointer;
+}
+
+.nl-spelling-options{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.nl-spelling-option{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:34px;
+  padding:5px 11px;
+  border:1px solid rgba(15, 23, 42, .14);
+  border-radius:999px;
+  background:#fff;
+  color:var(--text, #263244);
+  font-weight:700;
+  cursor:pointer;
+  user-select:none;
+}
+
+.nl-spelling-option:has(input:checked){
+  border-color:#51a69a;
+  background:rgba(81, 166, 154, .12);
+}
+
+.nl-spelling-option input{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:pointer;
+}
+
+.nl-length-fields{
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  gap:10px;
+}
+
+.nl-length-fields label{
+  display:grid;
+  gap:5px;
+  color:var(--muted, #667085);
+  font-size:.82rem;
+  font-weight:650;
+}
+
+.nl-length-fields select{
+  min-width:94px;
+}
+
+.nl-length-separator{
+  padding-bottom:11px;
+  color:var(--muted, #667085);
+  font-weight:700;
+}
+
+.nl-config-mode-hint,
+.nl-config-bank-status{
+  min-height:22px;
+  color:var(--muted, #667085);
+  font-size:.9rem;
+  line-height:1.35;
+}
+
+.nl-config-bank-status.is-ready{ color:#217a60; }
+.nl-config-bank-status.is-warning{ color:#9a6512; }
+.nl-config-bank-status.is-error{ color:#b42318; }
+
+@media (max-width: 900px){
+  .nl-spelling-selector__header{
+    flex-direction:column;
+  }
+
+  .nl-spelling-selector__actions{
+    justify-content:flex-start;
+  }
+
+  .nl-length-fields{
+    justify-content:flex-start;
+  }
+}

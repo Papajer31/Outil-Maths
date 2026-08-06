@@ -5,6 +5,7 @@ import {
   setSelectedStudent,
   setSelectedStudents,
   setStudentCode,
+  loadStudentCodeKeypad,
   validateSingleStudentCode,
   refreshMissionsForCurrentSelection,
   toggleSelectedStudentSelection
@@ -100,17 +101,23 @@ export function renderSelectStudentsView(root) {
 
       setStudentCode("");
       setSelectedStudent(student);
+      void loadStudentCodeKeypad(student.id);
     }, { signal });
   });
 
-  studentCodeInput?.addEventListener("input", () => {
-    const nextValue = String(studentCodeInput.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-    if (studentCodeInput.value !== nextValue) {
-      studentCodeInput.value = nextValue;
-    }
+  const updateStudentCode = (value) => {
+    const nextValue = String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+    if (studentCodeInput) studentCodeInput.value = nextValue;
     setStudentCode(nextValue);
     validateSingleButton?.toggleAttribute("disabled", nextValue.length < 3);
     if (studentCodeMessage) studentCodeMessage.textContent = "";
+  };
+
+  root.querySelectorAll("[data-student-code-key]").forEach((button) => {
+    button.addEventListener("click", () => updateStudentCode(`${studentState.studentCode}${button.dataset.studentCodeKey || ""}`), { signal });
+  });
+  root.querySelector("[data-student-code-delete]")?.addEventListener("click", () => {
+    updateStudentCode(String(studentState.studentCode || "").slice(0, -1));
   }, { signal });
 
   validateSingleButton?.addEventListener("click", async () => {
@@ -132,10 +139,6 @@ export function renderSelectStudentsView(root) {
       if (studentCodeMessage) studentCodeMessage.textContent = err?.message || "Impossible de vérifier le code.";
     }
   }, { signal });
-
-  if (studentCodeInput) {
-    window.requestAnimationFrame(() => studentCodeInput.focus());
-  }
 
   validateGroupButton?.addEventListener("click", async () => {
     if (currentMode !== "group") return;
@@ -210,6 +213,12 @@ function renderStudentCodeOverlay(student) {
   if (!student) return "";
 
   const value = String(studentState.studentCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+  const studentId = String(student.id || "").trim();
+  const keypadKeys = studentState.studentCodeKeypadStudentId === studentId
+    ? studentState.studentCodeKeypad
+    : [];
+  const keypadLoading = studentState.isLoadingStudentCodeKeypad && studentState.studentCodeKeypadStudentId === studentId;
+  const keypadMessage = String(studentState.studentCodeKeypadMessage || "").trim();
   return `
     <div
       class="selectstudents-code-overlay"
@@ -223,26 +232,37 @@ function renderStudentCodeOverlay(student) {
         <div class="selectstudents-code-title" id="studentCodeTitle">
           Entre ton code élève
         </div>
-        <input
-          id="studentCodeInput"
-          class="selectstudents-code-input"
-          value="${escapeAttr(value)}"
-          inputmode="text"
-          autocomplete="off"
-          maxlength="3"
-          aria-label="Code élève"
-          data-skip-autofs="true"
-        >
+        <div class="selectstudents-code-input-row">
+          <input
+            id="studentCodeInput"
+            class="selectstudents-code-input"
+            value="${escapeAttr(value)}"
+            inputmode="none"
+            autocomplete="off"
+            maxlength="3"
+            aria-label="Code élève"
+            readonly
+            data-skip-autofs="true"
+          >
+          <button type="button" class="selectstudents-code-delete" data-student-code-delete aria-label="Effacer le dernier caractère" title="Effacer" data-skip-autofs="true">
+            <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" aria-hidden="true"><path d="m456-320 104-104 104 104 56-56-104-104 104-104-56-56-104 104-104-104-56 56 104 104-104 104 56 56Zm-96 160q-19 0-36-8.5T296-192L80-480l216-288q11-15 28-23.5t36-8.5h440q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H360ZM180-480l180 240h440v-480H360L180-480Zm400 0Z"/></svg>
+          </button>
+        </div>
+        <div class="selectstudents-code-keypad" role="group" aria-label="Clavier du code élève">
+          ${keypadLoading ? '<div class="selectstudents-code-keypad-loading">Préparation du clavier…</div>' : keypadKeys.map((key) => `
+            <button type="button" class="selectstudents-code-key" data-student-code-key="${escapeAttr(key)}" aria-label="Ajouter ${escapeAttr(key)}" data-skip-autofs="true">${escapeHtml(key)}</button>
+          `).join("")}
+        </div>
         <button
           type="button"
           class="btn btn-primary btn-big selectstudents-validate-btn selectstudents-code-submit"
           id="btnValidateStudentCode"
           data-skip-autofs="true"
-          ${value.length >= 3 ? "" : "disabled"}
+          ${value.length >= 3 && keypadKeys.length ? "" : "disabled"}
         >
           Valider
         </button>
-        <div id="studentCodeMessage" class="sessionchoice-hint selectstudents-code-message"></div>
+        <div id="studentCodeMessage" class="sessionchoice-hint selectstudents-code-message">${escapeHtml(keypadMessage)}</div>
       </div>
     </div>
   `;

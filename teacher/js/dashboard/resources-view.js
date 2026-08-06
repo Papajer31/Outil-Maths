@@ -15,6 +15,8 @@ const RESOURCE_ROOT_PERSONAL = "__resource_root_personal";
 const RESOURCE_ROOT_SYSTEM = "__resource_root_system";
 const RESOURCE_SYSTEM_IMAGES = "__resource_system_images";
 const RESOURCE_SYSTEM_AUDIO = "__resource_system_audio";
+const SYSTEM_IMAGES_ROOT_ROLE = "system_images_root";
+const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
 
@@ -144,8 +146,10 @@ export function createResourcesViewController({
   storageQuotaElement,
   showToast,
   getCurrentTeacherSpace,
+  getIsSuperAdmin,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
@@ -179,6 +183,58 @@ export function createResourcesViewController({
       throw new Error("Aucun espace enseignant actif.");
     }
     return id;
+  }
+
+  function getSystemImagesRootFolder(){
+    return databaseSystemFolders.find((folder) => folder?.metadata?.system_role === SYSTEM_IMAGES_ROOT_ROLE) || null;
+  }
+
+  function getSystemImagesRootId(){
+    return normalizeTreeId(getSystemImagesRootFolder()?.id);
+  }
+
+  function isDatabaseSystemImageFolder(folder){
+    if (!folder || folder.is_system !== true) return false;
+    const rootId = getSystemImagesRootId();
+    if (!rootId || String(folder.id || "") === rootId) return false;
+    let cursor = folder;
+    const visited = new Set();
+    while (cursor) {
+      const cursorId = String(cursor.id || "");
+      if (!cursorId || visited.has(cursorId)) return false;
+      visited.add(cursorId);
+      const parentId = normalizeTreeId(cursor.parent_id);
+      if (parentId === rootId) return true;
+      cursor = parentId
+        ? (databaseSystemFolders.find((candidate) => String(candidate.id) === parentId) || null)
+        : null;
+    }
+    return false;
+  }
+
+  function isDatabaseSystemImageResource(resource){
+    return resource?.is_system === true
+      && String(resource?.storage_bucket || "") === "images"
+      && String(resource?.metadata?.image_asset_slug || "").trim() !== "";
+  }
+
+  function isLockedSystemFolder(folder){
+    const role = String(folder?.metadata?.system_role || "");
+    return role === SYSTEM_IMAGES_ROOT_ROLE || role === SYSTEM_IMAGES_UNCLASSIFIED_ROLE;
+  }
+
+  function canManageFolder(folder){
+    if (!folder || folder.is_virtual_root === true) return false;
+    if (folder.is_system !== true) return true;
+    return getIsSuperAdmin?.() === true
+      && (folder.managed_system_image === true || isDatabaseSystemImageFolder(folder))
+      && !isLockedSystemFolder(folder);
+  }
+
+  function canManageResource(resource){
+    if (!resource) return false;
+    if (resource.is_system !== true) return true;
+    return getIsSuperAdmin?.() === true && isDatabaseSystemImageResource(resource);
   }
 
   function getPersonalStorageUsage(){
@@ -257,12 +313,25 @@ export function createResourcesViewController({
       is_system: false
     }));
 
-    const normalizedDatabaseSystem = databaseSystemFolders.map((folder, index) => ({
-      ...folder,
-      parent_id: String(folder?.parent_id ?? "").trim() || RESOURCE_ROOT_SYSTEM,
-      display_order: Number.isFinite(Number(folder?.display_order)) ? Number(folder.display_order) : index,
-      is_system: true
-    }));
+    const systemImagesRootId = getSystemImagesRootId();
+    const normalizedDatabaseSystem = databaseSystemFolders
+      .filter((folder) => String(folder?.id || "") !== String(systemImagesRootId || ""))
+      .map((folder, index) => {
+        const actualParentId = normalizeTreeId(folder?.parent_id);
+        const managedSystemImage = isDatabaseSystemImageFolder(folder);
+        return {
+          ...folder,
+          parent_id: managedSystemImage && actualParentId === systemImagesRootId
+            ? RESOURCE_SYSTEM_IMAGES
+            : (actualParentId || RESOURCE_ROOT_SYSTEM),
+          actual_parent_id: actualParentId,
+          display_order: Number.isFinite(Number(folder?.display_order)) ? Number(folder.display_order) : index,
+          is_system: true,
+          is_database_system: true,
+          managed_system_image: managedSystemImage,
+          is_locked_system_role: isLockedSystemFolder(folder)
+        };
+      });
 
     return [...roots, ...normalizedPersonal, ...systemFolders, ...normalizedDatabaseSystem];
   }
@@ -276,14 +345,24 @@ export function createResourcesViewController({
       scope: "personal",
       is_system: false
     }));
-    const normalizedDatabaseSystem = databaseSystemResources.map((resource, index) => ({
-      ...resource,
-      config_name: resource?.title || "Ressource sans nom",
-      folder_id: String(resource?.folder_id ?? "").trim() || RESOURCE_ROOT_SYSTEM,
-      display_order: Number.isFinite(Number(resource?.display_order)) ? Number(resource.display_order) : index,
-      scope: "system",
-      is_system: true
-    }));
+    const systemImagesRootId = getSystemImagesRootId();
+    const normalizedDatabaseSystem = databaseSystemResources.map((resource, index) => {
+      const managedSystemImage = isDatabaseSystemImageResource(resource);
+      const actualFolderId = normalizeTreeId(resource?.folder_id);
+      return {
+        ...resource,
+        config_name: resource?.title || "Ressource sans nom",
+        folder_id: managedSystemImage && actualFolderId === systemImagesRootId
+          ? RESOURCE_SYSTEM_IMAGES
+          : (actualFolderId || RESOURCE_ROOT_SYSTEM),
+        actual_folder_id: actualFolderId,
+        display_order: Number.isFinite(Number(resource?.display_order)) ? Number(resource.display_order) : index,
+        scope: "system",
+        is_system: true,
+        is_database_system: true,
+        managed_system_image: managedSystemImage
+      };
+    });
     return [...normalizedPersonal, ...systemResources, ...normalizedDatabaseSystem];
   }
 
@@ -332,6 +411,24 @@ export function createResourcesViewController({
     if (!safeId || safeId === RESOURCE_ROOT_PERSONAL) return null;
     const folder = treeState.folderById.get(safeId);
     return folder?.is_system === true ? undefined : safeId;
+  }
+
+  function getSystemImageTargetFolderId(folderId = currentOpenFolderId, treeState = buildTreeState()){
+    if (getIsSuperAdmin?.() !== true) return undefined;
+    const safeId = normalizeTreeId(folderId);
+    const rootId = getSystemImagesRootId();
+    if (!safeId || !rootId) return undefined;
+    if (safeId === RESOURCE_SYSTEM_IMAGES) return rootId;
+    const folder = treeState.folderById.get(safeId);
+    return folder?.managed_system_image === true ? safeId : undefined;
+  }
+
+  function getWritableLocation(folderId = currentOpenFolderId, treeState = buildTreeState()){
+    const personalFolderId = getPersonalTargetFolderId(folderId, treeState);
+    if (personalFolderId !== undefined) return { scope:"personal", folderId:personalFolderId };
+    const systemFolderId = getSystemImageTargetFolderId(folderId, treeState);
+    if (systemFolderId !== undefined) return { scope:"system-image", folderId:systemFolderId };
+    return null;
   }
 
   function isVirtualRoot(folderId){
@@ -405,7 +502,7 @@ export function createResourcesViewController({
     const folder = node.item;
     const folderId = String(folder.id);
     const isSelected = normalizeTreeId(currentOpenFolderId) === folderId;
-    const isDraggable = folder?.is_system !== true && folder?.is_virtual_root !== true;
+    const isDraggable = canManageFolder(folder);
     const hasChildFolders = getExplorerFolders().some((candidate) => normalizeTreeId(candidate?.parent_id) === folderId);
     const isCollapsed = hasChildFolders && node.isCollapsed;
     return `
@@ -437,9 +534,9 @@ export function createResourcesViewController({
   }
 
   function renderFolderTile(folder, treeState){
-    const isProtected = folder?.is_system === true || folder?.is_virtual_root === true;
+    const isManageable = canManageFolder(folder);
     const resourceCount = countResourcesInFolder(folder.id, treeState);
-    const actions = !isProtected
+    const actions = isManageable
       ? `
         <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-folder" data-folder-id="${escapeAttr(folder.id)}" title="Renommer le dossier" aria-label="Renommer le dossier">
@@ -453,7 +550,7 @@ export function createResourcesViewController({
       : "";
 
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-resource-folder-tile" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" ${!isProtected ? 'draggable="true"' : ""}>
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-resource-folder-tile" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-resource-folder-topline">
             <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
@@ -494,7 +591,8 @@ export function createResourcesViewController({
     const resourceId = String(resource.id || "");
     const isImage = resource.type !== "audio";
     const typeLabel = isImage ? "Image" : "Audio";
-    const isProtected = resource?.is_system === true;
+    const isManageable = canManageResource(resource);
+    const isPersonal = resource?.is_system !== true;
     const preview = isImage
       ? `<img class="dashboard-resource-preview-image" src="${escapeAttr(resource.url || "")}" alt="${escapeAttr(resource.alt || resource.title || "Image")}" loading="lazy">`
       : `
@@ -502,21 +600,22 @@ export function createResourcesViewController({
           <span class="dashboard-material-icon">play_arrow</span>
         </span>
       `;
-    const actions = isProtected
+    const actions = !isManageable
       ? ""
       : `
         <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked dashboard-resource-tile-actions">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-resource" data-resource-id="${escapeAttr(resourceId)}" title="Renommer la ressource" aria-label="Renommer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
           </button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
-            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-          </button>
+          ${isPersonal ? `
+            <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
+              <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+            </button>` : ""}
         </div>
       `;
 
     return `
-      <article class="dashboard-resource-tile ${isImage ? "is-image" : "is-audio"}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${!isProtected ? 'draggable="true"' : ""}>
+      <article class="dashboard-resource-tile ${isImage ? "is-image" : "is-audio"}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-resource-tile-surface" type="button" data-action="open-resource" data-resource-id="${escapeAttr(resourceId)}">
           <span class="dashboard-resource-preview">
             <span class="dashboard-resource-type-pill">${typeLabel}</span>
@@ -583,36 +682,42 @@ export function createResourcesViewController({
   function updateActions(){
     const treeState = buildTreeState();
     const atExplorerRoot = !normalizeTreeId(currentOpenFolderId);
-    const writable = !atExplorerRoot && isWritablePersonalLocation(currentOpenFolderId, treeState);
+    const writableLocation = atExplorerRoot ? null : getWritableLocation(currentOpenFolderId, treeState);
+    const personalWritable = writableLocation?.scope === "personal";
+    const systemWritable = writableLocation?.scope === "system-image";
     const busy = isImporting || isRecordingResource || isMoving;
     if (createFolderButton) {
-      createFolderButton.disabled = !writable || busy;
+      createFolderButton.disabled = !writableLocation || busy;
       createFolderButton.title = atExplorerRoot
-        ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
-        : writable
+        ? "Sélectionne d’abord un espace de ressources."
+        : personalWritable
           ? "Créer un dossier personnel ici"
-          : "Les ressources système sont protégées en écriture";
+          : systemWritable
+            ? "Créer un dossier système d’images ici"
+            : "Ce dossier est protégé en écriture";
     }
     if (importResourcesButton) {
-      importResourcesButton.disabled = !writable || busy;
+      importResourcesButton.disabled = !personalWritable || busy;
       importResourcesButton.title = busy
         ? "Import en cours…"
         : atExplorerRoot
           ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
-          : writable
-            ? "Importer des fichiers ici"
-            : "Les ressources système sont protégées en écriture";
+          : personalWritable
+            ? "Importer des fichiers personnels ici"
+            : systemWritable
+              ? "Utilise le bouton « Banque d’images » pour importer des images système"
+              : "Les ressources système sont protégées en écriture";
       importResourcesButton.setAttribute("aria-busy", String(busy));
     }
     if (recordAudioButton) {
-      recordAudioButton.disabled = !writable || busy;
+      recordAudioButton.disabled = !personalWritable || busy;
       recordAudioButton.title = busy
         ? "Une opération est déjà en cours…"
         : atExplorerRoot
           ? "Sélectionne d’abord « Ressources personnelles » ou l’un de ses dossiers."
-          : writable
+          : personalWritable
             ? "Enregistrer un audio personnel ici"
-            : "Les ressources système sont protégées en écriture";
+            : "L’enregistrement audio est réservé aux ressources personnelles";
       recordAudioButton.setAttribute("aria-busy", String(busy));
     }
   }
@@ -630,37 +735,56 @@ export function createResourcesViewController({
     list?.querySelectorAll(selector).forEach((element) => element.classList.add("is-dragging"));
   }
 
+  function getDraggedRecord(source = draggedNode){
+    if (!source?.id || !source?.type) return null;
+    if (source.type === "folder") {
+      return personalFolders.find((item) => String(item.id) === String(source.id))
+        || databaseSystemFolders.find((item) => String(item.id) === String(source.id))
+        || null;
+    }
+    return personalResources.find((item) => String(item.id) === String(source.id))
+      || databaseSystemResources.find((item) => String(item.id) === String(source.id))
+      || null;
+  }
+
+  function getRecordScope(record){
+    if (!record) return "";
+    return record.is_system === true ? "system-image" : "personal";
+  }
+
   function getResourceDropTargetFromEvent(event){
     const targetElement = event.target instanceof Element ? event.target : null;
     if (!targetElement || !list?.contains(targetElement)) return null;
+    const sourceScope = getRecordScope(getDraggedRecord());
+    if (!sourceScope) return null;
 
     const treeRoot = targetElement.closest(".dashboard-activity-tree-root");
     if (treeRoot) {
-      return { rawFolderId: RESOURCE_ROOT_PERSONAL, element: treeRoot };
+      const rawFolderId = sourceScope === "system-image" ? RESOURCE_SYSTEM_IMAGES : RESOURCE_ROOT_PERSONAL;
+      const location = getWritableLocation(rawFolderId);
+      return location?.scope === sourceScope ? { rawFolderId, element:treeRoot } : null;
     }
 
     const explicitTarget = targetElement.closest("[data-drop-folder-id]");
     if (explicitTarget) {
       const rawFolderId = String(explicitTarget.dataset.dropFolderId || "");
-      return getPersonalTargetFolderId(rawFolderId) === undefined
-        ? null
-        : { rawFolderId, element: explicitTarget };
+      const location = getWritableLocation(rawFolderId);
+      return location?.scope === sourceScope ? { rawFolderId, element:explicitTarget } : null;
     }
 
     const folderTarget = targetElement.closest("[data-node-type='folder'][data-node-id]");
     if (folderTarget) {
       const rawFolderId = String(folderTarget.dataset.nodeId || "");
-      return getPersonalTargetFolderId(rawFolderId) === undefined
-        ? null
-        : { rawFolderId, element: folderTarget };
+      const location = getWritableLocation(rawFolderId);
+      return location?.scope === sourceScope ? { rawFolderId, element:folderTarget } : null;
     }
 
     const tilesPane = targetElement.closest(".dashboard-activity-tiles-pane");
     if (tilesPane) {
-      const rawFolderId = normalizeTreeId(currentOpenFolderId) || RESOURCE_ROOT_PERSONAL;
-      return getPersonalTargetFolderId(rawFolderId) === undefined
-        ? null
-        : { rawFolderId, element: tilesPane };
+      const rawFolderId = normalizeTreeId(currentOpenFolderId)
+        || (sourceScope === "system-image" ? RESOURCE_SYSTEM_IMAGES : RESOURCE_ROOT_PERSONAL);
+      const location = getWritableLocation(rawFolderId);
+      return location?.scope === sourceScope ? { rawFolderId, element:tilesPane } : null;
     }
 
     return null;
@@ -672,15 +796,17 @@ export function createResourcesViewController({
     markDraggedNode();
   }
 
-  function getNextFolderOrder(targetFolderId, sourceFolderId){
-    return personalFolders
+  function getNextFolderOrder(targetFolderId, sourceFolderId, scope){
+    const source = scope === "system-image" ? databaseSystemFolders : personalFolders;
+    return source
       .filter((folder) => String(folder.id) !== String(sourceFolderId || ""))
       .filter((folder) => normalizeTreeId(folder.parent_id) === normalizeTreeId(targetFolderId))
       .reduce((maximum, folder) => Math.max(maximum, Number(folder.display_order) || 0), -1) + 1;
   }
 
-  function getNextResourceOrder(targetFolderId, sourceResourceId){
-    return personalResources
+  function getNextResourceOrder(targetFolderId, sourceResourceId, scope){
+    const source = scope === "system-image" ? databaseSystemResources : personalResources;
+    return source
       .filter((resource) => String(resource.id) !== String(sourceResourceId || ""))
       .filter((resource) => normalizeTreeId(resource.folder_id) === normalizeTreeId(targetFolderId))
       .reduce((maximum, resource) => Math.max(maximum, Number(resource.display_order) || 0), -1) + 1;
@@ -688,14 +814,19 @@ export function createResourcesViewController({
 
   async function moveDraggedNodeToTarget(source, dropTarget){
     if (!source?.id || !source?.type || !dropTarget || isMoving) return;
-    const targetFolderId = getPersonalTargetFolderId(dropTarget.rawFolderId);
-    if (targetFolderId === undefined) return;
+    const treeState = buildTreeState();
+    const location = getWritableLocation(dropTarget.rawFolderId, treeState);
+    const sourceRecord = getDraggedRecord(source);
+    const sourceScope = getRecordScope(sourceRecord);
+    if (!location || !sourceRecord || location.scope !== sourceScope) return;
+    const targetFolderId = location.folderId;
+    const isSystem = sourceScope === "system-image";
 
     if (source.type === "folder") {
-      const folder = personalFolders.find((item) => String(item.id) === String(source.id));
-      if (!folder) return;
-      if (String(folder.id) === String(targetFolderId || "") || (targetFolderId && isFolderInside(targetFolderId, folder.id))) {
-        showToast?.("Un dossier ne peut pas être déplacé dans lui-même ou dans l’un de ses sous-dossiers.", { isError: true });
+      const folder = sourceRecord;
+      if (!canManageFolder({ ...folder, managed_system_image:isSystem ? isDatabaseSystemImageFolder(folder) : false })) return;
+      if (String(folder.id) === String(targetFolderId || "") || (targetFolderId && isFolderInside(dropTarget.rawFolderId, folder.id, treeState))) {
+        showToast?.("Un dossier ne peut pas être déplacé dans lui-même ou dans l’un de ses sous-dossiers.", { isError:true });
         clearResourceDropMarkers();
         return;
       }
@@ -704,26 +835,30 @@ export function createResourcesViewController({
         return;
       }
 
-      const previousFolders = [...personalFolders];
-      const displayOrder = getNextFolderOrder(targetFolderId, folder.id);
-      personalFolders = personalFolders.map((item) => String(item.id) === String(folder.id)
-        ? { ...item, parent_id: targetFolderId, display_order: displayOrder }
-        : item);
+      const previousFolders = isSystem ? [...databaseSystemFolders] : [...personalFolders];
+      const displayOrder = getNextFolderOrder(targetFolderId, folder.id, sourceScope);
+      const updater = (item) => String(item.id) === String(folder.id)
+        ? { ...item, parent_id:targetFolderId, display_order:displayOrder }
+        : item;
+      if (isSystem) databaseSystemFolders = databaseSystemFolders.map(updater);
+      else personalFolders = personalFolders.map(updater);
       isMoving = true;
-      if (targetFolderId) expandFolderPath(targetFolderId);
+      if (dropTarget.rawFolderId) expandFolderPath(dropTarget.rawFolderId);
       render();
       try {
         const updated = await updateResourceFolder?.(folder.id, {
-          parent_id: targetFolderId,
-          display_order: displayOrder
-        });
+          parent_id:targetFolderId,
+          display_order:displayOrder
+        }, { is_system:isSystem });
         if (updated) {
-          personalFolders = personalFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
+          if (isSystem) databaseSystemFolders = databaseSystemFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
+          else personalFolders = personalFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
         }
         showToast?.("Dossier déplacé.");
       } catch (error) {
-        personalFolders = previousFolders;
-        showToast?.(error?.message || "Impossible de déplacer le dossier.", { isError: true });
+        if (isSystem) databaseSystemFolders = previousFolders;
+        else personalFolders = previousFolders;
+        showToast?.(error?.message || "Impossible de déplacer le dossier.", { isError:true });
       } finally {
         isMoving = false;
         draggedNode = null;
@@ -734,35 +869,40 @@ export function createResourcesViewController({
     }
 
     if (source.type === "resource") {
-      const resource = personalResources.find((item) => String(item.id) === String(source.id));
-      if (!resource) return;
+      const resource = sourceRecord;
+      if (!canManageResource(resource)) return;
       if (normalizeTreeId(resource.folder_id) === normalizeTreeId(targetFolderId)) {
         clearResourceDropMarkers();
         return;
       }
 
-      const previousResources = [...personalResources];
-      const displayOrder = getNextResourceOrder(targetFolderId, resource.id);
-      personalResources = personalResources.map((item) => String(item.id) === String(resource.id)
-        ? { ...item, folder_id: targetFolderId, display_order: displayOrder }
-        : item);
+      const previousResources = isSystem ? [...databaseSystemResources] : [...personalResources];
+      const displayOrder = getNextResourceOrder(targetFolderId, resource.id, sourceScope);
+      const updater = (item) => String(item.id) === String(resource.id)
+        ? { ...item, folder_id:targetFolderId, display_order:displayOrder }
+        : item;
+      if (isSystem) databaseSystemResources = databaseSystemResources.map(updater);
+      else personalResources = personalResources.map(updater);
       isMoving = true;
-      if (targetFolderId) expandFolderPath(targetFolderId);
+      if (dropTarget.rawFolderId) expandFolderPath(dropTarget.rawFolderId);
       render();
       try {
         const updated = await updateResource?.(resource.id, {
-          folder_id: targetFolderId,
-          display_order: displayOrder
-        });
+          folder_id:targetFolderId,
+          display_order:displayOrder
+        }, { is_system:isSystem });
         if (updated) {
-          personalResources = personalResources.map((item) => String(item.id) === String(updated.id)
-            ? { ...item, ...updated, url: item.url || updated.url }
-            : item);
+          const merge = (item) => String(item.id) === String(updated.id)
+            ? { ...item, ...updated, url:item.url || updated.url }
+            : item;
+          if (isSystem) databaseSystemResources = databaseSystemResources.map(merge);
+          else personalResources = personalResources.map(merge);
         }
         showToast?.("Ressource déplacée.");
       } catch (error) {
-        personalResources = previousResources;
-        showToast?.(error?.message || "Impossible de déplacer la ressource.", { isError: true });
+        if (isSystem) databaseSystemResources = previousResources;
+        else personalResources = previousResources;
+        showToast?.(error?.message || "Impossible de déplacer la ressource.", { isError:true });
       } finally {
         isMoving = false;
         draggedNode = null;
@@ -784,10 +924,9 @@ export function createResourcesViewController({
       event.preventDefault();
       return;
     }
-    const sourceRecord = type === "folder"
-      ? personalFolders.find((item) => String(item.id) === id)
-      : personalResources.find((item) => String(item.id) === id);
-    if (!sourceRecord || sourceRecord.is_system === true) {
+    const sourceRecord = getDraggedRecord({ type, id });
+    const manageable = type === "folder" ? canManageFolder(sourceRecord) : canManageResource(sourceRecord);
+    if (!sourceRecord || !manageable) {
       event.preventDefault();
       return;
     }
@@ -1172,41 +1311,56 @@ export function createResourcesViewController({
 
   function createFolder(){
     const treeState = buildTreeState();
-    if (!normalizeTreeId(currentOpenFolderId)) return;
-    const parentId = getPersonalTargetFolderId(currentOpenFolderId, treeState);
-    if (parentId === undefined || isImporting) return;
+    if (!normalizeTreeId(currentOpenFolderId) || isImporting) return;
+    const location = getWritableLocation(currentOpenFolderId, treeState);
+    if (!location) return;
+    const isSystem = location.scope === "system-image";
+    const parentId = location.folderId;
     openNameOverlay({
-      title: "Créer un dossier personnel",
-      placeholder: "Nom du dossier",
-      confirmLabel: "Créer",
-      onConfirm: async (name) => {
-        const siblings = personalFolders.filter((folder) => normalizeTreeId(folder.parent_id) === normalizeTreeId(parentId));
-        const folder = await createResourceFolderForSpace?.(getTeacherSpaceId(), {
-          name,
-          parent_id: parentId,
-          display_order: siblings.length
-        });
+      title:isSystem ? "Créer un dossier d’images système" : "Créer un dossier personnel",
+      placeholder:"Nom du dossier",
+      confirmLabel:"Créer",
+      onConfirm:async (name) => {
+        const sourceFolders = isSystem ? databaseSystemFolders : personalFolders;
+        const siblings = sourceFolders.filter((folder) => normalizeTreeId(folder.parent_id) === normalizeTreeId(parentId));
+        const folder = isSystem
+          ? await createSystemResourceFolderAsAdmin?.({
+            name,
+            parent_id:parentId,
+            display_order:siblings.length,
+            metadata:{ resource_type:"image" }
+          })
+          : await createResourceFolderForSpace?.(getTeacherSpaceId(), {
+            name,
+            parent_id:parentId,
+            display_order:siblings.length
+          });
         if (!folder) throw new Error("Création du dossier impossible.");
-        personalFolders.push(folder);
+        if (isSystem) databaseSystemFolders.push(folder);
+        else personalFolders.push(folder);
         knownFolderIds.add(String(folder.id));
         collapsedFolderIds.add(String(folder.id));
         render();
-        showToast?.("Dossier de ressources créé.");
+        showToast?.(isSystem ? "Dossier système créé." : "Dossier de ressources créé.");
       }
     });
   }
 
   function renameFolder(folderId){
-    const folder = personalFolders.find((item) => String(item.id) === String(folderId));
-    if (!folder) return;
+    const personalFolder = personalFolders.find((item) => String(item.id) === String(folderId));
+    const systemFolder = databaseSystemFolders.find((item) => String(item.id) === String(folderId));
+    const folder = personalFolder || systemFolder;
+    const isSystem = Boolean(systemFolder);
+    if (!folder || !canManageFolder(folder)) return;
     openNameOverlay({
-      title: "Renommer le dossier",
-      initialValue: folder.name || "",
-      placeholder: "Nom du dossier",
-      onConfirm: async (name) => {
-        const updated = await updateResourceFolder?.(folder.id, { name });
+      title:"Renommer le dossier",
+      initialValue:folder.name || "",
+      placeholder:"Nom du dossier",
+      onConfirm:async (name) => {
+        const updated = await updateResourceFolder?.(folder.id, { name }, { is_system:isSystem });
         if (!updated) throw new Error("Renommage impossible.");
-        personalFolders = personalFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
+        if (isSystem) databaseSystemFolders = databaseSystemFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
+        else personalFolders = personalFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
         render();
         showToast?.("Dossier renommé.");
       }
@@ -1214,8 +1368,11 @@ export function createResourcesViewController({
   }
 
   async function deleteFolder(folderId){
-    const folder = personalFolders.find((item) => String(item.id) === String(folderId));
-    if (!folder) return;
+    const personalFolder = personalFolders.find((item) => String(item.id) === String(folderId));
+    const systemFolder = databaseSystemFolders.find((item) => String(item.id) === String(folderId));
+    const folder = personalFolder || systemFolder;
+    const isSystem = Boolean(systemFolder);
+    if (!folder || !canManageFolder(folder)) return;
     const confirmed = await openDashboardConfirmDialog({
       title:"Supprimer le dossier",
       message:`Supprimer le dossier « ${folder.name} » ?`,
@@ -1224,29 +1381,40 @@ export function createResourcesViewController({
     });
     if (!confirmed) return;
     try {
-      await deleteResourceFolder?.(folder.id);
-      personalFolders = personalFolders.filter((item) => String(item.id) !== String(folder.id));
-      if (String(currentOpenFolderId || "") === String(folder.id)) currentOpenFolderId = RESOURCE_ROOT_PERSONAL;
+      await deleteResourceFolder?.(folder.id, { is_system:isSystem });
+      if (isSystem) databaseSystemFolders = databaseSystemFolders.filter((item) => String(item.id) !== String(folder.id));
+      else personalFolders = personalFolders.filter((item) => String(item.id) !== String(folder.id));
+      if (String(currentOpenFolderId || "") === String(folder.id)) {
+        currentOpenFolderId = isSystem ? RESOURCE_SYSTEM_IMAGES : RESOURCE_ROOT_PERSONAL;
+      }
       render();
       showToast?.("Dossier supprimé.");
     } catch (error) {
-      window.alert(error?.message || "Suppression impossible.");
+      const message = String(error?.code || "") === "23503"
+        ? "Ce dossier contient encore des ressources ou des sous-dossiers."
+        : (error?.message || "Suppression impossible.");
+      showToast?.(message, { isError:true });
     }
   }
 
   function renamePersonalResource(resourceId){
-    const resource = personalResources.find((item) => String(item.id) === String(resourceId));
-    if (!resource || resource.is_system === true || typeof updateResource !== "function") return;
+    const personalResource = personalResources.find((item) => String(item.id) === String(resourceId));
+    const systemResource = databaseSystemResources.find((item) => String(item.id) === String(resourceId));
+    const resource = personalResource || systemResource;
+    const isSystem = Boolean(systemResource);
+    if (!resource || !canManageResource(resource) || typeof updateResource !== "function") return;
     openNameOverlay({
       title:"Renommer la ressource",
       initialValue:resource.title || "",
       placeholder:"Nom de la ressource",
       onConfirm:async (title) => {
-        const updated = await updateResource(resource.id, { title });
+        const updated = await updateResource(resource.id, { title }, { is_system:isSystem });
         if (!updated) throw new Error("Renommage impossible.");
-        personalResources = personalResources.map((item) => String(item.id) === String(updated.id)
+        const merge = (item) => String(item.id) === String(updated.id)
           ? { ...item, ...updated, url:item.url || updated.url }
-          : item);
+          : item;
+        if (isSystem) databaseSystemResources = databaseSystemResources.map(merge);
+        else personalResources = personalResources.map(merge);
         render();
         showToast?.("Ressource renommée.");
       }
@@ -1294,7 +1462,8 @@ export function createResourcesViewController({
       ...resource,
       tags: Array.isArray(resource.tags) ? resource.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : []
     };
-    const canEditTags = detailResource.is_system !== true && typeof updateResource === "function";
+    const canEditTags = canManageResource(detailResource) && typeof updateResource === "function";
+    const showTechnicalProperties = detailResource.is_system !== true || detailResource.managed_system_image === true;
     const url = await resolveResourceUrl(resource).catch(() => "");
     const preview = resource.type === "audio"
       ? (url
@@ -1349,12 +1518,12 @@ export function createResourcesViewController({
           </button>
         </div>
         <div class="dashboard-resource-detail-preview${detailResource.type === "audio" ? " is-audio" : ""}">${preview}</div>
-        <dl class="dashboard-resource-detail-properties${detailResource.is_system ? " is-system" : ""}">
+        <dl class="dashboard-resource-detail-properties${showTechnicalProperties ? "" : " is-system"}">
           <div><dt>Type</dt><dd>${detailResource.type === "audio" ? "Audio" : "Image"}</dd></div>
-          ${detailResource.is_system ? "" : `
+          ${showTechnicalProperties ? `
             <div><dt>${detailResource.type === "audio" ? "Durée" : "Dimensions"}</dt><dd>${escapeHtml(detailResource.type === "audio" ? duration : dimensions)}</dd></div>
             <div><dt>Poids</dt><dd>${escapeHtml(size)}</dd></div>
-          `}
+          ` : ""}
         </dl>
         <section class="dashboard-resource-detail-tags-panel">
           <h3>Tags</h3>
@@ -1427,12 +1596,15 @@ export function createResourcesViewController({
           .map((tag) => [tag.toLocaleLowerCase("fr-FR"), tag])
       ).values());
       try {
-        const updated = await updateResource(detailResource.id, { tags:uniqueTags });
+        const isSystem = detailResource.is_system === true;
+        const updated = await updateResource(detailResource.id, { tags:uniqueTags }, { is_system:isSystem });
         if (!updated) throw new Error("Mise à jour des tags impossible.");
         detailResource = { ...detailResource, ...updated, tags:Array.isArray(updated.tags) ? updated.tags : uniqueTags };
-        personalResources = personalResources.map((item) => String(item.id) === String(detailResource.id)
+        const merge = (item) => String(item.id) === String(detailResource.id)
           ? { ...item, ...updated, tags:detailResource.tags, url:item.url || updated.url }
-          : item);
+          : item;
+        if (isSystem) databaseSystemResources = databaseSystemResources.map(merge);
+        else personalResources = personalResources.map(merge);
         if (tagsHost) tagsHost.innerHTML = renderTags();
       } catch (error) {
         console.error("Impossible de mettre à jour les tags de la ressource.", error);

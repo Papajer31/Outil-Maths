@@ -4,9 +4,10 @@ import {
   accessCodeExists,
   listPublicActivitiesForSpace,
   listPublicCatalogActivities,
-  listPublicActivityFoldersForSpace,
+  listPublicPedagogicalNodesForSpace,
   listPublicStudentsForSpace,
   verifyPublicStudentCode,
+  getPublicStudentCodeKeypad,
   getPublicStudentActivityProgress,
   listPublicMissionsForSpace,
   loadPublicMissionSteps
@@ -273,6 +274,7 @@ export function setSelectedStudent(student){
   const normalized = student ? normalizeStudentRecord(student) : null;
   studentState.selectedStudent = normalized ? { ...normalized } : null;
   studentState.selectedStudents = normalized ? [normalized] : [];
+  resetStudentCodeKeypad();
   emitRefresh();
 }
 
@@ -339,6 +341,33 @@ export function setStudentCode(value){
   studentState.studentCode = String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
 }
 
+export async function loadStudentCodeKeypad(studentId){
+  const id = String(studentId || "").trim();
+  if (!id || !studentState.accessCode) return;
+  if (studentState.isLoadingStudentCodeKeypad && studentState.studentCodeKeypadStudentId === id) return;
+
+  studentState.studentCodeKeypad = [];
+  studentState.studentCodeKeypadStudentId = id;
+  studentState.studentCodeKeypadMessage = "";
+  studentState.isLoadingStudentCodeKeypad = true;
+  emitRefresh();
+
+  try {
+    const keys = await getPublicStudentCodeKeypad(studentState.accessCode, id);
+    if (String(studentState.selectedStudent?.id || "") !== id) return;
+    studentState.studentCodeKeypad = keys;
+    if (keys.length < 10) studentState.studentCodeKeypadMessage = "Le clavier est indisponible.";
+  } catch {
+    if (String(studentState.selectedStudent?.id || "") !== id) return;
+    studentState.studentCodeKeypadMessage = "Le clavier est indisponible.";
+  } finally {
+    if (studentState.studentCodeKeypadStudentId === id) {
+      studentState.isLoadingStudentCodeKeypad = false;
+      emitRefresh();
+    }
+  }
+}
+
 export async function validateSingleStudentCode(){
   const participant = getSelectedParticipantsForCurrentMode()[0] || null;
   if (!participant?.id) return false;
@@ -385,7 +414,7 @@ export async function selectMission(missionId){
     id: mission.id,
     mission_id: mission.id,
     config_name: mission.title,
-    catalog_context: "",
+    catalog_context: "mission",
     module_key: "tools",
     config_json: configJson
   };
@@ -403,6 +432,7 @@ export function goBackToSelectMode(){
   studentState.currentActivityFolderId = null;
   studentState.activityEntry = "";
   studentState.studentCode = "";
+  resetStudentCodeKeypad();
   studentState.missions = [];
   studentState.missionsMessage = "";
   studentState.selectedConfig = null;
@@ -589,7 +619,7 @@ async function loadClassData(accessCode, { refreshOnComplete = true, refreshOnSt
   try {
     const [activities, folders, students] = await Promise.all([
       listPublicActivitiesForSpace(accessCode),
-      listPublicActivityFoldersForSpace(accessCode),
+      listPublicPedagogicalNodesForSpace(accessCode),
       listPublicStudentsForSpace(accessCode)
     ]);
 
@@ -688,6 +718,13 @@ function buildStudentHash(routeName){
 
 function emitRefresh(){
   window.dispatchEvent(new Event("student:refresh"));
+}
+
+function resetStudentCodeKeypad(){
+  studentState.studentCodeKeypad = [];
+  studentState.studentCodeKeypadStudentId = "";
+  studentState.isLoadingStudentCodeKeypad = false;
+  studentState.studentCodeKeypadMessage = "";
 }
 
 function waitForHomeLaunchFlightComplete(){

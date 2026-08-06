@@ -119,6 +119,7 @@ function createRuntimeState(initialContext = {}) {
     answerRevealed: false,
     showResponseBox: shouldShowResponseBox(initialContext),
     instructionText: resolveInstruction(initialContext),
+    numberDisplayMode: "digits",
     answerDisplayMode: "correction",
     studentAnswerSnapshot: null,
     correctionSnapshot: null,
@@ -129,6 +130,7 @@ function createRuntimeState(initialContext = {}) {
 function syncRuntimeState(state, context = state.latestContext) {
   state.showResponseBox = shouldShowResponseBox(context);
   state.instructionText = resolveInstruction(context);
+  state.numberDisplayMode = normalizeSettings(context?.settings).numberDisplayMode;
 }
 
 function renderShell(state) {
@@ -209,7 +211,7 @@ function loadNextQuestion(state, context = {}) {
   }
 
   if (state.exprEl) {
-    state.exprEl.textContent = formatQuestion(nextQuestion);
+    state.exprEl.textContent = formatQuestion(nextQuestion, state.numberDisplayMode);
   }
 
   if (state.showResponseBox) {
@@ -293,10 +295,10 @@ function revealAnswer(state) {
   state.answerDisplayMode = "correction";
 
   if (state.showResponseBox) {
-    state.exprEl.textContent = formatQuestion(state.currentQuestion);
+    state.exprEl.textContent = formatQuestion(state.currentQuestion, state.numberDisplayMode);
     renderDisplayedResponse(state);
   } else {
-    state.exprEl.textContent = formatAnswer(state.currentQuestion);
+    state.exprEl.textContent = formatAnswer(state.currentQuestion, state.numberDisplayMode);
   }
 
   syncKeypadVisibility(state);
@@ -452,7 +454,7 @@ function syncCompactClass(state) {
     showResponseBox: state.showResponseBox,
     digitCount,
     lineLength: getCurrentLineDisplayLength(state),
-    secondLineLength: formatQuestion(state.currentQuestion).length,
+    secondLineLength: formatQuestion(state.currentQuestion, state.numberDisplayMode).length,
     minScale: 0.32
   });
 }
@@ -472,12 +474,12 @@ function getCurrentLineDisplayLength(state) {
   // correction, parce que le texte corrigé est plus court que la boîte.
   if (state.showResponseBox) {
     return estimateBoxedCalculationLineLength({
-      questionText: formatQuestion(state.currentQuestion),
+      questionText: formatQuestion(state.currentQuestion, state.numberDisplayMode),
       answerMaxLength: getCurrentAnswerMaxLength(state)
     });
   }
 
-  return formatAnswer(state.currentQuestion).length;
+  return formatAnswer(state.currentQuestion, state.numberDisplayMode).length;
 }
 
 function getCurrentAnswerMaxLength(state) {

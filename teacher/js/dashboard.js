@@ -6,11 +6,17 @@ import {
   createOrGetMyTeacherSpace,
   updateMyTeacherSpace,
   markTeacherSpaceAsOpened,
+  getMyTeacherClasses,
   listStudentsForTeacherSpace,
   createStudentForTeacherSpace,
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
+  listPedagogicalNodesForTeacher,
+  listPedagogicalNodesForAdmin,
+  createPedagogicalNodeAsAdmin,
+  updatePedagogicalNodeAsAdmin,
+  deletePedagogicalNodeAsAdmin,
   listCatalogActivitiesForTeacherSpace,
   setCatalogActivityVisibility,
   listMissionFoldersForSpace,
@@ -24,6 +30,14 @@ import {
   deleteMission,
   isCurrentUserSuperAdmin,
   listCatalogActivitiesForAdmin,
+  listAdventureDefaultMenuSlots,
+  saveAdventureDefaultMenuSlots,
+  listTeacherAdventureMenuSlots,
+  saveTeacherAdventureMenuSlot,
+  deleteTeacherAdventureMenuSlot,
+  deleteTeacherAdventureMenuSlotsForGrade,
+  listAdventureClassCursors,
+  saveAdventureClassCursor,
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
@@ -36,6 +50,7 @@ import {
   deleteQuiz,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
@@ -43,17 +58,23 @@ import {
   uploadResourceForSpace,
   updateResource,
   deleteResource,
-  createResourceSignedUrl
+  createResourceSignedUrl,
+  syncPhonologyWordsAsAdmin,
+  listImageAssetsAsAdmin,
+  importSystemImageAssetAsAdmin
 } from "./teacher-api.js";
 import { createHeaderPopupController } from "./dashboard/header-popups.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
+import { createAdventureRegistryViewController } from "./dashboard/adventure-registry-view.js";
 import { createMissionsViewController } from "./dashboard/missions-view.js";
 import { createTeacherToolsViewController } from "./dashboard/teacher-tools-view.js";
 import { createQuizWorkshopViewController } from "./dashboard/quiz-workshop-view.js";
 import { createQuizExplorerViewController } from "./dashboard/quiz-explorer-view.js";
 import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from "./dashboard/quiz-series-view.js";
 import { createResourcesViewController } from "./dashboard/resources-view.js";
+import { createPhonologyWordsImportDialog } from "./dashboard/phonology-words-import-dialog.js";
+import { createSystemImagesImportDialog } from "./dashboard/system-images-import-dialog.js";
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
 import { getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues } from "../../tools/quiz/model.js";
 import {
@@ -85,6 +106,7 @@ const btnOpenProfileOverlay = document.getElementById("btnOpenProfileOverlay");
 const profileOverlay = document.getElementById("profileOverlay");
 const btnCloseProfileOverlay = document.getElementById("btnCloseProfileOverlay");
 const btnNavClass = document.getElementById("btnNavClass");
+const btnNavAdventure = document.getElementById("btnNavAdventure");
 const btnNavActivities = document.getElementById("btnNavActivities");
 const btnNavMissions = document.getElementById("btnNavMissions");
 const btnNavQuiz = document.getElementById("btnNavQuiz");
@@ -101,6 +123,9 @@ const studentsList = document.getElementById("studentsList");
 const configsList = document.getElementById("configsList");
 const configHeader = document.getElementById("configHeader");
 const classView = document.getElementById("classView");
+const adventureView = document.getElementById("adventureView");
+const adventureHeader = document.getElementById("adventureHeader");
+const adventureList = document.getElementById("adventureList");
 const activitiesView = document.getElementById("activitiesView");
 const missionsView = document.getElementById("missionsView");
 const missionsHeader = document.getElementById("missionsHeader");
@@ -129,6 +154,8 @@ const quizSeriesMessage = document.getElementById("quizSeriesMessage");
 const resourcesView = document.getElementById("resourcesView");
 const resourcesHeader = document.getElementById("resourcesHeader");
 const resourcesList = document.getElementById("resourcesList");
+const btnManagePhonologyWords = document.getElementById("btnManagePhonologyWords");
+const btnManageSystemImages = document.getElementById("btnManageSystemImages");
 const btnCreateResourceFolder = document.getElementById("btnCreateResourceFolder");
 const btnImportResources = document.getElementById("btnImportResources");
 const btnRecordResourceAudio = document.getElementById("btnRecordResourceAudio");
@@ -173,11 +200,12 @@ let currentUser = null;
 let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
-let currentDashboardSection = "activities"; // "activities" | "missions" | "class" | "quiz" | "resources" | "teacher-tools"
+let currentDashboardSection = "activities"; // "adventure" | "activities" | "missions" | "class" | "quiz" | "resources" | "teacher-tools"
 let showDashboardHelpIcons = getContextualHelpEnabled();
 let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
 let hasMountedClassView = false;
+let hasMountedAdventureView = false;
 let hasMountedActivitiesView = false;
 let hasMountedMissionsView = false;
 let hasMountedQuizView = false;
@@ -185,6 +213,7 @@ let hasMountedResourcesView = false;
 let hasMountedTeacherToolsView = false;
 let currentUserIsSuperAdmin = false;
 let mountedClassTeacherSpaceId = "";
+let mountedAdventureTeacherSpaceId = "";
 let mountedActivitiesTeacherSpaceId = "";
 let mountedMissionsTeacherSpaceId = "";
 let mountedQuizTeacherSpaceId = "";
@@ -194,12 +223,15 @@ let dashboardToast = null;
 let dashboardToastTimer = null;
 
 const studentNotesDrafts = new Map();
+let adventureViewController = null;
 let activitiesViewController = null;
 let missionsViewController = null;
 let quizExplorerViewController = null;
 let quizWorkshopViewController = null;
 let quizSeriesViewController = null;
 let resourcesViewController = null;
+let phonologyWordsImportDialog = null;
+let systemImagesImportDialog = null;
 let teacherToolsViewController = null;
 let studentController = null;
 const helpPopoverController = initContextualHelpSystem({ root: document });
@@ -255,11 +287,36 @@ studentController = createStudentDashboardController({
   showToast: showDashboardShareToast
 });
 
+adventureViewController = createAdventureRegistryViewController({
+  adventureHeader,
+  adventureList,
+  getCurrentTeacherSpace: () => currentTeacherSpace,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
+  listPedagogicalNodesForTeacher,
+  listCatalogActivitiesForTeacherSpace,
+  listCatalogActivitiesForAdmin,
+  listAdventureDefaultMenuSlots,
+  saveAdventureDefaultMenuSlots,
+  listTeacherAdventureMenuSlots,
+  saveTeacherAdventureMenuSlot,
+  deleteTeacherAdventureMenuSlot,
+  deleteTeacherAdventureMenuSlotsForGrade,
+  listTeacherClasses: getMyTeacherClasses,
+  listAdventureClassCursors,
+  saveAdventureClassCursor,
+  showToast: showDashboardShareToast
+});
+
 activitiesViewController = createActivitiesViewController({
   configHeader,
   configsList,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
+  listPedagogicalNodesForTeacher,
+  listPedagogicalNodesForAdmin,
+  createPedagogicalNodeAsAdmin,
+  updatePedagogicalNodeAsAdmin,
+  deletePedagogicalNodeAsAdmin,
   listCatalogActivitiesForTeacherSpace,
   setCatalogActivityVisibility,
   listCatalogActivitiesForAdmin,
@@ -303,7 +360,7 @@ function testQuizSnapshot(snapshot) {
   const activity = {
     id: "atelier.quiz.test",
     config_name: snapshot.title || "Test du quiz",
-    category_id: "autres",
+    pedagogical_node_id: "autres",
     tool_id: "quiz",
     description: "Test direct depuis l’Atelier de quiz.",
     default_question_count: snapshot.questions.reduce((total, question) => total + Math.max(1, question?.variants?.length || 1), 0),
@@ -462,6 +519,22 @@ quizExplorerViewController = createQuizExplorerViewController({
   showToast: showDashboardShareToast
 });
 
+phonologyWordsImportDialog = createPhonologyWordsImportDialog({
+  openButton: btnManagePhonologyWords,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
+  syncPhonologyWordsAsAdmin,
+  showToast: showDashboardShareToast
+});
+
+systemImagesImportDialog = createSystemImagesImportDialog({
+  openButton: btnManageSystemImages,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
+  listImageAssetsAsAdmin,
+  importSystemImageAssetAsAdmin,
+  showToast: showDashboardShareToast,
+  onImported: () => resourcesViewController?.refresh?.({ forceRefresh:false })
+});
+
 resourcesViewController = createResourcesViewController({
   view: resourcesView,
   header: resourcesHeader,
@@ -473,8 +546,10 @@ resourcesViewController = createResourcesViewController({
   storageQuotaElement: resourceStorageQuota,
   showToast: showDashboardShareToast,
   getCurrentTeacherSpace: () => currentTeacherSpace,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listResourceFoldersForSpace,
   createResourceFolderForSpace,
+  createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
   updateResourceFolder,
   deleteResourceFolder,
@@ -600,6 +675,14 @@ async function ensureClassViewMounted({ forceRefresh = false } = {}){
   mountedClassTeacherSpaceId = teacherSpaceId;
 }
 
+async function ensureAdventureViewMounted({ forceRefresh = false } = {}){
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && hasMountedAdventureView && mountedAdventureTeacherSpaceId === teacherSpaceId) return;
+  await adventureViewController?.refresh?.({ forceRefresh });
+  hasMountedAdventureView = true;
+  mountedAdventureTeacherSpaceId = teacherSpaceId;
+}
+
 async function ensureActivitiesViewMounted({ forceRefresh = false } = {}){
   const teacherSpaceId = String(currentTeacherSpace?.id || "");
   if (!forceRefresh && hasMountedActivitiesView && mountedActivitiesTeacherSpaceId === teacherSpaceId) return;
@@ -686,6 +769,7 @@ function syncDashboardUrl({ mode = "replace" } = {}){
 function renderDashboardShellState(){
   syncDashboardViewportSizing();
 
+  btnNavAdventure?.classList.toggle("is-active", currentDashboardSection === "adventure");
   btnNavActivities?.classList.toggle("is-active", currentDashboardSection === "activities");
   btnNavMissions?.classList.toggle("is-active", currentDashboardSection === "missions");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
@@ -693,6 +777,7 @@ function renderDashboardShellState(){
   btnNavResources?.classList.toggle("is-active", currentDashboardSection === "resources");
   btnNavTeacherTools?.classList.toggle("is-active", currentDashboardSection === "teacher-tools");
 
+  adventureView?.classList.toggle("hidden", currentDashboardSection !== "adventure");
   activitiesView?.classList.toggle("hidden", currentDashboardSection !== "activities");
   missionsView?.classList.toggle("hidden", currentDashboardSection !== "missions");
   classView?.classList.toggle("hidden", currentDashboardSection !== "class");
@@ -709,6 +794,8 @@ function renderDashboardShellState(){
     toggleHelpIcons.checked = showDashboardHelpIcons;
   }
 
+  phonologyWordsImportDialog?.setVisible?.(currentUserIsSuperAdmin === true);
+  systemImagesImportDialog?.setVisible?.(currentUserIsSuperAdmin === true);
   renderStudentViewToggle();
 }
 
@@ -736,6 +823,12 @@ btnEditAccessCode?.addEventListener("click", studentController.openEditAccessCod
 btnAddStudent?.addEventListener("click", studentController.openPrimaryModal);
 btnModalCancel?.addEventListener("click", studentController.closeAccessCodeModal);
 btnModalCreate?.addEventListener("click", studentController.submitPrimaryModal);
+btnNavAdventure?.addEventListener("click", async () => {
+  currentDashboardSection = "adventure";
+  renderDashboardShellState();
+  const preserveDraft = adventureViewController?.hasUnsavedChanges?.() === true;
+  await ensureAdventureViewMounted({ forceRefresh: !preserveDraft });
+});
 btnNavActivities?.addEventListener("click", async () => {
   currentDashboardSection = "activities";
   renderDashboardShellState();
@@ -884,6 +977,7 @@ async function boot(){
 
     if (teacherEmail) teacherEmail.textContent = currentUser.email || "utilisateur inconnu";
     currentUserIsSuperAdmin = await isCurrentUserSuperAdmin();
+    btnNavAdventure?.classList.remove("hidden");
 
     currentTeacherSpace = await getMyTeacherSpace();
     if (currentTeacherSpace){

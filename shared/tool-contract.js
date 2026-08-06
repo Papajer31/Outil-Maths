@@ -454,6 +454,9 @@ function normalizeRuntimeWrapper(runtime, context = {}, tool = null) {
   const setShellAnswerDisplayMode = typeof safeRuntime.setShellAnswerDisplayMode === "function"
     ? safeRuntime.setShellAnswerDisplayMode.bind(safeRuntime)
     : null;
+  const getHistorySnapshot = typeof safeRuntime.getHistorySnapshot === "function"
+    ? safeRuntime.getHistorySnapshot.bind(safeRuntime)
+    : null;
 
   const normalized = {
     ...safeRuntime,
@@ -490,6 +493,15 @@ function normalizeRuntimeWrapper(runtime, context = {}, tool = null) {
   if (setShellAnswerDisplayMode) {
     normalized.setShellAnswerDisplayMode = (container, maybeContext = context, mode = "correction") => {
       return setShellAnswerDisplayMode(container, maybeContext, mode);
+    };
+  }
+
+  // Contrat optionnel d’historique riche. Les outils peuvent retourner un
+  // instantané structuré pour question / answer / correction. Le moteur
+  // utilise sinon un instantané DOM générique.
+  if (getHistorySnapshot) {
+    normalized.getHistorySnapshot = (stage = "question", container = null, maybeContext = context) => {
+      return getHistorySnapshot(stage, container, maybeContext);
     };
   }
 
@@ -561,6 +573,13 @@ function createLegacyToolRuntime(tool, context = {}) {
       }
 
       return false;
+    },
+    getHistorySnapshot(stage = "question", container = currentContainer, maybeContext = context) {
+      const targetContainer = container ?? currentContainer;
+      if (typeof safeTool.getHistorySnapshot === "function") {
+        return safeTool.getHistorySnapshot(stage, targetContainer, maybeContext);
+      }
+      return null;
     },
     unmount(container = currentContainer, maybeContext = context) {
       const targetContainer = container ?? currentContainer;

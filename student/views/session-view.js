@@ -8,7 +8,9 @@ import {
 import {
   normalizeAccessCode,
   loadPublicActivityConfig,
-  recordPublicStudentActivitySession
+  startPublicStudentActivityAttempt,
+  recordPublicStudentActivityAttemptQuestion,
+  finishPublicStudentActivityAttempt
 } from "../student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../../shared/activity-modes.js";
 import { normalizePassationProfile } from "../../shared/activity-config.js";
@@ -76,7 +78,7 @@ function rebuildExplorationCatalogRuntimeConfig(remote, passationProfile, config
   // (par exemple le snapshot courant de l’Atelier Quiz). La reconstruction prévue
   // pour l’Exploration remplacerait alors ces réglages par ceux du catalogue et
   // ferait disparaître les données temporaires avant le chargement de l’outil.
-  if (runtimeContext === "test") {
+  if (runtimeContext !== "exploration") {
     return configJson;
   }
 
@@ -134,11 +136,17 @@ export function renderSessionView(root){
   const isProjectedTeacherMode = studentState.sessionMode === "projected-teacher";
   const isSharedSessionEntry = studentState.sharedSessionEntry === true;
   const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
+  const selectedConfigJson = studentState.selectedConfig?.config_json;
+  const selectedFirstItem = getFirstSequenceItem(selectedConfigJson);
   const catalogRuntimeContext = normalizeCatalogRuntimeContext(
     studentState.selectedConfig?.catalog_context
-      ?? studentState.selectedConfig?.catalogContext
-      ?? studentState.projectedSession?.catalogRuntimeContext
-      ?? ""
+      || studentState.selectedConfig?.catalogContext
+      || selectedConfigJson?.catalog_context
+      || selectedConfigJson?.catalogContext
+      || selectedFirstItem?.catalog_context
+      || selectedFirstItem?.catalogContext
+      || studentState.projectedSession?.catalogRuntimeContext
+      || ""
   );
   const catalogDifficultyLevel = normalizeCatalogDifficultyLevel(
     studentState.selectedConfig?.catalog_difficulty_level
@@ -171,6 +179,8 @@ export function renderSessionView(root){
   let projectedSessionLink = null;
   let fitResizeObserver = null;
   let toolCountdownTicker = null;
+  let attemptStopStatus = "interrupted";
+  const detailedHistoryIdentityByAttempt = new Map();
 
   const SESSION_SCENE_WIDTH = 1920;
   const SESSION_SCENE_BASE_HEIGHT = 1080;
@@ -293,8 +303,17 @@ export function renderSessionView(root){
           showFatalError(message);
         },
         onSessionFinished: (summary) => {
-          void recordFinishedExplorationSession(summary);
+          syncFinishedExplorationLevel(summary);
         },
+        onActivityAttemptStarted: shouldRecordDetailedHistory()
+          ? (payload) => startDetailedActivityAttempt(payload)
+          : undefined,
+        onActivityQuestionRecorded: shouldRecordDetailedHistory()
+          ? (payload) => recordDetailedActivityQuestion(payload)
+          : undefined,
+        onActivityAttemptFinished: shouldRecordDetailedHistory()
+          ? (payload) => finishDetailedActivityAttempt(payload)
+          : undefined,
         onStateChange: () => {
           syncPauseButton();
           syncProjectedControls();
@@ -364,7 +383,7 @@ export function renderSessionView(root){
     stopFitLayoutObserver();
 
     try {
-      engine?.stop?.();
+      engine?.stop?.({ attemptStatus: attemptStopStatus });
     } catch {}
 
     try {
@@ -692,44 +711,117 @@ export function renderSessionView(root){
     }
   }
 
-  async function recordFinishedExplorationSession(summary){
+  function shouldRecordDetailedHistory(){
+    if (isProjectedTeacherMode || isCatalogTestMode || isSharedSessionEntry) return false;
+    if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return false;
+    const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+    return !!participant?.id && !!String(studentState.studentCode || "").trim();
+  }
+
+  function getDetailedHistoryParticipant(){
+    return getSelectedParticipantsForCurrentMode()[0] || null;
+  }
+
+  async function startDetailedActivityAttempt(payload = {}){
+    const participant = getDetailedHistoryParticipant();
+    const identity = {
+      accessCode: String(studentState.accessCode || ""),
+      studentId: Number(participant?.id),
+      studentCode: String(studentState.studentCode || "")
+    };
+    if (!Number.isFinite(identity.studentId) || identity.studentId <= 0 || !identity.studentCode.trim()) return null;
+
+    try {
+      const attemptId = await startPublicStudentActivityAttempt({
+        accessCode: identity.accessCode,
+        studentId: identity.studentId,
+        studentCode: identity.studentCode,
+        catalogActivityId: payload.catalogActivityId,
+        context: payload.context,
+        missionId: payload.missionId || studentState.selectedMission?.id || studentState.selectedConfig?.mission_id || null,
+        missionStepId: payload.missionStepId || null,
+        clientAttemptId: payload.clientAttemptId,
+        toolId: payload.toolId,
+        toolInstanceId: payload.toolInstanceId,
+        activityTitle: payload.activityTitle,
+        startedLevel: payload.startedLevel,
+        metadata: payload.metadata,
+        configSnapshot: payload.configSnapshot
+      });
+      if (attemptId) detailedHistoryIdentityByAttempt.set(String(attemptId), identity);
+      return attemptId ? { attemptId } : null;
+    } catch (error) {
+      console.warn("Impossible d’ouvrir l’historique détaillé de l’activité.", error);
+      return null;
+    }
+  }
+
+  async function recordDetailedActivityQuestion(payload = {}){
+    const attemptId = String(payload.attemptId || "").trim();
+    const identity = detailedHistoryIdentityByAttempt.get(attemptId);
+    if (!identity || !attemptId) return null;
+
+    try {
+      return await recordPublicStudentActivityAttemptQuestion({
+        accessCode: identity.accessCode,
+        studentId: identity.studentId,
+        studentCode: identity.studentCode,
+        attemptId,
+        questionIndex: payload.questionIndex,
+        toolId: payload.toolId,
+        toolInstanceId: payload.toolInstanceId,
+        levelPresented: payload.levelPresented,
+        levelAfter: payload.levelAfter,
+        outcome: payload.outcome,
+        pointsAwarded: payload.pointsAwarded,
+        durationMs: payload.durationMs,
+        questionSnapshot: payload.questionSnapshot,
+        answerSnapshot: payload.answerSnapshot,
+        correctionSnapshot: payload.correctionSnapshot
+      });
+    } catch (error) {
+      console.warn("Impossible d’enregistrer le détail de la question.", error);
+      return null;
+    }
+  }
+
+  async function finishDetailedActivityAttempt(payload = {}){
+    const attemptId = String(payload.attemptId || "").trim();
+    const identity = detailedHistoryIdentityByAttempt.get(attemptId);
+    if (!identity || !attemptId) return null;
+
+    try {
+      const result = await finishPublicStudentActivityAttempt({
+        accessCode: identity.accessCode,
+        studentId: identity.studentId,
+        studentCode: identity.studentCode,
+        attemptId,
+        status: payload.status,
+        endedLevel: payload.endedLevel,
+        durationMs: payload.durationMs
+      });
+
+      if (payload.context === "exploration" && result?.ended_level != null) {
+        void applyExplorationProgressLevelToSelectedConfig(result.ended_level);
+      }
+
+      detailedHistoryIdentityByAttempt.delete(attemptId);
+      return result;
+    } catch (error) {
+      console.warn("Impossible de finaliser l’historique détaillé de l’activité.", error);
+      return null;
+    }
+  }
+
+  function syncFinishedExplorationLevel(summary){
     const context = studentState.selectedConfig?.progression_context;
-    if (!context || isProjectedTeacherMode || isSharedSessionEntry) return;
-    if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return;
-    if (String(context.context || "").trim() !== "exploration") return;
+    if (!context || String(context.context || "").trim() !== "exploration") return;
 
     const item = (Array.isArray(summary?.items) ? summary.items : [])
       .find((entry) => String(entry?.catalogActivityId || "") === String(context.catalogActivityId || ""));
+    if (!item) return;
 
-    if (!item || !item.catalogActivityId || Math.max(0, Number(item.questionsCount) || 0) <= 0) return;
-
-    const endedLevel = item.endedLevel ?? item.startedLevel ?? context.startedLevel ?? 3;
-
-    // On met à jour immédiatement la config locale : si l’élève relance depuis l’écran
-    // de départ sans repasser par la liste, il ne repart pas avec l’ancienne config.
-    void applyExplorationProgressLevelToSelectedConfig(endedLevel);
-
-    try {
-      const savedProgress = await recordPublicStudentActivitySession({
-        accessCode: studentState.accessCode,
-        studentId: context.studentId,
-        studentCode: studentState.studentCode,
-        catalogActivityId: item.catalogActivityId,
-        context: "exploration",
-        startedLevel: item.startedLevel ?? context.startedLevel ?? 3,
-        endedLevel,
-        questionsCount: item.questionsCount,
-        correctCount: item.correctCount,
-        wrongCount: item.wrongCount,
-        durationMs: item.durationMs ?? summary?.durationMs ?? 0
-      });
-
-      if (savedProgress?.current_level != null) {
-        void applyExplorationProgressLevelToSelectedConfig(savedProgress.current_level);
-      }
-    } catch (err) {
-      console.warn("Impossible d’enregistrer la progression de l’élève.", err);
-    }
+    void applyExplorationProgressLevelToSelectedConfig(item.endedLevel ?? item.startedLevel ?? context.startedLevel ?? 3);
   }
 
 
@@ -852,6 +944,10 @@ export function renderSessionView(root){
   }
 
   function leaveSessionFromExitConfirm(){
+    attemptStopStatus = "abandoned";
+    try {
+      engine?.stop?.({ attemptStatus: "abandoned" });
+    } catch {}
     leaveSessionImmediately();
   }
 

@@ -12,6 +12,7 @@ import {
 import {
   GENERATION_MODES,
   CARRY_MODES,
+  NUMBER_DISPLAY_MODES,
   TERM_COUNT_OPTIONS,
   ADDITION_LIMITS,
   getDefaultSettings,
@@ -90,6 +91,7 @@ function renderRandomBranch(cfg) {
         ]
       })}
       ${renderResultConstraintWidget(cfg.resultConstraint)}
+      ${renderNumberDisplayWidget(cfg.numberDisplayMode)}
     `, { collapsible: true, expanded: false, idPrefix: "add_advanced" })}
   `;
 }
@@ -115,7 +117,20 @@ function renderFixedListBranch(cfg) {
       >${escapeHtml(cfg.fixedListRaw)}</textarea>
       <div class="add-fixed-list-feedback${parsed.invalidLineNumbers.length ? " is-error" : ""}" aria-live="polite">${escapeHtml(feedback)}</div>
     </div>
+    ${renderSection("Réglages avancés", renderNumberDisplayWidget(cfg.numberDisplayMode), { collapsible: true, expanded: false, idPrefix: "add_advanced" })}
   `;
+}
+
+function renderNumberDisplayWidget(value) {
+  return renderRadioGroup({
+    title: "Affichage des nombres",
+    id: "add_numberDisplayMode",
+    value,
+    options: [
+      { value: NUMBER_DISPLAY_MODES.DIGITS, label: "En chiffres" },
+      { value: NUMBER_DISPLAY_MODES.WORDS, label: "En lettres" }
+    ]
+  });
 }
 
 function renderTermRanges(termRanges, maxTermCount) {
@@ -185,6 +200,7 @@ function bindToolSettings(container) {
   });
   bindCollapsibleSection(container, "add_advanced");
   bindRadio(container, "add_carryMode");
+  bindRadio(container, "add_numberDisplayMode");
 
   [
     "add_termRange_t1",
@@ -226,6 +242,7 @@ function readSettingsFromDom(container, settings = {}, { validate = true } = {})
 
   const termCounts = readCheckedNumberValues(container, "[data-add-term-count]", TERM_COUNT_OPTIONS, previous.termCounts);
   const carryMode = readRadio(container, "add_carryMode", previous.carryMode);
+  const numberDisplayMode = readRadio(container, "add_numberDisplayMode", previous.numberDisplayMode);
 
   const termRanges = {
     t1: container.querySelector("#add_termRange_t1_min")
@@ -254,6 +271,7 @@ function readSettingsFromDom(container, settings = {}, { validate = true } = {})
     generationMode,
     termCounts,
     carryMode,
+    numberDisplayMode,
     termRanges,
     resultConstraint: {
       enabled: resultEnabled,

@@ -1,6 +1,6 @@
 # Legacy — ce qui ne doit plus piloter le projet
 
-Dernière mise à jour : 2026-07-24.
+Dernière mise à jour : 2026-07-30.
 
 ## Ancien éditeur d’activités personnelles
 
@@ -25,6 +25,14 @@ Les outils entièrement dépendants de ce modèle ont également été supprimé
 - `flash-qcm`.
 
 Aucune rétrocompatibilité n’est prévue. Les futurs comportements équivalents doivent être développés dans l’Atelier Quiz.
+
+
+
+## Ancienne portée de niveaux de l’arborescence
+
+Les colonnes `grade_scope_mode` et `grade_levels`, ainsi que l’héritage de niveaux depuis les disciplines ou les domaines, ne font plus partie du modèle actif.
+
+Le niveau scolaire est représenté par un nœud terminal `grade_level` placé sous l’objectif d’apprentissage. Les activités sont rangées directement dans ce dossier.
 
 ## SQL historiques
 

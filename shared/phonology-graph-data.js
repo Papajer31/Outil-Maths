@@ -1,0 +1,149 @@
+// Référentiel phonologique autonome, aligné sur _infos/referentiels/referentiel_grapho.txt.
+// Chaque entrée associe un code canonique aux graphies visibles autorisées.
+const RAW_PHONOLOGY_GRAPH_UNITS = [
+  {"id":"a","label":"a","variants":["a","à","â"]},
+  {"id":"e_a","label":"e","variants":["e"]},
+  {"id":"i","label":"i","variants":["i","î","ï"]},
+  {"id":"y_i","label":"y","variants":["y"]},
+  {"id":"u","label":"u","variants":["u","û","ü"]},
+  {"id":"eu_u","label":"eu","variants":["eu","eû"]},
+  {"id":"ou","label":"ou","variants":["ou","où","oû"]},
+  {"id":"aou","label":"aou","variants":["aou"]},
+  {"id":"oo_ou","label":"oo","variants":["oo"]},
+  {"id":"e_aigu","label":"é","variants":["é"]},
+  {"id":"e_ferme","label":"e","variants":["e"]},
+  {"id":"er","label":"er","variants":["er"]},
+  {"id":"ez","label":"ez","variants":["ez"]},
+  {"id":"es_ferme","label":"es","variants":["es"]},
+  {"id":"et_ferme","label":"et","variants":["et"]},
+  {"id":"ai_ferme","label":"ai","variants":["ai"]},
+  {"id":"e_grave","label":"è","variants":["è"]},
+  {"id":"e_circonflexe","label":"ê","variants":["ê"]},
+  {"id":"e_ouvert","label":"e","variants":["e","ë"]},
+  {"id":"ai_ouvert","label":"ai","variants":["ai"]},
+  {"id":"ei","label":"ei","variants":["ei"]},
+  {"id":"et_ouvert","label":"et","variants":["et"]},
+  {"id":"ey","label":"ey","variants":["ey"]},
+  {"id":"e_caduc","label":"e","variants":["e"]},
+  {"id":"ai_caduc","label":"ai","variants":["ai"]},
+  {"id":"on_caduc","label":"on","variants":["on"]},
+  {"id":"eu","label":"eu","variants":["eu","eû"]},
+  {"id":"oeu","label":"œu","variants":["œu"]},
+  {"id":"oe","label":"œ","variants":["œ"]},
+  {"id":"u_eu","label":"u","variants":["u"]},
+  {"id":"o","label":"o","variants":["o","ô"]},
+  {"id":"au","label":"au","variants":["au"]},
+  {"id":"eau","label":"eau","variants":["eau"]},
+  {"id":"oo_o","label":"oo","variants":["oo"]},
+  {"id":"u_o","label":"u","variants":["u"]},
+  {"id":"an","label":"an","variants":["an"]},
+  {"id":"am","label":"am","variants":["am"]},
+  {"id":"en_an","label":"en","variants":["en"]},
+  {"id":"em","label":"em","variants":["em"]},
+  {"id":"aon","label":"aon","variants":["aon"]},
+  {"id":"on","label":"on","variants":["on"]},
+  {"id":"om","label":"om","variants":["om"]},
+  {"id":"in","label":"in","variants":["in"]},
+  {"id":"im","label":"im","variants":["im"]},
+  {"id":"ain","label":"ain","variants":["ain"]},
+  {"id":"aim","label":"aim","variants":["aim"]},
+  {"id":"ein","label":"ein","variants":["ein"]},
+  {"id":"eim","label":"eim","variants":["eim"]},
+  {"id":"en_in","label":"en","variants":["en"]},
+  {"id":"yn","label":"yn","variants":["yn"]},
+  {"id":"ym","label":"ym","variants":["ym"]},
+  {"id":"un","label":"un","variants":["un"]},
+  {"id":"um","label":"um","variants":["um"]},
+  {"id":"i_yod","label":"i","variants":["i","ï"]},
+  {"id":"y_yod","label":"y","variants":["y"]},
+  {"id":"il_yod","label":"il","variants":["il"]},
+  {"id":"ill","label":"ill","variants":["ill"]},
+  {"id":"ill_ij","label":"ill","variants":["ill"]},
+  {"id":"u_glisse","label":"u","variants":["u"]},
+  {"id":"ou_glisse","label":"ou","variants":["ou"]},
+  {"id":"w_w","label":"w","variants":["w"]},
+  {"id":"p","label":"p","variants":["p","pp"]},
+  {"id":"b","label":"b","variants":["b","bb"]},
+  {"id":"t","label":"t","variants":["t","tt"]},
+  {"id":"th","label":"th","variants":["th"]},
+  {"id":"d","label":"d","variants":["d","dd"]},
+  {"id":"c_k","label":"c","variants":["c","cc"]},
+  {"id":"k","label":"k","variants":["k"]},
+  {"id":"q","label":"q","variants":["q"]},
+  {"id":"qu","label":"qu","variants":["qu"]},
+  {"id":"ck","label":"ck","variants":["ck"]},
+  {"id":"cqu","label":"cqu","variants":["cqu"]},
+  {"id":"ch_k","label":"ch","variants":["ch"]},
+  {"id":"g_g","label":"g","variants":["g","gg"]},
+  {"id":"gu","label":"gu","variants":["gu"]},
+  {"id":"c_g","label":"c","variants":["c"]},
+  {"id":"gh","label":"gh","variants":["gh"]},
+  {"id":"f","label":"f","variants":["f","ff"]},
+  {"id":"ph","label":"ph","variants":["ph"]},
+  {"id":"v","label":"v","variants":["v"]},
+  {"id":"w_v","label":"w","variants":["w"]},
+  {"id":"s_s","label":"s","variants":["s","ss"]},
+  {"id":"c_s","label":"c","variants":["c"]},
+  {"id":"ç","label":"ç","variants":["ç"]},
+  {"id":"sc","label":"sc","variants":["sc"]},
+  {"id":"t_s","label":"t","variants":["t"]},
+  {"id":"x_s","label":"x","variants":["x"]},
+  {"id":"z","label":"z","variants":["z","zz"]},
+  {"id":"s_z","label":"s","variants":["s"]},
+  {"id":"x_z","label":"x","variants":["x"]},
+  {"id":"ch","label":"ch","variants":["ch"]},
+  {"id":"sch","label":"sch","variants":["sch"]},
+  {"id":"sh","label":"sh","variants":["sh"]},
+  {"id":"j","label":"j","variants":["j"]},
+  {"id":"g_j","label":"g","variants":["g"]},
+  {"id":"ge","label":"ge","variants":["ge"]},
+  {"id":"m","label":"m","variants":["m","mm"]},
+  {"id":"n","label":"n","variants":["n","nn"]},
+  {"id":"gn","label":"gn","variants":["gn"]},
+  {"id":"l","label":"l","variants":["l","ll"]},
+  {"id":"r","label":"r","variants":["r","rr"]},
+  {"id":"x_ks","label":"x","variants":["x"]},
+  {"id":"x_gz","label":"x","variants":["x"]},
+  {"id":"oi","label":"oi","variants":["oi"]},
+  {"id":"oy","label":"oy","variants":["oy"]},
+  {"id":"ay","label":"ay","variants":["ay"]},
+  {"id":"oin","label":"oin","variants":["oin"]},
+  {"id":"ui","label":"ui","variants":["ui"]},
+  {"id":"ien","label":"ien","variants":["ien"]},
+  {"id":"ion","label":"ion","variants":["ion"]},
+  {"id":"ouil","label":"ouil","variants":["ouil"]},
+  {"id":"ouille","label":"ouille","variants":["ouille"]},
+  {"id":"ail","label":"ail","variants":["ail"]},
+  {"id":"aille","label":"aille","variants":["aille"]},
+  {"id":"eil","label":"eil","variants":["eil"]},
+  {"id":"eille","label":"eille","variants":["eille"]},
+  {"id":"euil","label":"euil","variants":["euil"]},
+  {"id":"euille","label":"euille","variants":["euille"]},
+  {"id":"__silent__","label":"","variants":[],"internal":true}
+];
+
+export const PHONOLOGY_GRAPH_UNITS = Object.freeze(
+  RAW_PHONOLOGY_GRAPH_UNITS.map((unit) => Object.freeze({
+    ...unit,
+    variants: Object.freeze([...(unit.variants || [])])
+  }))
+);
+
+export const PHONOLOGY_GRAPH_BY_ID = new Map(
+  PHONOLOGY_GRAPH_UNITS.map((unit) => [String(unit.id), unit])
+);
+
+export const PHONOLOGY_GRAPH_IDS = new Set(PHONOLOGY_GRAPH_BY_ID.keys());
+
+export const PHONOLOGY_GRAPH_IDS_BY_SURFACE = (() => {
+  const index = new Map();
+  for (const unit of PHONOLOGY_GRAPH_UNITS) {
+    for (const surface of unit.variants || []) {
+      const key = String(surface || "").normalize("NFC");
+      if (!key) continue;
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(unit.id);
+    }
+  }
+  return index;
+})();

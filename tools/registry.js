@@ -185,6 +185,20 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["phonologie", "encodage", "graphèmes", "drag-drop", "projection"]
   },
   {
+    id: "reperage-graphemes",
+    label: "Repérer les graphèmes",
+    entry: "../tools/reperage-graphemes/tool.js",
+    description: "Repérer dans plusieurs mots les lettres qui transcrivent un son ciblé.",
+    tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "sélection", "projection"]
+  },
+  {
+    id: "nuage-lettres",
+    label: "Nuage de lettres",
+    entry: "../tools/nuage-lettres/tool.js",
+    description: "Reconstituer un mot contenant un son ciblé à partir de lettres mélangées.",
+    tags: ["français", "lecture", "étude-du-code", "phonologie", "orthographe", "lettres", "manipulation", "projection"]
+  },
+  {
     id: "geste-graphique",
     label: "Geste graphique",
     entry: "../tools/geste-graphique/tool.js",

@@ -1,0 +1,288 @@
+.rg-root{
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:clamp(10px, 1.5vh, 18px);
+  padding:clamp(8px, 1.2vh, 14px) clamp(10px, 1vw, 18px) clamp(10px, 1.5vh, 18px);
+  box-sizing:border-box;
+  font-family:"Andika", system-ui, sans-serif;
+}
+
+.rg-words-grid{
+  flex:1 1 auto;
+  min-height:0;
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+  gap:clamp(10px, 1.4vw, 20px);
+}
+
+.rg-words-grid--count-4{
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+}
+
+.rg-words-grid--count-5,
+.rg-words-grid--count-6{
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+}
+
+.rg-words-grid--count-7,
+.rg-words-grid--count-8{
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+}
+
+.rg-words-grid.is-empty{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.rg-empty-message{
+  color:#64748b;
+  font-size:clamp(1.1rem, 2vw, 1.6rem);
+  font-weight:700;
+}
+
+.rg-word-card{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:clamp(10px, 1.6vw, 22px);
+  border:3px solid rgba(100, 116, 139, .25);
+  border-radius:clamp(16px, 1.7vw, 24px);
+  background:rgba(255, 255, 255, .94);
+  box-shadow:0 8px 22px rgba(15, 23, 42, .08);
+  overflow:hidden;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.rg-word-card.is-correct{
+  border-color:#22c55e;
+  background:rgba(240, 253, 244, .96);
+  box-shadow:0 8px 22px rgba(22, 163, 74, .12);
+}
+
+.rg-word-card.is-incorrect{
+  border-color:#ef4444;
+  background:rgba(254, 242, 242, .96);
+  box-shadow:0 8px 22px rgba(220, 38, 38, .12);
+}
+
+.rg-word{
+  max-width:100%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  line-height:1;
+  font-size:clamp(44px, 5.1vw, 78px);
+  font-weight:700;
+  letter-spacing:.01em;
+}
+
+.rg-word-card--medium .rg-word{
+  font-size:clamp(38px, 4.4vw, 68px);
+}
+
+.rg-word-card--long .rg-word{
+  font-size:clamp(32px, 3.6vw, 56px);
+}
+
+.rg-word-card--very-long .rg-word{
+  font-size:clamp(27px, 3vw, 46px);
+}
+
+.rg-words-grid--count-7 .rg-word,
+.rg-words-grid--count-8 .rg-word{
+  font-size:clamp(34px, 3.7vw, 58px);
+}
+
+.rg-words-grid--count-7 .rg-word-card--medium .rg-word,
+.rg-words-grid--count-8 .rg-word-card--medium .rg-word{
+  font-size:clamp(31px, 3.3vw, 51px);
+}
+
+.rg-words-grid--count-7 .rg-word-card--long .rg-word,
+.rg-words-grid--count-8 .rg-word-card--long .rg-word{
+  font-size:clamp(27px, 2.9vw, 44px);
+}
+
+.rg-words-grid--count-7 .rg-word-card--very-long .rg-word,
+.rg-words-grid--count-8 .rg-word-card--very-long .rg-word{
+  font-size:clamp(23px, 2.35vw, 36px);
+}
+
+.rg-letter{
+  appearance:none;
+  -webkit-appearance:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:.72em;
+  height:1.18em;
+  margin:0;
+  padding:0 .03em;
+  border:0;
+  border-radius:.16em;
+  background:transparent;
+  color:#172033;
+  font:inherit;
+  line-height:1;
+  cursor:default;
+  box-sizing:border-box;
+  transition:background .12s ease, color .12s ease, box-shadow .12s ease, transform .08s ease;
+}
+
+button.rg-letter{
+  cursor:pointer;
+  touch-action:manipulation;
+}
+
+button.rg-letter:hover{
+  background:rgba(59, 130, 246, .10);
+}
+
+button.rg-letter:active{
+  transform:scale(.94);
+}
+
+button.rg-letter:focus-visible{
+  outline:4px solid rgba(37, 99, 235, .35);
+  outline-offset:2px;
+}
+
+.rg-letter--separator{
+  min-width:.34em;
+  padding:0;
+}
+
+.rg-letter.is-selected{
+  background:#2563eb;
+  color:#fff;
+  box-shadow:inset 0 0 0 2px rgba(30, 64, 175, .25);
+}
+
+.rg-letter.is-correct,
+.rg-letter.is-correction{
+  background:#22c55e;
+  color:#fff;
+  box-shadow:inset 0 0 0 2px rgba(21, 128, 61, .24);
+}
+
+.rg-letter.is-wrong{
+  background:#ef4444;
+  color:#fff;
+  box-shadow:inset 0 0 0 2px rgba(185, 28, 28, .24);
+}
+
+.rg-root[data-response-ui="free"] .rg-word-card{
+  border-color:rgba(100, 116, 139, .18);
+}
+
+@media (max-width:1100px), (max-height:760px){
+  .rg-root{
+    gap:8px;
+    padding:6px 8px 10px;
+  }
+
+  .rg-words-grid{
+    gap:9px;
+  }
+
+  .rg-word-card{
+    padding:8px;
+    border-width:2px;
+    border-radius:14px;
+  }
+
+  .rg-word{
+    font-size:clamp(38px, 4.6vw, 58px);
+  }
+
+  .rg-word-card--medium .rg-word{
+    font-size:clamp(34px, 4vw, 52px);
+  }
+
+  .rg-word-card--long .rg-word{
+    font-size:clamp(29px, 3.35vw, 44px);
+  }
+
+  .rg-word-card--very-long .rg-word{
+    font-size:clamp(24px, 2.75vw, 37px);
+  }
+
+  .rg-words-grid--count-7 .rg-word,
+  .rg-words-grid--count-8 .rg-word{
+    font-size:clamp(31px, 3.5vw, 45px);
+  }
+
+  .rg-words-grid--count-7 .rg-word-card--medium .rg-word,
+  .rg-words-grid--count-8 .rg-word-card--medium .rg-word{
+    font-size:clamp(28px, 3.1vw, 40px);
+  }
+
+  .rg-words-grid--count-7 .rg-word-card--long .rg-word,
+  .rg-words-grid--count-8 .rg-word-card--long .rg-word{
+    font-size:clamp(25px, 2.7vw, 35px);
+  }
+
+  .rg-words-grid--count-7 .rg-word-card--very-long .rg-word,
+  .rg-words-grid--count-8 .rg-word-card--very-long .rg-word{
+    font-size:clamp(21px, 2.25vw, 29px);
+  }
+}
+
+.rg-root .tool-instruction{
+  gap:.16em;
+  flex-wrap:wrap;
+}
+
+.rg-sound-bubble{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  vertical-align:middle;
+}
+
+.rg-sound-bubble svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+
+.rg-sound-bubble__shape{
+  fill:#fff;
+  stroke:#51a69a;
+  stroke-width:3;
+  stroke-linejoin:round;
+}
+
+.rg-sound-bubble__text{
+  fill:#151c2a;
+  font-family:"Andika", system-ui, sans-serif;
+  font-weight:700;
+  text-anchor:middle;
+  dominant-baseline:middle;
+}
+
+.rg-sound-bubble--instruction{
+  width:1.75em;
+  height:1.24em;
+  margin:0 .04em;
+}
+
+.rg-instruction-sound-token{
+  display:inline-flex;
+  align-items:center;
+  gap:0;
+  white-space:nowrap;
+}

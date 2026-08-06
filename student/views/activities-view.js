@@ -14,6 +14,7 @@ import {
   isStudentFacingActivityMode,
   normalizeActivityMode
 } from "../../shared/activity-modes.js";
+import { filterPedagogicalNodesForGradeLevels } from "../../shared/catalogue.js";
 
 export const STUDENT_ACTIVITY_PLANET_SETTINGS = {
   respectReducedMotion: false
@@ -450,7 +451,17 @@ function buildBreadcrumbTrail(treeState, currentFolder){
 function buildActivityTreeState(){
   const currentMode = getCurrentStudentActivitiesMode();
 
-  const folders = (studentState.activityFolders || []).map((folder, index) => ({
+  const selectedGradeLevels = [...new Set(
+    (Array.isArray(studentState.selectedStudents) ? studentState.selectedStudents : [])
+      .map((student) => String(student?.grade_level || "").trim().toUpperCase())
+      .filter(Boolean)
+  )];
+  const scopedFolders = filterPedagogicalNodesForGradeLevels(
+    studentState.activityFolders || [],
+    selectedGradeLevels,
+    { requireAll: true }
+  );
+  const folders = scopedFolders.map((folder, index) => ({
     ...folder,
     id: String(folder?.id || ""),
     parent_id: normalizeFolderId(folder?.parent_id),
@@ -477,25 +488,33 @@ function buildActivityTreeState(){
     .filter((activity) => activity?.is_visible !== false)
     .filter((activity) => normalizeActivityMode(activity?.activity_mode, DEFAULT_ACTIVITY_MODE) === currentMode);
 
-  activities.forEach((activity) => {
-    if (activity.folder_id && !folderById.has(activity.folder_id)) {
-      activity.folder_id = null;
+  const visibleActivities = activities.filter((activity) => !activity.folder_id || folderById.has(activity.folder_id));
+  const usefulFolderIds = new Set();
+  visibleActivities.forEach((activity) => {
+    let folderId = activity.folder_id;
+    const seen = new Set();
+    while (folderId && folderById.has(folderId) && !seen.has(folderId)) {
+      usefulFolderIds.add(folderId);
+      seen.add(folderId);
+      folderId = folderById.get(folderId)?.parent_id || null;
     }
   });
+  const visibleFolders = folders.filter((folder) => usefulFolderIds.has(folder.id));
+  const visibleFolderById = new Map(visibleFolders.map((folder) => [folder.id, folder]));
 
   const folderChildren = new Map();
   const activityChildren = new Map();
 
-  folders.forEach((folder) => {
+  visibleFolders.forEach((folder) => {
     ensureBucket(folderChildren, folder.parent_id).push(folder);
   });
 
-  activities.forEach((activity) => {
+  visibleActivities.forEach((activity) => {
     ensureBucket(activityChildren, activity.folder_id).push(activity);
   });
 
   return {
-    folderById,
+    folderById: visibleFolderById,
     folderChildren,
     activityChildren
   };

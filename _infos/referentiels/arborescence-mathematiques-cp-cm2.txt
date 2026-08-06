@@ -1,0 +1,485 @@
+Mathématiques
+	Nombres, calculs et résolution de problèmes
+		Les nombres entiers
+			Dénombrer et construire des collections
+				CP
+				CE1
+				CE2
+				CM1
+			Lire et écrire les nombres entiers
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Représenter et décomposer les nombres entiers
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre la valeur de position et les relations entre unités de numération
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comparer, encadrer, intercaler et ordonner les nombres entiers
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer des nombres entiers sur une demi-droite graduée
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer une position ou un rang dans une suite
+				CP
+				CE1
+			Reconnaître les nombres pairs et impairs
+				CE1
+				CE2
+			Reconnaître et utiliser les multiples
+				CE2
+				CM1
+				CM2
+			Reconnaître et utiliser les diviseurs
+				CM1
+				CM2
+		Les fractions
+			Lire, écrire, interpréter et représenter des fractions
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et produire des fractions équivalentes
+				CE2
+				CM1
+				CM2
+			Décomposer et recomposer des fractions supérieures à 1
+				CM1
+				CM2
+			Repérer des fractions sur une demi-droite graduée
+				CE2
+				CM1
+				CM2
+			Comparer et encadrer des fractions
+				CE1
+				CE2
+				CM1
+				CM2
+			Additionner et soustraire des fractions
+				CE1
+				CE2
+				CM1
+				CM2
+			Calculer une fraction d’une quantité ou d’une grandeur
+				CM1
+				CM2
+			Calculer le produit d’un entier et d’une fraction
+				CM2
+		Les nombres décimaux
+			Lire, écrire, interpréter et représenter des nombres décimaux
+				CM1
+				CM2
+			Comprendre la valeur de position dans les nombres décimaux
+				CM1
+				CM2
+			Relier fractions décimales et écritures à virgule
+				CM1
+				CM2
+			Décomposer et recomposer des nombres décimaux
+				CM1
+				CM2
+			Comparer, encadrer, intercaler et ordonner les nombres décimaux
+				CM1
+				CM2
+			Repérer des nombres décimaux sur une demi-droite graduée
+				CM1
+				CM2
+			Arrondir un nombre décimal
+				CM1
+				CM2
+		Les quatre opérations
+			Comprendre le sens de l’addition
+				CP
+				CE1
+				CE2
+			Comprendre le sens de la soustraction
+				CP
+				CE1
+				CE2
+			Poser et effectuer des additions de nombres entiers
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Poser et effectuer des additions de nombres décimaux
+				CM1
+				CM2
+			Poser et effectuer des soustractions de nombres entiers
+				CE1
+				CE2
+				CM1
+				CM2
+			Poser et effectuer des soustractions de nombres décimaux
+				CM1
+				CM2
+			Comprendre le sens de la multiplication
+				CP
+				CE1
+				CE2
+			Poser et effectuer des multiplications de nombres entiers
+				CE2
+				CM1
+				CM2
+			Poser et effectuer la multiplication d’un nombre décimal par un nombre entier
+				CM1
+				CM2
+			Comprendre le sens de la division
+				CE2
+				CM1
+				CM2
+			Poser et effectuer des divisions euclidiennes
+				CM1
+				CM2
+			Poser et effectuer des divisions décimales
+				CM2
+			Estimer et contrôler le résultat d’une opération
+				CM1
+				CM2
+			Effectuer des calculs avec des parenthèses
+				CM1
+				CM2
+		Le calcul mental
+			Mémoriser les faits additifs
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Mémoriser les faits multiplicatifs
+				CE1
+				CE2
+				CM1
+				CM2
+			Calculer mentalement des doubles, des moitiés, des triples et des quarts
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Mémoriser les relations entre fractions usuelles et nombres décimaux
+				CM1
+				CM2
+			Calculer mentalement en utilisant la numération
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Calculer mentalement des sommes et des différences
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Calculer mentalement des produits
+				CE1
+				CE2
+				CM1
+				CM2
+			Calculer mentalement des quotients
+				CE1
+				CE2
+				CM1
+				CM2
+		La résolution de problèmes
+			Résoudre des problèmes additifs de type parties-tout
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes additifs de comparaison
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes multiplicatifs de recherche du tout
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes de partage et de groupement
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes de comparaison multiplicative
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes de dénombrement
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes additifs en plusieurs étapes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes mixtes en plusieurs étapes
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes d’optimisation
+				CM1
+				CM2
+			Résoudre des problèmes préparant à l’utilisation d’algorithmes
+				CM2
+		L’algèbre
+			Trouver un nombre inconnu dans une égalité
+				CM1
+				CM2
+			Résoudre des problèmes algébriques
+				CM1
+				CM2
+			Exécuter et produire des programmes de calcul
+				CM1
+				CM2
+			Identifier et poursuivre des suites numériques évolutives
+				CM1
+				CM2
+			Identifier et poursuivre des motifs évolutifs
+				CM1
+				CM2
+	Grandeurs et mesures
+		Les longueurs
+			Connaître, choisir et convertir les unités de longueur
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Mesurer, tracer et comparer des longueurs
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Estimer une longueur
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Comprendre et déterminer un périmètre
+				CE2
+				CM1
+				CM2
+		Les masses
+			Connaître, choisir et convertir les unités de masse
+				CE1
+				CE2
+				CM1
+				CM2
+			Mesurer et comparer des masses
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Estimer une masse
+				CE2
+				CM1
+				CM2
+		Les contenances
+			Connaître, choisir et convertir les unités de contenance
+				CE2
+				CM1
+				CM2
+			Mesurer et comparer des contenances
+				CE2
+				CM1
+				CM2
+			Estimer une contenance
+				CE2
+				CM1
+				CM2
+		La monnaie
+			Utiliser les euros et les centimes
+				CP
+				CE1
+				CE2
+			Constituer et comparer des sommes
+				CP
+				CE1
+				CE2
+			Résoudre des situations d’achat et de rendu de monnaie
+				CP
+				CE1
+				CE2
+		Le temps et les durées
+			Lire et représenter l’heure
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Connaître et convertir les unités de durée
+				CE1
+				CE2
+				CM1
+				CM2
+			Comparer et calculer des durées
+				CE1
+				CE2
+				CM1
+				CM2
+		Les aires
+			Connaître, choisir et convertir les unités d’aire
+				CM1
+				CM2
+			Comparer et déterminer des aires
+				CM1
+				CM2
+			Calculer l’aire d’un carré ou d’un rectangle
+				CM2
+		Les angles
+			Reconnaître, nommer et comparer des angles
+				CE2
+				CM1
+				CM2
+			Reproduire et construire des angles
+				CM2
+	Espace et géométrie
+		Les solides
+			Reconnaître et nommer les solides
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Décrire les solides usuels
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Construire et reproduire des solides ou des assemblages
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et construire des patrons
+				CE2
+				CM1
+				CM2
+		La géométrie plane
+			Reconnaître, nommer et décrire les figures planes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Repérer et utiliser l’alignement, les segments et les milieux
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et utiliser la perpendicularité
+				CE2
+				CM1
+				CM2
+			Reconnaître et utiliser le parallélisme
+				CM1
+				CM2
+			Reproduire et construire des figures planes
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Reconnaître et construire des figures symétriques
+				CE2
+				CM1
+				CM2
+			Suivre et produire des programmes de construction
+				CM1
+				CM2
+		Le repérage dans l’espace
+			Se repérer et décrire des positions dans l’espace
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Lire et produire des représentations d’un espace
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Suivre et coder des déplacements
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Analyser des assemblages de cubes
+				CE1
+				CE2
+				CM1
+				CM2
+	Organisation et gestion de données
+		Les tableaux et les représentations graphiques
+			Recueillir et organiser des données
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Produire des tableaux et des représentations graphiques
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Lire et interpréter des tableaux et des représentations graphiques
+				CP
+				CE1
+				CE2
+				CM1
+				CM2
+			Résoudre des problèmes à partir de données
+				CE2
+				CM1
+				CM2
+		Les probabilités
+			Identifier une expérience aléatoire et ses issues
+				CM1
+				CM2
+			Comparer et exprimer des probabilités simples
+				CM1
+				CM2
+			Comprendre l’indépendance d’expériences répétées
+				CM2
+	Proportionnalité
+		Les situations de proportionnalité
+			Identifier une situation de proportionnalité
+				CM1
+				CM2
+			Résoudre des problèmes de proportionnalité
+				CM1
+				CM2

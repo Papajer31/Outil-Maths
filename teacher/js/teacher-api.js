@@ -8,10 +8,15 @@ import {
 } from "../../shared/api-common.js";
 import {
   applyCatalogVisibility,
+  filterEffectivelyActivePedagogicalNodes,
   getCatalogActivities,
-  getCatalogFolders,
+  getPedagogicalNodes,
   normalizeCatalogActivity,
-  sortCatalogActivities
+  normalizePedagogicalNode,
+  normalizeCatalogGradeLevel,
+  PEDAGOGICAL_NODE_TYPES,
+  sortCatalogActivities,
+  sortPedagogicalNodes
 } from "../../shared/catalogue.js";
 
 export { normalizeAccessCode, normalizeConfigName };
@@ -543,17 +548,114 @@ function normalizeStudentCode(value) {
   return safe || null;
 }
 
-export function listCatalogFolders() {
-  return getCatalogFolders();
+export function listPedagogicalNodes() {
+  return getPedagogicalNodes();
+}
+
+async function queryPedagogicalNodes() {
+  const pageSize = 1000;
+  const rows = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("pedagogical_nodes")
+      .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+      .order("parent_id", { ascending: true, nullsFirst: true })
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return sortPedagogicalNodes(rows.map(normalizePedagogicalNode));
+}
+
+export async function listPedagogicalNodesForTeacher() {
+  try {
+    return filterEffectivelyActivePedagogicalNodes(await queryPedagogicalNodes());
+  } catch (err) {
+    console.warn("Arborescence pédagogique en base indisponible, utilisation du secours local.", err);
+    return filterEffectivelyActivePedagogicalNodes(getPedagogicalNodes());
+  }
+}
+
+export async function listPedagogicalNodesForAdmin() {
+  try {
+    return await queryPedagogicalNodes();
+  } catch (err) {
+    console.warn("Arborescence pédagogique Admin indisponible, utilisation du secours local.", err);
+    return getPedagogicalNodes();
+  }
+}
+
+export async function createPedagogicalNodeAsAdmin(folder = {}) {
+  const id = String(folder.id || "").trim().toLowerCase();
+  const name = cleanDisplayName(folder.name);
+  const parentId = String(folder.parent_id || "").trim() || null;
+  const nodeType = String(folder.node_type || "").trim();
+  if (!id || !/^[a-z0-9][a-z0-9._-]{0,159}$/.test(id)) throw new Error("Identifiant de nœud invalide.");
+  if (!name) throw new Error("Nom du nœud vide.");
+  if (!PEDAGOGICAL_NODE_TYPES.includes(nodeType)) throw new Error("Type de nœud invalide.");
+  if (nodeType === "grade_level" && !normalizeCatalogGradeLevel(name)) {
+    throw new Error("Un dossier de niveau doit être nommé CP, CE1, CE2, CM1 ou CM2.");
+  }
+  const payload = {
+    id,
+    parent_id: parentId,
+    name,
+    node_type: nodeType,
+    display_order: Math.max(0, Math.trunc(Number(folder.display_order) || 0)),
+    is_active: folder.is_active !== false
+  };
+  const { data, error } = await supabase.from("pedagogical_nodes").insert(payload)
+    .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return normalizePedagogicalNode(data);
+}
+
+export async function updatePedagogicalNodeAsAdmin(folderId, updates = {}) {
+  const id = String(folderId || "").trim().toLowerCase();
+  if (!id) throw new Error("Nœud pédagogique introuvable.");
+  const payload = {};
+  if ("name" in updates) {
+    payload.name = cleanDisplayName(updates.name);
+    const currentNode = (await queryPedagogicalNodes()).find((node) => node.id === id) || null;
+    if (currentNode?.node_type === "grade_level" && !normalizeCatalogGradeLevel(payload.name)) {
+      throw new Error("Un dossier de niveau doit être nommé CP, CE1, CE2, CM1 ou CM2.");
+    }
+  }
+  if ("parent_id" in updates) payload.parent_id = String(updates.parent_id || "").trim() || null;
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  if ("is_active" in updates) payload.is_active = updates.is_active !== false;
+  if (!Object.keys(payload).length) return null;
+  const { data, error } = await supabase.from("pedagogical_nodes").update(payload).eq("id", id)
+    .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return normalizePedagogicalNode(data);
+}
+
+export async function deletePedagogicalNodeAsAdmin(folderId) {
+  const id = String(folderId || "").trim().toLowerCase();
+  if (!id) throw new Error("Nœud pédagogique introuvable.");
+  const { error } = await supabase.from("pedagogical_nodes").delete().eq("id", id);
+  if (error) throw error;
 }
 
 async function listPublishedCatalogActivities() {
   try {
     const { data, error } = await supabase
       .from("catalog_activities")
-      .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+      .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
       .eq("status", "published")
-      .order("category_id", { ascending: true })
+      .order("pedagogical_node_id", { ascending: true })
+      .order("adventure_tier", { ascending: true })
       .order("display_order", { ascending: true })
       .order("title", { ascending: true });
 
@@ -567,14 +669,19 @@ async function listPublishedCatalogActivities() {
 }
 
 export async function listCatalogActivitiesForTeacherSpace(teacherSpaceId) {
-  const catalogActivities = await listPublishedCatalogActivities();
+  const [catalogActivities, folders] = await Promise.all([
+    listPublishedCatalogActivities(),
+    listPedagogicalNodesForTeacher()
+  ]);
+  const activeFolderIds = new Set(folders.map((folder) => String(folder.id)));
+  const availableActivities = catalogActivities.filter((activity) => activeFolderIds.has(String(activity.pedagogical_node_id || activity.folder_id || "")));
   const { data, error } = await supabase
     .from("catalog_activity_visibility")
     .select("catalog_activity_id, is_visible, updated_at")
     .eq("teacher_space_id", teacherSpaceId);
 
   if (error) throw error;
-  return sortCatalogActivities(applyCatalogVisibility(catalogActivities, Array.isArray(data) ? data : []));
+  return sortCatalogActivities(applyCatalogVisibility(availableActivities, Array.isArray(data) ? data : []));
 }
 
 export async function setCatalogActivityVisibility(teacherSpaceId, catalogActivityId, isVisible) {
@@ -759,9 +866,10 @@ export async function isCurrentUserSuperAdmin() {
 export async function listCatalogActivitiesForAdmin() {
   const { data, error } = await supabase
     .from("catalog_activities")
-    .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
     .neq("status", "archived")
-    .order("category_id", { ascending: true })
+    .order("pedagogical_node_id", { ascending: true })
+    .order("adventure_tier", { ascending: true })
     .order("display_order", { ascending: true })
     .order("title", { ascending: true });
 
@@ -769,25 +877,272 @@ export async function listCatalogActivitiesForAdmin() {
   return sortCatalogActivities(Array.isArray(data) ? data.map(normalizeCatalogActivity) : []);
 }
 
+
+export async function listAdventureDefaultMenuSlots(gradeLevel) {
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const { data, error } = await supabase
+    .from("adventure_default_menu_slots")
+    .select("grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .eq("grade_level", safeGrade)
+    .order("menu_number", { ascending: true })
+    .order("day_number", { ascending: true })
+    .order("slot_number", { ascending: true });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data.map(normalizeAdventureMenuSlot) : [];
+}
+
+export async function saveAdventureDefaultMenuSlots(gradeLevel, items = []) {
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const slots = (Array.isArray(items) ? items : [])
+    .map((item) => normalizeAdventureMenuSlot({ ...item, grade_level: safeGrade }))
+    .filter((item) => item.item_type === "objective" || item.item_type === "activity")
+    .map((item) => ({
+      menu_number: item.menu_number,
+      day_number: item.day_number,
+      slot_number: item.slot_number,
+      item_type: item.item_type,
+      grade_folder_id: item.item_type === "objective" ? item.grade_folder_id : null,
+      catalog_activity_id: item.item_type === "activity" ? item.catalog_activity_id : null
+    }));
+
+  const { error } = await supabase.rpc("replace_adventure_default_menu", {
+    p_grade_level: safeGrade,
+    p_slots: slots
+  });
+  if (error) throw error;
+  return listAdventureDefaultMenuSlots(safeGrade);
+}
+
+export async function listTeacherAdventureMenuSlots(teacherSpaceId, gradeLevel) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const { data, error } = await supabase
+    .from("teacher_adventure_menu_slots")
+    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .eq("teacher_space_id", safeTeacherSpaceId)
+    .eq("grade_level", safeGrade)
+    .order("menu_number", { ascending: true })
+    .order("day_number", { ascending: true })
+    .order("slot_number", { ascending: true });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data.map(normalizeAdventureMenuSlot) : [];
+}
+
+export async function saveTeacherAdventureMenuSlot(teacherSpaceId, item = {}) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const normalized = normalizeAdventureMenuSlot({
+    ...item,
+    teacher_space_id: safeTeacherSpaceId
+  });
+  const payload = {
+    teacher_space_id: safeTeacherSpaceId,
+    grade_level: normalized.grade_level,
+    menu_number: normalized.menu_number,
+    day_number: normalized.day_number,
+    slot_number: normalized.slot_number,
+    item_type: normalized.item_type,
+    grade_folder_id: normalized.item_type === "objective" ? normalized.grade_folder_id : null,
+    catalog_activity_id: normalized.item_type === "activity" ? normalized.catalog_activity_id : null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from("teacher_adventure_menu_slots")
+    .upsert(payload, {
+      onConflict: "teacher_space_id,grade_level,menu_number,day_number,slot_number"
+    })
+    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .single();
+
+  if (error) throw error;
+  return normalizeAdventureMenuSlot(data);
+}
+
+export async function deleteTeacherAdventureMenuSlot(teacherSpaceId, gradeLevel, menuNumber, dayNumber, slotNumber) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const { error } = await supabase
+    .from("teacher_adventure_menu_slots")
+    .delete()
+    .eq("teacher_space_id", safeTeacherSpaceId)
+    .eq("grade_level", safeGrade)
+    .eq("menu_number", normalizeAdventureMenuNumber(menuNumber))
+    .eq("day_number", normalizeAdventureDayNumber(dayNumber))
+    .eq("slot_number", normalizeAdventureSlotNumber(slotNumber));
+  if (error) throw error;
+}
+
+export async function deleteTeacherAdventureMenuSlotsForGrade(teacherSpaceId, gradeLevel) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const { error } = await supabase
+    .from("teacher_adventure_menu_slots")
+    .delete()
+    .eq("teacher_space_id", safeTeacherSpaceId)
+    .eq("grade_level", safeGrade);
+  if (error) throw error;
+}
+
+export async function listAdventureClassCursors(teacherClassIds = [], gradeLevel) {
+  const classIds = [...new Set((Array.isArray(teacherClassIds) ? teacherClassIds : [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value > 0))];
+  if (!classIds.length) return [];
+
+  const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
+  const { data, error } = await supabase
+    .from("adventure_class_cursors")
+    .select("teacher_class_id, grade_level, menu_number, day_number, is_enabled, created_at, updated_at")
+    .in("teacher_class_id", classIds)
+    .eq("grade_level", safeGrade)
+    .order("teacher_class_id", { ascending: true });
+
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map(normalizeAdventureClassCursor);
+}
+
+export async function saveAdventureClassCursor(teacherClassId, gradeLevel, updates = {}) {
+  const safeClassId = Number(teacherClassId);
+  if (!Number.isSafeInteger(safeClassId) || safeClassId <= 0) {
+    throw new Error("Classe Aventure invalide.");
+  }
+
+  const payload = {
+    teacher_class_id: safeClassId,
+    grade_level: normalizeAdventureGradeLevel(gradeLevel),
+    menu_number: normalizeAdventureMenuNumber(updates?.menu_number),
+    day_number: normalizeAdventureDayNumber(updates?.day_number),
+    is_enabled: updates?.is_enabled === true,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from("adventure_class_cursors")
+    .upsert(payload, { onConflict: "teacher_class_id,grade_level" })
+    .select("teacher_class_id, grade_level, menu_number, day_number, is_enabled, created_at, updated_at")
+    .single();
+
+  if (error) throw error;
+  return normalizeAdventureClassCursor(data);
+}
+
+function normalizeAdventureClassCursor(item = {}) {
+  return {
+    ...item,
+    teacher_class_id: Number(item?.teacher_class_id) || null,
+    grade_level: normalizeAdventureGradeLevel(item?.grade_level),
+    menu_number: normalizeAdventureMenuNumber(item?.menu_number),
+    day_number: normalizeAdventureDayNumber(item?.day_number),
+    is_enabled: item?.is_enabled === true
+  };
+}
+
+function normalizeAdventureMenuSlot(item = {}) {
+  const itemType = ["objective", "activity", "empty"].includes(String(item?.item_type || "").trim())
+    ? String(item.item_type).trim()
+    : "empty";
+  return {
+    ...item,
+    teacher_space_id: Number(item?.teacher_space_id) || null,
+    grade_level: normalizeAdventureGradeLevel(item?.grade_level),
+    menu_number: normalizeAdventureMenuNumber(item?.menu_number),
+    day_number: normalizeAdventureDayNumber(item?.day_number),
+    slot_number: normalizeAdventureSlotNumber(item?.slot_number),
+    item_type: itemType,
+    grade_folder_id: itemType === "objective" ? String(item?.grade_folder_id || "").trim() || null : null,
+    catalog_activity_id: itemType === "activity" ? String(item?.catalog_activity_id || "").trim() || null : null
+  };
+}
+
+function normalizeAdventureGradeLevel(value) {
+  const grade = normalizeCatalogGradeLevel(value);
+  if (!grade) throw new Error("Niveau Aventure invalide.");
+  return grade;
+}
+
+function normalizeAdventureMenuNumber(value) {
+  return Math.max(1, Math.min(34, Math.trunc(Number(value) || 1)));
+}
+
+function normalizeAdventureDayNumber(value) {
+  return Math.max(1, Math.min(4, Math.trunc(Number(value) || 1)));
+}
+
+function normalizeAdventureSlotNumber(value) {
+  return Math.max(1, Math.min(6, Math.trunc(Number(value) || 1)));
+}
+
+export async function listAdventureObjectivesForSpace(teacherSpaceId) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data, error } = await supabase
+    .from("teacher_adventure_objectives")
+    .select("teacher_space_id, grade_folder_id, display_order, is_enabled, created_at, updated_at")
+    .eq("teacher_space_id", safeTeacherSpaceId)
+    .order("display_order", { ascending: true })
+    .order("grade_folder_id", { ascending: true });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data.map(normalizeTeacherAdventureObjective) : [];
+}
+
+export async function saveAdventureObjectivesForSpace(teacherSpaceId, items = []) {
+  const safeTeacherSpaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const payload = (Array.isArray(items) ? items : []).map((item, index) => {
+    const gradeFolderId = String(item?.grade_folder_id || "").trim();
+    if (!gradeFolderId) return null;
+    return {
+      teacher_space_id: safeTeacherSpaceId,
+      grade_folder_id: gradeFolderId,
+      display_order: Math.max(0, Math.trunc(Number(item?.display_order) || index)),
+      is_enabled: item?.is_enabled !== false,
+      updated_at: new Date().toISOString()
+    };
+  }).filter(Boolean);
+
+  if (!payload.length) return [];
+
+  const { data, error } = await supabase
+    .from("teacher_adventure_objectives")
+    .upsert(payload, { onConflict: "teacher_space_id,grade_folder_id" })
+    .select("teacher_space_id, grade_folder_id, display_order, is_enabled, created_at, updated_at");
+
+  if (error) throw error;
+  return Array.isArray(data) ? data.map(normalizeTeacherAdventureObjective) : [];
+}
+
+function normalizeTeacherAdventureObjective(item = {}) {
+  const displayOrder = Number(item?.display_order);
+  return {
+    ...item,
+    teacher_space_id: Number(item?.teacher_space_id) || null,
+    grade_folder_id: String(item?.grade_folder_id || "").trim(),
+    display_order: Number.isFinite(displayOrder) ? Math.max(0, Math.trunc(displayOrder)) : 0,
+    is_enabled: item?.is_enabled !== false
+  };
+}
+
 export async function saveCatalogActivityAsAdmin(activity = {}) {
   const id = String(activity.id || "").trim().toLowerCase();
   const title = cleanDisplayName(activity.title || activity.config_name);
-  const categoryId = String(activity.category_id || activity.folder_id || "").trim();
+  const categoryId = String(activity.pedagogical_node_id || activity.folder_id || "").trim();
   const toolId = String(activity.tool_id || "").trim();
   if (!id) throw new Error("Identifiant d’activité vide.");
   if (!/^[a-z0-9][a-z0-9._-]{1,160}$/.test(id)) {
     throw new Error("Identifiant invalide. Utilise minuscules, chiffres, points, tirets ou underscores.");
   }
   if (!title) throw new Error("Titre d’activité vide.");
-  if (!categoryId) throw new Error("Catégorie obligatoire.");
+  if (!categoryId) throw new Error("Adresse pédagogique obligatoire.");
   if (!toolId) throw new Error("Outil obligatoire.");
 
   const payload = {
     id,
-    category_id: categoryId,
+    pedagogical_node_id: categoryId,
     tool_id: toolId,
     title,
     description: String(activity.description || "").trim(),
+    adventure_tier: Math.max(1, Math.trunc(Number(activity.adventure_tier) || 1)),
     display_order: Math.max(0, Math.trunc(Number(activity.display_order) || 0)),
     status: String(activity.status || "draft").trim() === "published" ? "published" : "draft",
     default_visible: activity.default_visible !== false,
@@ -800,7 +1155,7 @@ export async function saveCatalogActivityAsAdmin(activity = {}) {
   const { data, error } = await supabase
     .from("catalog_activities")
     .upsert(payload, { onConflict: "id" })
-    .select("id, category_id, tool_id, title, description, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
     .single();
 
   if (error) throw error;
@@ -849,9 +1204,11 @@ export async function listDefaultVocabularyWordsAsAdmin() {
 
 const QUIZ_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, display_order, is_system, created_at, updated_at";
 const QUIZ_FIELDS = "id, teacher_space_id, folder_id, title, document, schema_version, display_order, is_system, created_at, updated_at";
+const QUIZ_SUMMARY_FIELDS = "id, teacher_space_id, folder_id, title, schema_version, display_order, is_system, created_at, updated_at";
 const RESOURCE_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, metadata, display_order, is_system, created_at, updated_at";
 const RESOURCE_FIELDS = "id, teacher_space_id, folder_id, title, resource_type, storage_bucket, storage_path, mime_type, size_bytes, width, height, duration_seconds, alt_text, tags, metadata, display_order, is_system, created_at, updated_at";
 const TEACHER_RESOURCE_BUCKET = "teacher-resources";
+const SYSTEM_IMAGE_BUCKET = "images";
 
 function normalizePositiveTeacherSpaceId(value) {
   const id = Number(value);
@@ -1060,6 +1417,39 @@ export async function listQuizzesForSpace(teacherSpaceId) {
   return (Array.isArray(data) ? data : []).map(normalizeQuizRecord);
 }
 
+// Le sélecteur de quiz n'a besoin que de l'arborescence. Éviter de transférer
+// tous les documents (qui peuvent contenir des centaines de variantes).
+export async function listQuizSummariesForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data, error } = await supabase
+    .from("quizzes")
+    .select(QUIZ_SUMMARY_FIELDS)
+    .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
+    .order("is_system", { ascending: true })
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
+
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map(normalizeQuizRecord);
+}
+
+export async function getQuizForSpace(teacherSpaceId, quizId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const id = normalizeUuid(quizId);
+  if (!id) throw new Error("Quiz invalide.");
+
+  const { data, error } = await supabase
+    .from("quizzes")
+    .select(QUIZ_FIELDS)
+    .eq("id", id)
+    .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("Quiz introuvable.");
+  return normalizeQuizRecord(data);
+}
+
 export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
   const isSystem = quiz?.is_system === true;
   const spaceId = isSystem ? null : normalizePositiveTeacherSpaceId(teacherSpaceId);
@@ -1204,6 +1594,28 @@ export async function createResourceFolderForSpace(teacherSpaceId, folder = {}) 
   return normalizeResourceFolderRecord(data);
 }
 
+export async function createSystemResourceFolderAsAdmin(folder = {}) {
+  const name = cleanDisplayName(folder.name);
+  if (!name) throw new Error("Nom de dossier vide.");
+  const metadata = folder.metadata && typeof folder.metadata === "object" && !Array.isArray(folder.metadata)
+    ? cloneJsonValue(folder.metadata)
+    : {};
+  const { data, error } = await supabase
+    .from("resource_folders")
+    .insert({
+      teacher_space_id: null,
+      parent_id: normalizeNullableUuid(folder.parent_id),
+      name,
+      metadata: { ...metadata, resource_type:"image" },
+      display_order: Number.isFinite(Number(folder.display_order)) ? Number(folder.display_order) : 0,
+      is_system: true
+    })
+    .select(RESOURCE_FOLDER_FIELDS)
+    .single();
+  if (error) throw error;
+  return normalizeResourceFolderRecord(data);
+}
+
 export async function ensureRecordingsResourceFolderForSpace(teacherSpaceId) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
   const findExisting = async () => {
@@ -1239,7 +1651,7 @@ export async function ensureRecordingsResourceFolderForSpace(teacherSpaceId) {
   }
 }
 
-export async function updateResourceFolder(folderId, updates = {}) {
+export async function updateResourceFolder(folderId, updates = {}, options = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de ressources invalide.");
   const payload = {};
@@ -1255,25 +1667,26 @@ export async function updateResourceFolder(folderId, updates = {}) {
       ? cloneJsonValue(updates.metadata)
       : {};
   }
+  const isSystem = options?.is_system === true;
   const { data, error } = await supabase
     .from("resource_folders")
     .update(payload)
     .eq("id", id)
-    .eq("is_system", false)
+    .eq("is_system", isSystem)
     .select(RESOURCE_FOLDER_FIELDS)
     .single();
   if (error) throw error;
   return normalizeResourceFolderRecord(data);
 }
 
-export async function deleteResourceFolder(folderId) {
+export async function deleteResourceFolder(folderId, options = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de ressources invalide.");
   const { error } = await supabase
     .from("resource_folders")
     .delete()
     .eq("id", id)
-    .eq("is_system", false);
+    .eq("is_system", options?.is_system === true);
   if (error) throw error;
 }
 
@@ -1361,7 +1774,7 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
   return normalizeResourceRecord(data);
 }
 
-export async function updateResource(resourceId, updates = {}) {
+export async function updateResource(resourceId, updates = {}, options = {}) {
   const id = normalizeUuid(resourceId);
   if (!id) throw new Error("Ressource invalide.");
 
@@ -1387,12 +1800,14 @@ export async function updateResource(resourceId, updates = {}) {
       : {};
   }
 
+  const isSystem = options?.is_system === true;
+
   if (!Object.keys(payload).length) {
     const { data, error } = await supabase
       .from("resources")
       .select(RESOURCE_FIELDS)
       .eq("id", id)
-      .eq("is_system", false)
+      .eq("is_system", isSystem)
       .single();
     if (error) throw error;
     return normalizeResourceRecord(data);
@@ -1402,7 +1817,7 @@ export async function updateResource(resourceId, updates = {}) {
     .from("resources")
     .update(payload)
     .eq("id", id)
-    .eq("is_system", false)
+    .eq("is_system", isSystem)
     .select(RESOURCE_FIELDS)
     .single();
   if (error) throw error;
@@ -1413,6 +1828,10 @@ export async function createResourceSignedUrl(resource, expiresInSeconds = 3600)
   const bucket = String(resource?.storage_bucket || TEACHER_RESOURCE_BUCKET).trim();
   const path = String(resource?.storage_path || resource?.path || "").trim();
   if (!path) return "";
+  if (bucket === SYSTEM_IMAGE_BUCKET) {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return String(data?.publicUrl || "");
+  }
   const expiresIn = Math.max(60, Math.min(86400, Math.trunc(Number(expiresInSeconds) || 3600)));
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
   if (error) throw error;
@@ -1445,3 +1864,103 @@ export async function deleteResource(resourceId) {
     if (storageError) console.warn("La ligne a été supprimée, mais le fichier Storage n’a pas pu être effacé.", storageError);
   }
 }
+
+export async function syncPhonologyWordsAsAdmin(words, { deactivateMissing = true } = {}) {
+  const payload = (Array.isArray(words) ? words : []).map((row) => ({
+    slug: String(row?.slug || "").trim().toLowerCase(),
+    word: String(row?.word || "").trim(),
+    units: Array.isArray(row?.units) ? row.units.map((unit) => ({
+      graph: String(unit?.graph || "").trim(),
+      text: String(unit?.text || "").trim(),
+      isSilent: unit?.isSilent === true
+    })) : [],
+    is_active: true
+  }));
+
+  const { data, error } = await supabase.rpc("sync_phonology_words_as_admin", {
+    p_words: payload,
+    p_deactivate_missing: deactivateMissing === true
+  });
+  if (error) throw error;
+  return data && typeof data === "object" ? data : {};
+}
+
+function normalizeImageAssetRecord(row = {}) {
+  return {
+    slug: String(row.slug || "").trim().toLowerCase(),
+    resource_id: row.resource_id ? String(row.resource_id) : null,
+    storage_path: String(row.storage_path || "").trim(),
+    tags: Array.isArray(row.tags) ? row.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [],
+    notes: String(row.notes || "").trim(),
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? cloneJsonValue(row.metadata)
+      : {},
+    is_active: row.is_active !== false,
+    created_at: String(row.created_at || ""),
+    updated_at: String(row.updated_at || row.created_at || "")
+  };
+}
+
+export async function listImageAssetsAsAdmin() {
+  const { data, error } = await supabase
+    .from("image_assets")
+    .select("slug, resource_id, storage_path, tags, notes, metadata, is_active, created_at, updated_at")
+    .order("slug", { ascending: true });
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map(normalizeImageAssetRecord);
+}
+
+function isDuplicateStorageObjectError(error) {
+  const code = String(error?.code || error?.statusCode || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return code === "409" || code === "duplicate" || message.includes("duplicate") || message.includes("already exists");
+}
+
+export async function importSystemImageAssetAsAdmin(file, asset = {}) {
+  if (!(file instanceof Blob)) throw new Error("Fichier image invalide.");
+  const slug = String(asset.slug || "").trim().toLowerCase();
+  const storagePath = String(asset.storage_path || "").trim();
+  const mimeType = String(file.type || asset?.metadata?.mime_type || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]{0,119}$/.test(slug)) throw new Error("Identifiant d’image invalide.");
+  if (!storagePath.startsWith(`bank/${slug}/`)) throw new Error("Chemin Storage invalide.");
+  if (!mimeType.startsWith("image/")) throw new Error("Le fichier sélectionné n’est pas une image.");
+
+  let uploadedNewObject = false;
+  const { error: uploadError } = await supabase.storage
+    .from(SYSTEM_IMAGE_BUCKET)
+    .upload(storagePath, file, {
+      contentType: mimeType,
+      cacheControl: "31536000",
+      upsert: false
+    });
+  if (uploadError && !isDuplicateStorageObjectError(uploadError)) throw uploadError;
+  uploadedNewObject = !uploadError;
+
+  const tags = Array.isArray(asset.tags) ? asset.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [];
+  const metadata = asset.metadata && typeof asset.metadata === "object" && !Array.isArray(asset.metadata)
+    ? cloneJsonValue(asset.metadata)
+    : {};
+  const { data, error } = await supabase.rpc("upsert_system_image_asset_as_admin", {
+    p_slug: slug,
+    p_storage_path: storagePath,
+    p_tags: tags,
+    p_notes: String(asset.notes || "").trim(),
+    p_metadata: metadata
+  });
+
+  if (error) {
+    if (uploadedNewObject) {
+      await supabase.storage.from(SYSTEM_IMAGE_BUCKET).remove([storagePath]).catch(() => {});
+    }
+    throw error;
+  }
+
+  const previousStoragePath = String(asset.previous_storage_path || "").trim();
+  if (previousStoragePath && previousStoragePath !== storagePath && previousStoragePath.startsWith("bank/")) {
+    const { error: cleanupError } = await supabase.storage.from(SYSTEM_IMAGE_BUCKET).remove([previousStoragePath]);
+    if (cleanupError) console.warn("L’image a été remplacée, mais l’ancienne version Storage n’a pas pu être supprimée.", cleanupError);
+  }
+
+  return normalizeImageAssetRecord(data);
+}
+
