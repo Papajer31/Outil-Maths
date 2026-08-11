@@ -1,6 +1,4 @@
 import { openToolAssetPicker } from "../../../shared/tool-assets/asset-picker.js";
-import { listToolAssets } from "../../../shared/tool-assets/tool-assets.js";
-import { formatToolAssetFolderName } from "../../../shared/tool-assets/labels.js";
 import {
   normalizeQuizImageSource,
   resolveQuizImageSourceUrl
@@ -70,7 +68,7 @@ const QUESTION_ELEMENTS = [
     group: "content",
     icon: "image",
     title: "Image",
-    description: "Image du site ou image importée.",
+    description: "Image des ressources ou image importée.",
     detail: "Toujours affichée sans recadrage."
   },
   {
@@ -78,7 +76,7 @@ const QUESTION_ELEMENTS = [
     group: "content",
     icon: "play_arrow",
     title: "Audio",
-    description: "Audio du site, importé ou enregistré.",
+    description: "Audio des ressources, importé ou enregistré.",
     detail: "Lecture manuelle dans le runtime."
   },
   {
@@ -1900,7 +1898,7 @@ export function createQuizWorkshopViewController({
           </div>
         ` : `
           <div class="quiz-workshop-image-actions is-visible">
-            <button class="btn quiz-workshop-image-action" type="button" data-choose-quiz-image-site="${escapeHtml(widget.id)}">
+            <button class="btn quiz-workshop-image-action" type="button" data-choose-quiz-image-resource="${escapeHtml(widget.id)}">
               <span class="dashboard-material-icon" aria-hidden="true">collections</span>
               <span>Ressources</span>
             </button>
@@ -2011,28 +2009,9 @@ export function createQuizWorkshopViewController({
     const personalRoot = "Ressources personnelles";
     const systemImagesRoot = `${systemRoot} / Images`;
     const folderPaths = new Set([personalRoot, systemRoot, systemImagesRoot]);
-    const siteAssets = await listToolAssets({ type:"image" });
-    const systemAssets = (Array.isArray(siteAssets) ? siteAssets : []).map((asset) => {
-      const parts = String(asset?.src || "").split("/").filter(Boolean);
-      const folderParts = parts.slice(1, -1).map((part) => formatToolAssetFolderName(part));
-      let category = systemImagesRoot;
-      folderParts.forEach((part) => {
-        category = `${category} / ${part}`;
-        folderPaths.add(category);
-      });
-      return {
-        ...asset,
-        type:"image",
-        scope:"system",
-        category,
-        label:String(asset?.label || asset?.id || "Image"),
-        alt:String(asset?.alt || asset?.label || "Image"),
-        mimeType:String(asset?.mimeType || asset?.mime_type || "image/*")
-      };
-    });
 
-    if (currentQuizIsSystem || typeof listResourcesForSpace !== "function") {
-      return { assets:systemAssets, folderPaths:[...folderPaths], unifiedTree:true };
+    if (typeof listResourcesForSpace !== "function") {
+      return { assets:[], folderPaths:[...folderPaths], unifiedTree:true };
     }
 
     const teacherSpaceId = getActiveTeacherSpaceId();
@@ -2040,10 +2019,15 @@ export function createQuizWorkshopViewController({
       typeof listResourceFoldersForSpace === "function" ? listResourceFoldersForSpace(teacherSpaceId) : [],
       listResourcesForSpace(teacherSpaceId)
     ]);
-    const foldersById = new Map((Array.isArray(folderRows) ? folderRows : []).map((folder) => [String(folder.id || ""), folder]));
-    const images = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) => resource?.type === "image");
+    const visibleFolders = (Array.isArray(folderRows) ? folderRows : []).filter((folder) =>
+      !currentQuizIsSystem || folder?.is_system === true
+    );
+    const foldersById = new Map(visibleFolders.map((folder) => [String(folder.id || ""), folder]));
+    const images = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) =>
+      resource?.type === "image" && (!currentQuizIsSystem || resource?.is_system === true)
+    );
 
-    (Array.isArray(folderRows) ? folderRows : []).forEach((folder) => {
+    visibleFolders.forEach((folder) => {
       const root = folder?.is_system === true ? systemRoot : personalRoot;
       const path = getResourceFolderPath(folder?.id, foldersById);
       if (path && path !== "Sans dossier") folderPaths.add(`${root} / ${path}`);
@@ -2074,13 +2058,13 @@ export function createQuizWorkshopViewController({
     }));
 
     return {
-      assets:[...systemAssets, ...resourceAssets.filter((asset) => asset.resourceId && asset.url)],
+      assets:resourceAssets.filter((asset) => asset.resourceId && asset.url),
       folderPaths:[...folderPaths],
       unifiedTree:true
     };
   }
 
-  async function chooseSiteImage(widgetId){
+  async function chooseResourceImage(widgetId){
     const widget = draftWidgets.find((entry) => entry.id === widgetId);
     if (!widget || widget.type !== "image") return;
     try {
@@ -2088,26 +2072,16 @@ export function createQuizWorkshopViewController({
         type:"image",
         title:"Choisir une image",
         loadAssets:loadQuizImageResources,
-        includeDefaultAssets:false,
         emptyMessage:"Aucune image disponible dans ce dossier."
       });
       if (!asset) return;
-      if (asset.resourceId) {
-        setWidgetImageSource(widget, {
-          kind:"resource",
-          resourceId:asset.resourceId,
-          label:asset.label,
-          alt:asset.alt || asset.label,
-          mimeType:asset.mimeType || "image/*"
-        });
-        return;
-      }
+      if (!asset.resourceId) throw new Error("Cette image n’est pas une ressource Supabase valide.");
       setWidgetImageSource(widget, {
-        kind:"site-asset",
-        assetId:asset.id,
-        src:asset.src,
+        kind:"resource",
+        resourceId:asset.resourceId,
         label:asset.label,
-        alt:asset.alt || asset.label
+        alt:asset.alt || asset.label,
+        mimeType:asset.mimeType || "image/*"
       });
     } catch (error) {
       console.error("Impossible d’ouvrir les ressources du Quiz.", error);
@@ -2242,7 +2216,7 @@ export function createQuizWorkshopViewController({
             <input class="dashboard-audio-recorder-progress" data-quiz-audio-seek type="range" min="0" max="100" value="0" aria-label="Position de lecture">
           </div>` : `
           <div class="quiz-workshop-audio-actions">
-            <button class="btn" type="button" data-choose-quiz-audio-site="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">collections</span>Ressources</button>
+            <button class="btn" type="button" data-choose-quiz-audio-resource="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">collections</span>Ressources</button>
             ${currentQuizIsSystem ? "" : `
               <button class="btn" type="button" data-upload-quiz-audio="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">upload_file</span>Importer</button>
               <button class="btn" type="button" data-open-quiz-audio-recorder="${escapeHtml(widget.id)}"><span class="dashboard-material-icon" aria-hidden="true">radio_button_checked</span>Enregistrer</button>
@@ -2377,30 +2351,11 @@ export function createQuizWorkshopViewController({
   async function loadQuizAudioResources(){
     const systemRoot = "Ressources système";
     const personalRoot = "Ressources personnelles";
-    const systemAudioRoot = `${systemRoot} / Audios`;
+    const systemAudioRoot = `${systemRoot} / Audio`;
     const folderPaths = new Set([personalRoot, systemRoot, systemAudioRoot]);
-    const siteAssets = await listToolAssets({ type:"audio" });
-    const systemAssets = (Array.isArray(siteAssets) ? siteAssets : []).map((asset) => {
-      const parts = String(asset?.src || "").split("/").filter(Boolean);
-      const folderParts = parts.slice(1, -1).map((part) => formatToolAssetFolderName(part));
-      let category = systemAudioRoot;
-      folderParts.forEach((part) => {
-        category = `${category} / ${part}`;
-        folderPaths.add(category);
-      });
-      return {
-        ...asset,
-        type:"audio",
-        scope:"system",
-        category,
-        label:String(asset?.label || asset?.id || "Audio"),
-        mimeType:String(asset?.mimeType || asset?.mime_type || "audio/*"),
-        duration:Math.max(0, Number(asset?.duration) || 0)
-      };
-    });
 
-    if (currentQuizIsSystem || typeof listResourcesForSpace !== "function") {
-      return { assets:systemAssets, folderPaths:[...folderPaths], unifiedTree:true };
+    if (typeof listResourcesForSpace !== "function") {
+      return { assets:[], folderPaths:[...folderPaths], unifiedTree:true };
     }
 
     const teacherSpaceId = getActiveTeacherSpaceId();
@@ -2408,10 +2363,15 @@ export function createQuizWorkshopViewController({
       typeof listResourceFoldersForSpace === "function" ? listResourceFoldersForSpace(teacherSpaceId) : [],
       listResourcesForSpace(teacherSpaceId)
     ]);
-    const foldersById = new Map((Array.isArray(folderRows) ? folderRows : []).map((folder) => [String(folder.id || ""), folder]));
-    const audios = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) => resource?.type === "audio");
+    const visibleFolders = (Array.isArray(folderRows) ? folderRows : []).filter((folder) =>
+      !currentQuizIsSystem || folder?.is_system === true
+    );
+    const foldersById = new Map(visibleFolders.map((folder) => [String(folder.id || ""), folder]));
+    const audios = (Array.isArray(resourceRows) ? resourceRows : []).filter((resource) =>
+      resource?.type === "audio" && (!currentQuizIsSystem || resource?.is_system === true)
+    );
 
-    (Array.isArray(folderRows) ? folderRows : []).forEach((folder) => {
+    visibleFolders.forEach((folder) => {
       const root = folder?.is_system === true ? systemRoot : personalRoot;
       const path = getResourceFolderPath(folder?.id, foldersById);
       if (path && path !== "Sans dossier") folderPaths.add(`${root} / ${path}`);
@@ -2442,13 +2402,13 @@ export function createQuizWorkshopViewController({
     }));
 
     return {
-      assets:[...systemAssets, ...resourceAssets.filter((asset) => asset.resourceId && asset.url)],
+      assets:resourceAssets.filter((asset) => asset.resourceId && asset.url),
       folderPaths:[...folderPaths],
       unifiedTree:true
     };
   }
 
-  async function chooseAudioResource(widgetId){
+  async function chooseResourceAudio(widgetId){
     const widget = draftWidgets.find((entry) => entry.id === widgetId && entry.type === "audio");
     if (!widget) return;
     try {
@@ -2456,24 +2416,13 @@ export function createQuizWorkshopViewController({
         type:"audio",
         title:"Choisir un audio",
         loadAssets:loadQuizAudioResources,
-        includeDefaultAssets:false,
         emptyMessage:"Aucun audio disponible dans ce dossier."
       });
       if (!asset) return;
-      if (asset.resourceId) {
-        setWidgetAudioSource(widget, {
-          kind:"resource",
-          resourceId:asset.resourceId,
-          label:asset.label,
-          mimeType:asset.mimeType || "audio/*",
-          duration:asset.duration || 0
-        });
-        return;
-      }
+      if (!asset.resourceId) throw new Error("Cet audio n’est pas une ressource Supabase valide.");
       setWidgetAudioSource(widget, {
-        kind:"site-asset",
-        assetId:asset.id,
-        src:asset.src,
+        kind:"resource",
+        resourceId:asset.resourceId,
         label:asset.label,
         mimeType:asset.mimeType || "audio/*",
         duration:asset.duration || 0
@@ -3603,10 +3552,10 @@ export function createQuizWorkshopViewController({
       return;
     }
 
-    const chooseSiteImageButton = event.target.closest("[data-choose-quiz-image-site]");
-    if (chooseSiteImageButton) {
+    const chooseResourceImageButton = event.target.closest("[data-choose-quiz-image-resource]");
+    if (chooseResourceImageButton) {
       event.stopPropagation();
-      void chooseSiteImage(String(chooseSiteImageButton.dataset.chooseQuizImageSite || ""));
+      void chooseResourceImage(String(chooseResourceImageButton.dataset.chooseQuizImageResource || ""));
       return;
     }
 
@@ -3624,10 +3573,10 @@ export function createQuizWorkshopViewController({
       return;
     }
 
-    const chooseSiteAudioButton = event.target.closest("[data-choose-quiz-audio-site]");
-    if (chooseSiteAudioButton) {
+    const chooseResourceAudioButton = event.target.closest("[data-choose-quiz-audio-resource]");
+    if (chooseResourceAudioButton) {
       event.stopPropagation();
-      void chooseAudioResource(String(chooseSiteAudioButton.dataset.chooseQuizAudioSite || ""));
+      void chooseResourceAudio(String(chooseResourceAudioButton.dataset.chooseQuizAudioResource || ""));
       return;
     }
 

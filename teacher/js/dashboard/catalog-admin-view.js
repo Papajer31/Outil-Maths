@@ -46,7 +46,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "lecture",
     label: "Lecture",
-    toolIds: ["encodage", "reperage-graphemes", "nuage-lettres"]
+    toolIds: ["encodage", "reperage-graphemes", "nuage-lettres", "segmenter-mots", "recomposer-mots-syllabes", "mot-cache"]
   },
   {
     id: "ecriture",

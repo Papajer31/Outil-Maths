@@ -113,6 +113,7 @@ function createRuntimeState(initialContext = {}) {
     root: null,
     instructionEl: null,
     gridEl: null,
+    spellingsHintEl: null,
     settings: normalizeSettings(initialContext?.settings),
     settingsKey: "",
     responseUi: getResponseUi(initialContext),
@@ -139,12 +140,14 @@ function renderShell(state) {
     <div class="rg-root" data-response-ui="${escapeAttr(state.responseUi)}">
       ${renderToolInstruction({ id:"rg_instruction" })}
       <div class="rg-words-grid" id="rg_words_grid" aria-live="polite"></div>
+      <div class="rg-spellings-hint" id="rg_spellings_hint" hidden></div>
     </div>
   `;
 
   state.root = state.container.querySelector(".rg-root");
   state.instructionEl = state.container.querySelector("#rg_instruction");
   state.gridEl = state.container.querySelector("#rg_words_grid");
+  state.spellingsHintEl = state.container.querySelector("#rg_spellings_hint");
   updateInstruction(state);
   renderQuestion(state);
 }
@@ -211,30 +214,54 @@ function renderQuestion(state) {
   if (!question) {
     state.gridEl.className = "rg-words-grid is-empty";
     state.gridEl.innerHTML = '<div class="rg-empty-message">L’activité va commencer.</div>';
+    if (state.spellingsHintEl) state.spellingsHintEl.hidden = true;
     return;
   }
 
   const wordCount = question.words.length;
   state.gridEl.className = `rg-words-grid rg-words-grid--count-${wordCount}`;
-  state.gridEl.innerHTML = question.words.map((word) => renderWordCard(state, word)).join("");
+  let offset = 0;
+  state.gridEl.innerHTML = getWordRowCounts(wordCount).map((count) => {
+    const words = question.words.slice(offset, offset + count);
+    offset += count;
+    return `<div class="rg-words-row">${words.map((word) => renderWordCard(state, word)).join("")}</div>`;
+  }).join("");
+  renderSpellingsHint(state, question);
+}
+
+function renderSpellingsHint(state, question) {
+  const host = state.spellingsHintEl;
+  if (!host) return;
+  if (state.settings.showPossibleSpellings !== true || !question?.target?.id || question?.target?.kind === "graphemic") {
+    host.hidden = true;
+    return;
+  }
+  const spellings = state.settings.enabledSpellingsByTarget?.[question.target.id]
+    || question.target.spellings
+    || [];
+  if (!spellings.length) {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `N’oublie pas, le son ${renderSoundBubble(question.target.bubbleText, { className:"rg-sound-bubble--hint" })} peut s’écrire ${formatSpellings(spellings)}.`;
+}
+
+function formatSpellings(spellings = []) {
+  const values = spellings.map((spelling) => `<span class="rg-spellings-hint__spelling">${escapeHtml(spelling)}</span>`);
+  if (values.length === 1) return values[0];
+  if (values.length === 2) return `${values[0]} ou ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")} ou ${values.at(-1)}`;
 }
 
 function renderWordCard(state, word) {
-  const wordExpectedKeys = new Set(word.letters
-    .filter((letter) => letter.selectable && letter.isTarget)
-    .map((letter) => makeSelectionKey(word.wordIndex, letter.letterIndex)));
-  const studentKeys = getStudentSelection(state);
-  const wordSelectedKeys = new Set([...studentKeys].filter((key) => key.startsWith(`${word.wordIndex}:`)));
-  const wordIsCorrect = setsEqual(wordExpectedKeys, wordSelectedKeys);
-  const showVerdict = state.phaseMode === "answer" && state.responseUi === "boxed";
-  const sizeClass = getWordSizeClass(word.characterCount);
+  const displayWord = [word.prefix, word.word].filter(Boolean).join(" ");
 
   return `
-    <section class="rg-word-card ${sizeClass}${showVerdict ? (wordIsCorrect ? " is-correct" : " is-incorrect") : ""}" aria-label="Mot ${escapeAttr(word.word)}">
-      <div class="rg-word" role="group" aria-label="${escapeAttr(word.word)}">
-        ${word.letters.map((letter) => renderLetter(state, word, letter)).join("")}
-      </div>
-    </section>
+    <div class="rg-word" role="group" aria-label="${escapeAttr(displayWord)}">
+      ${word.prefix ? `<span class="rg-word-prefix" aria-hidden="true">${escapeHtml(word.prefix)}&nbsp;</span>` : ""}
+      ${word.letters.map((letter) => renderLetter(state, word, letter)).join("")}
+    </div>
   `;
 }
 
@@ -245,7 +272,7 @@ function renderLetter(state, word, letter) {
 
   const key = makeSelectionKey(word.wordIndex, letter.letterIndex);
   const interactive = isQuestionInteractive(state);
-  const className = getLetterClassName(state, key, letter.isTarget);
+  const className = getLetterClassName(state, key, letter.isTarget, word);
   const ariaPressed = state.selectedKeys.has(key) ? "true" : "false";
 
   if (!interactive) {
@@ -263,12 +290,15 @@ function renderLetter(state, word, letter) {
   `;
 }
 
-function getLetterClassName(state, key, isTarget) {
+function getLetterClassName(state, key, isTarget, word) {
   const classes = ["rg-letter"];
   const selectedNow = state.selectedKeys.has(key);
 
   if (state.phaseMode === "question") {
-    if (selectedNow) classes.push("is-selected");
+    if (selectedNow) {
+      classes.push("is-selected");
+      addContinuousGroupClasses(classes, state, key, isTarget, word, "selected");
+    }
     return classes.join(" ");
   }
 
@@ -278,14 +308,36 @@ function getLetterClassName(state, key, isTarget) {
   const wasSelected = studentSelection.has(key);
 
   if (state.answerDisplayMode === "student") {
-    if (wasSelected && isTarget) classes.push("is-correct");
-    else if (wasSelected && !isTarget) classes.push("is-wrong");
+    if (wasSelected && isTarget) { classes.push("is-correct"); addContinuousGroupClasses(classes, state, key, isTarget, word, "correct"); }
+    else if (wasSelected && !isTarget) { classes.push("is-wrong"); addContinuousGroupClasses(classes, state, key, isTarget, word, "wrong"); }
     return classes.join(" ");
   }
 
-  if (isTarget) classes.push("is-correction");
-  if (wasSelected && !isTarget) classes.push("is-wrong");
+  if (isTarget) { classes.push("is-correction"); addContinuousGroupClasses(classes, state, key, isTarget, word, "correction"); }
+  if (wasSelected && !isTarget) { classes.push("is-wrong"); addContinuousGroupClasses(classes, state, key, isTarget, word, "wrong"); }
   return classes.join(" ");
+}
+
+function addContinuousGroupClasses(classes, state, key, isTarget, word, kind) {
+  const [wordIndex, letterIndex] = key.split(":").map(Number);
+  const isSameKind = (index) => {
+    const neighbor = word?.letters?.find((letter) => Number(letter.letterIndex) === index);
+    if (!neighbor?.selectable) return false;
+    const neighborKey = makeSelectionKey(wordIndex, index);
+    const selected = state.phaseMode === "answer" && state.studentSelectionSnapshot instanceof Set
+      ? state.studentSelectionSnapshot.has(neighborKey)
+      : state.selectedKeys.has(neighborKey);
+    if (kind === "selected") return selected;
+    if (kind === "correct") return selected && neighbor.isTarget;
+    if (kind === "wrong") return selected && !neighbor.isTarget;
+    return neighbor.isTarget;
+  };
+  const hasPrevious = isSameKind(letterIndex - 1);
+  const hasNext = isSameKind(letterIndex + 1);
+  classes.push("rg-letter--continuous");
+  if (!hasPrevious) classes.push("is-group-start");
+  if (!hasNext) classes.push("is-group-end");
+  if (hasPrevious && hasNext) classes.push("is-group-mid");
 }
 
 function submitCurrentAnswer(state) {
@@ -310,15 +362,15 @@ function submitCurrentAnswer(state) {
 function updateInstruction(state) {
   if (!state.instructionEl) return;
   const prompt = String(state.currentQuestion?.prompt || "").trim()
-    || "Dans chaque mot, clique sur les lettres qui font le son demandé.";
+    || "Dans chaque mot, clique sur les lettres correspondant à la cible demandée.";
   const text = resolveQuestionInstructionText(
     state.latestContext,
     prompt,
-    "Dans chaque mot, clique sur les lettres qui font le son demandé."
+    "Dans chaque mot, clique sur les lettres correspondant à la cible demandée."
   );
   const target = state.currentQuestion?.target;
 
-  if (!target?.bubbleText || text !== prompt) {
+  if (!target?.bubbleText || target?.kind === "graphemic" || text !== prompt) {
     state.instructionEl.removeAttribute("aria-label");
     setToolInstructionText(state.instructionEl, text);
     return;
@@ -329,11 +381,9 @@ function updateInstruction(state) {
   state.instructionEl.removeAttribute("aria-hidden");
   state.instructionEl.setAttribute("aria-label", prompt);
   state.instructionEl.innerHTML = `
-    <span>Dans chaque mot, clique sur la ou les lettres qui font le son</span>
-    <span class="rg-instruction-sound-token">
-      ${renderSoundBubble(target.bubbleText, { className:"rg-sound-bubble--instruction" })}<span aria-hidden="true">,</span>
-    </span>
-    <span>comme dans « ${escapeHtml(target.example)} ».</span>
+    <span>Sélectionne la ou les lettres qui permettent d’écrire le son</span>
+    ${renderSoundBubble(target.bubbleText, { className:"rg-sound-bubble--instruction" })}
+    <span aria-hidden="true">.</span>
   `;
 }
 
@@ -375,12 +425,18 @@ function getResponseUi(context = {}) {
   return value === "free" ? "free" : "boxed";
 }
 
-function getWordSizeClass(characterCount) {
-  const count = Math.max(0, Number(characterCount) || 0);
-  if (count >= 13) return "rg-word-card--very-long";
-  if (count >= 10) return "rg-word-card--long";
-  if (count >= 7) return "rg-word-card--medium";
-  return "rg-word-card--short";
+function getWordRowCounts(wordCount) {
+  const layouts = {
+    1:[1],
+    2:[1, 1],
+    3:[2, 1],
+    4:[2, 2],
+    5:[2, 2, 1],
+    6:[2, 2, 2],
+    7:[2, 2, 2, 1],
+    8:[2, 2, 2, 2]
+  };
+  return layouts[wordCount] || [wordCount];
 }
 
 function setsEqual(first, second) {

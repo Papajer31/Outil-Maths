@@ -69,7 +69,7 @@ const PICBILLE_TOP_PAD = 18 * PICBILLE_SCALE;
 const PICBILLE_BOTTOM_PAD = 22 * PICBILLE_SCALE;
 const PICBILLE_UNIT_ROW_GAP = 16 * PICBILLE_SCALE;
 const PICBILLE_UNIT_CROSS_SIZE = 3.6 * PICBILLE_SCALE;
-const PICBILLE_HUNDRED_ASSET_URL = new URL("../../shared/tool-assets/images/representation/cent.webp", import.meta.url).href;
+const PICBILLE_HUNDRED_ASSET_URL = new URL("../../shared/tool-assets/representation/cent.webp", import.meta.url).href;
 const PICBILLE_HUNDRED_W = 120 * PICBILLE_SCALE;
 const PICBILLE_HUNDRED_H = PICBILLE_HUNDRED_W * (519 / 608);
 const PICBILLE_HUNDRED_GAP = 12 * PICBILLE_SCALE;
@@ -77,10 +77,10 @@ const PICBILLE_HUNDRED_ROW_GAP = 10 * PICBILLE_SCALE;
 const PICBILLE_SECTION_GAP = 18 * PICBILLE_SCALE;
 
 const CUE_ASSET_URLS = Object.freeze({
-  picbille: new URL("../../shared/tool-assets/images/representation/picbille.webp", import.meta.url).href,
-  dede: new URL("../../shared/tool-assets/images/representation/dede.webp", import.meta.url).href,
-  blocs_textuels: new URL("../../shared/tool-assets/images/representation/tuiles.webp", import.meta.url).href,
-  blocs_bleus_base10: new URL("../../shared/tool-assets/images/representation/blue_squares.webp", import.meta.url).href
+  picbille: new URL("../../shared/tool-assets/personnages/picbille.webp", import.meta.url).href,
+  dede: new URL("../../shared/tool-assets/personnages/dede.webp", import.meta.url).href,
+  blocs_textuels: new URL("../../shared/tool-assets/representation/tuiles.webp", import.meta.url).href,
+  blocs_bleus_base10: new URL("../../shared/tool-assets/representation/blue_squares.webp", import.meta.url).href
 });
 
 export const REPRESENTATION_DIRECTIONS = Object.freeze({

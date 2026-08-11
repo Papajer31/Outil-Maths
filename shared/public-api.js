@@ -129,6 +129,23 @@ export async function listPublicImageAssets({ activeOnly = true } = {}) {
     .filter((row) => !activeOnly || row.is_active);
 }
 
+export async function listPublicImageAssetsInSystemFolder(folderName) {
+  const safeFolderName = cleanDisplayName(folderName);
+  if (!safeFolderName) return [];
+
+  const { data, error } = await supabase.rpc("list_public_system_image_assets_in_folder", {
+    p_folder_name: safeFolderName
+  });
+  if (error) throw error;
+
+  return (Array.isArray(data) ? data : [])
+    .map((row) => ({
+      slug: normalizeImageAssetSlug(row?.slug),
+      storage_path: normalizeImageAssetStoragePath(row?.storage_path)
+    }))
+    .filter((row) => row.slug && row.storage_path);
+}
+
 export function getPublicImageAssetUrl(storagePath, { bucket = "images" } = {}) {
   const safePath = normalizeImageAssetStoragePath(storagePath);
   const safeBucket = String(bucket || "").trim() || "images";
@@ -162,24 +179,49 @@ function normalizePhonologyWordUnits(value) {
     .filter((unit) => unit.graph);
 }
 
-export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
-  let query = supabase
-    .from("phonology_words")
-    .select("slug, word, units, is_active")
-    .order("slug", { ascending: true });
+function normalizePhonologyWordSyllables(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((syllable) => String(syllable || "").trim())
+    .filter(Boolean);
+}
 
-  if (activeOnly) {
-    query = query.eq("is_active", true);
+export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
+  // Supabase/PostgREST limite par défaut une réponse à 1000 lignes.
+  // phonology_words dépasse désormais cette taille : sans pagination, les
+  // outils ne voyaient que les premiers mots par ordre alphabétique.
+  const pageSize = 1000;
+  const rows = [];
+
+  for (let from = 0; ; from += pageSize) {
+    let query = supabase
+      .from("phonology_words")
+      .select("slug, word, prefix, units, syllables, familiarity, is_active")
+      .order("slug", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (activeOnly) {
+      query = query.eq("is_active", true);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return (Array.isArray(data) ? data : [])
+  return rows
     .map((row) => ({
       slug: normalizePhonologyWordSlug(row?.slug),
       word: normalizePhonologyWordLabel(row?.word),
+      prefix: normalizePhonologyWordLabel(row?.prefix),
       units: normalizePhonologyWordUnits(row?.units),
+      syllables: normalizePhonologyWordSyllables(row?.syllables),
+      familiarity: Number.isFinite(Number(row?.familiarity))
+        ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+        : 50,
       is_active: row?.is_active !== false
     }))
     .filter((row) => row.slug && row.word && row.units.length > 0)

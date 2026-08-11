@@ -10,14 +10,20 @@ import {
   ALL_TARGET_ID,
   getDefaultSettings,
   normalizeSettings,
-  getTargetOptions,
-  getTargetForSettings,
   setWordCatalog,
   getEligibleWordCount,
   getEligibleTargetCount,
-  canGenerateQuestion
+  getPhonemicSpellingUsage,
+  canGenerateQuestion,
+  getRelevanceDiagnostics
 } from "./model.js";
-import { renderSoundBubble } from "./sound-bubble.js";
+import {
+  WORD_SELECTION_MODES,
+  renderWordSelectionSelector,
+  bindWordSelectionSelector,
+  readWordSelectionSelector,
+  updateWordSelectionSpellingUsage
+} from "../../shared/word-selection-selector.js";
 
 let stylesInjected = false;
 let catalogPromise = null;
@@ -31,17 +37,37 @@ export function renderToolSettings(container, settings = {}) {
   container.innerHTML = `
     <div class="rg-config-root">
       ${renderToolSettingsStack(
-        renderTargetSelector(cfg),
         renderRadioGroup({
           title: "Nombre de mots par question",
           id: "rg_wordCount",
           value: String(cfg.wordCount),
           options: WORD_COUNT_OPTIONS.map((value) => ({
             value: String(value),
-            label: `${value} mots`
+            label: `${value} mot${value > 1 ? "s" : ""}`
           }))
         }),
-        `<div class="rg-config-bank-status" data-rg-bank-status aria-live="polite"></div>`
+        renderWordSelectionSelector(cfg, {
+          idPrefix:"rg",
+          allTargetId:ALL_TARGET_ID,
+          showRelevanceLevels:true,
+          bankStatusMarkup:`<div class="rg-config-bank-status" data-rg-bank-status aria-live="polite"></div>`,
+          afterSelectionMarkup:`<div data-rg-phonemic-only>${renderRadioGroup({
+            title: "Affichage des graphies possibles",
+            id: "rg_showPossibleSpellings",
+            value: cfg.showPossibleSpellings ? "show" : "hide",
+            options: [
+              { value:"show", label:"Afficher" },
+              { value:"hide", label:"Ne pas afficher" }
+            ]
+          })}</div>`
+        }),
+        `<details class="rg-relevance-diagnostic" hidden>
+          <summary>Diagnostic de pertinence</summary>
+          <div class="rg-relevance-diagnostic__body">
+            <input class="rg-relevance-diagnostic__search" type="search" data-rg-relevance-search placeholder="Tester un mot…" autocomplete="off">
+            <div data-rg-relevance-diagnostic-results></div>
+          </div>
+        </details>`
       )}
     </div>
   `;
@@ -49,35 +75,32 @@ export function renderToolSettings(container, settings = {}) {
   bindRadio(container, "rg_wordCount", {
     onChange: () => refreshBankStatus(container)
   });
+  bindRadio(container, "rg_showPossibleSpellings");
 
-  container.querySelector("#rg_targetId")?.addEventListener("change", () => {
-    resetSpellingSelector(container);
-    refreshTargetPreview(container);
-    refreshBankStatus(container);
+  bindWordSelectionSelector(container, {
+    idPrefix:"rg",
+    allTargetId:ALL_TARGET_ID,
+    onChange:() => {
+      syncModeSpecificControls(container);
+      refreshBankStatus(container);
+      refreshRelevanceDiagnostic(container);
+    }
   });
 
-  container.querySelector("[data-rg-spelling-selector]")?.addEventListener("change", (event) => {
-    if (!(event.target instanceof HTMLInputElement) || event.target.name !== "rg_enabledSpelling") return;
-    refreshTargetPreview(container);
-    refreshBankStatus(container);
-  });
+  container.querySelector("[data-rg-relevance-search]")?.addEventListener("input", () => refreshRelevanceDiagnostic(container));
 
-  container.querySelector("[data-rg-spelling-selector]")?.addEventListener("click", (event) => {
-    const target = event.target instanceof Element ? event.target.closest("[data-rg-spelling-action]") : null;
-    if (!target) return;
-    const checked = target.getAttribute("data-rg-spelling-action") === "all";
-    container.querySelectorAll('input[name="rg_enabledSpelling"]').forEach((input) => {
-      if (input instanceof HTMLInputElement) input.checked = checked;
-    });
-    refreshTargetPreview(container);
-    refreshBankStatus(container);
-  });
-
-  refreshTargetPreview(container);
+  syncModeSpecificControls(container);
   refreshBankStatus(container);
+  refreshRelevanceDiagnostic(container);
   ensureWordCatalogLoaded()
-    .then(() => refreshBankStatus(container))
-    .catch(() => refreshBankStatus(container));
+    .then(() => {
+      refreshBankStatus(container);
+      refreshRelevanceDiagnostic(container);
+    })
+    .catch(() => {
+      refreshBankStatus(container);
+      refreshRelevanceDiagnostic(container);
+    });
 }
 
 export function readToolSettings(container) {
@@ -91,12 +114,19 @@ export function readToolSettings(container) {
     throw new Error(catalogError || "La banque de mots est indisponible.");
   }
 
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
+    throw new Error("Ajoute au moins une entrée graphémique.");
+  }
+
   if (!canGenerateQuestion(settings)) {
-    if (settings.targetId === ALL_TARGET_ID) {
-      throw new Error("Aucun son ne contient assez de mots pour générer cette question.");
-    }
     const availableCount = getEligibleWordCount(settings);
-    throw new Error(`La banque ne contient que ${availableCount} mot${availableCount > 1 ? "s" : ""} compatible${availableCount > 1 ? "s" : ""} avec ce son.`);
+    if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
+      throw new Error(`La banque ne contient que ${availableCount} mot${availableCount > 1 ? "s" : ""} compatible${availableCount > 1 ? "s" : ""} avec ces entrées graphémiques et ce niveau de pertinence.`);
+    }
+    if (settings.targetId === ALL_TARGET_ID) {
+      throw new Error("Aucun phonème ne contient assez de mots pour générer cette question.");
+    }
+    throw new Error(`La banque ne contient que ${availableCount} mot${availableCount > 1 ? "s" : ""} compatible${availableCount > 1 ? "s" : ""} avec ce phonème.`);
   }
 
   return settings;
@@ -104,96 +134,24 @@ export function readToolSettings(container) {
 
 export { getDefaultSettings };
 
-function renderTargetSelector(cfg) {
-  const options = getTargetOptions().map((option) => `
-    <option value="${escapeAttr(option.value)}" ${option.value === cfg.targetId ? "selected" : ""}>${escapeHtml(option.label)}</option>
-  `).join("");
-
-  return `
-    <section class="tv-group rg-target-group">
-      <label class="tv-group-title" for="rg_targetId">Son ciblé</label>
-      <select class="tv-input rg-target-select" id="rg_targetId">
-        ${options}
-      </select>
-      <div class="rg-target-preview" data-rg-target-preview></div>
-      <div class="rg-spelling-selector" data-rg-spelling-selector>
-        ${renderSpellingSelectorMarkup(cfg)}
-      </div>
-    </section>
-  `;
-}
-
 function readCurrentSettings(container) {
+  const selection = readWordSelectionSelector(container, {
+    idPrefix:"rg",
+    allTargetId:ALL_TARGET_ID
+  });
   return normalizeSettings({
-    targetId: container.querySelector("#rg_targetId")?.value || ALL_TARGET_ID,
-    wordCount: Number(readRadio(container, "rg_wordCount", "6")),
-    enabledSpellings: [...container.querySelectorAll('input[name="rg_enabledSpelling"]:checked')]
-      .map((input) => input instanceof HTMLInputElement ? input.value : "")
-      .filter(Boolean)
+    ...selection,
+    wordCount:Number(readRadio(container, "rg_wordCount", "6")),
+    showPossibleSpellings:readRadio(container, "rg_showPossibleSpellings", "hide") === "show"
   });
 }
 
-function renderSpellingSelectorMarkup(settings = {}) {
-  const target = getTargetForSettings(settings);
-  if (!target || target.id === ALL_TARGET_ID) {
-    return '<p class="rg-spelling-selector__empty">Toutes les graphies sont utilisées en révision générale.</p>';
+function syncModeSpecificControls(container) {
+  const selection = readWordSelectionSelector(container, { idPrefix:"rg", allTargetId:ALL_TARGET_ID });
+  const phonemicOnly = container.querySelector("[data-rg-phonemic-only]");
+  if (phonemicOnly instanceof HTMLElement) {
+    phonemicOnly.hidden = selection.wordSelectionMode !== WORD_SELECTION_MODES.PHONEMIC;
   }
-
-  const enabled = new Set(Array.isArray(settings.enabledSpellings) ? settings.enabledSpellings : target.spellings);
-  const options = target.spellings.map((spelling, index) => `
-    <label class="rg-spelling-option">
-      <input
-        type="checkbox"
-        name="rg_enabledSpelling"
-        value="${escapeAttr(spelling)}"
-        ${enabled.has(spelling) ? "checked" : ""}
-      >
-      <span>${escapeHtml(spelling)}</span>
-    </label>
-  `).join("");
-
-  return `
-    <div class="rg-spelling-selector__header">
-      <div>
-        <div class="rg-spelling-selector__title">Graphies utilisées</div>
-        <div class="rg-spelling-selector__hint">Décoche les graphies trop complexes pour les élèves.</div>
-      </div>
-      <div class="rg-spelling-selector__actions">
-        <button type="button" data-rg-spelling-action="all">Tout cocher</button>
-        <button type="button" data-rg-spelling-action="none">Tout décocher</button>
-      </div>
-    </div>
-    <div class="rg-spelling-options">${options}</div>
-  `;
-}
-
-function resetSpellingSelector(container) {
-  const host = container.querySelector("[data-rg-spelling-selector]");
-  if (!host) return;
-  const targetId = container.querySelector("#rg_targetId")?.value || ALL_TARGET_ID;
-  const wordCount = Number(readRadio(container, "rg_wordCount", "6"));
-  const settings = normalizeSettings({ targetId, wordCount });
-  host.innerHTML = renderSpellingSelectorMarkup(settings);
-}
-
-function refreshTargetPreview(container) {
-  const settings = readCurrentSettings(container);
-  const target = getTargetForSettings(settings);
-  const host = container.querySelector("[data-rg-target-preview]");
-  if (!host || !target) return;
-  if (target.id === ALL_TARGET_ID) {
-    host.textContent = "À chaque question, l’outil choisira aléatoirement un son parmi ceux qui disposent d’assez de mots.";
-    return;
-  }
-
-  const activeSpellings = Array.isArray(settings.enabledSpellings) ? settings.enabledSpellings : [];
-  host.innerHTML = `
-    <span class="rg-target-preview__line">
-      Son sélectionné : ${renderSoundBubble(target.bubbleText, { className:"rg-sound-bubble--config" })}
-      <span>comme dans « ${escapeHtml(target.example)} »</span>
-    </span>
-    <span class="rg-target-preview__spellings">${activeSpellings.length} graphie${activeSpellings.length > 1 ? "s" : ""} active${activeSpellings.length > 1 ? "s" : ""} sur ${target.spellings.length}.</span>
-  `;
 }
 
 function refreshBankStatus(container) {
@@ -214,17 +172,117 @@ function refreshBankStatus(container) {
   }
 
   const settings = readCurrentSettings(container);
+  updateWordSelectionSpellingUsage(container, {
+    idPrefix:"rg",
+    usageByTarget:getPhonemicSpellingUsage(settings)
+  });
   const count = getEligibleWordCount(settings);
   const targetCount = getEligibleTargetCount(settings);
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
 
-  if (settings.targetId === ALL_TARGET_ID) {
-    host.textContent = `${targetCount} son${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} à partir de ${count} mot${count > 1 ? "s" : ""} distinct${count > 1 ? "s" : ""}${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+  const levelLabel = settings.relevanceLevel === "simple" ? "Simple" : settings.relevanceLevel === "complexe" ? "Complexe" : "Normal";
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
+    if (!settings.graphemicEntries.length) {
+      host.classList.remove("is-ready");
+      host.classList.add("is-warning");
+      host.textContent = "Ajoute au moins une entrée graphémique.";
+      return;
+    }
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} »${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
     return;
   }
 
-  host.textContent = `${count} mot${count > 1 ? "s" : ""} compatible${count > 1 ? "s" : ""} dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+  if (settings.targetIds.length !== 1 || settings.targetIds[0] === ALL_TARGET_ID) {
+    host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} à partir de ${count} mot${count > 1 ? "s" : ""} distinct${count > 1 ? "s" : ""}${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+    return;
+  }
+
+  host.textContent = `${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} » dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+}
+
+function refreshRelevanceDiagnostic(container) {
+  const host = container.querySelector("[data-rg-relevance-diagnostic-results]");
+  if (!host) return;
+
+  if (catalogStatus === "idle" || catalogStatus === "loading") {
+    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Chargement de la banque…</div>';
+    return;
+  }
+  if (catalogStatus === "error") {
+    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Diagnostic indisponible.</div>';
+    return;
+  }
+
+  const settings = readCurrentSettings(container);
+  const query = container.querySelector("[data-rg-relevance-search]")?.value || "";
+  const diagnostic = getRelevanceDiagnostics(settings, { query, perCategory:4 });
+  if (!diagnostic.target) {
+    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Sélectionne une seule cible phonémique ou graphémique pour inspecter les scores mot par mot.</div>';
+    return;
+  }
+
+  const counts = diagnostic.counts;
+  const rows = diagnostic.rows;
+  const chips = [
+    ["simple", "Simple", counts.simple],
+    ["normal", "Normal", counts.normal],
+    ["complexe", "Complexe", counts.complexe],
+    ["excluded", "Exclus", counts.excluded]
+  ].map(([id, label, count]) => `<span class="rg-relevance-chip rg-relevance-chip--${id}"><strong>${count}</strong> ${label}</span>`).join("");
+
+  const table = rows.length ? `
+    <div class="rg-relevance-table-wrap">
+      <table class="rg-relevance-table">
+        <thead><tr><th>Mot</th><th>Score</th><th>Classe</th><th>Pureté</th><th>Occ.</th><th>Structure</th><th>Parasites</th><th>Familiarité</th></tr></thead>
+        <tbody>${rows.map((row) => {
+          const c = row.components || {};
+          const title = row.severePurityIssue ? ' title="Pureté critique : semi-voyelle adjacente dans la même syllabe"' : "";
+          return `<tr${title}>
+            <td><strong>${escapeHtml(row.word)}</strong>${row.severePurityIssue ? '<span class="rg-relevance-critical">!</span>' : ""}</td>
+            <td>${formatScore(row.score)}</td>
+            <td>${escapeHtml(row.categoryLabel)}</td>
+            <td>${formatPoints(c.purity)}</td>
+            <td>${formatPoints(c.occurrences)}</td>
+            <td>${formatPoints(c.structure)}</td>
+            <td>${formatPoints(c.cleanliness)}</td>
+            <td>${formatPoints(c.familiarity)}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>
+    </div>` : '<div class="rg-relevance-diagnostic__empty">Aucun mot correspondant.</div>';
+
+  const targetLabel = diagnostic.target.kind === "graphemic"
+    ? `Graphie « ${escapeHtml(diagnostic.target.grapheme)} »`
+    : `Phonème « ${escapeHtml(diagnostic.target.bubbleText)} »`;
+  host.innerHTML = `
+    <div class="rg-relevance-diagnostic__target">${targetLabel} · ${diagnostic.total} mots strictement compatibles</div>
+    <div class="rg-relevance-chips">${chips}</div>
+    ${table}
+    <div class="rg-relevance-diagnostic__note">Score = pureté 30 + occurrences 10 + structure 15 + absence de parasites 30 + familiarité 15. Seuils : Simple ≥ 90 ; Normal 80–89,9 ; Complexe 60–79,9 ; Exclu < 60. « ! » signale une occurrence perceptivement liée à une semi-voyelle : elle reste toujours sous le seuil d’exclusion.</div>
+  `;
+}
+
+function formatPoints(component) {
+  const points = Number(component?.points);
+  const weight = Number(component?.weight);
+  if (!Number.isFinite(points) || !Number.isFinite(weight)) return "–";
+  return `${formatScore(points)}/${weight}`;
+}
+
+function formatScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "–";
+  return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(".", ",");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 async function ensureWordCatalogLoaded() {
@@ -260,17 +318,4 @@ function injectStyles() {
   link.href = href;
   link.dataset.rgConfigStyle = href;
   document.head.appendChild(link);
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value);
 }

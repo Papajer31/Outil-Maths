@@ -7,6 +7,7 @@
   align-items:stretch !important;
   justify-content:center !important;
   overflow:auto;
+  scrollbar-gutter:stable;
 }
 
 /* Conteneur principal du dashboard (largeur max + empilement vertical) */
@@ -1490,6 +1491,7 @@ body .dashboard-share-popup.cfg-share-popup{
   flex:1 1 auto;
   min-height:0;
   overflow:auto;
+  scrollbar-gutter:stable;
   padding:16px;
 }
 
@@ -3165,6 +3167,7 @@ body .dashboard-share-popup.cfg-share-popup{
   padding:12px;
   background:transparent;
   overflow:auto;
+  scrollbar-gutter:stable;
 }
 
 .cfg-tools-header{
@@ -3189,6 +3192,7 @@ body .dashboard-share-popup.cfg-share-popup{
   gap:0;
   min-height:0;
   overflow:auto;
+  scrollbar-gutter:stable;
 }
 
 .cfg-tool-main{

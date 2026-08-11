@@ -25,13 +25,28 @@ function formatSyncResult(result){
   const unchanged = Number(result?.unchanged_count) || 0;
   const deactivated = Number(result?.deactivated_count) || 0;
   const active = Number(result?.active_count) || 0;
+  const deleted = Number(result?.deleted_count) || 0;
+
+  if (result?.replace_all === true) {
+    const deletedPlural = deleted !== 1;
+    const insertedPlural = inserted !== 1;
+    return `Remplacement terminé : ${deleted} ancien${deletedPlural ? "s" : ""} mot${deletedPlural ? "s" : ""} supprimé${deletedPlural ? "s" : ""}, ${inserted} mot${insertedPlural ? "s" : ""} importé${insertedPlural ? "s" : ""}. ${active} mots actifs en base.`;
+  }
+
   return `Synchronisation terminée : ${inserted} ajouté${inserted > 1 ? "s" : ""}, ${modified} modifié${modified > 1 ? "s" : ""}, ${reactivated} réactivé${reactivated > 1 ? "s" : ""}, ${unchanged} inchangé${unchanged > 1 ? "s" : ""}, ${deactivated} désactivé${deactivated > 1 ? "s" : ""}. ${active} mots actifs en base.`;
 }
 
 function isMigrationMissingError(error){
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("sync_phonology_words_as_admin")
+    || message.includes("replace_phonology_words_as_admin")
     || message.includes("could not find the function")
+    || message.includes("phonology_words.prefix")
+    || message.includes("phonology_words.syllables")
+    || message.includes("phonology_words.familiarity")
+    || (message.includes("prefix") && message.includes("column"))
+    || (message.includes("syllables") && message.includes("column"))
+    || (message.includes("familiarity") && message.includes("column"))
     || message.includes("schema cache");
 }
 
@@ -47,7 +62,7 @@ export function createPhonologyWordsImportDialog({
   let reportHost = null;
   let syncButton = null;
   let exportButton = null;
-  let deactivateMissingInput = null;
+  let syncModeInputs = [];
   let currentAnalysis = null;
   let isSyncing = false;
 
@@ -63,7 +78,7 @@ export function createPhonologyWordsImportDialog({
         <header class="cfg-modal-header phonology-import-header">
           <div>
             <div id="phonologyImportTitle" class="cfg-modal-title">Banque phonologique</div>
-            <div class="cfg-modal-subtitle">Charge le fichier texte, vérifie chaque segmentation, puis synchronise Supabase.</div>
+            <div class="cfg-modal-subtitle">Charge le fichier texte, vérifie la segmentation phonologique, la syllabation et la familiarité lexicale, puis synchronise Supabase.</div>
           </div>
           <button class="btn cfg-modal-close" type="button" data-close-phonology-import="true" aria-label="Fermer">✕</button>
         </header>
@@ -85,9 +100,11 @@ export function createPhonologyWordsImportDialog({
           <label class="phonology-import-source-panel">
             <span class="phonology-import-panel-title">Contenu du fichier</span>
             <small class="phonology-import-format-hint">Codes canoniques obligatoires : <strong>c_k</strong>, <strong>s_z</strong>, <strong>y_i</strong>… Aucun ancien code ni valeur automatique.</small>
+            <small class="phonology-import-format-hint">Format final : <strong>mot|segmentation phonologique|syllabation|familiarité</strong>, par exemple <strong>cabane|c_k/a/b/a/n/*e|ca/bane|84</strong>. La familiarité est un entier de 0 à 100.</small>
+            <small class="phonology-import-format-hint">Préfixe d’affichage optionnel : <strong>(un) abricot|...|a/bri/cot</strong>, <strong>(des) affaires|...|a/ffaires</strong>. Le texte entre parenthèses est affiché mais n’entre ni dans la segmentation ni dans la syllabation.</small>
             <small class="phonology-import-format-hint">Syntaxe : code explicite pour une graphie ambiguë (<strong>c_k</strong>, <strong>s_z</strong>…), graphie directe lorsqu’elle est unique (<strong>ss</strong>, <strong>ll</strong>, <strong>rr</strong>), <strong>code=graphie</strong> pour une variante (<strong>a=â</strong>) et <strong>*lettres</strong> pour les lettres muettes.</small>
             <small class="phonology-import-format-hint">Les compositions d’encodage comme <strong>ec_cons</strong> ou <strong>ette</strong> sont déduites automatiquement : elles ne doivent pas apparaître dans la segmentation fine.</small>
-            <textarea class="modal-text-input phonology-import-source" spellcheck="false" placeholder="couronne|c_k/ou/r/o/nn/*e"></textarea>
+            <textarea class="modal-text-input phonology-import-source" spellcheck="false" placeholder="(une) couronne|c_k/ou/r/o/nn/*e|cou/ronne|70"></textarea>
           </label>
 
           <section class="phonology-import-report-panel" aria-live="polite">
@@ -98,13 +115,30 @@ export function createPhonologyWordsImportDialog({
           </section>
         </div>
 
-        <label class="phonology-import-sync-option">
-          <input type="checkbox" data-deactivate-missing checked>
-          <span>
-            <strong>Synchronisation exacte</strong>
-            <small>Les mots absents du fichier seront désactivés dans Supabase, jamais supprimés.</small>
-          </span>
-        </label>
+        <fieldset class="phonology-import-sync-options">
+          <legend>Mode d’import</legend>
+          <label class="phonology-import-sync-option">
+            <input type="radio" name="phonology-import-mode" value="merge">
+            <span>
+              <strong>Ajouter / mettre à jour</strong>
+              <small>Les autres mots déjà présents restent inchangés.</small>
+            </span>
+          </label>
+          <label class="phonology-import-sync-option">
+            <input type="radio" name="phonology-import-mode" value="exact" checked>
+            <span>
+              <strong>Synchronisation exacte</strong>
+              <small>Les mots absents du fichier sont désactivés, mais restent en base.</small>
+            </span>
+          </label>
+          <label class="phonology-import-sync-option is-destructive">
+            <input type="radio" name="phonology-import-mode" value="replace">
+            <span>
+              <strong>Remplacer complètement la base</strong>
+              <small>Tous les mots existants sont supprimés, puis ce fichier devient l’intégralité de la banque.</small>
+            </span>
+          </label>
+        </fieldset>
 
         <footer class="phonology-import-actions">
           <button class="btn" type="button" data-action="export-phonology-seed" disabled>Exporter la seed SQL</button>
@@ -124,7 +158,7 @@ export function createPhonologyWordsImportDialog({
     reportHost = overlay.querySelector(".phonology-import-report");
     syncButton = overlay.querySelector("[data-action='sync-phonology-words']");
     exportButton = overlay.querySelector("[data-action='export-phonology-seed']");
-    deactivateMissingInput = overlay.querySelector("[data-deactivate-missing]");
+    syncModeInputs = [...overlay.querySelectorAll("input[name='phonology-import-mode']")];
 
     overlay.querySelectorAll("[data-close-phonology-import]").forEach((element) => {
       element.addEventListener("click", close);
@@ -228,6 +262,8 @@ export function createPhonologyWordsImportDialog({
     reportHost.innerHTML = `
       <div class="phonology-import-summary ${summaryClass}">
         <div><strong>${stats.wordCount}</strong><span>mots prêts</span></div>
+        <div><strong>${stats.syllabifiedWordCount}</strong><span>mots syllabés</span></div>
+        <div><strong>${stats.familiarityWordCount}</strong><span>mots familiarisés</span></div>
         <div><strong>${stats.graphCount}</strong><span>graphèmes utilisés</span></div>
         <div><strong>${stats.errorCount}</strong><span>erreur${stats.errorCount > 1 ? "s" : ""}</span></div>
         <div><strong>${stats.warningCount}</strong><span>alerte${stats.warningCount > 1 ? "s" : ""}</span></div>
@@ -239,15 +275,24 @@ export function createPhonologyWordsImportDialog({
     `;
   }
 
+  function getImportMode(){
+    const selected = syncModeInputs.find((input) => input.checked);
+    return ["merge", "exact", "replace"].includes(selected?.value) ? selected.value : "exact";
+  }
+
   async function synchronize(){
     if (!currentAnalysis?.isValid || isSyncing) return;
-    const deactivateMissing = deactivateMissingInput?.checked === true;
+    const importMode = getImportMode();
+    const replaceAll = importMode === "replace";
+    const deactivateMissing = importMode === "exact";
     const confirmed = await openDashboardConfirmDialog({
-      title: "Synchroniser la banque phonologique",
-      message: deactivateMissing
-        ? `${currentAnalysis.rows.length} mots seront envoyés. Tous les mots actuellement en base mais absents de ce fichier seront désactivés.`
-        : `${currentAnalysis.rows.length} mots seront ajoutés ou mis à jour. Les autres mots déjà présents resteront actifs.`,
-      confirmLabel: "Synchroniser"
+      title: replaceAll ? "Remplacer toute la banque phonologique" : "Synchroniser la banque phonologique",
+      message: replaceAll
+        ? `${currentAnalysis.rows.length} mots ont été validés. Tous les mots actuellement présents dans phonology_words seront supprimés définitivement, puis remplacés par ce fichier. L’opération est atomique : si l’import échoue, la suppression est annulée.`
+        : deactivateMissing
+          ? `${currentAnalysis.rows.length} mots seront envoyés. Tous les mots actuellement en base mais absents de ce fichier seront désactivés.`
+          : `${currentAnalysis.rows.length} mots seront ajoutés ou mis à jour. Les autres mots déjà présents resteront actifs.`,
+      confirmLabel: replaceAll ? "Supprimer et remplacer" : "Synchroniser"
     });
     if (!confirmed) return;
 
@@ -257,14 +302,16 @@ export function createPhonologyWordsImportDialog({
     syncButton.classList.add("is-loading");
 
     try {
-      const result = await syncPhonologyWordsAsAdmin(currentAnalysis.rows, { deactivateMissing });
+      const result = await syncPhonologyWordsAsAdmin(currentAnalysis.rows, { deactivateMissing, replaceAll });
       const message = formatSyncResult(result);
       reportHost.insertAdjacentHTML("afterbegin", `<div class="phonology-import-sync-result">${renderMaterialIcon("check_circle", { className: "dashboard-material-icon" })}<span>${escapeHtml(message)}</span></div>`);
       showToast?.(message);
     } catch (error) {
       console.error(error);
       const message = isMigrationMissingError(error)
-        ? "La migration 21_phonology_words_import.sql doit être exécutée une seule fois dans Supabase avant le premier import."
+        ? replaceAll
+          ? "Les migrations 28 puis 29 doivent être exécutées dans Supabase avant d’utiliser le remplacement complet avec familiarité."
+          : "La migration 29_phonology_word_familiarity.sql doit être exécutée dans Supabase avant d’importer la familiarité."
         : String(error?.message || "La synchronisation Supabase a échoué.");
       reportHost.insertAdjacentHTML("afterbegin", `<div class="phonology-import-sync-error"><strong>Synchronisation impossible.</strong><span>${escapeHtml(message)}</span></div>`);
       showToast?.(message, { isError: true, duration: 7000 });
@@ -278,8 +325,10 @@ export function createPhonologyWordsImportDialog({
 
   function exportSeed(){
     if (!currentAnalysis?.isValid) return;
+    const importMode = getImportMode();
     const sql = buildPhonologyWordsSeedSql(currentAnalysis.rows, {
-      deactivateMissing: deactivateMissingInput?.checked === true
+      deactivateMissing: importMode === "exact",
+      replaceAll: importMode === "replace"
     });
     downloadTextFile("seed_phonology_words.sql", sql, "application/sql;charset=utf-8");
     showToast?.("Seed SQL générée.");

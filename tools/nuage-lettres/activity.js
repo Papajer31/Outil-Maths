@@ -14,7 +14,7 @@ import {
   resolveQuestionInstructionText,
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
-import { renderSoundBubble } from "./sound-bubble.js";
+import { bindFreeDrag } from "../../shared/tool-ui/drag-core.js";
 
 let stylesReadyPromise = null;
 let phonologyWordCatalogPromise = null;
@@ -128,8 +128,7 @@ function createRuntimeState(initialContext = {}) {
     phaseMode: "idle",
     answerDisplayMode: "correction",
     letterMotion: new Map(),
-    dragState: null,
-    suppressedClicks: new Map(),
+    cloudDragAbortController: null,
     animationFrame: 0,
     lastAnimationTimestamp: 0,
     layoutFrame: 0,
@@ -190,24 +189,9 @@ function bindEvents(state) {
 
     const cloudButton = target.closest("[data-nl-cloud-id]");
     if (!cloudButton || !isQuestionInteractive(state)) return;
-    const id = String(cloudButton.getAttribute("data-nl-cloud-id") || "");
-    if (!id || state.answerIds.includes(id)) return;
-
-    const suppressedUntil = Number(state.suppressedClicks.get(id) || 0);
-    if (suppressedUntil > performance.now()) {
-      state.suppressedClicks.delete(id);
-      return;
-    }
-
-    state.answerIds.push(id);
-    renderQuestion(state);
-    syncValidationState(state);
+    if (state.settings.cloudMode !== CLOUD_MODES.DRAGGABLE) selectCloudLetter(state, cloudButton);
   });
 
-  state.root?.addEventListener("pointerdown", (event) => beginDrag(state, event));
-  state.root?.addEventListener("pointermove", (event) => moveDrag(state, event));
-  state.root?.addEventListener("pointerup", (event) => endDrag(state, event));
-  state.root?.addEventListener("pointercancel", (event) => endDrag(state, event));
 }
 
 function loadNextQuestion(state) {
@@ -245,8 +229,8 @@ function loadNextQuestion(state) {
   state.phaseMode = "question";
   state.answerDisplayMode = "correction";
   state.letterMotion = new Map();
-  state.dragState = null;
-  state.suppressedClicks.clear();
+  state.cloudDragAbortController?.abort();
+  state.cloudDragAbortController = null;
 
   updateInstruction(state);
   renderQuestion(state);
@@ -257,6 +241,8 @@ function renderQuestion(state) {
   if (!state.boardEl) return;
   stopAnimationLoop(state);
   disconnectResizeObserver(state);
+  state.cloudDragAbortController?.abort();
+  state.cloudDragAbortController = null;
 
   const question = state.currentQuestion;
   if (!question) {
@@ -271,7 +257,6 @@ function renderQuestion(state) {
     ? question.shuffledLetterIds.filter((id) => !answerIdSet.has(id))
     : [];
   const letterById = getLetterById(question);
-  const remainingCount = Math.max(0, question.letters.length - answerIds.length);
   const resultClass = state.phaseMode === "answer"
     ? (state.lastEvaluation?.isCorrect ? " is-correct" : " is-incorrect")
     : "";
@@ -280,38 +265,29 @@ function renderQuestion(state) {
 
   state.boardEl.className = `nl-board ${modeClass} ${sizeClass}${resultClass}`;
   state.boardEl.innerHTML = `
-    <section class="nl-cloud-panel" aria-label="Nuage de lettres">
-      <div class="nl-panel-header">
-        <span class="nl-panel-title">Lettres mélangées</span>
-        <span class="nl-cloud-count">${cloudIds.length} lettre${cloudIds.length > 1 ? "s" : ""}</span>
-      </div>
-      <div class="nl-cloud-zone" id="nl_cloud_zone" data-mode="${escapeAttr(state.settings.cloudMode)}">
-        ${cloudIds.map((id) => renderCloudLetter(state, letterById.get(id))).join("")}
-        ${state.phaseMode === "answer" ? renderAnswerCloudMessage(state) : ""}
-      </div>
+    <section class="nl-cloud-zone" id="nl_cloud_zone" data-mode="${escapeAttr(state.settings.cloudMode)}" aria-label="Nuage de lettres">
+      ${cloudIds.map((id) => renderCloudLetter(state, letterById.get(id))).join("")}
     </section>
 
-    <section class="nl-answer-panel" aria-label="Zone de réponse">
-      <div class="nl-panel-header nl-answer-header">
-        <span class="nl-panel-title">Ton mot</span>
-        <button
+    ${renderFirstLetterHint(state, question)}
+
+    <div class="nl-answer-row">
+      <section class="nl-answer-zone${resultClass}" role="group" aria-label="Réponse composée">
+        ${answerIds.map((id) => renderAnswerLetter(state, letterById.get(id), id)).join("")}
+      </section>
+      <button
           type="button"
           class="nl-clear-button"
           data-nl-clear-answer
+          aria-label="Tout effacer"
+          title="Tout effacer"
           ${state.phaseMode !== "question" || state.answerIds.length === 0 ? "disabled" : ""}
-        >Tout effacer</button>
-      </div>
-      <div class="nl-answer-zone${resultClass}" role="group" aria-label="Réponse composée">
-        ${answerIds.map((id) => renderAnswerLetter(state, letterById.get(id), id)).join("")}
-        ${state.phaseMode === "question"
-          ? Array.from({ length: remainingCount }, (_, index) => `<span class="nl-answer-placeholder" aria-hidden="true" data-placeholder-index="${index}"></span>`).join("")
-          : ""}
-      </div>
-      ${renderAnswerCaption(state)}
-    </section>
+        >${renderEraserIcon()}</button>
+    </div>
   `;
 
   state.cloudZoneEl = state.boardEl.querySelector("#nl_cloud_zone");
+  bindCloudDragBehaviors(state);
   scheduleCloudLayout(state);
   observeCloudResize(state);
 }
@@ -321,7 +297,7 @@ function renderCloudLetter(state, letter) {
   const motion = state.letterMotion.get(letter.id);
   const positioned = motion && Number.isFinite(motion.x) && Number.isFinite(motion.y);
   const style = positioned
-    ? `style="transform:translate3d(${roundPosition(motion.x)}px, ${roundPosition(motion.y)}px, 0)"`
+    ? `style="left:${roundPosition(motion.x)}px;top:${roundPosition(motion.y)}px"`
     : "";
   const mode = state.settings.cloudMode;
   const modeLabel = mode === CLOUD_MODES.DRAGGABLE
@@ -337,7 +313,7 @@ function renderCloudLetter(state, letter) {
       data-nl-cloud-id="${escapeAttr(letter.id)}"
       ${style}
       aria-label="Lettre ${escapeAttr(letter.text)}${modeLabel}"
-    >${escapeHtml(letter.text)}</button>
+    ><span class="nl-letter-glyph">${escapeHtml(letter.text)}</span></button>
   `;
 }
 
@@ -350,7 +326,7 @@ function renderAnswerLetter(state, letter, id) {
   }
 
   if (!interactive) {
-    return `<span class="${classNames.join(" ")}">${escapeHtml(letter.text)}</span>`;
+    return `<span class="${classNames.join(" ")}"><span class="nl-letter-glyph">${escapeHtml(letter.text)}</span></span>`;
   }
 
   return `
@@ -359,30 +335,14 @@ function renderAnswerLetter(state, letter, id) {
       type="button"
       data-nl-answer-id="${escapeAttr(id)}"
       aria-label="Retirer la lettre ${escapeAttr(letter.text)} de la réponse"
-    >${escapeHtml(letter.text)}</button>
+    ><span class="nl-letter-glyph">${escapeHtml(letter.text)}</span></button>
   `;
 }
 
-function renderAnswerCloudMessage(state) {
-  if (state.answerDisplayMode === "student" && state.lastEvaluation?.isCorrect === false) {
-    return '<div class="nl-cloud-feedback is-wrong">Voici l’ordre que tu avais proposé.</div>';
-  }
-  return `<div class="nl-cloud-feedback${state.lastEvaluation?.isCorrect ? " is-correct" : ""}">${state.lastEvaluation?.isCorrect ? "Bravo, le mot est correctement formé !" : "Voici le mot attendu."}</div>`;
-}
-
-function renderAnswerCaption(state) {
-  if (state.phaseMode !== "answer") {
-    const total = state.currentQuestion?.letters?.length || 0;
-    const placed = state.answerIds.length;
-    return `<div class="nl-answer-caption">${placed} lettre${placed > 1 ? "s" : ""} placée${placed > 1 ? "s" : ""} sur ${total}. Le bouton Valider s’active quand le mot est complet.</div>`;
-  }
-
-  if (state.lastEvaluation?.isCorrect) {
-    return '<div class="nl-answer-caption is-correct">Le mot est correct.</div>';
-  }
-  return state.answerDisplayMode === "student"
-    ? '<div class="nl-answer-caption is-wrong">Ta proposition.</div>'
-    : '<div class="nl-answer-caption is-correction">Correction.</div>';
+function renderFirstLetterHint(state, question) {
+  const firstLetter = String(question?.letters?.[0]?.text || "");
+  if (state.settings.showFirstLetter !== true || !firstLetter) return "";
+  return `<div class="nl-first-letter-hint">Le mot commence par la lettre <span>${escapeHtml(firstLetter)}</span>.</div>`;
 }
 
 function getDisplayedAnswerIds(state) {
@@ -416,31 +376,14 @@ function submitCurrentAnswer(state) {
 function updateInstruction(state) {
   if (!state.instructionEl) return;
   const prompt = String(state.currentQuestion?.prompt || "").trim()
-    || "Remets les lettres dans l’ordre pour former le mot.";
+    || "Clique sur les lettres dans l’ordre pour former un mot.";
   const text = resolveQuestionInstructionText(
     state.latestContext,
     prompt,
-    "Remets les lettres dans l’ordre pour former le mot."
+    "Clique sur les lettres dans l’ordre pour former un mot."
   );
-  const target = state.currentQuestion?.target;
-
-  if (!target?.bubbleText || text !== prompt) {
-    state.instructionEl.removeAttribute("aria-label");
-    setToolInstructionText(state.instructionEl, text);
-    return;
-  }
-
-  state.instructionEl.hidden = false;
-  state.instructionEl.classList.remove("is-empty", "is-reserved-space");
-  state.instructionEl.removeAttribute("aria-hidden");
-  state.instructionEl.setAttribute("aria-label", prompt);
-  state.instructionEl.innerHTML = `
-    <span>Remets les lettres dans l’ordre pour former un mot qui contient le son</span>
-    <span class="nl-instruction-sound-token">
-      ${renderSoundBubble(target.bubbleText, { className:"nl-sound-bubble--instruction" })}<span aria-hidden="true">,</span>
-    </span>
-    <span>comme dans « ${escapeHtml(target.example)} ».</span>
-  `;
+  state.instructionEl.removeAttribute("aria-label");
+  setToolInstructionText(state.instructionEl, text);
 }
 
 function canValidate(state) {
@@ -460,62 +403,38 @@ function canToggleAnswerDisplay(state) {
     && state.lastEvaluation?.isCorrect === false;
 }
 
-function beginDrag(state, event) {
-  if (!isQuestionInteractive(state) || state.settings.cloudMode !== CLOUD_MODES.DRAGGABLE) return;
-  const target = event.target instanceof Element ? event.target.closest("[data-nl-cloud-id]") : null;
-  if (!(target instanceof HTMLElement) || !state.cloudZoneEl) return;
+function bindCloudDragBehaviors(state) {
+  if (state.settings.cloudMode !== CLOUD_MODES.DRAGGABLE || !state.cloudZoneEl) return;
+  const controller = new AbortController();
+  state.cloudDragAbortController = controller;
 
-  const id = String(target.dataset.nlCloudId || "");
-  const motion = state.letterMotion.get(id);
-  if (!id || !motion) return;
-
-  const zoneRect = state.cloudZoneEl.getBoundingClientRect();
-  const tileRect = target.getBoundingClientRect();
-  state.dragState = {
-    id,
-    pointerId: event.pointerId,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    offsetX: event.clientX - tileRect.left,
-    offsetY: event.clientY - tileRect.top,
-    zoneRect,
-    tileWidth: tileRect.width,
-    tileHeight: tileRect.height,
-    moved: false,
-    element: target
-  };
-  target.setPointerCapture?.(event.pointerId);
-  target.classList.add("is-dragging");
+  state.cloudZoneEl.querySelectorAll("[data-nl-cloud-id]").forEach((element) => {
+    if (!(element instanceof HTMLElement)) return;
+    bindFreeDrag(element, {
+      surface: state.cloudZoneEl,
+      signal: controller.signal,
+      disabled: () => !isQuestionInteractive(state),
+      onMove: ({ element: draggedElement, x, y }) => {
+        const id = String(draggedElement.dataset.nlCloudId || "");
+        const motion = state.letterMotion.get(id);
+        if (!motion) return;
+        motion.x = x;
+        motion.y = y;
+        motion.homeX = x;
+        motion.homeY = y;
+      },
+      onClick: ({ element: clickedElement }) => selectCloudLetter(state, clickedElement)
+    });
+  });
 }
 
-function moveDrag(state, event) {
-  const drag = state.dragState;
-  if (!drag || drag.pointerId !== event.pointerId || !state.cloudZoneEl) return;
-  const dx = event.clientX - drag.startClientX;
-  const dy = event.clientY - drag.startClientY;
-  if (!drag.moved && Math.hypot(dx, dy) >= 5) drag.moved = true;
-
-  const maxX = Math.max(0, drag.zoneRect.width - drag.tileWidth);
-  const maxY = Math.max(0, drag.zoneRect.height - drag.tileHeight);
-  const x = clamp(event.clientX - drag.zoneRect.left - drag.offsetX, 0, maxX);
-  const y = clamp(event.clientY - drag.zoneRect.top - drag.offsetY, 0, maxY);
-  const motion = state.letterMotion.get(drag.id);
-  if (!motion) return;
-  motion.x = x;
-  motion.y = y;
-  motion.homeX = x;
-  motion.homeY = y;
-  applyLetterPosition(drag.element, motion);
-  event.preventDefault();
-}
-
-function endDrag(state, event) {
-  const drag = state.dragState;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.element?.classList.remove("is-dragging");
-  try { drag.element?.releasePointerCapture?.(event.pointerId); } catch {}
-  if (drag.moved) state.suppressedClicks.set(drag.id, performance.now() + 450);
-  state.dragState = null;
+function selectCloudLetter(state, element) {
+  if (!isQuestionInteractive(state)) return;
+  const id = String(element?.dataset?.nlCloudId || "");
+  if (!id || state.answerIds.includes(id)) return;
+  state.answerIds.push(id);
+  renderQuestion(state);
+  syncValidationState(state);
 }
 
 function scheduleCloudLayout(state) {
@@ -676,7 +595,8 @@ function disconnectResizeObserver(state) {
 
 function applyLetterPosition(element, motion) {
   if (!(element instanceof HTMLElement) || !motion) return;
-  element.style.transform = `translate3d(${roundPosition(motion.x)}px, ${roundPosition(motion.y)}px, 0)`;
+  element.style.left = `${roundPosition(motion.x)}px`;
+  element.style.top = `${roundPosition(motion.y)}px`;
   element.classList.add("is-positioned");
 }
 
@@ -726,7 +646,8 @@ function teardownState(state, container) {
   state.studentAnswerSnapshot = null;
   state.lastEvaluation = null;
   state.letterMotion.clear();
-  state.dragState = null;
+  state.cloudDragAbortController?.abort();
+  state.cloudDragAbortController = null;
   state.phaseMode = "idle";
 }
 
@@ -797,4 +718,8 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value);
+}
+
+function renderEraserIcon() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path fill="currentColor" d="M690-240h190v80H610l80-80Zm-500 80-85-85q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L520-160H190Zm296-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/></svg>`;
 }

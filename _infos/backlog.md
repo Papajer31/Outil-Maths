@@ -1,91 +1,72 @@
 # Backlog consolidé
 
-Dernière mise à jour : 2026-08-04.
+Dernière mise à jour : 2026-08-07.
 
-## Priorités proches
+## Priorité principale — Aventure
 
-- Exécuter et valider `20_adventure_engine_foundations.sql`.
-- Brancher un premier passage obligatoire Aventure de bout en bout.
-- Ajouter ensuite la sélection par Objectif, la matrice lente et la reprise des six passages.
-- Générer les quatre passages adaptatifs seulement après stabilisation des passages obligatoires.
-- Construire l’interface élève Aventure complète avant la rentrée.
-- Remplir au minimum les premiers menus réellement nécessaires ; les suivants pourront être complétés semaine après semaine.
-- Reporter Missions, l’étude du code, les audios système et les extensions du Tableau tant que le MVP Aventure n’est pas fiable.
-
-## Aventure
-
-### Patch 20 — fondations
-
-- [x] Curseur Menu/Jour par classe et par niveau.
-- [x] Jauge 0–50 propre à chaque palier d’un OdApp.
-- [x] Journée élève unique par niveau, menu et jour.
-- [x] Six passages obligatoires figés à la première ouverture.
-- [x] Quatre emplacements adaptatifs figés pour la reprise.
-- [x] RPC publique sécurisée d’ouverture/reprise.
-- [x] Lecture publique sécurisée des jauges de l’élève.
-
-### À enchaîner avant la rentrée
-
-- [ ] Sélectionner et lancer une activité précise depuis un passage obligatoire.
-- [ ] Sélectionner une activité compatible avec le palier pour une case Objectif.
-- [ ] Séparer le niveau de difficulté Aventure de celui d’Exploration et de Missions.
-- [ ] Appliquer la matrice lente question par question, y compris les retraits.
-- [ ] Relier une tentative d’historique à son passage Aventure.
-- [ ] Finaliser un passage sans double comptage.
+- [ ] Confirmer le déploiement et la validation des fondations SQL en production.
+- [ ] Lancer un passage obligatoire visant une activité précise.
+- [ ] Sélectionner une activité adaptée pour une case Objectif.
+- [ ] Séparer complètement le niveau Aventure des niveaux Exploration et Missions.
+- [ ] Appliquer la matrice lente question par question.
+- [ ] Relier chaque tentative à son passage Aventure et empêcher le double comptage.
 - [ ] Reprendre automatiquement le premier passage non terminé.
-- [ ] Terminer une journée après dix passages.
-- [ ] Générer les quatre adaptatives uniquement depuis les OdApp déjà rencontrés.
-- [ ] Remplacer la tuile élève « Bientôt » par l’interface Aventure.
-- [ ] Tester classes multi-niveaux, changements de curseur et rechargements.
+- [ ] Enchaîner les six passages obligatoires puis les quatre adaptatifs.
+- [ ] Remplacer la tuile élève « Bientôt » par l’interface complète.
+- [ ] Tester les classes multi-niveaux, rechargements et changements de curseur.
 
-### Après stabilisation du MVP
+Après le MVP : vieillissement au-dessus de 40, rangs de maîtrise, reporting enseignant et réglages super-admin de la matrice.
 
-- [ ] Vieillissement au-dessus de 40 avec plancher 30.
-- [ ] Rangs de maîtrise et reconfirmations.
-- [ ] Reporting enseignant.
-- [ ] Réglages super-admin de la matrice et des seuils.
+## Étude du code et images
+
+- [ ] Refaire l’outil Encodage sur une base propre.
+- [ ] Stabiliser `reperage-graphemes`, `dictee-muette` et `nuage-lettres` puis créer leurs activités d’Exploration.
+- [ ] Continuer l’enrichissement de `phonology_words` et des banques d’images sans redéploiement.
+- [ ] Étendre les listes blanches d’images propres à chaque outil lorsque nécessaire.
+- [ ] Prévoir l’interface technique pour `vocabulary_default_words`.
 
 ## Quiz
 
-- Réintroduire le comportement Flash directement dans l’Atelier Quiz.
-- Ajouter deux éléments explicites pour l’utilisateur : **Texte flash** et **Image flash**.
-- Réutiliser en interne les moteurs Texte et Image existants avec un comportement Flash, sans créer de nouveaux formats de données ni de second éditeur.
-- Conserver l’élément Audio normal ; ne pas créer d’« Audio flash » tant qu’un besoin clair n’est pas défini.
+- [ ] Ajouter **Texte flash** et **Image flash** en réutilisant les moteurs existants.
+- [ ] Conserver l’Audio normal ; ne pas créer d’Audio flash sans besoin clair.
 
-## Catalogue
+## Exploration et catalogue de secours
 
-- Vérifier régulièrement la cohérence entre `tools/registry.js`, `shared/catalogue.js` et les activités réellement présentes dans Supabase.
-- Décider si `nombres-lettres`, `conjugaison` ou `quiz` doivent un jour recevoir une activité dans le catalogue local de secours.
-
-## Ressources
-
-- Conserver temporairement les ressources système locales alignées sur `shared/tool-assets/manifest.json` pendant leur migration progressive.
-- Les images pédagogiques importées dans `image_assets` sont visibles et classables dans les ressources système Supabase ; migrer ensuite chaque consommateur avant de supprimer ses fichiers statiques.
-- Conserver les ressources personnelles dans Supabase avec leur quota.
-- Les imports `phonology_words` et `image_assets` sont disponibles dans le tableau de bord super-admin. Il reste à prévoir l’outil technique pour `vocabulary_default_words`.
+- [ ] Vérifier régulièrement la cohérence entre `tools/registry.js`, `shared/catalogue.js` et Supabase.
+- [ ] Décider si `reperage-graphemes`, `dictee-muette`, `nuage-lettres`, `nombres-lettres`, `conjugaison` ou `quiz` doivent rejoindre le secours local.
 
 ## Tableau
 
-- Continuer le polish des widgets.
-- Tester le widget Grille en usage réel.
-- Vérifier que le widget système Arrière-plan ne perturbe ni la sélection ni la projection.
+- [ ] Continuer le polish des widgets.
+- [ ] Tester le widget Grille en usage réel.
+- [ ] Choisir la police générale d’une scène.
+- [ ] Sauvegarder des scènes dans l’espace enseignant.
+- [ ] Piloter davantage les widgets depuis la scène.
+- [ ] Ajouter des pages de scène.
 
-## Outils élèves
+## Évolutions générales
 
-- Garder l’approche MVP : un outil simple et fonctionnel, puis amélioration.
-- Éviter les outils trop génériques dont l’action élève devient floue.
-- Factoriser seulement lorsque plusieurs outils stabilisés montrent une duplication réelle.
+- Modifier le mot de passe depuis le dashboard.
+- Enregistrer des configurations favorites et archiver des activités.
+- Partager une activité par lien.
+- Mélanger les outils d’une séquence pendant une session.
+- Ajouter un écran Outils pour les réglages par défaut et les tags.
+- Créer des profils de calibration physique d’écran pour les outils de mesure.
+- Ajouter des ressources textuelles partagées dans Supabase avec singulier, pluriel, genre, ordre et activation.
+- Prévoir un outil d’enregistrement audio humain pour les contenus système.
+- Remplacer progressivement les confirmations natives restantes par l’UI du site.
 
-## Dette à surveiller
+## Idées d’outils conservées
 
-- Maintenir la documentation au même état que le code.
-- Ne pas rejouer les SQL historiques sans migration propre.
-- Remplacer les confirmations natives restantes par des modales ou toasts maison lorsque le parcours le justifie.
+- Calculs `10 + 10 + 10 + N`, avec variantes `5 + 5`.
+- Dénombrement par tracé de traits.
+- Calculs avec représentations Picbille ou Dédé.
+- Balance mathématique.
+- Droite graduée à placement continu.
+- Vocabulaire entre deux mots repères.
+- Manipulation enseignant : monnaie, centaines-dizaines-unités, étiquettes-mots et tirage de phrases.
+- Système de tickets pour la planète des jeux.
 
-## Idée à conserver — enregistrement audio système
+## Monnaie
 
-Prévoir un outil technique d’enregistrement audio humain : nommage automatique selon le contexte, association aux textes fixes et aux contenus pédagogiques, puis sauvegarde ou téléchargement immédiat. Cette piste reste privilégiée au TTS pour garantir une prononciation contrôlée et adaptée aux élèves.
-
-## Découpage restant de Monnaie
-
-`monnaie-representation` couvre Lire une somme et Composer une somme. Les modes restant éventuellement à créer comme outils autonomes sont : comparer des sommes, acheter des objets, trouver plusieurs façons et rendre la monnaie.
+`monnaie-representation` couvre Lire une somme et Composer une somme. Les usages Comparer, Acheter, Trouver plusieurs façons et Rendre la monnaie devront rester des outils distincts si leur besoin est confirmé.

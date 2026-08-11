@@ -1,4 +1,3 @@
-import { loadToolAssetsManifest } from "../../shared/tool-assets/tool-assets.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -18,6 +17,13 @@ import {
   pickQuestion,
   questionKey
 } from "./model.js";
+
+const TECHNICAL_CHARACTER_URLS = Object.freeze({
+  "images-comparaison-minibille": new URL("../../shared/tool-assets/personnages/Minibille.webp", import.meta.url).href,
+  "images-comparaison-maxibille": new URL("../../shared/tool-assets/personnages/Maxibille.webp", import.meta.url).href,
+  "images-personnages-mathieu": new URL("../../shared/tool-assets/personnages/Mathieu.webp", import.meta.url).href,
+  "images-personnages-mathilde": new URL("../../shared/tool-assets/personnages/Mathilde.webp", import.meta.url).href
+});
 
 let stylesInjected = false;
 
@@ -129,8 +135,6 @@ function createRuntimeState(initialContext = {}) {
     studentAnswerSnapshot: "",
     correctionSnapshot: "",
     currentSettings: normalizeSettings(initialContext?.settings),
-    manifest: null,
-    assetsLoadingPromise: null,
     responseAbortController: null,
     drawingAbortController: null,
     placementAbortController: null,
@@ -178,7 +182,6 @@ function renderShell(state) {
 }
 
 async function loadNextQuestion(state) {
-  await ensureManifestLoaded(state);
   state.answerRevealed = false;
   state.selectedAnswer = "";
   state.submittedAnswer = "";
@@ -207,22 +210,6 @@ async function loadNextQuestion(state) {
 
   renderQuestion(state);
   syncValidateState(state);
-}
-
-async function ensureManifestLoaded(state) {
-  if (state.manifest) return state.manifest;
-  if (state.assetsLoadingPromise) return state.assetsLoadingPromise;
-
-  state.assetsLoadingPromise = loadToolAssetsManifest()
-    .then((manifest) => {
-      state.manifest = manifest;
-      return manifest;
-    })
-    .finally(() => {
-      state.assetsLoadingPromise = null;
-    });
-
-  return state.assetsLoadingPromise;
 }
 
 function renderQuestion(state) {
@@ -348,10 +335,10 @@ function renderClearTracesButton() {
 }
 
 function renderCharacter(state, { name, assetId, role }) {
-  const asset = assetId ? state.manifest?.assetsById?.get(assetId) : null;
-  if (asset?.url) {
+  const assetUrl = assetId ? TECHNICAL_CHARACTER_URLS[assetId] : "";
+  if (assetUrl) {
     return `
-      <img class="comparaison-character comparaison-character--${escapeHtml(role)}" src="${escapeHtml(asset.url)}" alt="${escapeHtml(name)}" draggable="false" loading="eager" decoding="async">
+      <img class="comparaison-character comparaison-character--${escapeHtml(role)}" src="${escapeHtml(assetUrl)}" alt="${escapeHtml(name)}" draggable="false" loading="eager" decoding="async">
     `;
   }
 

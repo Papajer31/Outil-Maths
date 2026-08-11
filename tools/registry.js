@@ -188,15 +188,43 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     id: "reperage-graphemes",
     label: "Repérer les graphèmes",
     entry: "../tools/reperage-graphemes/tool.js",
-    description: "Repérer dans plusieurs mots les lettres qui transcrivent un son ciblé.",
+    description: "Repérer dans plusieurs mots une cible phonémique ou graphémique.",
     tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "sélection", "projection"]
+  },
+  {
+    id: "dictee-muette",
+    label: "Dictée muette",
+    entry: "../tools/dictee-muette/tool.js",
+    description: "Écrire le mot correspondant à une image de l’Imagier avec plusieurs niveaux d’aide.",
+    tags: ["français", "étude-du-code", "encodage", "dictée", "orthographe", "image", "clavier", "projection"]
   },
   {
     id: "nuage-lettres",
     label: "Nuage de lettres",
     entry: "../tools/nuage-lettres/tool.js",
-    description: "Reconstituer un mot contenant un son ciblé à partir de lettres mélangées.",
+    description: "Reconstituer un mot sélectionné par entrée phonémique ou graphémique à partir de lettres mélangées.",
     tags: ["français", "lecture", "étude-du-code", "phonologie", "orthographe", "lettres", "manipulation", "projection"]
+  },
+  {
+    id: "segmenter-mots",
+    label: "Segmenter les mots",
+    entry: "../tools/segmenter-mots/tool.js",
+    description: "Segmenter une suite continue de lettres pour retrouver les mots sélectionnés dans la banque phonologique.",
+    tags: ["français", "lecture", "étude-du-code", "segmentation", "mots", "phonologie", "graphèmes", "tablette", "manipulation", "projection"]
+  },
+  {
+    id: "recomposer-mots-syllabes",
+    label: "Recomposer les mots",
+    entry: "../tools/recomposer-mots-syllabes/tool.js",
+    description: "Recomposer plusieurs mots à partir de leurs syllabes mélangées.",
+    tags: ["français", "lecture", "étude-du-code", "syllabes", "mots", "phonologie", "graphèmes", "tablette", "manipulation", "projection"]
+  },
+  {
+    id: "mot-cache",
+    label: "Mot caché",
+    entry: "../tools/mot-cache/tool.js",
+    description: "Retrouver un mot caché horizontalement ou verticalement dans une grille de lettres.",
+    tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "mots-mêlés", "grille", "tablette", "sélection", "projection"]
   },
   {
     id: "geste-graphique",

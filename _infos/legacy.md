@@ -1,53 +1,35 @@
-# Legacy — ce qui ne doit plus piloter le projet
+# Historique et éléments supprimés
 
-Dernière mise à jour : 2026-07-30.
+Dernière mise à jour : 2026-08-07.
 
-## Ancien éditeur d’activités personnelles
+Ce fichier résume les choix abandonnés et les migrations achevées. Ils ne doivent plus piloter les nouveaux développements.
 
-Le modèle `activity_configs` / `activity_folders` n’est plus le modèle produit actif. Le dashboard s’appuie sur le Catalogue système, les Missions et les Quiz.
+## Activités personnelles historiques
 
-Les anciens modules d’édition personnelle ne doivent pas être réintroduits.
+Le modèle `activity_configs` / `activity_folders` n’est plus le modèle produit. Le dashboard repose sur Exploration, Missions et Quiz.
 
 ## Anciennes banques de questions
 
-Le modèle suivant a été supprimé de l’application et de Supabase :
+Les tables `question_banks`, `question_bank_items` et `question_bank_folders`, leurs API et leurs politiques ont été supprimées le 24 juillet 2026 avec `10_remove_question_banks.sql`.
 
-- `question_banks` ;
-- `question_bank_items` ;
-- `question_bank_folders`.
+Les anciens outils `question-reponse`, `qcm`, `selection`, `flash-question-reponse` et `flash-qcm` ont également été retirés. Le QCM texte et la sélection de mots ont été recréés comme éléments internes au Quiz. Aucune rétrocompatibilité n’est prévue.
 
-Les outils entièrement dépendants de ce modèle ont également été supprimés :
+## Ancienne portée de niveaux
 
-- `question-reponse` ;
-- `qcm` ;
-- `selection` ;
-- `flash-question-reponse` ;
-- `flash-qcm`.
+`grade_scope_mode`, `grade_levels` et l’héritage depuis les parents ont été remplacés par un nœud terminal `grade_level` sous chaque objectif d’apprentissage. La migration contrôlée a sauvegardé les anciens nœuds et rattachements avant reconstruction.
 
-Aucune rétrocompatibilité n’est prévue. Les futurs comportements équivalents doivent être développés dans l’Atelier Quiz.
+## Ancien registre Aventure
 
+`adventure_objective_registry` et `teacher_adventure_objectives` documentent une étape intermédiaire. Les menus hebdomadaires et les curseurs de classe portent désormais le fonctionnement actif.
 
+## Anciennes ressources statiques
 
-## Ancienne portée de niveaux de l’arborescence
-
-Les colonnes `grade_scope_mode` et `grade_levels`, ainsi que l’héritage de niveaux depuis les disciplines ou les domaines, ne font plus partie du modèle actif.
-
-Le niveau scolaire est représenté par un nœud terminal `grade_level` placé sous l’objectif d’apprentissage. Les activités sont rangées directement dans ce dossier.
-
-## SQL historiques
-
-Les fichiers SQL ayant créé ou modifié les anciennes banques sont conservés pour témoigner de l’historique du projet. Ils sont obsolètes et ne doivent pas être rejoués.
-
-La suppression physique a été réalisée avec `10_remove_question_banks.sql`.
-
-## Registre legacy
-
-Le registre actif ne contient plus de registre legacy parallèle. Un ancien code peut rester documenté pour mémoire, mais il ne doit pas être exposé par `tools/registry.js`.
+Le catalogue `shared/tool-assets/manifest.json` et son chargeur ont été supprimés en août 2026. Toutes les ressources pédagogiques vivent désormais dans Supabase. Les fichiers locaux conservés sont exclusivement des assets techniques explicitement chargés par les outils.
 
 ## Monnaie
 
-L’ancien outil monolithique `monnaie` n’est plus présent. `monnaie-representation` couvre Lire une somme et Composer une somme. Les autres usages éventuels devront être créés sous forme d’outils autonomes.
+L’ancien outil monolithique `monnaie` a été remplacé par `monnaie-representation`. Les autres situations devront être créées sous forme d’outils autonomes.
 
-## Règle
+## SQL historiques
 
-Un élément legacy peut rester documenté ou archivé, mais il ne doit pas servir de point d’appui implicite aux nouveaux développements.
+Les SQL restent conservés pour retracer l’évolution de la base. Les scripts qui créaient les banques ou d’anciens modèles ne doivent jamais être rejoués sur la base actuelle. Voir `sql/README.md`.

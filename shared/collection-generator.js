@@ -1,33 +1,35 @@
-import { COLLECTION_ALLOWED_ASSET_IDS } from "./tool-assets/collection-allowed-assets.js";
+import { COLLECTION_ALLOWED_EMOJIS } from "./tool-assets/collection-allowed-assets.js";
 
-function normalizeSearchText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
+const COLLECTION_ALLOWED_EMOJI_BY_SLUG = new Map(
+  COLLECTION_ALLOWED_EMOJIS.map((entry) => [String(entry.slug || "").trim().toLowerCase(), entry])
+);
 
-const COLLECTION_ALLOWED_ASSET_ID_SET = new Set(COLLECTION_ALLOWED_ASSET_IDS);
+export function getCollectionEmojiAssets(assets = []) {
+  const source = Array.isArray(assets) ? assets : [];
 
-export function getCollectionEmojiAssets(manifestOrAssets) {
-  const assets = Array.isArray(manifestOrAssets)
-    ? manifestOrAssets
-    : Array.isArray(manifestOrAssets?.assets)
-      ? manifestOrAssets.assets
-      : [];
-
-  return assets.filter((asset) => isEmojiCollectionAsset(asset)
-    && COLLECTION_ALLOWED_ASSET_ID_SET.has(String(asset?.id || "")));
+  return source
+    .filter(isEmojiCollectionAsset)
+    .map((asset) => {
+      const slug = String(asset?.slug || asset?.id || "").trim().toLowerCase();
+      const allowed = COLLECTION_ALLOWED_EMOJI_BY_SLUG.get(slug);
+      if (!allowed) return null;
+      const label = String(allowed.label || asset?.label || asset?.alt || slug).trim() || "objet";
+      return {
+        ...asset,
+        id: slug,
+        slug,
+        label,
+        alt: label
+      };
+    })
+    .filter(Boolean);
 }
 
 export function isEmojiCollectionAsset(asset) {
   if (!asset || typeof asset !== "object") return false;
   if (String(asset.type || "image").trim().toLowerCase() !== "image") return false;
-  const category = normalizeSearchText(asset.category || "");
-  const src = normalizeSearchText(asset.src || "");
-  return category === "emojis" || category.startsWith("emojis ") || src.includes("images emojis ");
+  const slug = String(asset.slug || asset.id || "").trim().toLowerCase();
+  return slug.startsWith("emoji_") && COLLECTION_ALLOWED_EMOJI_BY_SLUG.has(slug);
 }
 
 export function pickCollectionAsset(assets = [], { avoidId = "", random = Math.random } = {}) {

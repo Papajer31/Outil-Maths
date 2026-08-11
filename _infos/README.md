@@ -1,24 +1,29 @@
-# _infos — index documentaire
+# `_infos` — documentation du projet
 
-Dernière mise à jour : 2026-07-30.
+Dernière mise à jour : 2026-08-07.
 
-Ce dossier sert de mémoire courte et fiable du projet. Il ne doit pas contenir plusieurs documents concurrents racontant des états différents.
+Ce dossier conserve uniquement les informations utiles pour comprendre, déployer et poursuivre le projet. Les comptes rendus de patch terminés ne doivent plus s’accumuler à la racine : leur conclusion est intégrée au document de référence concerné ou à `legacy.md`.
 
-## Ordre de lecture conseillé
+## Documents courants
 
-1. `etat-projet.md` : état fonctionnel actuel.
-2. `architecture.md` : découpage technique et règles structurantes.
-3. `aventure.md` : contrat pédagogique et fonctionnel du mode Aventure.
-4. `patch-arborescence-dossiers-niveau.md` : ordre de déploiement et tests du mini-patch.
-5. `backlog.md` : décisions en attente et prochaines évolutions.
-6. `outils.md` : état des outils et widgets.
-7. `tableau.md` : logique du Tableau projetable.
-8. `supabase.md` : modèle Supabase actuel et prudences SQL.
-9. `legacy.md` : éléments supprimés ou explicitement à ne pas réactiver.
-10. `audit-suppression-banques.md` : bilan de la suppression définitive des anciennes banques.
+1. `etat-projet.md` — photographie fonctionnelle du projet.
+2. `architecture.md` — règles techniques et découpage des modules.
+3. `aventure.md` — contrat du mode Aventure.
+4. `historique-activites.md` — contrat de tentative et d’enregistrement des réponses.
+5. `outils.md` — registre des outils, Quiz, Tableau et assets.
+6. `supabase.md` — modèle de données et Storage.
+7. `backlog.md` — chantiers encore ouverts et idées conservées.
+8. `legacy.md` — éléments supprimés ou migrations achevées à ne pas réactiver.
 
-## Règle de maintenance
+## Sous-dossiers
 
-Quand une idée devient une décision, elle quitte `backlog.md` pour rejoindre le document de référence correspondant. Une note devenue obsolète doit être corrigée ou archivée, pas conservée dans un résumé concurrent.
+- `referentiels/` — sources pédagogiques et linguistiques volumineuses.
+- `sql/` — historique SQL ; lire impérativement `sql/README.md` avant toute exécution.
+- `tests/` — procédures de validation encore utiles.
 
-Les fichiers SQL numérotés sont historiques et ne doivent jamais être rejoués comme un lot. Les scripts hors numérotation sont documentés individuellement dans `_infos/sql/README.md`.
+## Règles de maintenance
+
+- Une décision stabilisée quitte `backlog.md` et rejoint son document de référence.
+- Un patch terminé ne crée pas durablement un nouveau fichier à la racine de `_infos`.
+- Les ressources pédagogiques sont dans Supabase ; `shared/tool-assets/` ne contient que des dépendances techniques des outils.
+- Les SQL numérotés ne constituent pas un lot rejouable sur la base actuelle.

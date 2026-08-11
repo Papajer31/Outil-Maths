@@ -3,36 +3,21 @@ import { supabase } from "./supabase-client.js";
 const DB_NAME = "site-outils-quiz-images";
 const DB_VERSION = 1;
 const STORE_NAME = "images";
-const SYSTEM_ASSET_BASE_URL = new URL("./tool-assets/manifest.json", import.meta.url);
 const objectUrlCache = new Map();
 const resourceUrlCache = new Map();
 const RESOURCE_SIGNED_URL_LIFETIME_SECONDS = 3600;
 const RESOURCE_SIGNED_URL_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const PUBLIC_RESOURCE_BUCKETS = new Set(["images"]);
 
 export function normalizeQuizImageSource(source){
   if (!source || typeof source !== "object" || Array.isArray(source)) return null;
   const rawKind = String(source.kind || source.type || "").trim().toLowerCase();
-  const kind = rawKind === "site-asset" || rawKind === "system" || rawKind === "asset"
-    ? "site-asset"
-    : rawKind === "local-upload" || rawKind === "upload" || rawKind === "local"
-      ? "local-upload"
-      : rawKind === "resource" || rawKind === "supabase-resource" || rawKind === "personal-resource" || rawKind === "system-resource"
-        ? "resource"
-        : "";
+  const kind = rawKind === "local-upload" || rawKind === "upload" || rawKind === "local"
+    ? "local-upload"
+    : rawKind === "resource" || rawKind === "supabase-resource" || rawKind === "personal-resource" || rawKind === "system-resource"
+      ? "resource"
+      : "";
   if (!kind) return null;
-
-  if (kind === "site-asset") {
-    const assetId = String(source.assetId || source.asset_id || source.id || "").trim();
-    const src = String(source.src || source.path || "").trim();
-    if (!assetId && !src) return null;
-    return {
-      kind,
-      assetId,
-      src,
-      label: String(source.label || source.name || assetId || "Image").trim() || "Image",
-      alt: String(source.alt || source.label || source.name || assetId || "Image").trim() || "Image"
-    };
-  }
 
   if (kind === "resource") {
     const resourceId = String(source.resourceId || source.resource_id || source.id || "").trim();
@@ -89,11 +74,6 @@ export async function resolveQuizImageSourceUrl(source){
   const normalized = normalizeQuizImageSource(source);
   if (!normalized) return "";
 
-  if (normalized.kind === "site-asset") {
-    if (!normalized.src) return "";
-    return new URL(normalized.src, SYSTEM_ASSET_BASE_URL).href;
-  }
-
   if (normalized.kind === "resource") {
     return await resolveResourceImageUrl(normalized.resourceId);
   }
@@ -127,6 +107,18 @@ async function resolveResourceImageUrl(resourceId){
   const bucket = String(resource.storage_bucket || "teacher-resources").trim();
   const path = String(resource.storage_path || "").trim();
   if (!bucket || !path) return "";
+
+  if (PUBLIC_RESOURCE_BUCKETS.has(bucket)) {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    const url = String(data?.publicUrl || "");
+    if (url) {
+      resourceUrlCache.set(id, {
+        url,
+        expiresAt: Number.MAX_SAFE_INTEGER
+      });
+    }
+    return url;
+  }
 
   const { data, error } = await supabase.storage
     .from(bucket)

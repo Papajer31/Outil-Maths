@@ -210,11 +210,16 @@
 }
 
 .sd-object--image {
+  visibility: hidden;
   object-fit: contain;
   object-position: center;
   user-select: none;
   -webkit-user-drag: none;
   filter: drop-shadow(0 .09rem .13rem rgba(0,0,0,.18));
+}
+
+.sd-object--image.is-loaded {
+  visibility: visible;
 }
 
 .sd-object--fallback {

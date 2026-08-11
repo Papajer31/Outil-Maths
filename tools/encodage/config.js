@@ -15,6 +15,7 @@ import {
   getAvailableGraphs,
   getDefaultSettings,
   normalizeSettings,
+  ensureGraphImageCatalog,
   getGraphImageUrl,
   getGraphFallbackDisplay,
   getGraphLabel,
@@ -137,6 +138,9 @@ export function renderToolSettings(container, settings, context = {}) {
   bindPresetSelect(container);
   bindEvents(container, context);
   bindGraphAssetFallbacks(container);
+  ensureGraphImageCatalog()
+    .then(() => hydrateGraphAssetImages(container))
+    .catch(() => {});
   ensurePublicWordCatalogLoaded(container).catch(() => {});
   ensurePresetsLoaded(container, context).catch((err) => {
     editorState.status = "error";
@@ -628,7 +632,12 @@ function renderGraphVisual(graph, {
     : "";
 
   return `
-    <span class="${escapeAttr(rootClassName)}" data-graph-visual>
+    <span
+      class="${escapeAttr(rootClassName)}"
+      data-graph-visual
+      data-graph-id="${escapeAttr(graph)}"
+      data-graph-img-class="${escapeAttr(imgClassName)}"
+    >
       ${imageUrl ? `<img class="${escapeAttr(imgClassName)}" src="${escapeAttr(imageUrl)}" alt="" draggable="false" data-graph-img>` : ""}
       <span class="${escapeAttr(fallbackClassName)}" data-graph-fallback data-unit-size="${escapeAttr(getUnitSizeBucket(fallback.label))}">
         <span>${escapeHtml(fallback.label)}</span>
@@ -643,6 +652,33 @@ function getUnitSizeBucket(text) {
   if (length >= 5) return "long";
   if (length >= 3) return "medium";
   return "short";
+}
+
+function hydrateGraphAssetImages(root) {
+  root.querySelectorAll("[data-graph-visual][data-graph-id]").forEach((visual) => {
+    const graph = String(visual.dataset.graphId || "").trim();
+    const imageUrl = getGraphImageUrl(graph);
+    if (!imageUrl) {
+      visual.classList.add("is-fallback");
+      return;
+    }
+
+    let image = visual.querySelector("[data-graph-img]");
+    if (!(image instanceof HTMLImageElement)) {
+      image = document.createElement("img");
+      image.className = String(visual.dataset.graphImgClass || "phono-graph-img").trim() || "phono-graph-img";
+      image.alt = "";
+      image.draggable = false;
+      image.dataset.graphImg = "";
+      visual.prepend(image);
+    }
+
+    image.hidden = false;
+    image.src = imageUrl;
+    visual.classList.remove("is-fallback");
+  });
+
+  bindGraphAssetFallbacks(root);
 }
 
 function bindGraphAssetFallbacks(root) {

@@ -1,6 +1,6 @@
 # Aventure — contrat fonctionnel et technique
 
-Dernière mise à jour : 2026-08-04.
+Dernière mise à jour : 2026-08-07.
 
 ## Objectif de rentrée
 
@@ -150,28 +150,28 @@ La séparation des contextes doit être respectée : le niveau atteint en Explor
 - `adventure_default_menu_slots`
 - `teacher_adventure_menu_slots`
 
-### Fondations moteur — patch 20
+### Fondations moteur
 
 - `adventure_class_cursors`
 - `student_adventure_tier_progress`
 - `student_adventure_days`
 - `student_adventure_passages`
 
-### RPC publiques — patch 20
+### RPC publiques
 
 - `open_student_adventure_day`
 - `get_student_adventure_progress`
 
 Les anciennes tables `adventure_objective_registry` et `teacher_adventure_objectives` sont historiques et ne sont plus utilisées par l’écran des menus.
 
-## Ordre des prochains patchs
+## Ordre de réalisation restant
 
-1. Fondations SQL, curseur enseignant et gel des journées — **patch 20**.
-2. Sélection et lancement d’un passage obligatoire de type Activité.
-3. Sélection d’une activité pour une case Objectif selon le palier.
-4. Application question par question de la matrice lente et mise à jour de la jauge.
-5. Enchaînement et reprise des six passages obligatoires.
-6. Génération stable des quatre passages adaptatifs.
-7. Interface élève complète et fin de journée.
-8. Tests multi-élèves, multi-niveaux, rechargements et changements de curseur.
-9. Vieillissement, rangs de maîtrise et reporting après stabilisation du MVP.
+1. Confirmer le déploiement et la validation des fondations SQL.
+2. Sélectionner et lancer un passage obligatoire de type Activité.
+3. Sélectionner une activité pour une case Objectif selon le palier.
+4. Appliquer la matrice lente question par question et mettre à jour la jauge.
+5. Enchaîner et reprendre les six passages obligatoires.
+6. Générer de manière stable les quatre passages adaptatifs.
+7. Finaliser l’interface élève et la fin de journée.
+8. Tester plusieurs élèves, niveaux, rechargements et changements de curseur.
+9. Ajouter ensuite vieillissement, rangs de maîtrise et reporting.

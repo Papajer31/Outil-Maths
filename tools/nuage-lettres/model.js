@@ -1,5 +1,14 @@
-import { PHONOLOGY_GRAPH_BY_ID } from "../../shared/phonology-graph-data.js";
-import { getPhonemeTarget, getPhonemeTargets } from "../reperage-graphemes/phonemes-data.js";
+import { getPhonemeTarget, getPhonemeTargets, normalizePhonologyTargetId } from "../../shared/phonology-targets.js";
+import { findPhonologyTargetOccurrences } from "../../shared/phonology-target-matcher.js";
+import {
+  WORD_SELECTION_MODES,
+  findGraphemicOccurrences,
+  getGraphemicTargets,
+  inferWordSelectionMode,
+  legacyGraphemicEntriesFromSettings,
+  normalizeGraphemicEntries,
+  wordContainsAnyGraphemicEntry
+} from "../../shared/graphemic-targets.js";
 
 export const CLOUD_MODES = Object.freeze({
   FIXED: "fixed",
@@ -10,12 +19,12 @@ export const CLOUD_MODES = Object.freeze({
 export const LETTER_COUNT_OPTIONS = Object.freeze(
   Array.from({ length: 11 }, (_, index) => index + 2)
 );
+export const ALL_TARGET_ID = "all";
 
 const DEFAULT_TARGET_ID = "ou";
 const DEFAULT_MIN_LETTERS = 4;
 const DEFAULT_MAX_LETTERS = 8;
 const DEFAULT_CLOUD_MODE = CLOUD_MODES.FIXED;
-const GRAPH_BY_ID = PHONOLOGY_GRAPH_BY_ID;
 
 let WORD_CATALOG = [];
 let ELIGIBLE_CACHE = new Map();
@@ -23,26 +32,49 @@ let ELIGIBLE_CACHE = new Map();
 export function getDefaultSettings() {
   const target = getPhonemeTarget(DEFAULT_TARGET_ID);
   return {
+    wordSelectionMode:WORD_SELECTION_MODES.PHONEMIC,
     targetId: DEFAULT_TARGET_ID,
+    targetIds: [DEFAULT_TARGET_ID],
     enabledSpellings: normalizeSpellings(target?.spellings),
+    enabledSpellingsByTarget: { [DEFAULT_TARGET_ID]:normalizeSpellings(target?.spellings) },
+    graphemicEntries:[],
+    excludedGraphemicEntries:[],
     minLetters: DEFAULT_MIN_LETTERS,
     maxLetters: DEFAULT_MAX_LETTERS,
+    showFirstLetter: false,
     cloudMode: DEFAULT_CLOUD_MODE
   };
 }
 
 export function normalizeSettings(settings = {}) {
   const knownTargets = new Set(getPhonemeTargets().map((target) => target.id));
-  const requestedTargetId = String(settings?.targetId || DEFAULT_TARGET_ID).trim();
-  const targetId = knownTargets.has(requestedTargetId) ? requestedTargetId : DEFAULT_TARGET_ID;
-  const target = getPhonemeTarget(targetId);
+  const wordSelectionMode = inferWordSelectionMode(settings, knownTargets);
+  const explicitGraphemicEntries = normalizeGraphemicEntries(settings?.graphemicEntries || settings?.graphemes || []);
+  const graphemicEntries = wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC
+    ? (explicitGraphemicEntries.length ? explicitGraphemicEntries : legacyGraphemicEntriesFromSettings(settings))
+    : explicitGraphemicEntries;
+  const excludedGraphemicEntries = normalizeGraphemicEntries(
+    settings?.excludedGraphemicEntries || settings?.graphemicExcludedEntries || settings?.graphemicExclusions || []
+  );
 
-  const availableSpellings = normalizeSpellings(target?.spellings);
-  const hasExplicitSpellings = Object.prototype.hasOwnProperty.call(settings || {}, "enabledSpellings");
-  const requestedSpellings = normalizeSpellings(settings?.enabledSpellings);
-  const enabledSpellings = hasExplicitSpellings
-    ? requestedSpellings.filter((spelling) => availableSpellings.includes(spelling))
-    : availableSpellings;
+  const rawTargetIds = Array.isArray(settings?.targetIds) ? settings.targetIds : [settings?.targetId || DEFAULT_TARGET_ID];
+  const targetIds = Array.from(new Set(rawTargetIds
+    .map((id) => {
+      const rawId = String(id || "").trim();
+      return rawId === ALL_TARGET_ID ? rawId : normalizePhonologyTargetId(rawId);
+    })
+    .filter((id) => id === ALL_TARGET_ID || knownTargets.has(id))));
+  const normalizedTargetIds = targetIds.includes(ALL_TARGET_ID) || !targetIds.length ? [ALL_TARGET_ID] : targetIds;
+  const targetId = normalizedTargetIds.length === 1 && normalizedTargetIds[0] !== ALL_TARGET_ID ? normalizedTargetIds[0] : ALL_TARGET_ID;
+  const rawSpellingsByTarget = settings?.enabledSpellingsByTarget && typeof settings.enabledSpellingsByTarget === "object" ? settings.enabledSpellingsByTarget : {};
+  const hasLegacySpellings = Object.prototype.hasOwnProperty.call(settings || {}, "enabledSpellings");
+  const enabledSpellingsByTarget = Object.fromEntries(normalizedTargetIds.filter((id) => id !== ALL_TARGET_ID).map((id) => {
+    const available = normalizeSpellings(getPhonemeTarget(id)?.spellings);
+    const requested = Object.prototype.hasOwnProperty.call(rawSpellingsByTarget, id) ? rawSpellingsByTarget[id] : settings?.enabledSpellings;
+    const explicit = Object.prototype.hasOwnProperty.call(rawSpellingsByTarget, id) || (normalizedTargetIds.length === 1 && hasLegacySpellings);
+    return [id, explicit ? normalizeSpellings(requested).filter((spelling) => available.includes(spelling)) : available];
+  }));
+  const enabledSpellings = targetId !== ALL_TARGET_ID ? (enabledSpellingsByTarget[targetId] || []) : [];
 
   let minLetters = normalizeLetterCount(settings?.minLetters, DEFAULT_MIN_LETTERS);
   let maxLetters = normalizeLetterCount(settings?.maxLetters, DEFAULT_MAX_LETTERS);
@@ -54,10 +86,16 @@ export function normalizeSettings(settings = {}) {
     : DEFAULT_CLOUD_MODE;
 
   return {
+    wordSelectionMode,
     targetId,
+    targetIds:normalizedTargetIds,
+    graphemicEntries,
+    excludedGraphemicEntries,
     enabledSpellings,
+    enabledSpellingsByTarget,
     minLetters,
     maxLetters,
+    showFirstLetter:settings?.showFirstLetter === true,
     cloudMode
   };
 }
@@ -71,53 +109,88 @@ export function getWordCatalog() {
   return cloneData(WORD_CATALOG);
 }
 
-export function getTargetOptions() {
-  return getPhonemeTargets().map((target) => ({
-    value: target.id,
-    label: target.label
-  }));
-}
-
-export function getTargetForSettings(settings = {}) {
-  const cfg = normalizeSettings(settings);
-  const target = getPhonemeTarget(cfg.targetId);
-  return target ? {
-    ...target,
-    enabledSpellings: [...cfg.enabledSpellings]
-  } : null;
-}
-
 export function getEligibleWords(settings = {}) {
   const cfg = normalizeSettings(settings);
-  const target = getPhonemeTarget(cfg.targetId);
-  if (!target) return [];
+  const bySlug = new Map();
+  getSelectedTargets(cfg).forEach((target) => {
+    getEligibleWordsForTarget(cfg, target).forEach((word) => bySlug.set(word.slug, word));
+  });
+  return [...bySlug.values()];
+}
 
+function getEligibleWordsForTarget(cfg, target) {
+  if (!target) return [];
+  const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
   const cacheKey = [
-    cfg.targetId,
-    cfg.enabledSpellings.join("|"),
+    target.id,
+    enabledSpellings.join("|"),
     cfg.minLetters,
-    cfg.maxLetters
+    cfg.maxLetters,
+    target.kind === "graphemic" ? `exclude:${cfg.excludedGraphemicEntries.join("|")}` : ""
   ].join("::");
   if (ELIGIBLE_CACHE.has(cacheKey)) return cloneData(ELIGIBLE_CACHE.get(cacheKey));
 
   const words = WORD_CATALOG
     .filter((entry) => isLettersOnly(entry.word))
+    .filter((entry) => target.kind !== "graphemic"
+      || !wordContainsAnyGraphemicEntry(entry.word, cfg.excludedGraphemicEntries))
     .map((entry) => ({
       ...entry,
-      letters: splitWordLetters(entry.word),
-      occurrences: findTargetOccurrences(entry.units, target)
+      letters:splitWordLetters(entry.word),
+      occurrences:target.kind === "graphemic"
+        ? findGraphemicOccurrences(entry.word, target.grapheme)
+        : findPhonologyTargetOccurrences(entry.units, target)
     }))
     .filter((entry) => entry.occurrences.length > 0)
     .filter((entry) => entry.letters.length >= cfg.minLetters && entry.letters.length <= cfg.maxLetters)
-    .filter((entry) => targetOccurrencesUseAllowedSpellings(entry.occurrences, cfg.enabledSpellings))
-    .map(({ occurrences, ...entry }) => entry);
+    .filter((entry) => target.kind === "graphemic" || targetOccurrencesUseAllowedSpellings(entry.occurrences, enabledSpellings))
+    .map(({ occurrences, ...entry }) => ({
+      ...entry,
+      targetSpellings:Array.from(new Set(occurrences.map((occurrence) => occurrence.spelling).filter(Boolean)))
+    }));
 
   ELIGIBLE_CACHE.set(cacheKey, words);
   return cloneData(words);
 }
 
+
+export function getPhonemicSpellingUsage(settings = {}) {
+  const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode !== WORD_SELECTION_MODES.PHONEMIC) return {};
+
+  const usageByTarget = {};
+  const targets = cfg.targetIds.includes(ALL_TARGET_ID)
+    ? getPhonemeTargets()
+    : cfg.targetIds.map(getPhonemeTarget).filter(Boolean);
+
+  for (const target of targets) {
+    usageByTarget[target.id] = buildSpellingUsage(target, getEligibleWordsForTarget(cfg, target));
+  }
+  return usageByTarget;
+}
+
+function buildSpellingUsage(target, words) {
+  const spellings = normalizeSpellings(target?.spellings);
+  const allowed = new Set(spellings);
+  const counts = Object.fromEntries(spellings.map((spelling) => [spelling, 0]));
+
+  for (const word of Array.isArray(words) ? words : []) {
+    const present = new Set(normalizeSpellings(word?.targetSpellings));
+    for (const spelling of present) {
+      if (allowed.has(spelling)) counts[spelling] += 1;
+    }
+  }
+
+  return { totalWords:Array.isArray(words) ? words.length : 0, counts };
+}
+
 export function getEligibleWordCount(settings = {}) {
   return getEligibleWords(settings).length;
+}
+
+export function getEligibleTargetCount(settings = {}) {
+  const cfg = normalizeSettings(settings);
+  return getSelectedTargets(cfg).filter((target) => getEligibleWordsForTarget(cfg, target).length > 0).length;
 }
 
 export function canGenerateQuestion(settings = {}) {
@@ -129,10 +202,12 @@ export function pickQuestion(settings = {}, {
   usedWordSlugs = null
 } = {}) {
   const cfg = normalizeSettings(settings);
-  const target = getPhonemeTarget(cfg.targetId);
+  const previousTargetId = String(avoidKey || "").split("::")[0];
+  const viable = getSelectedTargets(cfg).filter((target) => getEligibleWordsForTarget(cfg, target).length);
+  const choices = viable.filter((target) => target.id !== previousTargetId);
+  const target = randomChoice(choices.length ? choices : viable);
   if (!target) return null;
-
-  const pool = getEligibleWords(cfg);
+  const pool = getEligibleWordsForTarget(cfg, target);
   if (!pool.length) return null;
 
   const used = usedWordSlugs instanceof Set ? usedWordSlugs : new Set();
@@ -167,16 +242,24 @@ export function pickQuestion(settings = {}, {
   };
 }
 
+function getSelectedTargets(settings = {}) {
+  const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) return getGraphemicTargets(cfg.graphemicEntries);
+  return cfg.targetIds.includes(ALL_TARGET_ID) ? getPhonemeTargets() : cfg.targetIds.map(getPhonemeTarget).filter(Boolean);
+}
+
+function getEnabledSpellingsForTarget(settings, target) {
+  const cfg = normalizeSettings(settings);
+  if (target?.kind === "graphemic") return target.spellings || [];
+  return cfg.targetIds.includes(ALL_TARGET_ID) ? target.spellings : (cfg.enabledSpellingsByTarget[target.id] || target.spellings);
+}
+
 export function questionKey(question) {
   return String(question?.key || "");
 }
 
 export function buildPrompt(targetOrSettings = {}) {
-  const target = targetOrSettings?.graphIds
-    ? targetOrSettings
-    : getTargetForSettings(targetOrSettings);
-  if (!target) return "Remets les lettres dans l’ordre pour former le mot.";
-  return `Remets les lettres dans l’ordre pour former un mot qui contient le son « ${target.bubbleText} », comme dans « ${target.example} ».`;
+  return "Clique sur les lettres dans l’ordre pour former un mot.";
 }
 
 export function evaluateAnswer(question, answerIds = []) {
@@ -237,63 +320,9 @@ function normalizeWordCatalog(words) {
     .filter((word) => word.slug && word.word && word.units.length > 0);
 }
 
-function findTargetOccurrences(units, target) {
-  const occurrences = [];
-  const graphIds = new Set(Array.isArray(target?.graphIds) ? target.graphIds : []);
-  const safeUnits = Array.isArray(units) ? units : [];
-
-  safeUnits.forEach((unit, index) => {
-    if (unit?.isSilent === true || !graphIds.has(String(unit?.graph || ""))) return;
-    const spelling = normalizeSpelling(getUnitSurfaceText(unit));
-    if (spelling) occurrences.push({ indexes: [index], spelling });
-  });
-
-  for (const sequence of Array.isArray(target?.graphSequences) ? target.graphSequences : []) {
-    if (!Array.isArray(sequence) || !sequence.length) continue;
-    for (let start = 0; start <= safeUnits.length - sequence.length; start += 1) {
-      let matches = true;
-      for (let offset = 0; offset < sequence.length; offset += 1) {
-        const unit = safeUnits[start + offset];
-        if (unit?.isSilent === true || String(unit?.graph || "") !== sequence[offset]) {
-          matches = false;
-          break;
-        }
-      }
-      if (!matches) continue;
-      const indexes = sequence.map((_, offset) => start + offset);
-      const baseSpelling = normalizeSpelling(indexes.map((index) => getUnitSurfaceText(safeUnits[index])).join(""));
-      const spelling = resolveSequenceSpelling(baseSpelling, safeUnits, start + sequence.length, target?.spellings);
-      if (spelling) occurrences.push({ indexes, spelling });
-    }
-  }
-
-  return occurrences;
-}
-
-function resolveSequenceSpelling(baseSpelling, units, nextIndex, targetSpellings) {
-  const accepted = new Set(normalizeSpellings(targetSpellings));
-  if (accepted.has(baseSpelling)) return baseSpelling;
-
-  let candidate = baseSpelling;
-  for (let index = nextIndex; index < units.length; index += 1) {
-    const unit = units[index];
-    if (unit?.isSilent !== true) break;
-    candidate = normalizeSpelling(candidate + getUnitSurfaceText(unit));
-    if (accepted.has(candidate)) return candidate;
-  }
-
-  return baseSpelling;
-}
-
 function targetOccurrencesUseAllowedSpellings(occurrences, enabledSpellings) {
   const allowed = new Set(normalizeSpellings(enabledSpellings));
   return allowed.size > 0 && occurrences.every((occurrence) => allowed.has(occurrence.spelling));
-}
-
-function getUnitSurfaceText(unit) {
-  const explicit = String(unit?.text || "").trim().normalize("NFC");
-  if (explicit) return explicit;
-  return String(GRAPH_BY_ID.get(String(unit?.graph || ""))?.label || "").normalize("NFC");
 }
 
 function normalizeSpellings(values) {

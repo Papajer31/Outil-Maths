@@ -5,6 +5,10 @@ import {
   FALLBACKS
 } from "./graphs-data.js";
 import { GRAPH_COMPOSITIONS } from "./compositions-data.js";
+import {
+  listPublicImageAssets,
+  getPublicImageAssetUrl
+} from "../../shared/public-api.js";
 
 export const INPUT_MODES = Object.freeze({
   GRAPHEMES: "graphemes",
@@ -45,8 +49,11 @@ const HOMOGRAPH_HINTS = Object.freeze({
   y_y: "y",
   y_ii: "ii"
 });
+const GRAPH_IMAGE_BUCKET = "images";
 
 let WORD_CATALOG = [];
+let graphImageUrlsBySlug = new Map();
+let graphImageCatalogPromise = null;
 
 export function setWordCatalog(words) {
   WORD_CATALOG = normalizeWordCatalog(words);
@@ -95,10 +102,41 @@ export function getGraphFilename(id) {
   return getGraphAsset(id);
 }
 
+export async function ensureGraphImageCatalog({ force = false } = {}) {
+  if (force) graphImageCatalogPromise = null;
+  if (graphImageCatalogPromise) return graphImageCatalogPromise;
+
+  graphImageCatalogPromise = listPublicImageAssets()
+    .then((rows) => {
+      const nextUrls = new Map();
+
+      for (const row of (Array.isArray(rows) ? rows : [])) {
+        const slug = String(row?.slug || "").trim().toLowerCase();
+        const storagePath = String(row?.storage_path || "").trim();
+        if (!slug || !storagePath) continue;
+
+        const publicUrl = getPublicImageAssetUrl(storagePath, { bucket: GRAPH_IMAGE_BUCKET });
+        if (publicUrl) nextUrls.set(slug, publicUrl);
+      }
+
+      graphImageUrlsBySlug = nextUrls;
+      return new Map(graphImageUrlsBySlug);
+    })
+    .catch((error) => {
+      graphImageCatalogPromise = null;
+      throw error;
+    });
+
+  return graphImageCatalogPromise;
+}
+
 export function getGraphImageUrl(id) {
   const asset = getGraphAsset(id);
   if (!asset) return "";
-  return new URL(`../../shared/tool-assets/images/graphs/${asset}`, import.meta.url).href;
+  const slug = asset.replace(/\.[a-z0-9]+$/i, "").trim().toLowerCase();
+  return graphImageUrlsBySlug.get(`grapheme_${slug}`)
+    || graphImageUrlsBySlug.get(slug)
+    || "";
 }
 
 export function visibleTextOfGraph(id) {

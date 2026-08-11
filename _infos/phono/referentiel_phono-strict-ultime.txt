@@ -1,0 +1,179 @@
+# ============================================================
+# RÉFÉRENTIEL MINIMAL DES PHONÈMES — BANQUE ULTIME
+# ============================================================
+#
+# Principe : ce fichier ne contient que les cibles phonémiques simples
+# nécessaires pour analyser les 4 714 mots de la banque.
+#
+# codes = unités de la banque qui réalisent directement la cible.
+# inclus_dans = macros grapho-phonologiques utilisées dans la banque
+#               qui contiennent aussi ce phonème, sans constituer elles-mêmes
+#               des phonèmes (ex. oi = /w/+/a/, x = /k/+/s/).
+#
+# IMPORTANT : la banque ne distingue actuellement pas /o/ de /ɔ/,
+# ni /ø/ de /œ/. Ces deux paires restent donc fusionnées ici pour
+# conserver un référentiel opérationnel fidèle aux données.
+# Les séparer strictement exigerait de recoder les mots concernés.
+# ============================================================
+
+# ------------------------------------------------------------
+# VOYELLES ORALES
+# ------------------------------------------------------------
+
+[a]|(a)
+graphies = a/à/â
+codes = a
+inclus_dans = oi/oy
+
+[i]|(i)
+graphies = i/î/ï/y
+codes = i/y_i
+inclus_dans = i_ij/ill_ij/y_ij
+
+[y]|(u)
+graphies = u/û/ü
+codes = u
+
+[u]|(ou)
+graphies = ou/où/oû
+codes = ou
+
+[e]|(é)
+graphies = é/e/ê/er/ez/ai
+codes = e_aigu/e_ferme/e_circonflexe_ferme/er/ez/ai_ferme
+inclus_dans = ay_ferme
+
+[ɛ]|(è)
+graphies = è/ê/e/ë/ai/ei/et
+codes = e_grave/e_circonflexe/e_ouvert/ai_ouvert/ei/et_ouvert
+inclus_dans = ay
+
+[ə]|(e schwa)
+graphies = e
+codes = e_schwa
+
+[ø];[œ]|(eu)
+graphies = eu/eû/œu/u
+codes = eu/oeu/u_eu
+
+[o];[ɔ]|(o)
+graphies = o/ô/au/eau
+codes = o/au/eau
+
+
+# ------------------------------------------------------------
+# VOYELLES NASALES
+# ------------------------------------------------------------
+
+[ɑ̃]|(an)
+graphies = an/am/en/em
+codes = an/am/en_an/em
+
+[ɔ̃]|(on)
+graphies = on/om
+codes = on/om
+
+[ɛ̃]|(in)
+graphies = in/im/ain/ein/en/ym
+codes = in/im/ain/ein/en_in/ym
+inclus_dans = oin
+
+[œ̃]|(un)
+graphies = un/um
+codes = un/um
+
+
+# ------------------------------------------------------------
+# SEMI-VOYELLES
+# ------------------------------------------------------------
+
+[j]|(y)
+graphies = i/ï/y/il/ill
+codes = i_yod/y_yod/il_yod/ill
+inclus_dans = ay/ay_ferme/i_ij/ill_ij/oy/y_ij
+
+[ɥ]|(uw)
+graphies = u
+codes = u_glisse
+
+[w]|(ouw)
+graphies = ou/w
+codes = ou_glisse/w_w
+inclus_dans = oi/oin/oy
+
+
+# ------------------------------------------------------------
+# CONSONNES
+# ------------------------------------------------------------
+
+[p]|(p)
+graphies = p/pp
+codes = p/pp
+
+[b]|(b)
+graphies = b
+codes = b
+
+[t]|(t)
+graphies = t/tt/th
+codes = t/tt/th
+
+[d]|(d)
+graphies = d/dd
+codes = d/dd
+
+[k]|(k)
+graphies = c/cc/k/qu/ch
+codes = c_k/cc/k/qu/ch_k
+inclus_dans = x_ks
+
+[g]|(g)
+graphies = g/gg/gu
+codes = g_g/gg/gu
+inclus_dans = x_gz
+
+[f]|(f)
+graphies = f/ff/ph
+codes = f/ff/ph
+
+[v]|(v)
+graphies = v/w
+codes = v/w_v
+
+[s]|(s)
+graphies = s/ss/c/ç/sc/t
+codes = s_s/ss/c_s/ç/sc/t_s
+inclus_dans = x_ks
+
+[z]|(z)
+graphies = z/s/x
+codes = z/s_z/x_z
+inclus_dans = x_gz
+
+[ʃ]|(ch)
+graphies = ch
+codes = ch
+
+[ʒ]|(j)
+graphies = j/g/ge
+codes = j/g_j/ge
+
+[m]|(m)
+graphies = m/mm
+codes = m/mm
+
+[n]|(n)
+graphies = n/nn
+codes = n/nn
+
+[ɲ]|(gn)
+graphies = gn
+codes = gn
+
+[l]|(l)
+graphies = l/ll
+codes = l/ll
+
+[ʁ]|(r)
+graphies = r/rr
+codes = r/rr

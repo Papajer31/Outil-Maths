@@ -37,14 +37,13 @@ function normalizeUnicode(value){
 }
 
 function normalizeSlug(value){
+  // Le slug est un identifiant lexical, pas un slug de fichier.
+  // On conserve donc les diacritiques : « cache » et « caché » doivent
+  // pouvoir coexister dans phonology_words.
   return normalizeUnicode(value)
-    .toLowerCase()
-    .replace(/œ/g, "oe")
-    .replace(/æ/g, "ae")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR")
     .replace(/[’']/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
 }
 
@@ -172,27 +171,117 @@ function createIssue({ line, code, message, source = "", severity = "error" }){
   return { line, code, message, source, severity };
 }
 
+function splitOptionalPrefix(rawValue){
+  const value = normalizeUnicode(rawValue).trim();
+  if (!value.startsWith("(")) {
+    return { prefix: "", word: value, isValid: true };
+  }
+
+  const closeIndex = value.indexOf(")");
+  if (closeIndex <= 1) {
+    return { prefix: "", word: value, isValid: false };
+  }
+
+  const prefix = normalizeUnicode(value.slice(1, closeIndex).trim());
+  const word = normalizeUnicode(value.slice(closeIndex + 1).trim());
+  const hasNestedParenthesis = prefix.includes("(") || prefix.includes(")");
+  return {
+    prefix,
+    word,
+    isValid: Boolean(prefix && word && !hasNestedParenthesis)
+  };
+}
+
 function parseWordLine(sourceLine, lineNumber){
-  const separatorIndex = sourceLine.indexOf("|");
-  if (separatorIndex <= 0 || separatorIndex === sourceLine.length - 1) {
+  const columns = sourceLine.split("|");
+  if (columns.length < 2 || columns.length > 4 || columns.some((column, index) => index < 2 && !column.trim())) {
     return {
       row: null,
       issues: [createIssue({
         line: lineNumber,
         code: "invalid_line",
-        message: "La ligne doit utiliser le format mot|u/n/i/t/é/s.",
+        message: "La ligne doit utiliser le format mot|u/n/i/t/é/s|sy/lla/ba/tion|familiarite (syllabation et familiarité restent tolérées comme absentes pour les anciennes banques).",
         source: sourceLine
       })]
     };
   }
 
-  const word = normalizeUnicode(sourceLine.slice(0, separatorIndex).trim());
-  const unitsSource = normalizeUnicode(sourceLine.slice(separatorIndex + 1).trim());
+  const displayWordSource = normalizeUnicode(columns[0].trim());
+  const unitsSource = normalizeUnicode(columns[1].trim());
+  const hasSyllabationColumn = columns.length >= 3;
+  const syllablesSource = hasSyllabationColumn ? normalizeUnicode(columns[2].trim()) : "";
+  const hasFamiliarityColumn = columns.length === 4;
+  const familiaritySource = hasFamiliarityColumn ? normalizeUnicode(columns[3].trim()) : "";
   const issues = [];
   const warnings = [];
+  const parsedDisplay = splitOptionalPrefix(displayWordSource);
+  const prefix = parsedDisplay.prefix;
+  const word = parsedDisplay.word;
+
+  if (!parsedDisplay.isValid) {
+    issues.push(createIssue({
+      line: lineNumber,
+      code: "invalid_prefix",
+      message: "Le préfixe optionnel doit utiliser le format « (texte) mot », par exemple « (un) abricot ».",
+      source: sourceLine
+    }));
+  }
 
   if (!word) {
     issues.push(createIssue({ line: lineNumber, code: "missing_word", message: "Le mot est vide.", source: sourceLine }));
+  }
+
+  let familiarity = 50;
+  if (hasFamiliarityColumn) {
+    if (!/^\d{1,3}$/.test(familiaritySource)) {
+      issues.push(createIssue({
+        line: lineNumber,
+        code: "invalid_familiarity",
+        message: "La familiarité doit être un entier compris entre 0 et 100.",
+        source: sourceLine
+      }));
+    } else {
+      familiarity = Number(familiaritySource);
+      if (!Number.isInteger(familiarity) || familiarity < 0 || familiarity > 100) {
+        issues.push(createIssue({
+          line: lineNumber,
+          code: "invalid_familiarity",
+          message: "La familiarité doit être un entier compris entre 0 et 100.",
+          source: sourceLine
+        }));
+      }
+    }
+  }
+
+  const syllables = [];
+  if (hasSyllabationColumn) {
+    if (!syllablesSource) {
+      issues.push(createIssue({
+        line: lineNumber,
+        code: "missing_syllabation",
+        message: "La troisième colonne de syllabation est vide.",
+        source: sourceLine
+      }));
+    } else {
+      const syllableTokens = syllablesSource.split("/").map((token) => normalizeUnicode(token.trim()));
+      if (syllableTokens.some((token) => !token)) {
+        issues.push(createIssue({
+          line: lineNumber,
+          code: "empty_syllable",
+          message: "La syllabation contient une syllabe vide.",
+          source: sourceLine
+        }));
+      } else if (syllableTokens.join("") !== word) {
+        issues.push(createIssue({
+          line: lineNumber,
+          code: "syllabation_word_mismatch",
+          message: `La syllabation « ${syllablesSource} » ne reconstitue pas exactement le mot « ${word} ».`,
+          source: sourceLine
+        }));
+      } else {
+        syllables.push(...syllableTokens);
+      }
+    }
   }
 
   const slug = normalizeSlug(word);
@@ -256,6 +345,21 @@ function parseWordLine(sourceLine, lineNumber){
       break;
     }
 
+    if (explicitText) {
+      const declaredVariants = Array.isArray(GRAPH_BY_ID.get(resolved.graph)?.variants)
+        ? GRAPH_BY_ID.get(resolved.graph).variants
+        : [];
+      if (!declaredVariants.includes(explicitText)) {
+        issues.push(createIssue({
+          line: lineNumber,
+          code: "invalid_graph_override",
+          message: `La graphie explicite « ${explicitText} » n’est pas déclarée pour le code « ${resolved.graph} ».`,
+          source: sourceLine
+        }));
+        break;
+      }
+    }
+
     const surface = findSurfaceAt(word, cursor, getSurfaceCandidates(graphToken, resolved, explicitText));
     if (!surface) {
       const remaining = word.slice(cursor) || "fin du mot";
@@ -309,7 +413,11 @@ function parseWordLine(sourceLine, lineNumber){
     row: issues.length ? null : {
       slug,
       word,
+      prefix,
       units,
+      syllables,
+      familiarity,
+      hasFamiliarity: hasFamiliarityColumn,
       is_active: true,
       sourceLine: lineNumber
     },
@@ -383,7 +491,26 @@ export function parsePhonologyWordsText(source){
       severity: "warning",
       message: `Seulement ${entry.wordCount} mot${entry.wordCount > 1 ? "s" : ""} pour « ${entry.label} » (${entry.graph}).`
     }));
-  const warnings = [...structuralWarnings, ...coverageWarnings];
+  const missingSyllabationCount = uniqueRows.filter((row) => !Array.isArray(row.syllables) || row.syllables.length === 0).length;
+  const syllabationWarnings = missingSyllabationCount > 0
+    ? [createIssue({
+        line: 0,
+        code: "missing_syllabation_rows",
+        severity: "warning",
+        message: `${missingSyllabationCount} mot${missingSyllabationCount > 1 ? "s n’ont" : " n’a"} pas de syllabation. Le format historique reste accepté.`
+      })]
+    : [];
+  const missingFamiliarityCount = uniqueRows.filter((row) => row.hasFamiliarity !== true).length;
+  const familiarityWarnings = missingFamiliarityCount > 0
+    ? [createIssue({
+        line: 0,
+        code: "missing_familiarity_rows",
+        severity: "warning",
+        message: `${missingFamiliarityCount} mot${missingFamiliarityCount > 1 ? "s n’ont" : " n’a"} pas de familiarité lexicale explicite. La valeur neutre 50 sera utilisée.`
+      })]
+    : [];
+  const cleanRows = uniqueRows.map(({ hasFamiliarity, ...row }) => row);
+  const warnings = [...structuralWarnings, ...coverageWarnings, ...syllabationWarnings, ...familiarityWarnings];
 
   if (!uniqueRows.length && !issues.length) {
     issues.push(createIssue({
@@ -394,12 +521,15 @@ export function parsePhonologyWordsText(source){
   }
 
   return {
-    rows: uniqueRows,
+    rows: cleanRows,
     issues,
     warnings,
     coverage,
     stats: {
       wordCount: uniqueRows.length,
+      syllabifiedWordCount: uniqueRows.length - missingSyllabationCount,
+      familiarityWordCount: uniqueRows.length - missingFamiliarityCount,
+      syllableCount: uniqueRows.reduce((total, row) => total + (Array.isArray(row.syllables) ? row.syllables.length : 0), 0),
       graphCount: allGraphIds.size,
       unitCount: uniqueRows.reduce((total, row) => total + row.units.length, 0),
       errorCount: issues.length,
@@ -413,21 +543,31 @@ function escapeSqlText(value){
   return String(value || "").replace(/'/g, "''");
 }
 
-export function buildPhonologyWordsSeedSql(rows, { deactivateMissing = true } = {}){
+export function buildPhonologyWordsSeedSql(rows, {
+  deactivateMissing = true,
+  replaceAll = false
+} = {}){
   const safeRows = Array.isArray(rows) ? rows : [];
   if (!safeRows.length) throw new Error("Aucun mot à exporter.");
 
   const values = safeRows.map((row) => {
     const units = JSON.stringify(row.units);
-    return `  ('${escapeSqlText(row.slug)}', '${escapeSqlText(row.word)}', '${escapeSqlText(units)}'::jsonb, true, now())`;
+    const syllables = JSON.stringify(Array.isArray(row.syllables) ? row.syllables : []);
+    const familiarity = Number.isFinite(Number(row.familiarity))
+      ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+      : 50;
+    return `  ('${escapeSqlText(row.slug)}', '${escapeSqlText(row.word)}', '${escapeSqlText(row.prefix || "")}', '${escapeSqlText(units)}'::jsonb, '${escapeSqlText(syllables)}'::jsonb, ${familiarity}, true, now())`;
   }).join(",\n");
 
   const slugs = safeRows.map((row) => `'${escapeSqlText(row.slug)}'`).join(", ");
-  const deactivateSql = deactivateMissing
+  const replaceSql = replaceAll
+    ? "delete from public.phonology_words where slug is not null;\n\n"
+    : "";
+  const deactivateSql = !replaceAll && deactivateMissing
     ? `\n\nupdate public.phonology_words\nset is_active = false, updated_at = now()\nwhere slug not in (${slugs});`
     : "";
 
-  return `-- Seed générée automatiquement depuis la banque phonologique.\nbegin;\n\ninsert into public.phonology_words (slug, word, units, is_active, updated_at)\nvalues\n${values}\non conflict (slug) do update\nset\n  word = excluded.word,\n  units = excluded.units,\n  is_active = true,\n  updated_at = now();${deactivateSql}\n\ncommit;\n`;
+  return `-- Seed générée automatiquement depuis la banque phonologique.\nbegin;\n\n${replaceSql}insert into public.phonology_words (slug, word, prefix, units, syllables, familiarity, is_active, updated_at)\nvalues\n${values}\non conflict (slug) do update\nset\n  word = excluded.word,\n  prefix = excluded.prefix,\n  units = excluded.units,\n  syllables = excluded.syllables,\n  familiarity = excluded.familiarity,\n  is_active = true,\n  updated_at = now();${deactivateSql}\n\ncommit;\n`;
 }
 
 export function getPhonologyGraphLabel(graphId){

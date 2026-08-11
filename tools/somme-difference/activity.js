@@ -1,4 +1,4 @@
-import { loadToolAssetsManifest } from "../../shared/tool-assets/tool-assets.js";
+import { loadPublicEmojiAssetsById } from "../../shared/public-emoji-assets.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -17,6 +17,13 @@ import {
 
 const ANSWER_PARTS = Object.freeze(["left", "operator", "right", "result"]);
 const NUMERIC_PARTS = Object.freeze(["left", "right", "result"]);
+const TECHNICAL_CHARACTER_URLS = Object.freeze({
+  "images-personnages-mathis": new URL("../../shared/tool-assets/personnages/Mathis.webp", import.meta.url).href,
+  "images-personnages-mathilde": new URL("../../shared/tool-assets/personnages/Mathilde.webp", import.meta.url).href,
+  "images-personnages-mathieu": new URL("../../shared/tool-assets/personnages/Mathieu.webp", import.meta.url).href,
+  "images-personnages-mathea": new URL("../../shared/tool-assets/personnages/Mathea.webp", import.meta.url).href
+});
+
 let stylesInjected = false;
 
 export function createActivity(initialContext = {}) {
@@ -112,7 +119,7 @@ function createRuntimeState(initialContext = {}) {
     drawingAbortController: null,
     resizeObserver: null,
     responseAbortController: null,
-    manifest: null,
+    emojiAssetsById: new Map(),
     assetsLoadingPromise: null,
     currentSettings: normalizeSettings(initialContext?.settings),
     currentQuestion: null,
@@ -157,7 +164,7 @@ function renderShell(state) {
 }
 
 async function loadNextQuestion(state) {
-  await ensureManifestLoaded(state);
+  await ensureEmojiAssetsLoaded(state);
   state.answerRevealed = false;
   state.answerDisplayMode = "correction";
   state.answerParts = createEmptyAnswerParts();
@@ -177,13 +184,24 @@ async function loadNextQuestion(state) {
   syncValidateState(state);
 }
 
-async function ensureManifestLoaded(state) {
-  if (state.manifest) return state.manifest;
+async function ensureEmojiAssetsLoaded(state) {
+  if (state.emojiAssetsById.size) return state.emojiAssetsById;
   if (state.assetsLoadingPromise) return state.assetsLoadingPromise;
-  state.assetsLoadingPromise = loadToolAssetsManifest().then((manifest) => {
-    state.manifest = manifest;
-    return manifest;
-  });
+
+  state.assetsLoadingPromise = loadPublicEmojiAssetsById()
+    .then((assetsById) => {
+      state.emojiAssetsById = assetsById;
+      return state.emojiAssetsById;
+    })
+    .catch((error) => {
+      console.error("Impossible de charger les émojis depuis Supabase.", error);
+      state.emojiAssetsById = new Map();
+      return state.emojiAssetsById;
+    })
+    .finally(() => {
+      state.assetsLoadingPromise = null;
+    });
+
   return state.assetsLoadingPromise;
 }
 
@@ -196,6 +214,7 @@ function renderQuestion(state) {
   if (state.workspaceEl) {
     state.workspaceEl.innerHTML = renderWorkspaceMarkup(state);
     state.sceneEl = state.workspaceEl.querySelector(".sd-scene");
+    revealLoadedEmojiImages(state.workspaceEl, ".sd-object--image");
   }
   renderResponseArea(state, { readOnly: false });
   setupDrawingLayer(state);
@@ -267,16 +286,16 @@ function renderCharacterRow(state, { role, character, count, object }) {
 }
 
 function renderCharacter(state, character, role) {
-  const asset = character?.assetId ? state.manifest?.assetsById?.get(character.assetId) : null;
-  if (asset?.url) {
-    return `<img class="sd-character sd-character--${escapeHtml(role)}" src="${escapeHtml(asset.url)}" alt="${escapeHtml(character.name)}" draggable="false" loading="eager" decoding="async">`;
+  const assetUrl = character?.assetId ? TECHNICAL_CHARACTER_URLS[character.assetId] : "";
+  if (assetUrl) {
+    return `<img class="sd-character sd-character--${escapeHtml(role)}" src="${escapeHtml(assetUrl)}" alt="${escapeHtml(character.name)}" draggable="false" loading="eager" decoding="async">`;
   }
   return `<div class="sd-character sd-character--placeholder sd-character--${escapeHtml(role)}"><span>${escapeHtml(getInitials(character?.name))}</span></div>`;
 }
 
 function renderCollection(count, object, state = null) {
   const safeCount = Math.max(0, Math.min(99, Math.floor(Number(count) || 0)));
-  const asset = object?.assetId ? state?.manifest?.assetsById?.get(object.assetId) : null;
+  const asset = object?.assetId ? state?.emojiAssetsById?.get(object.assetId) : null;
 
   if (safeCount <= 10) {
     const items = Array.from({ length: safeCount }, (_, index) => renderCollectionObject({
@@ -340,12 +359,24 @@ function renderCollectionObject({ object, asset, index, groupEnd = false }) {
 
   if (asset?.url) {
     return `
-      <img class="${escapeHtml(classes)}" src="${escapeHtml(asset.url)}" alt="${escapeHtml(label)}" draggable="false" loading="eager" decoding="async">
+      <img class="${escapeHtml(classes)}" src="${escapeHtml(asset.url)}" alt="" aria-hidden="true" draggable="false" loading="eager" decoding="async">
     `;
   }
   return `
     <span class="${escapeHtml(classes)}" aria-label="${escapeHtml(label)}">${escapeHtml(object?.fallback || "●")}</span>
   `;
+}
+
+function revealLoadedEmojiImages(root, selector) {
+  if (!root) return;
+  root.querySelectorAll(selector).forEach((image) => {
+    const reveal = () => image.classList.add("is-loaded");
+    if (image.complete && image.naturalWidth > 0) {
+      reveal();
+      return;
+    }
+    image.addEventListener("load", reveal, { once: true });
+  });
 }
 
 function isGroupEnd(index, totalCount) {

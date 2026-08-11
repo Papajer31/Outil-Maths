@@ -46,14 +46,41 @@ function normalizeSlug(value){
     .slice(0, 120);
 }
 
-function slugFromFile(file){
-  const name = String(file?.name || "").replace(/\.[^.]+$/, "");
-  return normalizeSlug(name);
+function fileNameWithoutExtension(file){
+  return String(file?.name || "").replace(/\.[^.]+$/, "").trim();
 }
 
-function humanizeSlug(slug){
-  const label = String(slug || "").replace(/[_-]+/g, " ").trim();
-  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "Image";
+function normalizeBatchPrefix(value){
+  const normalized = String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[’']/g, "-")
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/-+/g, "-")
+    .replace(/^[-_]+/, "");
+  if (!normalized) return "";
+  return /[-_]$/.test(normalized) ? normalized : `${normalized}_`;
+}
+
+function slugFromFile(file, prefix = ""){
+  return normalizeSlug(`${prefix}${fileNameWithoutExtension(file)}`);
+}
+
+function displayNameFromFile(file){
+  return fileNameWithoutExtension(file) || "Image";
+}
+
+function normalizeDestinationPath(value){
+  return String(value || "")
+    .replace(/\\+/g, "/")
+    .replace(/>+/g, "/")
+    .split("/")
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "." && part !== "..")
+    .join("/")
+    .slice(0, 500);
 }
 
 function normalizedExtension(file, mimeType){
@@ -73,6 +100,20 @@ function normalizedExtension(file, mimeType){
 
 function relativeSourcePath(file){
   return String(file?.webkitRelativePath || file?.name || "").replace(/\\+/g, "/").replace(/^\/+/, "");
+}
+
+function relativeSourceFolderPath(file){
+  const path = relativeSourcePath(file);
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 2) return "";
+  return parts.slice(1, -1).join("/");
+}
+
+function joinDestinationPath(basePath, relativeFolderPath, preserveSubfolders){
+  const base = normalizeDestinationPath(basePath);
+  const relative = preserveSubfolders ? normalizeDestinationPath(relativeFolderPath) : "";
+  if (!relative) return base;
+  return normalizeDestinationPath(`${base || "À classer"}/${relative}`);
 }
 
 function deriveTags(file){
@@ -123,6 +164,8 @@ function existingHash(asset){
 function isMigrationMissingError(error){
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("metadata")
+    || message.includes("upsert_system_image_asset_as_admin")
+    || message.includes("could not find the function")
     || message.includes("bucket not found")
     || message.includes("row-level security")
     || message.includes("violates row-level security")
@@ -142,8 +185,12 @@ export function createSystemImagesImportDialog({
   let folderInput = null;
   let reportHost = null;
   let importButton = null;
+  let prefixInput = null;
+  let destinationInput = null;
+  let preserveSubfoldersInput = null;
   let selectedFiles = [];
   let analysisRows = [];
+  let analyzedOptions = null;
   let isAnalyzing = false;
   let isImporting = false;
 
@@ -181,8 +228,29 @@ export function createSystemImagesImportDialog({
           <span class="system-images-import-selection" data-system-images-selection>Aucune image sélectionnée</span>
         </div>
 
+        <div class="system-images-import-options">
+          <label class="system-images-import-option">
+            <span>Préfixe technique facultatif</span>
+            <input type="text" maxlength="60" placeholder="Ex. grapheme_" data-system-image-prefix>
+            <small>Ajouté devant l’identifiant de tout le lot, sans modifier le nom affiché.</small>
+          </label>
+          <label class="system-images-import-option">
+            <span>Dossier de destination</span>
+            <input type="text" maxlength="500" placeholder="Ex. Cartons graphèmes" data-system-image-destination>
+            <small>Créé sous Ressources système → Images s’il n’existe pas. Vide : À classer.</small>
+          </label>
+          <label class="system-images-import-option system-images-import-option--checkbox">
+            <span>Arborescence du dossier sélectionné</span>
+            <span class="system-images-import-checkbox-row">
+              <input type="checkbox" data-system-image-preserve-subfolders checked>
+              <span>Recréer les sous-dossiers</span>
+            </span>
+            <small>Ex. « animaux/chat.webp » sera importé dans « destination/animaux ».</small>
+          </label>
+        </div>
+
         <div class="system-images-import-hint">
-          Le nom du fichier devient l’identifiant de l’image : <strong>chat.webp → chat</strong>. Les sous-dossiers deviennent des tags. Les nouvelles images apparaissent dans <strong>Ressources système → Images → À classer</strong>, puis peuvent être rangées par glisser-déposer. Un fichier portant le même identifiant remplace proprement l’ancienne version sans perdre son classement.
+          Le nom affiché reprend exactement le nom du fichier sans extension. L’identifiant est normalisé et peut recevoir le préfixe du lot : <strong>ail.webp + grapheme_ → grapheme_ail</strong>. Les sous-dossiers sont recréés et restent aussi enregistrés comme tags. Un remplacement conserve le classement et le nom visible déjà choisis, sauf si un dossier de destination est explicitement indiqué.
         </div>
 
         <div class="system-images-import-report" aria-live="polite">
@@ -205,6 +273,8 @@ export function createSystemImagesImportDialog({
     folderInput = overlay.querySelector("[data-system-image-folder]");
     reportHost = overlay.querySelector(".system-images-import-report");
     importButton = overlay.querySelector("[data-action='import-system-images']");
+    prefixInput = overlay.querySelector("[data-system-image-prefix]");
+    destinationInput = overlay.querySelector("[data-system-image-destination]");
 
     overlay.querySelectorAll("[data-close-system-images-import]").forEach((element) => element.addEventListener("click", close));
     overlay.querySelector("[data-action='choose-system-image-files']")?.addEventListener("click", () => filesInput?.click());
@@ -213,6 +283,9 @@ export function createSystemImagesImportDialog({
     importButton?.addEventListener("click", () => void importImages());
     filesInput?.addEventListener("change", () => setSelectedFiles(filesInput.files));
     folderInput?.addEventListener("change", () => setSelectedFiles(folderInput.files));
+    prefixInput?.addEventListener("input", invalidateAnalysis);
+    destinationInput?.addEventListener("input", invalidateAnalysis);
+    preserveSubfoldersInput?.addEventListener("change", invalidateAnalysis);
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") close();
     });
@@ -235,9 +308,34 @@ export function createSystemImagesImportDialog({
     overlay.setAttribute("aria-hidden", "true");
   }
 
+  function getImportOptions(){
+    const rawPrefix = String(prefixInput?.value || "").trim();
+    const prefix = normalizeBatchPrefix(rawPrefix);
+    return {
+      rawPrefix,
+      prefix,
+      prefixIsValid: !rawPrefix || Boolean(prefix),
+      destinationPath: normalizeDestinationPath(destinationInput?.value || ""),
+      preserveSubfolders: preserveSubfoldersInput?.checked !== false
+    };
+  }
+
+  function invalidateAnalysis(){
+    if (!analysisRows.length && !analyzedOptions) return;
+    analysisRows = [];
+    analyzedOptions = null;
+    if (importButton) importButton.disabled = true;
+    if (reportHost) {
+      reportHost.innerHTML = selectedFiles.length
+        ? '<div class="dashboard-activity-empty-state">Les options ont changé. Clique de nouveau sur <strong>Analyser</strong>.</div>'
+        : '<div class="dashboard-activity-empty-state">Choisis plusieurs images ou un dossier complet.</div>';
+    }
+  }
+
   function setSelectedFiles(fileList){
     selectedFiles = Array.from(fileList || []).filter(Boolean);
     analysisRows = [];
+    analyzedOptions = null;
     const label = overlay.querySelector("[data-system-images-selection]");
     const analyzeButton = overlay.querySelector("[data-action='analyze-system-images']");
     if (label) {
@@ -259,6 +357,9 @@ export function createSystemImagesImportDialog({
     importButton.disabled = true;
     reportHost.innerHTML = '<div class="dashboard-activity-empty-state">Analyse des fichiers et comparaison avec Supabase…</div>';
     try {
+      const options = getImportOptions();
+      if (!options.prefixIsValid) throw new Error("Le préfixe technique ne contient aucun caractère utilisable.");
+      analyzedOptions = options;
       const existingRows = await listImageAssetsAsAdmin?.();
       const existingBySlug = new Map((Array.isArray(existingRows) ? existingRows : []).map((row) => [String(row?.slug || "").trim().toLowerCase(), row]));
       const rows = [];
@@ -266,7 +367,7 @@ export function createSystemImagesImportDialog({
 
       for (const file of selectedFiles) {
         const mimeType = inferMimeType(file);
-        const slug = slugFromFile(file);
+        const slug = slugFromFile(file, options.prefix);
         const sourcePath = relativeSourcePath(file);
         const row = {
           file,
@@ -274,7 +375,12 @@ export function createSystemImagesImportDialog({
           sourcePath,
           mimeType,
           tags: deriveTags(file),
-          title: humanizeSlug(slug),
+          title: displayNameFromFile(file),
+          destinationPath: joinDestinationPath(
+            options.destinationPath,
+            relativeSourceFolderPath(file),
+            options.preserveSubfolders
+          ),
           sizeBytes: Math.max(0, Number(file.size) || 0),
           width: 0,
           height: 0,
@@ -317,8 +423,9 @@ export function createSystemImagesImportDialog({
       renderAnalysis();
     } catch (error) {
       console.error(error);
+      analyzedOptions = null;
       const message = isMigrationMissingError(error)
-        ? "Les migrations 22 puis 23 doivent être exécutées dans Supabase avant le premier import."
+        ? "Les migrations 22, 23 puis 24 doivent être exécutées dans Supabase avant cet import."
         : String(error?.message || "Analyse impossible.");
       reportHost.innerHTML = `<div class="system-images-import-error"><strong>Analyse impossible.</strong><span>${escapeHtml(message)}</span></div>`;
       showToast?.(message, { isError: true, duration: 7000 });
@@ -346,8 +453,9 @@ export function createSystemImagesImportDialog({
       return `
         <tr>
           <td><img class="system-images-import-preview" src="${escapeAttr(previewUrl)}" alt=""></td>
-          <td><strong>${escapeHtml(row.slug || "—")}</strong><div class="system-images-import-path" title="${escapeAttr(row.sourcePath)}">${escapeHtml(row.sourcePath)}</div></td>
-          <td>${escapeHtml(row.mimeType || "—")}</td>
+          <td><strong>${escapeHtml(row.title || "Image")}</strong><div class="system-images-import-path" title="${escapeAttr(row.sourcePath)}">${escapeHtml(row.sourcePath)}</div></td>
+          <td><strong>${escapeHtml(row.slug || "—")}</strong></td>
+          <td>${escapeHtml(row.destinationPath || "À classer")}</td>
           <td>${escapeHtml(formatBytes(row.sizeBytes))}${row.width && row.height ? `<div>${row.width} × ${row.height}</div>` : ""}</td>
           <td>${escapeHtml(row.tags.join(", ") || "—")}</td>
           <td><span class="system-images-import-status is-${escapeAttr(row.status)}">${escapeHtml(status)}</span></td>
@@ -365,7 +473,7 @@ export function createSystemImagesImportDialog({
       </div>
       <div class="system-images-import-table-wrap">
         <table class="system-images-import-table">
-          <thead><tr><th>Aperçu</th><th>Identifiant</th><th>Format</th><th>Taille</th><th>Tags</th><th>État</th></tr></thead>
+          <thead><tr><th>Aperçu</th><th>Nom affiché</th><th>Identifiant</th><th>Destination</th><th>Taille</th><th>Tags</th><th>État</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
@@ -387,9 +495,13 @@ export function createSystemImagesImportDialog({
   async function importImages(){
     const rows = analysisRows.filter((row) => row.status === "new" || row.status === "update");
     if (!rows.length || isImporting || analysisRows.some((row) => row.status === "error")) return;
+    const destinationLabel = analyzedOptions?.destinationPath || "À classer";
+    const folderDetail = analyzedOptions?.preserveSubfolders
+      ? " Les sous-dossiers du dossier sélectionné seront recréés."
+      : "";
     const confirmed = await openDashboardConfirmDialog({
       title: "Importer la banque d’images",
-      message: `${rows.length} image${rows.length > 1 ? "s" : ""} seront envoyée${rows.length > 1 ? "s" : ""} dans le bucket public « images ». Les anciennes versions remplacées seront supprimées après mise à jour de la base.`,
+      message: `${rows.length} image${rows.length > 1 ? "s" : ""} seront envoyée${rows.length > 1 ? "s" : ""} dans le bucket public « images », à partir du dossier « ${destinationLabel} ».${folderDetail} Les anciennes versions remplacées seront supprimées après mise à jour de la base.`,
       confirmLabel: "Importer"
     });
     if (!confirmed) return;
@@ -409,6 +521,7 @@ export function createSystemImagesImportDialog({
           storage_path: row.storagePath,
           tags: row.tags,
           notes: row.title,
+          folder_path: row.destinationPath || "",
           metadata: {
             content_hash: row.hash,
             original_name: String(row.file?.name || ""),
@@ -417,7 +530,10 @@ export function createSystemImagesImportDialog({
             size_bytes: row.sizeBytes,
             width: row.width,
             height: row.height,
-            imported_at: new Date().toISOString()
+            imported_at: new Date().toISOString(),
+            import_prefix: analyzedOptions?.prefix || "",
+            import_destination: row.destinationPath || "",
+            preserve_subfolders: analyzedOptions?.preserveSubfolders === true
           },
           previous_storage_path: String(row.previous?.storage_path || "")
         });

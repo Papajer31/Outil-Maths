@@ -80,7 +80,7 @@
 
 .phonology-import-summary{
   display:grid;
-  grid-template-columns:repeat(4, minmax(0, 1fr));
+  grid-template-columns:repeat(6, minmax(0, 1fr));
   gap:8px;
 }
 
@@ -108,11 +108,11 @@
   font-size:13px;
 }
 
-.phonology-import-summary.is-valid > div:nth-child(3) strong{
+.phonology-import-summary.is-valid > div:nth-child(5) strong{
   color:#70d995;
 }
 
-.phonology-import-summary.is-invalid > div:nth-child(3) strong{
+.phonology-import-summary.is-invalid > div:nth-child(5) strong{
   color:#ff7c7c;
 }
 
@@ -198,6 +198,26 @@
   white-space:nowrap;
 }
 
+
+.phonology-import-sync-options{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:10px;
+  margin:0;
+  padding:0;
+  border:0;
+  flex:0 0 auto;
+}
+
+.phonology-import-sync-options legend{
+  position:absolute;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+  clip:rect(0 0 0 0);
+  white-space:nowrap;
+}
+
 .phonology-import-sync-option{
   display:flex;
   align-items:flex-start;
@@ -225,6 +245,15 @@
   color:var(--muted);
 }
 
+.phonology-import-sync-option.is-destructive{
+  border-color:rgba(255, 102, 102, .42);
+  background:rgba(210, 58, 58, .08);
+}
+
+.phonology-import-sync-option.is-destructive strong{
+  color:#ff9a9a;
+}
+
 .phonology-import-actions{
   display:flex;
   align-items:center;
@@ -245,6 +274,10 @@
   .phonology-import-layout{
     grid-template-columns:1fr;
     grid-template-rows:minmax(280px, 1fr) minmax(300px, 1fr);
+  }
+
+  .phonology-import-sync-options{
+    grid-template-columns:1fr;
   }
 }
 

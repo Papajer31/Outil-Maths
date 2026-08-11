@@ -1,4 +1,4 @@
-import { loadToolAssetsManifest } from "../../shared/tool-assets/tool-assets.js";
+import { listPublicEmojiAssets } from "../../shared/public-emoji-assets.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -118,7 +118,6 @@ function createRuntimeState(initialContext = {}) {
     studentAnswerSnapshot: "",
     correctionSnapshot: "",
     currentSettings: normalizeSettings(initialContext?.settings),
-    manifest: null,
     emojiAssets: [],
     assetsLoadingPromise: null,
     responseAbortController: null,
@@ -180,10 +179,14 @@ async function ensureEmojiAssetsLoaded(state) {
   if (state.emojiAssets.length) return state.emojiAssets;
   if (state.assetsLoadingPromise) return state.assetsLoadingPromise;
 
-  state.assetsLoadingPromise = loadToolAssetsManifest()
-    .then((manifest) => {
-      state.manifest = manifest;
-      state.emojiAssets = getCollectionEmojiAssets(manifest);
+  state.assetsLoadingPromise = listPublicEmojiAssets()
+    .then((assets) => {
+      state.emojiAssets = getCollectionEmojiAssets(assets);
+      return state.emojiAssets;
+    })
+    .catch((error) => {
+      console.error("Impossible de charger les émojis depuis Supabase.", error);
+      state.emojiAssets = [];
       return state.emojiAssets;
     })
     .finally(() => {
@@ -205,6 +208,7 @@ function renderQuestion(state) {
     state.questionAreaEl.innerHTML = renderQuestionMarkup(state.currentQuestion);
   }
   renderResponses(state);
+  revealLoadedEmojiImages(state.root, ".collection-item");
   scheduleCollectionCloudOverlapCheck(state.root);
 }
 
@@ -608,7 +612,8 @@ function renderCollectionCloud(collection = {}, { className = "collection-displa
         <img
           class="collection-item"
           src="${escapeHtml(item.src)}"
-          alt="${escapeHtml(item.alt)}"
+          alt=""
+          aria-hidden="true"
           draggable="false"
           loading="eager"
           decoding="async"
@@ -617,6 +622,18 @@ function renderCollectionCloud(collection = {}, { className = "collection-displa
       `).join("")}
     </div>
   `;
+}
+
+function revealLoadedEmojiImages(root, selector) {
+  if (!root) return;
+  root.querySelectorAll(selector).forEach((image) => {
+    const reveal = () => image.classList.add("is-loaded");
+    if (image.complete && image.naturalWidth > 0) {
+      reveal();
+      return;
+    }
+    image.addEventListener("load", reveal, { once: true });
+  });
 }
 
 function teardownBindings(state) {

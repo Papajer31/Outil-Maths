@@ -9,6 +9,7 @@ import {
   evaluateWordAttempt,
   evaluateLetterAttempt,
   buildStudentGraphTiles,
+  ensureGraphImageCatalog,
   getGraphImageUrl,
   getGraphFallbackDisplay,
   getGraphLabel,
@@ -249,7 +250,10 @@ export function createActivity(initialContext = {}) {
       state.container = container;
       syncRuntimeState(state, context ?? state.latestContext);
       await injectActivityStyles();
-      await ensurePhonologyWordCatalog();
+      await Promise.all([
+        ensurePhonologyWordCatalog(),
+        ensureGraphImageCatalog().catch(() => new Map())
+      ]);
       renderShell();
       bindStaticEvents();
       updatePromptDisplay();
@@ -262,7 +266,10 @@ export function createActivity(initialContext = {}) {
 
       syncRuntimeState(state, context ?? state.latestContext);
       await injectActivityStyles();
-      await ensurePhonologyWordCatalog();
+      await Promise.all([
+        ensurePhonologyWordCatalog(),
+        ensureGraphImageCatalog().catch(() => new Map())
+      ]);
 
       if (!state.dom.root || !state.dom.root.isConnected || state.dom.root.dataset.responseUi !== state.responseUi) {
         renderShell();

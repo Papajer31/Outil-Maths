@@ -1,0 +1,131 @@
+.gts-group{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  align-items:stretch;
+}
+
+.gts-entry-block{
+  display:flex;
+  flex-direction:row;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+}
+
+.gts-entry-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:0 1 auto;
+}
+
+.gts-entry-input{
+  flex:0 1 190px;
+  min-width:120px;
+  height:42px;
+  padding:0 13px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;
+  background:rgba(255,255,255,.045);
+  color:var(--text);
+  font:inherit;
+  font-size:17px;
+  outline:0;
+}
+
+.gts-entry-input:focus{
+  border-color:rgba(255,216,94,.78);
+  box-shadow:0 0 0 3px rgba(255,216,94,.10);
+}
+
+.gts-entry-block--exclude .gts-entry-input:focus{
+  border-color:rgba(255,112,112,.72);
+  box-shadow:0 0 0 3px rgba(255,112,112,.10);
+}
+
+.gts-add-button{
+  height:42px;
+  padding:0 16px;
+  border:0;
+  border-radius:10px;
+  background:rgba(255,216,94,.15);
+  box-shadow:inset 0 0 0 1px rgba(255,216,94,.52);
+  color:var(--text);
+  font:inherit;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.gts-add-button:hover{
+  background:rgba(255,216,94,.22);
+}
+
+.gts-add-button--exclude{
+  background:rgba(255,112,112,.10);
+  box-shadow:inset 0 0 0 1px rgba(255,112,112,.48);
+}
+
+.gts-add-button--exclude:hover{
+  background:rgba(255,112,112,.17);
+}
+
+.gts-feedback{
+  min-height:0;
+  color:var(--muted,#667085);
+  font-size:.84rem;
+}
+
+.gts-feedback:empty{
+  display:none;
+}
+
+.gts-feedback.is-error{
+  color:#ff9a9a;
+}
+
+.gts-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+
+.gts-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:38px;
+  padding:0 6px 0 14px;
+  border-radius:999px;
+  background:rgba(255,216,94,.16);
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.72);
+  color:var(--text);
+  font-size:18px;
+  font-weight:650;
+}
+
+.gts-chip--exclude{
+  background:rgba(255,112,112,.12);
+  box-shadow:inset 0 0 0 2px rgba(255,112,112,.58);
+}
+
+.gts-chip button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:30px;
+  height:30px;
+  margin-left:4px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+}
+
+.gts-chip button:hover{
+  background:rgba(255,255,255,.10);
+}

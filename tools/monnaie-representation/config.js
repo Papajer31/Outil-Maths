@@ -260,7 +260,7 @@ function renderDenominationOption(denomination, checked) {
 function renderDenominationFace(denomination) {
   const asset = String(denomination?.asset || "").trim();
   if (!asset) return escapeHtml(denomination?.label ?? "");
-  const src = new URL(`../../shared/tool-assets/images/monnaie/${asset}`, import.meta.url).href;
+  const src = new URL(`../../shared/tool-assets/monnaie/${asset}`, import.meta.url).href;
   return `<img src="${escapeAttr(src)}" alt="${escapeAttr(denomination.label)}" loading="lazy">`;
 }
 

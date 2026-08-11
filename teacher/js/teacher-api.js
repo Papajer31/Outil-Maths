@@ -1251,13 +1251,12 @@ function collectQuizResourceIds(document) {
 
 function hasForbiddenSystemQuizSource(document) {
   const forbiddenKinds = new Set([
-    "resource",
-    "supabase-resource",
-    "personal-resource",
-    "system-resource",
     "local-upload",
     "local-recording",
     "local-file",
+    "site-asset",
+    "system",
+    "asset",
     "blob"
   ]);
   let forbidden = false;
@@ -1276,6 +1275,23 @@ function hasForbiddenSystemQuizSource(document) {
   };
   visit(document);
   return forbidden;
+}
+
+async function assertSystemQuizResourcesAreSystem(resourceIds) {
+  const ids = Array.from(new Set((Array.isArray(resourceIds) ? resourceIds : []).map(normalizeUuid).filter(Boolean)));
+  if (!ids.length) return;
+
+  const { data, error } = await supabase
+    .from("resources")
+    .select("id, is_system")
+    .in("id", ids);
+  if (error) throw error;
+
+  const rows = Array.isArray(data) ? data : [];
+  const allowedIds = new Set(rows.filter((row) => row?.is_system === true).map((row) => normalizeUuid(row.id)).filter(Boolean));
+  if (allowedIds.size !== ids.length || ids.some((id) => !allowedIds.has(id))) {
+    throw new Error("Un quiz système ne peut utiliser que des ressources système.");
+  }
 }
 
 async function syncQuizResourceLinks(quizId, document) {
@@ -1464,9 +1480,10 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
     is_system: isSystem
   });
   const linkedResourceIds = collectQuizResourceIds(document);
-  if (isSystem && (linkedResourceIds.length || hasForbiddenSystemQuizSource(document))) {
-    throw new Error("Un quiz système ne peut utiliser que les ressources système locales du manifest.");
+  if (isSystem && hasForbiddenSystemQuizSource(document)) {
+    throw new Error("Un quiz système ne peut pas utiliser de fichiers locaux au navigateur.");
   }
+  if (isSystem) await assertSystemQuizResourcesAreSystem(linkedResourceIds);
 
   const payload = {
     teacher_space_id: spaceId,
@@ -1496,7 +1513,7 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
   const { data, error } = await query.select(QUIZ_FIELDS).single();
   if (error) throw error;
   const saved = normalizeQuizRecord(data);
-  await syncQuizResourceLinks(saved.id, isSystem ? {} : (saved.document || document));
+  await syncQuizResourceLinks(saved.id, saved.document || document);
   return saved;
 }
 
@@ -1838,9 +1855,26 @@ export async function createResourceSignedUrl(resource, expiresInSeconds = 3600)
   return String(data?.signedUrl || "");
 }
 
-export async function deleteResource(resourceId) {
+export async function deleteResource(resourceId, options = {}) {
   const id = normalizeUuid(resourceId);
   if (!id) throw new Error("Ressource invalide.");
+
+  if (options?.is_system === true) {
+    const { data, error } = await supabase.rpc("delete_system_image_asset_as_admin", {
+      p_resource_id: id
+    });
+    if (error) throw error;
+
+    const bucket = String(data?.storage_bucket || SYSTEM_IMAGE_BUCKET).trim() || SYSTEM_IMAGE_BUCKET;
+    const path = String(data?.storage_path || "").trim();
+    if (path) {
+      const { error: storageError } = await supabase.storage.from(bucket).remove([path]);
+      if (storageError) {
+        console.warn("L’image a été supprimée de la base, mais son fichier Storage n’a pas pu être effacé.", storageError);
+      }
+    }
+    return data && typeof data === "object" ? data : {};
+  }
 
   const { data: resource, error: readError } = await supabase
     .from("resources")
@@ -1863,24 +1897,52 @@ export async function deleteResource(resourceId) {
     const { error: storageError } = await supabase.storage.from(bucket).remove([path]);
     if (storageError) console.warn("La ligne a été supprimée, mais le fichier Storage n’a pas pu être effacé.", storageError);
   }
+  return resource;
 }
 
-export async function syncPhonologyWordsAsAdmin(words, { deactivateMissing = true } = {}) {
+export async function syncPhonologyWordsAsAdmin(words, {
+  deactivateMissing = true,
+  replaceAll = false
+} = {}) {
+  // Préflight volontaire : une ancienne fonction RPC accepterait le JSON
+  // enrichi mais pourrait ignorer silencieusement les nouveaux champs. On
+  // refuse donc la synchronisation tant que le schéma prefix + syllables + familiarity
+  // n’est pas présent (migration 29).
+  const { error: phonologySchemaError } = await supabase
+    .from("phonology_words")
+    .select("prefix, syllables, familiarity")
+    .limit(1);
+  if (phonologySchemaError) throw phonologySchemaError;
+
   const payload = (Array.isArray(words) ? words : []).map((row) => ({
-    slug: String(row?.slug || "").trim().toLowerCase(),
+    slug: String(row?.slug || "").trim().toLocaleLowerCase("fr-FR"),
     word: String(row?.word || "").trim(),
+    prefix: String(row?.prefix || "").trim(),
     units: Array.isArray(row?.units) ? row.units.map((unit) => ({
       graph: String(unit?.graph || "").trim(),
       text: String(unit?.text || "").trim(),
       isSilent: unit?.isSilent === true
     })) : [],
+    syllables: Array.isArray(row?.syllables)
+      ? row.syllables.map((syllable) => String(syllable || "").trim()).filter(Boolean)
+      : [],
+    familiarity: Number.isFinite(Number(row?.familiarity))
+      ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+      : 50,
     is_active: true
   }));
 
-  const { data, error } = await supabase.rpc("sync_phonology_words_as_admin", {
-    p_words: payload,
-    p_deactivate_missing: deactivateMissing === true
-  });
+  const rpcName = replaceAll === true
+    ? "replace_phonology_words_as_admin"
+    : "sync_phonology_words_as_admin";
+  const rpcArgs = replaceAll === true
+    ? { p_words: payload }
+    : {
+        p_words: payload,
+        p_deactivate_missing: deactivateMissing === true
+      };
+
+  const { data, error } = await supabase.rpc(rpcName, rpcArgs);
   if (error) throw error;
   return data && typeof data === "object" ? data : {};
 }
@@ -1945,7 +2007,8 @@ export async function importSystemImageAssetAsAdmin(file, asset = {}) {
     p_storage_path: storagePath,
     p_tags: tags,
     p_notes: String(asset.notes || "").trim(),
-    p_metadata: metadata
+    p_metadata: metadata,
+    p_folder_path: String(asset.folder_path || "").trim()
   });
 
   if (error) {

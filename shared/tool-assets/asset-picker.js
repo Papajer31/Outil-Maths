@@ -1,4 +1,3 @@
-import { listToolAssets } from "./tool-assets.js";
 import { formatToolAssetCategory } from "./labels.js";
 
 let activePicker = null;
@@ -9,7 +8,6 @@ export async function openToolAssetPicker(options = {}) {
   const type = String(options.type || "image").trim().toLowerCase() || "image";
   const title = String(options.title || "Choisir une image").trim();
   const emptyMessage = String(options.emptyMessage || "Aucune ressource disponible.").trim();
-  const includeDefaultAssets = options.includeDefaultAssets !== false;
 
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
@@ -348,25 +346,19 @@ export async function openToolAssetPicker(options = {}) {
 
     searchInput?.addEventListener("input", renderGrid);
 
-    Promise.all([
-      includeDefaultAssets ? listToolAssets({ type }) : Promise.resolve([]),
-      typeof options.loadAssets === "function"
-        ? Promise.resolve(options.loadAssets({ type }))
-        : Promise.resolve(options.assets || [])
-    ])
-      .then(([defaultAssets, extraResult]) => {
-        const extraAssets = Array.isArray(extraResult) ? extraResult : extraResult?.assets;
-        if (!Array.isArray(extraResult)) {
-          folderPaths = Array.isArray(extraResult?.folderPaths) ? extraResult.folderPaths : folderPaths;
-          usesUnifiedTree = extraResult?.unifiedTree === true || usesUnifiedTree;
+    (typeof options.loadAssets === "function"
+      ? Promise.resolve(options.loadAssets({ type }))
+      : Promise.resolve(options.assets || []))
+      .then((result) => {
+        const provided = Array.isArray(result) ? result : result?.assets;
+        if (!Array.isArray(result)) {
+          folderPaths = Array.isArray(result?.folderPaths) ? result.folderPaths : folderPaths;
+          usesUnifiedTree = result?.unifiedTree === true || usesUnifiedTree;
         }
-        const systemAssets = (Array.isArray(defaultAssets) ? defaultAssets : [])
-          .map((asset) => normalizePickerAsset(asset, "system"))
-          .filter(Boolean);
-        const providedAssets = (Array.isArray(extraAssets) ? extraAssets : [])
+        const providedAssets = (Array.isArray(provided) ? provided : [])
           .map((asset) => normalizePickerAsset(asset, asset?.scope || "personal"))
           .filter((asset) => asset && asset.type === type);
-        assets = dedupeAssets([...providedAssets, ...systemAssets]);
+        assets = dedupeAssets(providedAssets);
         selectedScope = usesUnifiedTree
           ? "all"
           : (assets.some((asset) => asset.scope === "personal") ? "personal" : "system");

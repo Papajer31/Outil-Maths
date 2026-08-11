@@ -1000,7 +1000,7 @@ function renderMoneyFace(state, item) {
   }
   const asset = String(item?.asset || "").trim();
   if (!asset) return escapeHtml(item?.label ?? "");
-  const src = new URL(`../../shared/tool-assets/images/monnaie/${asset}`, import.meta.url).href;
+  const src = new URL(`../../shared/tool-assets/monnaie/${asset}`, import.meta.url).href;
   return `<img src="${escapeAttr(src)}" alt="${escapeAttr(item.label)}" draggable="false">`;
 }
 

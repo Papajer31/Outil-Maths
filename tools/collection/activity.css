@@ -142,6 +142,7 @@
 }
 
 .collection-item {
+  visibility: hidden;
   position: absolute;
   left: var(--collection-x, 50%);
   top: var(--collection-y, 50%);
@@ -152,6 +153,10 @@
   -webkit-user-drag: none;
   transform: translate(-50%, -50%) rotate(var(--collection-rotation, 0deg)) scale(var(--collection-scale, 1));
   filter: drop-shadow(0 .35rem .45rem rgba(0,0,0,.18));
+}
+
+.collection-item.is-loaded {
+  visibility: visible;
 }
 
 .collection-responses {

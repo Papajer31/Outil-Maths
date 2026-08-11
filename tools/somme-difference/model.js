@@ -41,18 +41,18 @@ const CHARACTER_POOL = Object.freeze([
   { id: "mathea", name: "Mathea", gender: "f", assetId: "images-personnages-mathea" }
 ]);
 
-// Liste provisoire : une vraie liste blanche commune d'assets emojis pourra la remplacer.
+// Sous-ensemble contrôlé de la liste blanche commune des émojis de collection.
 const COLLECTION_OBJECTS = Object.freeze([
-  { id: "pommes", assetId: "images-emojis-alimentation-pomme", fallback: "🍎", plural: "pommes" },
-  { id: "bananes", assetId: "images-emojis-alimentation-banane", fallback: "🍌", plural: "bananes" },
-  { id: "cerises", assetId: "images-emojis-alimentation-cerise", fallback: "🍒", plural: "cerises" },
-  { id: "fraises", assetId: "images-emojis-alimentation-fraise", fallback: "🍓", plural: "fraises" },
-  { id: "carottes", assetId: "images-emojis-alimentation-carotte", fallback: "🥕", plural: "carottes" },
-  { id: "etoiles", assetId: "images-emojis-meteo-etoile", fallback: "⭐", plural: "étoiles" },
-  { id: "coeurs", assetId: "images-emojis-symboles-coeur", fallback: "❤️", plural: "cœurs" },
-  { id: "crayons", assetId: "images-emojis-bureau-crayon", fallback: "✏️", plural: "crayons" },
-  { id: "ballons", assetId: "images-emojis-celebrations-ballon-baudruche", fallback: "🎈", plural: "ballons" },
-  { id: "chats", assetId: "images-emojis-animaux-chat", fallback: "🐱", plural: "chats" }
+  { id: "pommes", assetId: "emoji_pomme", fallback: "🍎", plural: "pommes" },
+  { id: "bananes", assetId: "emoji_banane", fallback: "🍌", plural: "bananes" },
+  { id: "cerises", assetId: "emoji_cerise", fallback: "🍒", plural: "cerises" },
+  { id: "fraises", assetId: "emoji_fraise", fallback: "🍓", plural: "fraises" },
+  { id: "carottes", assetId: "emoji_carotte", fallback: "🥕", plural: "carottes" },
+  { id: "etoiles", assetId: "emoji_etoile", fallback: "⭐", plural: "étoiles" },
+  { id: "coeurs", assetId: "emoji_coeur", fallback: "❤️", plural: "cœurs" },
+  { id: "crayons", assetId: "emoji_crayon", fallback: "✏️", plural: "crayons" },
+  { id: "ballons", assetId: "emoji_ballon_baudruche", fallback: "🎈", plural: "ballons" },
+  { id: "chats", assetId: "emoji_chat", fallback: "🐱", plural: "chats" }
 ]);
 
 const SUM_INSTRUCTIONS = Object.freeze([

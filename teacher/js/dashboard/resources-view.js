@@ -5,8 +5,6 @@ import {
 } from "./activity-tree.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
-import { loadToolAssetsManifest } from "../../../shared/tool-assets/tool-assets.js";
-import { formatToolAssetFolderName } from "../../../shared/tool-assets/labels.js";
 import { resolveQuizImageSourceUrl } from "../../../shared/quiz-local-image-store.js";
 import { resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
 import { openAudioRecorderDialog } from "./audio-recorder-dialog.js";
@@ -19,13 +17,6 @@ const SYSTEM_IMAGES_ROOT_ROLE = "system_images_root";
 const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
-
-function normalizePath(value){
-  return String(value || "")
-    .replace(/\\+/g, "/")
-    .replace(/^\/+|\/+$/g, "")
-    .trim();
-}
 
 function formatBytes(value){
   const bytes = Math.max(0, Number(value) || 0);
@@ -48,8 +39,8 @@ function formatDuration(value){
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
-function buildSystemCatalogue(manifest){
-  const folders = [
+function createSystemVirtualFolders(){
+  return [
     {
       id: RESOURCE_SYSTEM_IMAGES,
       parent_id: RESOURCE_ROOT_SYSTEM,
@@ -69,71 +60,6 @@ function buildSystemCatalogue(manifest){
       resource_type: "audio"
     }
   ];
-  const folderByPath = new Map([
-    ["image:", RESOURCE_SYSTEM_IMAGES],
-    ["audio:", RESOURCE_SYSTEM_AUDIO]
-  ]);
-  const resources = [];
-  const folderOrderByParent = new Map();
-
-  for (const asset of manifest?.assets || []) {
-    const type = String(asset?.type || "").toLowerCase() === "audio" ? "audio" : "image";
-    const src = normalizePath(asset?.src);
-    if (!src) continue;
-
-    const parts = src.split("/").filter(Boolean);
-    if (parts.length < 2) continue;
-    const folderParts = parts.slice(1, -1);
-    let parentId = type === "audio" ? RESOURCE_SYSTEM_AUDIO : RESOURCE_SYSTEM_IMAGES;
-    let currentPath = "";
-
-    folderParts.forEach((part) => {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-      const pathKey = `${type}:${currentPath}`;
-      let folderId = folderByPath.get(pathKey);
-      if (!folderId) {
-        folderId = `__resource_system_${type}_${encodeURIComponent(currentPath).replace(/%/g, "_").toLowerCase()}`;
-        folderByPath.set(pathKey, folderId);
-        const nextOrder = folderOrderByParent.get(parentId) || 0;
-        folderOrderByParent.set(parentId, nextOrder + 1);
-        folders.push({
-          id: folderId,
-          parent_id: parentId,
-          name: formatToolAssetFolderName(part),
-          raw_name: part,
-          system_path: `${type === "audio" ? "audio" : "images"}/${currentPath}`,
-          display_order: nextOrder,
-          is_system: true,
-          resource_type: type
-        });
-      }
-      parentId = folderId;
-    });
-
-    resources.push({
-      id: String(asset.id),
-      config_name: String(asset.label || asset.id || "Ressource"),
-      title: String(asset.label || asset.id || "Ressource"),
-      folder_id: parentId,
-      display_order: resources.length,
-      scope: "system",
-      is_system: true,
-      type,
-      url: String(asset.url || ""),
-      path: src,
-      alt: String(asset.alt || asset.label || ""),
-      category: String(asset.category || ""),
-      tags: Array.isArray(asset.tags) ? asset.tags : [],
-      mime_type: String(asset.mimeType || asset.mime_type || ""),
-      size_bytes: Math.max(0, Number(asset.sizeBytes ?? asset.size) || 0),
-      width: Math.max(0, Number(asset.width) || 0),
-      height: Math.max(0, Number(asset.height) || 0),
-      duration: Math.max(0, Number(asset.duration) || 0),
-      source: asset
-    });
-  }
-
-  return { folders, resources };
 }
 
 export function createResourcesViewController({
@@ -163,12 +89,8 @@ export function createResourcesViewController({
   let personalResources = [];
   let databaseSystemFolders = [];
   let databaseSystemResources = [];
-  let systemFolders = [];
-  let systemResources = [];
   let personalLoadError = "";
   let currentOpenFolderId = null;
-  let manifestLoaded = false;
-  let manifestError = "";
   let isImporting = false;
   let isRecordingResource = false;
   let isMoving = false;
@@ -221,6 +143,19 @@ export function createResourcesViewController({
   function isLockedSystemFolder(folder){
     const role = String(folder?.metadata?.system_role || "");
     return role === SYSTEM_IMAGES_ROOT_ROLE || role === SYSTEM_IMAGES_UNCLASSIFIED_ROLE;
+  }
+
+  function isEmptySystemUnclassifiedFolder(folder){
+    if (String(folder?.metadata?.system_role || "") !== SYSTEM_IMAGES_UNCLASSIFIED_ROLE) return false;
+    const folderId = normalizeTreeId(folder?.id);
+    if (!folderId) return false;
+    const hasChildFolder = databaseSystemFolders.some((candidate) =>
+      normalizeTreeId(candidate?.parent_id) === folderId
+    );
+    const hasResource = databaseSystemResources.some((resource) =>
+      normalizeTreeId(resource?.folder_id) === folderId
+    );
+    return !hasChildFolder && !hasResource;
   }
 
   function canManageFolder(folder){
@@ -316,6 +251,7 @@ export function createResourcesViewController({
     const systemImagesRootId = getSystemImagesRootId();
     const normalizedDatabaseSystem = databaseSystemFolders
       .filter((folder) => String(folder?.id || "") !== String(systemImagesRootId || ""))
+      .filter((folder) => !isEmptySystemUnclassifiedFolder(folder))
       .map((folder, index) => {
         const actualParentId = normalizeTreeId(folder?.parent_id);
         const managedSystemImage = isDatabaseSystemImageFolder(folder);
@@ -333,7 +269,7 @@ export function createResourcesViewController({
         };
       });
 
-    return [...roots, ...normalizedPersonal, ...systemFolders, ...normalizedDatabaseSystem];
+    return [...roots, ...normalizedPersonal, ...createSystemVirtualFolders(), ...normalizedDatabaseSystem];
   }
 
   function getExplorerResources(){
@@ -363,7 +299,7 @@ export function createResourcesViewController({
         managed_system_image: managedSystemImage
       };
     });
-    return [...normalizedPersonal, ...systemResources, ...normalizedDatabaseSystem];
+    return [...normalizedPersonal, ...normalizedDatabaseSystem];
   }
 
   function buildTreeState(){
@@ -592,7 +528,6 @@ export function createResourcesViewController({
     const isImage = resource.type !== "audio";
     const typeLabel = isImage ? "Image" : "Audio";
     const isManageable = canManageResource(resource);
-    const isPersonal = resource?.is_system !== true;
     const preview = isImage
       ? `<img class="dashboard-resource-preview-image" src="${escapeAttr(resource.url || "")}" alt="${escapeAttr(resource.alt || resource.title || "Image")}" loading="lazy">`
       : `
@@ -607,10 +542,9 @@ export function createResourcesViewController({
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-resource" data-resource-id="${escapeAttr(resourceId)}" title="Renommer la ressource" aria-label="Renommer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
           </button>
-          ${isPersonal ? `
-            <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
-              <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-            </button>` : ""}
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
+            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+          </button>
         </div>
       `;
 
@@ -632,10 +566,6 @@ export function createResourcesViewController({
   }
 
   function renderEmptyState(selectedFolder){
-    if (!manifestLoaded && !selectedFolder) return `<div class="dashboard-activity-empty-state">Chargement de la bibliothèque…</div>`;
-    if (manifestError && isFolderInside(selectedFolder?.id, RESOURCE_ROOT_SYSTEM)) {
-      return `<div class="dashboard-activity-empty-state is-error">${escapeHtml(manifestError)}</div>`;
-    }
     const name = selectedFolder?.name ? ` dans « ${selectedFolder.name} »` : "";
     return `<div class="dashboard-activity-empty-state">Aucune ressource${escapeHtml(name)}.</div>`;
   }
@@ -1040,6 +970,31 @@ export function createResourcesViewController({
     bindRenderedEvents();
   }
 
+  // A rename does not change the explorer structure.  Keep the existing nodes
+  // in place so the scroll position, lazy-loaded previews and drag state are
+  // not needlessly reset.
+  function updateRenderedFolderName(folderId, name){
+    if (!list) return;
+    const safeId = String(folderId || "");
+    list.querySelectorAll("[data-node-type='folder'][data-node-id]").forEach((element) => {
+      if (String(element.dataset.nodeId || "") !== safeId) return;
+      element.querySelectorAll(".dashboard-activity-tree-node-label, .dashboard-activity-tile-title").forEach((label) => {
+        label.textContent = name || "";
+      });
+    });
+  }
+
+  function updateRenderedResourceTitle(resourceId, title){
+    if (!list) return;
+    const safeId = String(resourceId || "");
+    list.querySelectorAll("[data-node-type='resource'][data-node-id]").forEach((element) => {
+      if (String(element.dataset.nodeId || "") !== safeId) return;
+      element.querySelectorAll(".dashboard-resource-tile-title").forEach((label) => {
+        label.textContent = title || "Ressource";
+      });
+    });
+  }
+
   function openNameOverlay({ title, initialValue = "", placeholder = "", confirmLabel = "Enregistrer", onConfirm } = {}){
     const overlay = document.createElement("div");
     overlay.className = "modal";
@@ -1361,7 +1316,7 @@ export function createResourcesViewController({
         if (!updated) throw new Error("Renommage impossible.");
         if (isSystem) databaseSystemFolders = databaseSystemFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
         else personalFolders = personalFolders.map((item) => String(item.id) === String(updated.id) ? updated : item);
-        render();
+        updateRenderedFolderName(updated.id, updated.name || name);
         showToast?.("Dossier renommé.");
       }
     });
@@ -1415,30 +1370,38 @@ export function createResourcesViewController({
           : item;
         if (isSystem) databaseSystemResources = databaseSystemResources.map(merge);
         else personalResources = personalResources.map(merge);
-        render();
+        updateRenderedResourceTitle(updated.id, updated.title || title);
         showToast?.("Ressource renommée.");
       }
     });
   }
 
   async function deletePersonalResource(resourceId){
-    const resource = personalResources.find((item) => String(item.id) === String(resourceId));
-    if (!resource || resource.is_system === true || typeof deleteResource !== "function") return;
+    const personalResource = personalResources.find((item) => String(item.id) === String(resourceId));
+    const systemResource = databaseSystemResources.find((item) => String(item.id) === String(resourceId));
+    const resource = personalResource || systemResource;
+    const isSystem = Boolean(systemResource);
+    if (!resource || !canManageResource(resource) || typeof deleteResource !== "function") return;
+
+    const technicalId = String(resource?.metadata?.image_asset_slug || "").trim();
     const confirmed = await openDashboardConfirmDialog({
-      title:"Supprimer la ressource",
-      message:`Supprimer définitivement la ressource « ${resource.title || "Ressource"} » ?`,
+      title:isSystem ? "Supprimer l’image système" : "Supprimer la ressource",
+      message:isSystem
+        ? `Supprimer définitivement l’image système « ${resource.title || "Image"} »${technicalId ? ` (identifiant : ${technicalId})` : ""} ? Les outils qui utilisent directement cet identifiant ne pourront plus l’afficher.`
+        : `Supprimer définitivement la ressource « ${resource.title || "Ressource"} » ?`,
       confirmLabel:"Supprimer",
       danger:true
     });
     if (!confirmed) return;
     try {
-      await deleteResource(resource.id);
-      personalResources = personalResources.filter((item) => String(item.id) !== String(resource.id));
+      await deleteResource(resource.id, { is_system:isSystem });
+      if (isSystem) databaseSystemResources = databaseSystemResources.filter((item) => String(item.id) !== String(resource.id));
+      else personalResources = personalResources.filter((item) => String(item.id) !== String(resource.id));
       render();
-      showToast?.("Ressource supprimée.");
+      showToast?.(isSystem ? "Image système supprimée." : "Ressource supprimée.");
     } catch (error) {
-      const message = error?.code === "23503"
-        ? "Cette ressource est encore utilisée par un quiz et ne peut pas être supprimée."
+      const message = String(error?.code || "") === "23503"
+        ? "Cette image est encore utilisée par un quiz et ne peut pas être supprimée."
         : (error?.message || "Suppression impossible.");
       showToast?.(message, { isError: true });
     }
@@ -1624,23 +1587,6 @@ export function createResourcesViewController({
     }
   }
 
-  async function loadSystemResources({ force = false } = {}){
-    manifestError = "";
-    try {
-      const manifest = await loadToolAssetsManifest({ force });
-      const catalogue = buildSystemCatalogue(manifest);
-      systemFolders = catalogue.folders;
-      systemResources = catalogue.resources;
-      manifestLoaded = true;
-    } catch (error) {
-      manifestLoaded = true;
-      manifestError = error?.message || "Impossible de charger les ressources système.";
-      systemFolders = buildSystemCatalogue({ assets: [] }).folders;
-      systemResources = [];
-    }
-    render();
-  }
-
   list?.addEventListener("dragover", handleResourceDragOver);
   list?.addEventListener("dragleave", handleResourceDragLeave);
   list?.addEventListener("drop", (event) => { void handleResourceDrop(event); });
@@ -1662,8 +1608,7 @@ export function createResourcesViewController({
         personalLoadError = error?.message || "Impossible de charger les ressources personnelles.";
         showToast?.(personalLoadError, { isError: true });
       }
-      if (!manifestLoaded || forceRefresh) await loadSystemResources({ force: forceRefresh });
-      else render();
+      render();
     },
     render,
     getCurrentFolderId: () => currentOpenFolderId

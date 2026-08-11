@@ -1,0 +1,225 @@
+# ============================================================
+# RÉFÉRENTIEL DES GRAPHÈMES ET COMPOSITIONS GRAPHIQUES
+# syntaxe : code|graphie1;graphie2;graphie3
+# Dans la banque, code=graphie explicite la graphie réellement écrite lorsqu'un code admet plusieurs variantes (ex. i=ï, u=û, a=â).
+# ============================================================
+
+
+# ------------------------------------------------------------
+# VOYELLES ORALES
+# ------------------------------------------------------------
+
+a|a;à;â
+e_a|e
+
+i|i;î;ï
+y_i|y
+
+u|u;û;ü
+eu_u|eu;eû
+
+ou|ou;où;oû
+aou|aou
+oo_ou|oo
+
+e_aigu|é
+e_ferme|e
+e_circonflexe_ferme|ê
+e_trema_ferme|ë
+er|er
+ez|ez
+es_ferme|es
+et_ferme|et
+ai_ferme|ai
+
+e_grave|è
+e_circonflexe|ê
+e_ouvert|e;ë
+ai_ouvert|ai
+ai_circonflexe_ouvert|aî
+ei|ei
+et_ouvert|et
+ey|ey
+
+# SCHWA /ə/
+# Le suffixe _schwa décrit uniquement la valeur phonologique /ə/ lorsque la graphie est réalisée.
+# Il ne dit rien sur la possibilité de supprimer ce schwa dans la parole.
+# Une lettre non prononcée reste notée *lettre dans la banque.
+e_schwa|e
+ai_schwa|ai
+on_schwa|on
+
+eu|eu;eû
+# e_eu = e réellement prononcé /ø/ ou /œ/ (cas lexicaux rares), PAS un schwa.
+e_eu|e
+oeu|œu
+oe|œ
+u_eu|u
+
+o|o;ô
+au|au
+eau|eau
+oo_o|oo
+u_o|u
+
+
+# ------------------------------------------------------------
+# VOYELLES NASALES
+# ------------------------------------------------------------
+
+an|an
+am|am
+en_an|en
+em|em
+aon|aon
+
+on|on
+om|om
+
+in|in
+im|im
+ain|ain
+aim|aim
+ein|ein
+eim|eim
+en_in|en
+yn|yn
+ym|ym
+
+un|un
+um|um
+
+
+# ------------------------------------------------------------
+# SEMI-VOYELLES
+# ------------------------------------------------------------
+
+i_yod|i;ï
+y_yod|y
+il_yod|il
+ill|ill
+ill_ij|ill
+
+u_glisse|u
+
+ou_glisse|ou
+w_w|w
+
+
+# ------------------------------------------------------------
+# CONSONNES
+# ------------------------------------------------------------
+# Convention pédagogique :
+# quand une consonne double représente un seul phonème et constitue
+# une seule unité sélectionnable, la graphie doublée est son propre code
+# (bb, cc, dd, ff, gg, ll, mm, nn, pp, rr, ss, tt, zz, etc.).
+# Si les deux lettres ont des valeurs différentes, elles restent deux unités
+# distinctes dans le mot (ex. accepter : c_k/c_s).
+
+p|p
+pp|pp
+b|b
+bb|bb
+b_p|b
+
+t|t
+tt|tt
+th|th
+
+d|d
+dd|dd
+
+c_k|c
+cc|cc
+k|k
+q|q
+qu|qu
+ck|ck
+cqu|cqu
+ch_k|ch
+
+g_g|g
+gg|gg
+gu|gu
+c_g|c
+gh|gh
+
+f|f
+ff|ff
+ph|ph
+
+v|v
+w_v|w
+
+s_s|s
+ss|ss
+c_s|c
+ç|ç
+sc|sc
+t_s|t
+x_s|x
+
+z|z
+zz|zz
+s_z|s
+x_z|x
+
+ch|ch
+sch|sch
+sh|sh
+
+j|j
+g_j|g
+ge|ge
+
+m|m
+mm|mm
+n|n
+nn|nn
+gn|gn
+l|l
+ll|ll
+r|r
+rr|rr
+
+
+# ------------------------------------------------------------
+# GRAPHIES POLYPHONÉMIQUES
+# Une seule unité graphique code plusieurs phonèmes.
+# ------------------------------------------------------------
+
+i_ij|i
+y_ij|y
+x_ks|x
+x_gz|x
+qu_kw|qu
+oe_wa|oe
+oê_wa|oê
+
+
+# ------------------------------------------------------------
+# COMPOSITIONS PHONOLOGIQUES ET PÉDAGOGIQUES
+# Ces codes correspondent à des groupes graphiques complets.
+# ------------------------------------------------------------
+
+oi|oi;oî
+oy|oy
+ay|ay
+ay_ferme|ay
+ay_ei|ay
+oin|oin
+ui|ui
+ien|ien
+ion|ion
+
+ouil|ouil
+ouille|ouille
+
+ail|ail
+aille|aille
+
+eil|eil
+eille|eille
+
+euil|euil
+euille|euille

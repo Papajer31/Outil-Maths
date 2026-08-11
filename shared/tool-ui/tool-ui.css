@@ -462,3 +462,314 @@ button.tool-choice-button.is-selected:hover:not(:disabled) {
   cursor: default;
 }
 
+
+/* ---------------------------------------------------------
+   Réponse alphabétique + clavier alphabétique commun
+   --------------------------------------------------------- */
+
+.tool-alphabet-answer{
+  cursor:text;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
+}
+
+.tool-alphabet-answer__display{
+  min-width:1ch;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+
+.tool-alphabet-answer.has-placeholder .tool-alphabet-answer__display{
+  color:var(--tool-answer-placeholder-color);
+}
+
+.tool-alphabet-answer:focus-visible{
+  outline:3px solid var(--tool-ui-focus);
+  outline-offset:3px;
+}
+
+.tool-alphabet-keyboard{
+  --tool-alphabet-keyboard-solid-bg:#252d3b;
+  --tool-alphabet-drawer-toggle-width:clamp(45px, 4vw, 58px);
+  position:relative;
+  width:100%;
+  margin-inline:auto;
+  display:flex;
+  flex-direction:column;
+  gap:clamp(8px, 1vh, 12px);
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+.tool-alphabet-keyboard--hidden{
+  display:none !important;
+}
+
+.tool-alphabet-keyboard__row{
+  --tool-alphabet-key-gap:clamp(7px, .7vw, 11px);
+  min-width:0;
+  display:grid;
+  grid-template-columns:repeat(var(--tool-alphabet-key-count), minmax(0, 1fr));
+  gap:var(--tool-alphabet-key-gap);
+}
+
+.tool-alphabet-keyboard__row--vowels{
+  width:min(100%, 900px);
+  align-self:center;
+}
+
+.tool-alphabet-keyboard__row--vowels:has(> .tool-alphabet-keyboard__vowel-key){
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr) calc(var(--tool-alphabet-drawer-toggle-width) - var(--tool-alphabet-key-gap)))
+    repeat(2, minmax(0, 1fr))
+    calc(var(--tool-alphabet-drawer-toggle-width) - var(--tool-alphabet-key-gap));
+}
+
+.tool-alphabet-keyboard__row--vowels:has(> .tool-alphabet-keyboard__vowel-key) > .tool-alphabet-keyboard__vowel-key{
+  grid-column:span 2;
+}
+
+.tool-alphabet-keyboard__row--vowels:has(> .tool-alphabet-keyboard__vowel-key) > .tool-alphabet-keyboard__button--backspace{
+  grid-column:span 2;
+}
+
+.tool-alphabet-keyboard__vowel-key{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) var(--tool-alphabet-drawer-toggle-width);
+  min-width:0;
+  overflow:visible;
+}
+
+.tool-alphabet-keyboard__vowel-key.is-open{
+  z-index:11;
+}
+
+.has-open-accent-drawer .tool-alphabet-keyboard__button,
+.has-open-accent-drawer .tool-alphabet-keyboard__drawer-toggle{
+  opacity:.14;
+}
+
+.has-open-accent-drawer .tool-alphabet-keyboard__vowel-key.is-open .tool-alphabet-keyboard__button,
+.has-open-accent-drawer .tool-alphabet-keyboard__vowel-key.is-open .tool-alphabet-keyboard__drawer-toggle{
+  opacity:1;
+}
+
+.tool-alphabet-keyboard__vowel-key > .tool-alphabet-keyboard__button{
+  width:100%;
+  height:100%;
+  position:relative;
+  z-index:3;
+  border-right-width:2px;
+  border-radius:clamp(12px, 1.1vw, 17px) 0 0 clamp(12px, 1.1vw, 17px);
+  background:var(--tool-alphabet-keyboard-solid-bg);
+}
+
+.tool-alphabet-keyboard__drawer-toggle{
+  position:relative;
+  z-index:3;
+  display:grid;
+  place-items:center;
+  width:100%;
+  min-width:0;
+  height:100%;
+  min-height:100%;
+  padding:0;
+  border-width:3px;
+  border-radius:0 14px 14px 0;
+  background:var(--tool-alphabet-keyboard-solid-bg);
+  box-shadow:none;
+  font-size:clamp(15px, 1.3vw, 20px);
+  font-weight:900;
+  line-height:1;
+  transform:translateX(0);
+  transition:none !important;
+}
+
+.tool-alphabet-keyboard__drawer-toggle:active:not(:disabled){
+  transform:none;
+}
+
+.tool-alphabet-keyboard__vowel-key.is-open > .tool-alphabet-keyboard__drawer-toggle,
+.tool-alphabet-keyboard__vowel-key.is-open > .tool-alphabet-keyboard__drawer-toggle:active:not(:disabled){
+  z-index:6;
+  transform:translateX(var(--tool-alphabet-accent-drawer-width, 0px));
+}
+
+.tool-alphabet-keyboard__accent-drawer{
+  position:absolute;
+  z-index:4;
+  top:0;
+  left:calc(100% - var(--tool-alphabet-drawer-toggle-width));
+  display:flex;
+  align-items:stretch;
+  justify-content:center;
+  gap:0;
+  box-sizing:border-box;
+  height:100%;
+  min-width:max-content;
+  padding:0;
+  border:3px solid var(--tool-ui-panel-border-strong);
+  border-radius:0;
+  background:var(--tool-alphabet-keyboard-solid-bg);
+  box-shadow:0 10px 24px rgba(0,0,0,.28);
+  overflow:hidden;
+  visibility:hidden;
+  pointer-events:none;
+  transform:none;
+  transition:none;
+}
+
+.tool-alphabet-keyboard__accent-drawer.is-open{
+  visibility:visible;
+  pointer-events:auto;
+  transform:none;
+  transition:none;
+}
+
+.tool-alphabet-keyboard__accent-drawer > .tool-alphabet-keyboard__accent-button{
+  align-self:stretch;
+  box-sizing:border-box;
+  width:var(--tool-alphabet-vowel-button-width, clamp(42px, 3.8vw, 54px));
+  min-width:var(--tool-alphabet-vowel-button-width, clamp(42px, 3.8vw, 54px));
+  height:100%;
+  min-height:0;
+  padding:2px 5px;
+  border:0;
+  border-right:2px solid var(--tool-ui-panel-border-strong);
+  border-radius:0;
+  background:var(--tool-alphabet-keyboard-solid-bg);
+  font-size:var(--tool-alphabet-vowel-font-size, clamp(25px, 2vw, 34px));
+}
+
+.tool-alphabet-keyboard__accent-drawer > .tool-alphabet-keyboard__accent-button:last-child{ border-right:0; }
+
+button.tool-alphabet-keyboard__drawer-toggle:hover:not(:disabled),
+button.tool-alphabet-keyboard__accent-button:hover:not(:disabled),
+.tool-alphabet-keyboard__vowel-key > button.tool-alphabet-keyboard__button:hover:not(:disabled){
+  background:#313b4c;
+}
+
+.tool-alphabet-keyboard__button{
+  min-width:0;
+  min-height:clamp(56px, 6.8vh, 74px);
+  padding:5px 7px;
+  border-width:3px;
+  border-radius:clamp(12px, 1.1vw, 17px);
+  font-size:clamp(25px, 2vw, 34px);
+  line-height:1;
+  touch-action:manipulation;
+  transition:border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.tool-alphabet-keyboard__glyph{
+  display:inline-block;
+  transform:translateY(-2px);
+}
+
+.tool-alphabet-keyboard__button:active:not(:disabled){
+  transform:none;
+  background:rgba(255,255,255,.18);
+  box-shadow:0 0 0 3px rgba(255,255,255,.18) inset;
+}
+
+.tool-alphabet-keyboard__vowel-key > .tool-alphabet-keyboard__button:active:not(:disabled),
+.tool-alphabet-keyboard__accent-button:active:not(:disabled),
+.tool-alphabet-keyboard__drawer-toggle:active:not(:disabled){
+  background:#394456;
+}
+
+.tool-alphabet-keyboard__button--backspace{
+  display:grid;
+  place-items:center;
+}
+
+.tool-alphabet-keyboard__button--backspace .material-icon-svg{
+  width:clamp(26px, 2.1vw, 36px);
+  height:clamp(26px, 2.1vw, 36px);
+  fill:currentColor;
+}
+
+.tool-alphabet-keyboard__row--diacritics{
+  width:min(100%, 980px);
+  align-self:center;
+}
+
+.tool-alphabet-keyboard__row--utilities{
+  width:min(100%, 520px);
+  align-self:center;
+}
+
+.tool-alphabet-keyboard__row--utilities .tool-alphabet-keyboard__button{
+  font-size:clamp(20px, 1.5vw, 27px);
+  min-height:clamp(46px, 5.5vh, 58px);
+}
+
+@media (max-width:900px), (max-height:720px){
+  .tool-alphabet-keyboard{
+    gap:6px;
+  }
+
+  .tool-alphabet-keyboard__row{
+    --tool-alphabet-key-gap:5px;
+    gap:var(--tool-alphabet-key-gap);
+  }
+
+  .tool-alphabet-keyboard__drawer-toggle{
+    width:100%;
+    min-width:0;
+    height:100%;
+    font-size:15px;
+  }
+
+  .tool-alphabet-keyboard__accent-drawer{
+    top:0;
+    gap:0;
+    padding:0;
+  }
+
+  .tool-alphabet-keyboard__accent-drawer > .tool-alphabet-keyboard__accent-button{
+    width:var(--tool-alphabet-vowel-button-width, 36px);
+    min-width:var(--tool-alphabet-vowel-button-width, 36px);
+    min-height:0;
+    font-size:var(--tool-alphabet-vowel-font-size, 22px);
+  }
+
+  .tool-alphabet-keyboard__button{
+    min-height:50px;
+    padding:3px 4px;
+    border-width:2px;
+    border-radius:10px;
+    font-size:clamp(22px, 2.6vw, 29px);
+  }
+}
+
+/* Aide pédagogique optionnelle : la touche reste active, seule sa présence
+   dans la réponse attendue est signalée visuellement. */
+.tool-alphabet-keyboard__button.is-highlighted{
+  border-color:var(--tool-ui-accent);
+  background:var(--tool-ui-accent-bg);
+  box-shadow:0 0 0 2px rgba(255,255,255,.08) inset;
+}
+
+.tool-alphabet-keyboard__drawer-toggle.is-highlighted{
+  border-color:var(--tool-ui-accent);
+  background:var(--tool-ui-accent-bg);
+  box-shadow:0 0 0 2px rgba(255,255,255,.08) inset;
+}
+
+.tool-alphabet-keyboard__vowel-key.is-open > .tool-alphabet-keyboard__drawer-toggle.is-highlighted{
+  border-color:var(--tool-ui-panel-border-strong);
+  background:var(--tool-alphabet-keyboard-solid-bg);
+  box-shadow:none;
+}
+
+.tool-alphabet-keyboard__accent-drawer > .tool-alphabet-keyboard__accent-button.is-highlighted{
+  position:relative;
+  z-index:1;
+  border:3px solid var(--tool-ui-accent);
+  border-radius:0;
+  background:var(--tool-ui-accent-bg);
+  box-shadow:0 0 0 2px rgba(255,255,255,.14) inset;
+}

@@ -66,6 +66,7 @@ export function bindFreeDrag(element, options = {}) {
   const disabled = typeof options.disabled === "function" ? options.disabled : () => !!options.disabled;
   const resolveSurface = typeof options.surface === "function" ? options.surface : () => options.surface;
   const signal = options.signal;
+  const positionElement = options.positionElement !== false;
 
   let pointerId = null;
   let startClientX = 0;
@@ -157,7 +158,7 @@ export function bindFreeDrag(element, options = {}) {
     const pointerLocal = clientPointToLocalPoint(surface, event.clientX, event.clientY);
     const nextZ = typeof options.zIndex === "function" ? options.zIndex({ element, event, surface }) : options.zIndex;
 
-    setElementPositionWithoutTransition(element, localRect.left, localRect.top);
+    if (positionElement) setElementPositionWithoutTransition(element, localRect.left, localRect.top);
     if (nextZ != null) element.style.zIndex = String(nextZ);
     dragClasses.forEach((className) => element.classList.add(className));
 
@@ -194,8 +195,10 @@ export function bindFreeDrag(element, options = {}) {
 
     drag.x = x;
     drag.y = y;
-    element.style.left = toCssPx(x);
-    element.style.top = toCssPx(y);
+    if (positionElement) {
+      element.style.left = toCssPx(x);
+      element.style.top = toCssPx(y);
+    }
 
     options.onMove?.({
       element,
