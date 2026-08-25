@@ -60,9 +60,16 @@ export function createActivity(initialContext = {}) {
     },
 
     getShellAnswerDisplayState() {
+      const transitionTargets = state.currentQuestion?.tokenMode === TOKEN_MODES.COMPLETE
+        ? [
+          ...(state.workspaceEl?.querySelectorAll?.(".comparaison-collection-side") || []),
+          state.responsesEl
+        ]
+        : [state.responsesEl];
       return {
         canToggle: canToggleStudentAnswerDisplay(state),
-        mode: canToggleStudentAnswerDisplay(state) ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+        mode: canToggleStudentAnswerDisplay(state) ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+        transitionTargets: transitionTargets.filter(Boolean)
       };
     },
 
@@ -71,7 +78,12 @@ export function createActivity(initialContext = {}) {
       state.latestContext = context ?? state.latestContext;
       syncRuntimeState(state, state.latestContext);
       if (!canToggleStudentAnswerDisplay(state)) return false;
-      state.answerDisplayMode = normalizeAnswerDisplayMode(mode);
+      const nextMode = normalizeAnswerDisplayMode(mode);
+      if (nextMode === state.answerDisplayMode) return true;
+      state.answerDisplayMode = nextMode;
+      if (state.currentQuestion?.tokenMode === TOKEN_MODES.COMPLETE) {
+        updateReviewedCollectionLines(state, nextMode);
+      }
       renderAnswerResult(state);
       return true;
     },
@@ -93,8 +105,8 @@ export function createActivity(initialContext = {}) {
     getAnswerState() {
       if (!state.currentQuestion) return { answered: false, correct: false };
       const evaluation = state.answerRevealed
-        ? evaluateAnswer(state.currentQuestion, state.submittedAnswer)
-        : evaluateAnswer(state.currentQuestion, state.selectedAnswer);
+        ? evaluateCurrentResponse(state, state.submittedAnswer, state.studentPlacedTokensSnapshot)
+        : evaluateCurrentResponse(state, state.selectedAnswer, state.placedTokens);
       return {
         answered: evaluation.answered,
         correct: evaluation.isCorrect
@@ -134,6 +146,7 @@ function createRuntimeState(initialContext = {}) {
     answerDisplayMode: "correction",
     studentAnswerSnapshot: "",
     correctionSnapshot: "",
+    studentPlacedTokensSnapshot: createEmptyPlacedTokens(),
     currentSettings: normalizeSettings(initialContext?.settings),
     responseAbortController: null,
     drawingAbortController: null,
@@ -188,6 +201,7 @@ async function loadNextQuestion(state) {
   state.answerDisplayMode = "correction";
   state.studentAnswerSnapshot = "";
   state.correctionSnapshot = "";
+  state.studentPlacedTokensSnapshot = createEmptyPlacedTokens();
   state.strokes = [];
   state.assistedLinks = [];
   state.assistedRemainderKey = "";
@@ -235,16 +249,24 @@ function renderQuestion(state) {
   setupTokenPlacement(state);
 }
 
-function renderWorkspaceMarkup(state, question, { correction = false } = {}) {
-  const tokenMode = correction ? TOKEN_MODES.DISPLAYED : (question.tokenMode || TOKEN_MODES.DISPLAYED);
-  const traceEnabled = !correction && tokenMode !== TOKEN_MODES.NONE && (question.traceMode === TRACE_MODES.FREE || question.traceMode === TRACE_MODES.ASSISTED);
+function renderWorkspaceMarkup(state, question, { correction = false, answerMode = "" } = {}) {
+  const normalizedAnswerMode = normalizeAnswerDisplayMode(answerMode);
+  const isCompleteReview = question.tokenMode === TOKEN_MODES.COMPLETE && !!answerMode;
+  const isStudentReview = isCompleteReview && normalizedAnswerMode === "student";
+  const isCorrectionReview = isCompleteReview && normalizedAnswerMode === "correction";
+  const tokenMode = isCompleteReview
+    ? TOKEN_MODES.COMPLETE
+    : correction ? TOKEN_MODES.DISPLAYED : (question.tokenMode || TOKEN_MODES.DISPLAYED);
+  const traceEnabled = (isStudentReview || (!correction && !answerMode))
+    && tokenMode !== TOKEN_MODES.NONE
+    && (question.traceMode === TRACE_MODES.FREE || question.traceMode === TRACE_MODES.ASSISTED);
   const bigGroupGaps = Math.max(0, Math.floor((Number(question.bigCount) - 1) / 5));
   const groupsBeforeRemainder = Math.max(0, Math.floor(Number(question.smallCount) / 5));
   const groupsInsideRemainder = countGroupBreaksBetween(Number(question.smallCount), Number(question.bigCount));
 
   return `
-    <div class="comparaison-scene${correction ? " comparaison-scene--correction" : ""}" style="--comparaison-big-count:${escapeHtml(question.bigCount)};--comparaison-small-count:${escapeHtml(question.smallCount)};--comparaison-diff:${escapeHtml(question.difference)};--comparaison-big-group-gaps:${escapeHtml(bigGroupGaps)};--comparaison-groups-before-remainder:${escapeHtml(groupsBeforeRemainder)};--comparaison-groups-inside-remainder:${escapeHtml(groupsInsideRemainder)};">
-      ${correction ? "" : renderSideControls(question, { traceEnabled })}
+    <div class="comparaison-scene${correction || isCorrectionReview ? " comparaison-scene--correction" : ""}${isStudentReview ? " comparaison-scene--student-review" : ""}" style="--comparaison-big-count:${escapeHtml(question.bigCount)};--comparaison-small-count:${escapeHtml(question.smallCount)};--comparaison-diff:${escapeHtml(question.difference)};--comparaison-big-group-gaps:${escapeHtml(bigGroupGaps)};--comparaison-groups-before-remainder:${escapeHtml(groupsBeforeRemainder)};--comparaison-groups-inside-remainder:${escapeHtml(groupsInsideRemainder)};">
+      ${correction || answerMode ? "" : renderSideControls(question, { traceEnabled })}
       <div class="comparaison-rows">
         ${renderCharacterRow(state, question, {
           role: "big",
@@ -252,7 +274,8 @@ function renderWorkspaceMarkup(state, question, { correction = false } = {}) {
           count: question.bigCount,
           assetId: question.bigAssetId,
           tokenCount: question.bigCount,
-          tokenMode
+          tokenMode,
+          answerMode: isCompleteReview ? normalizedAnswerMode : ""
         })}
         ${renderCharacterRow(state, question, {
           role: "small",
@@ -260,17 +283,21 @@ function renderWorkspaceMarkup(state, question, { correction = false } = {}) {
           count: question.smallCount,
           assetId: question.smallAssetId,
           tokenCount: question.smallCount,
-          tokenMode
+          tokenMode,
+          answerMode: isCompleteReview ? normalizedAnswerMode : ""
         })}
       </div>
       ${traceEnabled ? '<canvas class="comparaison-drawing-canvas" id="comparaison_drawing_canvas" aria-label="Zone de tracé libre"></canvas>' : ""}
       ${traceEnabled && question.traceMode === TRACE_MODES.ASSISTED ? '<svg class="comparaison-assisted-remainder-svg" id="comparaison_assisted_remainder_svg" aria-hidden="true" focusable="false"></svg>' : ""}
-      ${correction ? '<canvas class="comparaison-correction-canvas" id="comparaison_correction_canvas" aria-hidden="true"></canvas><svg class="comparaison-correction-remainder-svg" id="comparaison_correction_remainder_svg" aria-hidden="true" focusable="false"></svg>' : ""}
+      ${correction || isCorrectionReview ? '<canvas class="comparaison-correction-canvas" id="comparaison_correction_canvas" aria-hidden="true"></canvas><svg class="comparaison-correction-remainder-svg" id="comparaison_correction_remainder_svg" aria-hidden="true" focusable="false"></svg>' : ""}
     </div>
   `;
 }
 
-function renderCharacterRow(state, question, { role, name, count, assetId, tokenCount, tokenMode }) {
+function renderCharacterRow(state, question, { role, name, count, assetId, tokenCount, tokenMode, answerMode = "" }) {
+  const placedTokens = answerMode
+    ? state.studentPlacedTokensSnapshot?.[role] || []
+    : state.placedTokens?.[role] || [];
   return `
     <div class="comparaison-row comparaison-row--${escapeHtml(role)}">
       <div class="comparaison-character-side">
@@ -278,15 +305,61 @@ function renderCharacterRow(state, question, { role, name, count, assetId, token
         ${renderCharacter(state, { name, assetId, role })}
       </div>
       <div class="comparaison-collection-side">
-        ${renderCollectionLine({
-          role,
-          tokenCount,
-          tokenMode,
-          placedTokens: state.placedTokens?.[role] || []
-        })}
+        ${answerMode
+          ? renderReviewedCollectionLine({ role, expectedCount: tokenCount, placedTokens, answerMode })
+          : renderCollectionLine({ role, tokenCount, tokenMode, placedTokens })}
       </div>
     </div>
   `;
+}
+
+function renderReviewedCollectionLine({ role, expectedCount, placedTokens = [], answerMode = "student" }) {
+  const tokens = Array.isArray(placedTokens) ? placedTokens : [];
+  const submittedCount = tokens.length;
+  const targetCount = Math.max(0, Math.floor(Number(expectedCount) || 0));
+  const isStudent = normalizeAnswerDisplayMode(answerMode) === "student";
+  const lineCount = isStudent ? Math.max(1, submittedCount, targetCount) : Math.max(1, targetCount);
+  const lineGroupGaps = Math.max(0, Math.floor((lineCount - 1) / 5));
+  const items = [];
+
+  if (isStudent) {
+    for (let index = 0; index < submittedCount; index += 1) {
+      const token = tokens[index];
+      const extraClass = index >= targetCount ? " comparaison-token--feedback-error" : "";
+      items.push(renderToken({
+        role,
+        index,
+        targetCount: lineCount,
+        placed: true,
+        tokenId: token?.id || `${role}-placed-${index}`,
+        extraClass
+      }));
+    }
+    for (let index = submittedCount; index < targetCount; index += 1) {
+      items.push(renderMissingTokenFeedback({ role, index, targetCount: lineCount }));
+    }
+  } else {
+    for (let index = 0; index < targetCount; index += 1) {
+      const correctionClass = index >= submittedCount ? " comparaison-token--feedback-correction" : "";
+      items.push(renderToken({
+        role,
+        index,
+        targetCount: lineCount,
+        tokenId: `${role}-${index}`,
+        extraClass: correctionClass
+      }));
+    }
+  }
+
+  return `
+    <div class="comparaison-token-line comparaison-token-line--${escapeHtml(role)} comparaison-token-line--complete comparaison-token-line--review" style="--comparaison-line-count:${escapeHtml(lineCount)};--comparaison-line-group-gaps:${escapeHtml(lineGroupGaps)};" data-comparaison-token-line="${escapeHtml(role)}" aria-label="${isStudent ? "Réponse de l’élève" : "Correction"} : ${escapeHtml(isStudent ? submittedCount : targetCount)} jetons">
+      ${items.join("")}
+    </div>
+  `;
+}
+
+function renderMissingTokenFeedback({ role, index, targetCount }) {
+  return `<span class="comparaison-token comparaison-token--missing comparaison-token--feedback-error${isGroupEnd(index, targetCount) ? " comparaison-token--group-end" : ""}" data-token-role="${escapeHtml(role)}" data-token-index="${escapeHtml(index)}" aria-label="Jeton manquant"></span>`;
 }
 
 function renderSpeechBubble({ name, count }) {
@@ -404,10 +477,10 @@ function renderNextSpot({ role, index, lineCount }) {
   `;
 }
 
-function renderToken({ role, index, targetCount = 0, placed = false, tokenId = "" }) {
+function renderToken({ role, index, targetCount = 0, placed = false, tokenId = "", extraClass = "" }) {
   const id = tokenId || `${role}-${index}`;
   return `
-    <span class="comparaison-token comparaison-token--${escapeHtml(role)}${placed ? " comparaison-token--placed" : ""}${isGroupEnd(index, targetCount) ? " comparaison-token--group-end" : ""}" data-token-role="${escapeHtml(role)}" data-token-index="${escapeHtml(index)}" data-token-id="${escapeHtml(id)}" aria-label="Jeton ${escapeHtml(index + 1)}"></span>
+    <span class="comparaison-token comparaison-token--${escapeHtml(role)}${placed ? " comparaison-token--placed" : ""}${extraClass}${isGroupEnd(index, targetCount) ? " comparaison-token--group-end" : ""}" data-token-role="${escapeHtml(role)}" data-token-index="${escapeHtml(index)}" data-token-id="${escapeHtml(id)}" aria-label="Jeton ${escapeHtml(index + 1)}"></span>
   `;
 }
 
@@ -1168,8 +1241,40 @@ function createEmptyPlacedTokens() {
   return { big: [], small: [] };
 }
 
+function clonePlacedTokens(placedTokens = createEmptyPlacedTokens()) {
+  return {
+    big: Array.isArray(placedTokens?.big) ? placedTokens.big.map((token) => ({ ...token })) : [],
+    small: Array.isArray(placedTokens?.small) ? placedTokens.small.map((token) => ({ ...token })) : []
+  };
+}
+
+function evaluatePlacedTokens(question = {}, placedTokens = createEmptyPlacedTokens()) {
+  if (question?.tokenMode !== TOKEN_MODES.COMPLETE) {
+    return { required: false, isCorrect: true, bigCorrect: true, smallCorrect: true };
+  }
+  const bigCorrect = (placedTokens?.big?.length || 0) === Number(question.bigCount || 0);
+  const smallCorrect = (placedTokens?.small?.length || 0) === Number(question.smallCount || 0);
+  return {
+    required: true,
+    isCorrect: bigCorrect && smallCorrect,
+    bigCorrect,
+    smallCorrect
+  };
+}
+
+function evaluateCurrentResponse(state, answer = "", placedTokens = state.placedTokens) {
+  const numeric = evaluateAnswer(state.currentQuestion, answer);
+  const tokens = evaluatePlacedTokens(state.currentQuestion, placedTokens);
+  return {
+    ...numeric,
+    numeric,
+    tokens,
+    isCorrect: numeric.isCorrect && tokens.isCorrect
+  };
+}
+
 function requestReveal(state) {
-  const wasCorrect = evaluateAnswer(state.currentQuestion, state.selectedAnswer).isCorrect;
+  const wasCorrect = evaluateCurrentResponse(state, state.selectedAnswer, state.placedTokens).isCorrect;
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
@@ -1185,27 +1290,105 @@ function revealAnswer(state) {
   state.submittedAnswer = state.selectedAnswer || "";
   state.answerRevealed = true;
 
-  const evaluation = evaluateAnswer(state.currentQuestion, state.submittedAnswer);
+  state.studentPlacedTokensSnapshot = clonePlacedTokens(state.placedTokens);
+  const evaluation = evaluateCurrentResponse(state, state.submittedAnswer, state.studentPlacedTokensSnapshot);
   state.root?.classList.add("comparaison-root--revealed");
   state.root?.classList.toggle("comparaison-root--correct", evaluation.isCorrect);
   state.root?.classList.toggle("comparaison-root--incorrect", !evaluation.isCorrect);
 
   state.studentAnswerSnapshot = String(state.submittedAnswer || "");
   state.correctionSnapshot = String(state.currentQuestion.correctAnswer || "");
-  state.answerDisplayMode = "correction";
+  state.answerDisplayMode = evaluation.isCorrect ? "correction" : "student";
   teardownPlacement(state);
   teardownDrawing(state);
-  renderCorrectionWorkspace(state);
+  renderAnswerWorkspace(state);
   renderAnswerResult(state);
   syncValidateState(state);
+}
+
+function renderAnswerWorkspace(state) {
+  if (!state.workspaceEl || !state.currentQuestion) return;
+  const isCompleteMode = state.currentQuestion.tokenMode === TOKEN_MODES.COMPLETE;
+  if (!isCompleteMode) {
+    renderCorrectionWorkspace(state);
+    return;
+  }
+
+  teardownCorrection(state);
+  teardownDrawing(state);
+  const mode = normalizeAnswerDisplayMode(state.answerDisplayMode);
+  state.workspaceEl.innerHTML = renderWorkspaceMarkup(state, state.currentQuestion, { answerMode: mode });
+  state.sceneEl = state.workspaceEl.querySelector(".comparaison-scene");
+  if (mode === "student") setupFrozenStudentDrawingLayer(state);
+  else setupCorrectionLayer(state);
+}
+
+function updateReviewedCollectionLines(state, answerMode) {
+  const question = state.currentQuestion;
+  const scene = state.sceneEl;
+  if (!question || !scene) {
+    renderAnswerWorkspace(state);
+    return;
+  }
+
+  teardownCorrection(state);
+  teardownDrawing(state);
+
+  const mode = normalizeAnswerDisplayMode(answerMode);
+  scene.classList.toggle("comparaison-scene--student-review", mode === "student");
+  scene.classList.toggle("comparaison-scene--correction", mode === "correction");
+  ["big", "small"].forEach((role) => {
+    const collectionSide = scene.querySelector(`.comparaison-row--${role} .comparaison-collection-side`);
+    if (!collectionSide) return;
+    const expectedCount = role === "big" ? question.bigCount : question.smallCount;
+    collectionSide.innerHTML = renderReviewedCollectionLine({
+      role,
+      expectedCount,
+      placedTokens: state.studentPlacedTokensSnapshot?.[role] || [],
+      answerMode: mode
+    });
+  });
+
+  scene.querySelectorAll(
+    "#comparaison_drawing_canvas, #comparaison_assisted_remainder_svg, #comparaison_correction_canvas, #comparaison_correction_remainder_svg"
+  ).forEach((element) => element.remove());
+
+  if (mode === "student") {
+    const traceEnabled = question.traceMode === TRACE_MODES.FREE || question.traceMode === TRACE_MODES.ASSISTED;
+    if (traceEnabled) {
+      scene.insertAdjacentHTML("beforeend", '<canvas class="comparaison-drawing-canvas" id="comparaison_drawing_canvas" aria-label="Zone de tracé libre"></canvas>');
+      if (question.traceMode === TRACE_MODES.ASSISTED) {
+        scene.insertAdjacentHTML("beforeend", '<svg class="comparaison-assisted-remainder-svg" id="comparaison_assisted_remainder_svg" aria-hidden="true" focusable="false"></svg>');
+      }
+    }
+    setupFrozenStudentDrawingLayer(state);
+    return;
+  }
+
+  scene.insertAdjacentHTML(
+    "beforeend",
+    '<canvas class="comparaison-correction-canvas" id="comparaison_correction_canvas" aria-hidden="true"></canvas><svg class="comparaison-correction-remainder-svg" id="comparaison_correction_remainder_svg" aria-hidden="true" focusable="false"></svg>'
+  );
+  setupCorrectionLayer(state);
 }
 
 function renderCorrectionWorkspace(state) {
   if (!state.workspaceEl || !state.currentQuestion) return;
   teardownCorrection(state);
+  teardownDrawing(state);
   state.workspaceEl.innerHTML = renderWorkspaceMarkup(state, state.currentQuestion, { correction: true });
   state.sceneEl = state.workspaceEl.querySelector(".comparaison-scene");
   setupCorrectionLayer(state);
+}
+
+function setupFrozenStudentDrawingLayer(state) {
+  state.canvas = state.workspaceEl?.querySelector?.("#comparaison_drawing_canvas") || null;
+  state.assistedRemainderSvg = state.workspaceEl?.querySelector?.("#comparaison_assisted_remainder_svg") || null;
+  if (!state.canvas) return;
+  state.canvasContext = state.canvas.getContext("2d");
+  syncCanvasSize(state);
+  state.resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => syncCanvasSize(state)) : null;
+  state.resizeObserver?.observe?.(state.canvas);
 }
 
 function setupCorrectionLayer(state) {
@@ -1353,11 +1536,13 @@ function renderAnswerResult(state) {
 
   const showStudentAnswer = canToggleStudentAnswerDisplay(state) && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
   const value = showStudentAnswer ? state.studentAnswerSnapshot : state.correctionSnapshot;
-  const evaluation = evaluateAnswer(state.currentQuestion, state.studentAnswerSnapshot);
+  const numericEvaluation = evaluateAnswer(state.currentQuestion, state.studentAnswerSnapshot);
   const className = [
     "comparaison-numeric-answer",
     "comparaison-numeric-answer--readonly",
-    evaluation.isCorrect ? "is-correct" : "is-incorrect"
+    showStudentAnswer
+      ? (numericEvaluation.isCorrect ? "is-correct" : "is-incorrect")
+      : (numericEvaluation.isCorrect ? "is-correct" : "is-correction")
   ].filter(Boolean).join(" ");
 
   state.responsesEl.className = "comparaison-responses comparaison-responses--write comparaison-responses--result";
@@ -1382,7 +1567,10 @@ function renderAnswerResult(state) {
 
 function canToggleStudentAnswerDisplay(state) {
   if (!state.answerRevealed) return false;
-  return String(state.studentAnswerSnapshot || "") !== String(state.correctionSnapshot || "");
+  const numericDiffers = String(state.studentAnswerSnapshot || "") !== String(state.correctionSnapshot || "");
+  const tokensDiffer = state.currentQuestion?.tokenMode === TOKEN_MODES.COMPLETE
+    && !evaluatePlacedTokens(state.currentQuestion, state.studentPlacedTokensSnapshot).isCorrect;
+  return numericDiffers || tokensDiffer;
 }
 
 function normalizeAnswerDisplayMode(value) {

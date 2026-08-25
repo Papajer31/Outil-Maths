@@ -55,7 +55,8 @@ export function createActivity(initialContext = {}) {
     getShellAnswerDisplayState() {
       return {
         canToggle: canToggleStudentAnswerDisplay(state),
-        mode: canToggleStudentAnswerDisplay(state) ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+        mode: canToggleStudentAnswerDisplay(state) ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+        transitionTargets: [state.responsesEl]
       };
     },
 
@@ -442,7 +443,8 @@ function requestReveal(state) {
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect
+    wasCorrect,
+    skipValidationReview: state.currentQuestion?.mode !== COLLECTION_MODES.WRITE_NUMBER
   });
   if (requested === false || !state.latestContext?.services?.requestAnswerPhase) {
     revealAnswer(state);
@@ -466,6 +468,7 @@ function revealAnswer(state) {
     renderWriteAnswerResult(state);
   } else {
     renderResponses(state);
+    revealLoadedEmojiImages(state.responsesEl, ".collection-item");
     scheduleCollectionCloudOverlapCheck(state.root);
   }
   syncValidateState(state);
@@ -486,7 +489,9 @@ function renderWriteAnswerResult(state) {
   const className = [
     "collection-numeric-answer",
     "collection-numeric-answer--readonly",
-    evaluation.isCorrect ? "is-correct" : "is-incorrect"
+    showStudentAnswer
+      ? (evaluation.isCorrect ? "is-correct" : "is-incorrect")
+      : (evaluation.isCorrect ? "is-correct" : "is-correction")
   ].filter(Boolean).join(" ");
 
   state.responsesEl.className = "collection-responses collection-responses--write collection-responses--write-result";

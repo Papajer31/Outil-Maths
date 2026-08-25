@@ -226,6 +226,15 @@ input.tool-answer-input:not(.tool-answer-box) {
   box-shadow: 0 0 0 2px rgba(239, 107, 115, .16) inset;
 }
 
+.tool-answer-box.is-correction,
+.tool-answer-input.is-correction,
+.tool-answer-display.is-correction,
+.tool-runtime .tool-is-correction {
+  border-style: dashed;
+  border-color: var(--tool-ui-success);
+  box-shadow: 0 0 0 2px rgba(87, 208, 122, .16) inset;
+}
+
 .tool-choice-grid {
   min-width: 0;
   display: grid;

@@ -531,6 +531,10 @@ export function normalizePedagogicalNode(folder = {}, fallbackOrder = 0) {
     parent_id: parentId,
     name: String(folder?.name || id).trim() || id,
     node_type: nodeType,
+    student_label: String(folder?.student_label || "").trim() || null,
+    student_navigation_mode: String(folder?.student_navigation_mode || "").trim() === "transparent"
+      ? "transparent"
+      : "folder",
     display_order: Number.isFinite(order) ? Math.max(0, Math.trunc(order)) : Math.max(0, Math.trunc(Number(fallbackOrder) || 0)),
     is_active: folder?.is_active !== false
   };

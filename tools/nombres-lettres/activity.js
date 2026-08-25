@@ -495,7 +495,8 @@ function getShellAnswerDisplayState(state) {
     canToggle: canToggleStudentAnswerDisplay(state),
     mode: canToggleStudentAnswerDisplay(state)
       ? normalizeAnswerDisplayMode(state.answerDisplayMode)
-      : "correction"
+      : "correction",
+    transitionTargets: [state.responseShellEl]
   };
 }
 

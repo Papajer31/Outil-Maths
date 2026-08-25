@@ -37,7 +37,7 @@ function inferMimeType(file){
 function normalizeSlug(value){
   return String(value || "")
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[’']/g, "-")
     .replace(/[^a-z0-9_-]+/g, "-")
@@ -46,8 +46,34 @@ function normalizeSlug(value){
     .slice(0, 120);
 }
 
+function normalizeAssociatedWordSlug(value){
+  return String(value || "")
+    .trim()
+    .normalize("NFC")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/[’']/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function fileNameWithoutExtension(file){
-  return String(file?.name || "").replace(/\.[^.]+$/, "").trim();
+  return String(file?.name || "").replace(/\.[^.]+$/, "").trim().normalize("NFC");
+}
+
+function buildUniqueTechnicalSlug(baseSlug, blockedSlugs){
+  const normalizedBase = normalizeSlug(baseSlug);
+  if (!normalizedBase) return "";
+  if (!(blockedSlugs instanceof Set) || !blockedSlugs.has(normalizedBase)) return normalizedBase;
+
+  for (let index = 2; index < 10000; index += 1) {
+    const suffix = `-${index}`;
+    const trimmedBase = normalizedBase.slice(0, Math.max(1, 120 - suffix.length)).replace(/[-_]+$/g, "");
+    const candidate = `${trimmedBase}${suffix}`;
+    if (!blockedSlugs.has(candidate)) return candidate;
+  }
+
+  return "";
 }
 
 function normalizeBatchPrefix(value){
@@ -66,6 +92,10 @@ function normalizeBatchPrefix(value){
 
 function slugFromFile(file, prefix = ""){
   return normalizeSlug(`${prefix}${fileNameWithoutExtension(file)}`);
+}
+
+function associatedWordSlugFromFile(file){
+  return normalizeAssociatedWordSlug(fileNameWithoutExtension(file));
 }
 
 function displayNameFromFile(file){
@@ -164,6 +194,7 @@ function existingHash(asset){
 function isMigrationMissingError(error){
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("metadata")
+    || message.includes("word_slug")
     || message.includes("upsert_system_image_asset_as_admin")
     || message.includes("could not find the function")
     || message.includes("bucket not found")
@@ -176,6 +207,7 @@ export function createSystemImagesImportDialog({
   openButton,
   getIsSuperAdmin,
   listImageAssetsAsAdmin,
+  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin,
   showToast,
   onImported
@@ -360,22 +392,58 @@ export function createSystemImagesImportDialog({
       const options = getImportOptions();
       if (!options.prefixIsValid) throw new Error("Le préfixe technique ne contient aucun caractère utilisable.");
       analyzedOptions = options;
-      const existingRows = await listImageAssetsAsAdmin?.();
-      const existingBySlug = new Map((Array.isArray(existingRows) ? existingRows : []).map((row) => [String(row?.slug || "").trim().toLowerCase(), row]));
+      const [existingRowsRaw, phonologyLexiconRaw] = await Promise.all([
+        listImageAssetsAsAdmin?.(),
+        listPhonologyWordLexiconAsAdmin?.()
+      ]);
+      const existingRows = Array.isArray(existingRowsRaw) ? existingRowsRaw : [];
+      const phonologyLexicon = Array.isArray(phonologyLexiconRaw) ? phonologyLexiconRaw : [];
+      const existingByWordSlug = new Map();
+      const occupiedSlugs = new Set();
+      for (const row of existingRows) {
+        const slug = String(row?.slug || "").trim().toLowerCase();
+        const wordSlug = String(row?.word_slug || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+        if (slug) occupiedSlugs.add(slug);
+        if (wordSlug && !existingByWordSlug.has(wordSlug)) existingByWordSlug.set(wordSlug, row);
+      }
+      const knownWordsBySlug = new Map(
+        phonologyLexicon
+          .map((row) => [
+            String(row?.slug || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR"),
+            String(row?.word || "").trim().normalize("NFC")
+          ])
+          .filter(([slug, word]) => slug && word)
+      );
       const rows = [];
       const slugCounts = new Map();
+      const wordSlugCounts = new Map();
+      const assignedSlugs = new Set();
 
       for (const file of selectedFiles) {
         const mimeType = inferMimeType(file);
-        const slug = slugFromFile(file, options.prefix);
         const sourcePath = relativeSourcePath(file);
+        const title = displayNameFromFile(file);
+        const wordSlug = associatedWordSlugFromFile(file);
+        const associatedWord = knownWordsBySlug.get(wordSlug) || "";
+        const previous = wordSlug ? (existingByWordSlug.get(wordSlug) || null) : null;
+        let slug = String(previous?.slug || "").trim().toLowerCase();
+        if (!slug) {
+          slug = buildUniqueTechnicalSlug(
+            slugFromFile(file, options.prefix),
+            new Set([...occupiedSlugs, ...assignedSlugs])
+          );
+        }
+        if (slug) assignedSlugs.add(slug);
+
         const row = {
           file,
           slug,
+          wordSlug,
+          associatedWord,
           sourcePath,
           mimeType,
           tags: deriveTags(file),
-          title: displayNameFromFile(file),
+          title,
           destinationPath: joinDestinationPath(
             options.destinationPath,
             relativeSourceFolderPath(file),
@@ -386,13 +454,17 @@ export function createSystemImagesImportDialog({
           height: 0,
           hash: "",
           storagePath: "",
-          previous: existingBySlug.get(slug) || null,
+          previous,
           status: "error",
           error: ""
         };
 
-        if (!slug || !/^[a-z0-9][a-z0-9_-]{0,119}$/.test(slug)) {
-          row.error = "Nom de fichier inutilisable comme identifiant.";
+        if (!wordSlug) {
+          row.error = "Nom de fichier inutilisable comme mot associé.";
+        } else if (!associatedWord) {
+          row.error = `Aucun mot de la banque ne correspond à « ${title || wordSlug} ».`;
+        } else if (!slug || !/^[a-z0-9][a-z0-9_-]{0,119}$/.test(slug)) {
+          row.error = "Impossible de générer un identifiant technique unique.";
         } else if (!ACCEPTED_MIME_TYPES.has(mimeType)) {
           row.error = "Format non accepté.";
         } else if (row.sizeBytes <= 0) {
@@ -410,13 +482,17 @@ export function createSystemImagesImportDialog({
             : "new";
         }
         slugCounts.set(slug, (slugCounts.get(slug) || 0) + 1);
+        wordSlugCounts.set(wordSlug, (wordSlugCounts.get(wordSlug) || 0) + 1);
         rows.push(row);
       }
 
       rows.forEach((row) => {
-        if (row.slug && slugCounts.get(row.slug) > 1) {
+        if (row.wordSlug && wordSlugCounts.get(row.wordSlug) > 1) {
           row.status = "error";
-          row.error = "Identifiant présent plusieurs fois dans la sélection.";
+          row.error = "Mot associé présent plusieurs fois dans la sélection.";
+        } else if (row.slug && slugCounts.get(row.slug) > 1) {
+          row.status = "error";
+          row.error = "Identifiant technique présent plusieurs fois dans la sélection.";
         }
       });
       analysisRows = rows;
@@ -425,7 +501,7 @@ export function createSystemImagesImportDialog({
       console.error(error);
       analyzedOptions = null;
       const message = isMigrationMissingError(error)
-        ? "Les migrations 22, 23 puis 24 doivent être exécutées dans Supabase avant cet import."
+        ? "Les migrations 22, 23, 24 puis 30 doivent être exécutées dans Supabase avant cet import."
         : String(error?.message || "Analyse impossible.");
       reportHost.innerHTML = `<div class="system-images-import-error"><strong>Analyse impossible.</strong><span>${escapeHtml(message)}</span></div>`;
       showToast?.(message, { isError: true, duration: 7000 });
@@ -454,6 +530,7 @@ export function createSystemImagesImportDialog({
         <tr>
           <td><img class="system-images-import-preview" src="${escapeAttr(previewUrl)}" alt=""></td>
           <td><strong>${escapeHtml(row.title || "Image")}</strong><div class="system-images-import-path" title="${escapeAttr(row.sourcePath)}">${escapeHtml(row.sourcePath)}</div></td>
+          <td><strong>${escapeHtml(row.associatedWord || row.wordSlug || "—")}</strong><div class="system-images-import-path">${escapeHtml(row.wordSlug || "")}</div></td>
           <td><strong>${escapeHtml(row.slug || "—")}</strong></td>
           <td>${escapeHtml(row.destinationPath || "À classer")}</td>
           <td>${escapeHtml(formatBytes(row.sizeBytes))}${row.width && row.height ? `<div>${row.width} × ${row.height}</div>` : ""}</td>
@@ -473,7 +550,7 @@ export function createSystemImagesImportDialog({
       </div>
       <div class="system-images-import-table-wrap">
         <table class="system-images-import-table">
-          <thead><tr><th>Aperçu</th><th>Nom affiché</th><th>Identifiant</th><th>Destination</th><th>Taille</th><th>Tags</th><th>État</th></tr></thead>
+          <thead><tr><th>Aperçu</th><th>Nom affiché</th><th>Mot associé</th><th>Identifiant</th><th>Destination</th><th>Taille</th><th>Tags</th><th>État</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
@@ -518,6 +595,7 @@ export function createSystemImagesImportDialog({
       try {
         const saved = await importSystemImageAssetAsAdmin(row.file, {
           slug: row.slug,
+          word_slug: row.wordSlug,
           storage_path: row.storagePath,
           tags: row.tags,
           notes: row.title,
@@ -533,7 +611,9 @@ export function createSystemImagesImportDialog({
             imported_at: new Date().toISOString(),
             import_prefix: analyzedOptions?.prefix || "",
             import_destination: row.destinationPath || "",
-            preserve_subfolders: analyzedOptions?.preserveSubfolders === true
+            preserve_subfolders: analyzedOptions?.preserveSubfolders === true,
+            image_word_slug: row.wordSlug,
+            image_word: row.associatedWord || row.wordSlug
           },
           previous_storage_path: String(row.previous?.storage_path || "")
         });

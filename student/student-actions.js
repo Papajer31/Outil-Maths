@@ -9,6 +9,7 @@ import {
   verifyPublicStudentCode,
   getPublicStudentCodeKeypad,
   getPublicStudentActivityProgress,
+  openPublicStudentAdventureDay,
   listPublicMissionsForSpace,
   loadPublicMissionSteps
 } from "./student-api.js";
@@ -57,14 +58,10 @@ export async function submitAccessCode(rawValue){
 
   try {
     await fullscreenPromise;
-    studentState.homeLaunchPhase = "flying";
-    emitRefresh();
-
     const accessCheck = await accessCheckPromise;
     if (accessCheck.error) throw accessCheck.error;
 
     if (!accessCheck.exists){
-      await waitForHomeLaunchFlightComplete();
       studentState.homeMessage = "Code introuvable.";
       studentState.homeLaunchPhase = "";
       studentState.isCheckingAccessCode = false;
@@ -76,7 +73,6 @@ export async function submitAccessCode(rawValue){
     studentState.accessCode = code;
     studentState.homeCode = code;
     studentState.homeMessage = "";
-    studentState.homeLaunchPhase = "flying";
     studentState.isCheckingAccessCode = false;
 
     studentState.activities = [];
@@ -86,6 +82,7 @@ export async function submitAccessCode(rawValue){
     studentState.activityEntry = "";
     studentState.studentCode = "";
     studentState.activitiesMessage = "";
+    resetAdventureState();
     studentState.activitiesMode = DEFAULT_ACTIVITY_MODE;
     studentState.hasChosenActivitiesMode = false;
     studentState.currentActivityFolderId = null;
@@ -107,17 +104,18 @@ export async function submitAccessCode(rawValue){
 
     try {
       await ensureClassDataLoaded({ refreshOnComplete: false, refreshOnStart: false });
-      await waitForHomeLaunchFlightComplete();
       studentState.homeMessage = "";
-      studentState.homeLaunchPhase = "leaving";
+      studentState.homeLaunchPhase = "flying";
       studentState.isCheckingAccessCode = false;
       studentState.isLoadingActivities = false;
+      emitRefresh();
+      await waitForHomeLaunchFlightComplete();
+      studentState.homeLaunchPhase = "leaving";
       emitRefresh();
       await delay(HOME_LAUNCH_FADE_MS);
       studentState.homeLaunchPhase = "";
       window.location.hash = "#/selectmode";
     } catch (err){
-      await waitForHomeLaunchFlightComplete();
       studentState.homeMessage = err?.message || "Impossible de charger les activités et les élèves.";
       studentState.homeLaunchPhase = "";
       studentState.isCheckingAccessCode = false;
@@ -157,6 +155,7 @@ export function goBackHome(){
   studentState.selectedStudents = [];
   studentState.sharedSessionEntry = false;
   studentState.activitiesMessage = "";
+  resetAdventureState();
   studentState.publicStudentsMessage = "";
   window.location.hash = "#/home";
 }
@@ -164,6 +163,132 @@ export function goBackHome(){
 export function openActivityFolder(folderId){
   studentState.currentActivityFolderId = normalizeFolderId(folderId);
   emitRefresh();
+}
+
+export async function openAdventureEntry(){
+  studentState.activityEntry = "adventure";
+  studentState.currentActivityFolderId = null;
+  studentState.selectedConfig = null;
+  studentState.selectedMission = null;
+  clearSelectedActivityMeta();
+  await refreshAdventureDay();
+}
+
+export async function refreshAdventureDay(){
+  const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+  const studentId = Number(participant?.id);
+  const studentCode = String(studentState.studentCode || "").trim();
+
+  studentState.isLoadingAdventure = true;
+  studentState.adventureMessage = "";
+  emitRefresh();
+
+  if (!studentState.accessCode || !Number.isFinite(studentId) || studentId <= 0 || !studentCode) {
+    studentState.adventureDay = null;
+    studentState.adventureMessage = "Impossible d’ouvrir l’Aventure pour cet élève.";
+    studentState.isLoadingAdventure = false;
+    emitRefresh();
+    return null;
+  }
+
+  try {
+    const day = await openPublicStudentAdventureDay(
+      studentState.accessCode,
+      studentId,
+      studentCode
+    );
+    studentState.adventureDay = day && typeof day === "object" ? day : null;
+    studentState.adventureMessage = String(
+      day?.availability === "ready" ? "" : day?.message || "Aucune Aventure disponible pour le moment."
+    ).trim();
+    return studentState.adventureDay;
+  } catch (err) {
+    studentState.adventureDay = null;
+    studentState.adventureMessage = err?.message || "Impossible de charger l’Aventure.";
+    return null;
+  } finally {
+    studentState.isLoadingAdventure = false;
+    emitRefresh();
+  }
+}
+
+export async function startNextAdventurePassage(){
+  if (studentState.isLoadingAdventure) return false;
+
+  let day = studentState.adventureDay;
+  if (!day || day.availability !== "ready") {
+    day = await refreshAdventureDay();
+  }
+  if (!day || day.availability !== "ready" || day.day_status === "completed") return false;
+
+  const requiredPassages = (Array.isArray(day.passages) ? day.passages : [])
+    .filter((passage) => String(passage?.passage_type || "") === "required")
+    .sort((a, b) => Number(a?.passage_number || 0) - Number(b?.passage_number || 0));
+  const passage = requiredPassages.find((item) => !["completed", "skipped"].includes(String(item?.status || ""))) || null;
+
+  if (!passage) {
+    await refreshAdventureDay();
+    return false;
+  }
+
+  const activityId = String(passage?.catalog_activity_id || "").trim();
+  let activity = findLoadedCatalogActivity(activityId);
+
+  if (!activity) {
+    try {
+      const catalogActivities = await listPublicCatalogActivities();
+      activity = getCatalogActivityById(activityId, catalogActivities);
+    } catch {}
+  }
+
+  if (!activity) {
+    studentState.adventureMessage = "L’activité prévue pour cette étape est introuvable.";
+    emitRefresh();
+    return false;
+  }
+
+  const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+  const startedLevel = normalizeCatalogDifficultyLevel(passage?.started_level ?? 2);
+  const configJson = buildCatalogActivityConfig(activity, {
+    activityMode: "individual",
+    responseUi: "boxed",
+    progressMode: "practice",
+    difficultyLevel: startedLevel,
+    context: "adventure",
+    adaptive: true,
+    catalogActivities: studentState.activities
+  });
+
+  if (!configJson) {
+    studentState.adventureMessage = "Impossible de préparer cette activité Aventure.";
+    emitRefresh();
+    return false;
+  }
+
+  studentState.selectedMission = null;
+  clearSelectedActivityMeta();
+  studentState.selectedConfig = {
+    id: activity.id,
+    catalog_activity_id: activity.id,
+    config_name: activity.config_name,
+    catalog_context: "adventure",
+    catalog_difficulty_level: startedLevel,
+    module_key: "tools",
+    config_json: configJson,
+    progression_context: {
+      context: "adventure",
+      catalogActivityId: activity.id,
+      studentId: String(participant?.id || ""),
+      startedLevel,
+      adventureDayId: String(day?.day_id || ""),
+      adventurePassageId: String(passage?.id || ""),
+      passageNumber: Math.max(1, Math.trunc(Number(passage?.passage_number) || 1))
+    }
+  };
+
+  studentState.sharedSessionEntry = false;
+  window.location.hash = "#/sessionstart";
+  return true;
 }
 
 export async function selectActivity(configName){
@@ -323,17 +448,21 @@ export function selectActivitiesMode(mode){
   studentState.selectedStudents = [];
   studentState.sharedSessionEntry = false;
   studentState.activitiesMessage = "";
+  resetAdventureState();
   studentState.publicStudentsMessage = "";
   emitRefresh();
 }
 
 export function selectActivityEntry(entry){
   const safeEntry = String(entry || "").trim().toLowerCase();
-  studentState.activityEntry = ["exploration", "missions"].includes(safeEntry) ? safeEntry : "";
+  studentState.activityEntry = ["exploration", "missions", "adventure"].includes(safeEntry) ? safeEntry : "";
   studentState.currentActivityFolderId = null;
   studentState.selectedConfig = null;
   studentState.selectedMission = null;
   clearSelectedActivityMeta();
+  if (studentState.activityEntry !== "adventure") {
+    resetAdventureState();
+  }
   emitRefresh();
 }
 
@@ -425,6 +554,21 @@ export async function selectMission(missionId){
 
 
 export function goBackToActivities(){
+  const returningFromAdventure = String(
+    studentState.selectedConfig?.progression_context?.context
+      || studentState.selectedConfig?.catalog_context
+      || ""
+  ).trim().toLowerCase() === "adventure";
+
+  if (returningFromAdventure) {
+    studentState.activityEntry = "adventure";
+    studentState.selectedConfig = null;
+    clearSelectedActivityMeta();
+    window.location.hash = buildStudentHash("activities");
+    void refreshAdventureDay();
+    return;
+  }
+
   window.location.hash = buildStudentHash("activities");
 }
 
@@ -435,6 +579,7 @@ export function goBackToSelectMode(){
   resetStudentCodeKeypad();
   studentState.missions = [];
   studentState.missionsMessage = "";
+  resetAdventureState();
   studentState.selectedConfig = null;
   clearSelectedActivityMeta();
   studentState.selectedMission = null;
@@ -450,6 +595,7 @@ export function goBackToSelectStudents(){
   studentState.studentCode = "";
   studentState.missions = [];
   studentState.missionsMessage = "";
+  resetAdventureState();
   studentState.selectedConfig = null;
   clearSelectedActivityMeta();
   studentState.selectedMission = null;
@@ -715,6 +861,12 @@ function buildStudentHash(routeName){
   return `#/${cleanRoute}?${params.toString()}`;
 }
 
+
+function resetAdventureState(){
+  studentState.adventureDay = null;
+  studentState.adventureMessage = "";
+  studentState.isLoadingAdventure = false;
+}
 
 function emitRefresh(){
   window.dispatchEvent(new Event("student:refresh"));

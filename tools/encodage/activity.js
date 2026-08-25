@@ -1350,7 +1350,8 @@ export function createActivity(initialContext = {}) {
     const canToggle = canToggleStudentAnswerDisplay();
     return {
       canToggle,
-      mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+      mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+      transitionTargets: [state.dom.answerBox]
     };
   }
 

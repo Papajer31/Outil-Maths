@@ -57,6 +57,9 @@ export function createSessionEngine({
   let questionTimer = null;
   let answerTimer = null;
   let transitionTimer = null;
+  let validationReviewTimer = null;
+  let validationReviewPending = false;
+  let validationReviewGeneration = 0;
   let gaugeRaf = null;
   let gaugeStart = 0;
   let gaugeDurationMs = 0;
@@ -118,6 +121,261 @@ export function createSessionEngine({
     return new Promise((resolve) => {
       window.setTimeout(resolve, Math.max(0, Math.floor(Number(ms) || 0)));
     });
+  }
+
+  const VALIDATION_REVIEW_DELAY_MS = 3000;
+  const VALIDATION_REVEAL_FADE_OUT_MS = 500;
+  const VALIDATION_REVEAL_FADE_IN_MS = 500;
+
+  function setValidationReviewPending(pending) {
+    validationReviewPending = pending === true;
+    els.workArea?.classList.toggle("session-workarea--validation-review", validationReviewPending);
+
+    if (validationReviewPending && els.workArea?.contains(document.activeElement)) {
+      try {
+        document.activeElement?.blur?.();
+      } catch {}
+    }
+
+    if (!validationReviewPending) {
+      clearAnswerTransitionTargets();
+    }
+  }
+
+  function cancelValidationReview() {
+    validationReviewGeneration += 1;
+    if (validationReviewTimer) {
+      window.clearTimeout(validationReviewTimer);
+      validationReviewTimer = null;
+    }
+    setValidationReviewPending(false);
+  }
+
+  async function invokeRuntimeShowAnswer(item) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return false;
+    const showCtx = getToolContext(item);
+    const maybePromise = activeRuntime?.showAnswer?.(els.workArea, showCtx);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      await maybePromise;
+    }
+    return true;
+  }
+
+  function getRuntimeAnswerDisplayState(item) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return null;
+    if (typeof activeRuntime.getShellAnswerDisplayState !== "function") return null;
+    try {
+      const state = activeRuntime.getShellAnswerDisplayState(els.workArea, getToolContext(item));
+      return state && typeof state.then !== "function" ? state : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function setRuntimeAnswerDisplayMode(item, mode) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return false;
+    if (typeof activeRuntime.setShellAnswerDisplayMode !== "function") return false;
+    try {
+      const result = activeRuntime.setShellAnswerDisplayMode(
+        els.workArea,
+        getToolContext(item),
+        normalizeShellAnswerDisplayMode(mode)
+      );
+      if (result && typeof result.then === "function") {
+        await result;
+        return true;
+      }
+      return result !== false;
+    } catch {
+      return false;
+    }
+  }
+
+  function normalizeAnswerTransitionTargets(value) {
+    const candidates = value?.nodeType === 1 ? [value] : Array.from(value || []);
+    return candidates.filter((target, index) => (
+      target?.nodeType === 1
+      && target.isConnected
+      && (target === els.workArea || els.workArea?.contains(target))
+      && candidates.indexOf(target) === index
+    ));
+  }
+
+  function getRuntimeAnswerTransitionTargets(item) {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return [];
+
+    try {
+      if (typeof activeRuntime.getShellAnswerTransitionTargets === "function") {
+        const explicitTargets = activeRuntime.getShellAnswerTransitionTargets(els.workArea, getToolContext(item));
+        if (explicitTargets && typeof explicitTargets.then !== "function") {
+          const normalizedTargets = normalizeAnswerTransitionTargets(explicitTargets);
+          if (normalizedTargets.length) return normalizedTargets;
+        }
+      }
+
+      const displayState = getRuntimeAnswerDisplayState(item);
+      return normalizeAnswerTransitionTargets(displayState?.transitionTargets);
+    } catch {
+      return [];
+    }
+  }
+
+  function clearAnswerTransitionTargets() {
+    const targets = [
+      els.workArea,
+      ...Array.from(els.workArea?.querySelectorAll?.(".session-answer-transition-target") || [])
+    ].filter(Boolean);
+    targets.forEach((target) => {
+      target.classList.remove(
+        "session-answer-transition-target",
+        "session-answer-transition-target--hidden",
+        "session-answer-transition-target--revealing"
+      );
+    });
+  }
+
+  async function fadeToCorrection(item, generation, { answerPrepared = true } = {}) {
+    if (!els.workArea || generation !== validationReviewGeneration) return false;
+
+    const outgoingTargets = getRuntimeAnswerTransitionTargets(item);
+    if (outgoingTargets.length) {
+      outgoingTargets.forEach((target) => {
+        target.classList.add("session-answer-transition-target", "session-answer-transition-target--hidden");
+      });
+      await wait(VALIDATION_REVEAL_FADE_OUT_MS);
+      if (generation !== validationReviewGeneration || !isSessionRunning || paused) return false;
+    }
+
+    if (!answerPrepared) {
+      await invokeRuntimeShowAnswer(item);
+    } else {
+      const displayState = getRuntimeAnswerDisplayState(item);
+      if (displayState?.canToggle === true) {
+        await setRuntimeAnswerDisplayMode(item, "correction");
+      }
+    }
+
+    captureHistoryStage(item, "correction");
+    if (outgoingTargets.length) {
+      const incomingTargets = getRuntimeAnswerTransitionTargets(item);
+      incomingTargets.forEach((target) => {
+        target.classList.add(
+          "session-answer-transition-target",
+          "session-answer-transition-target--hidden",
+          "session-answer-transition-target--revealing"
+        );
+      });
+      void els.workArea.offsetWidth;
+      incomingTargets.forEach((target) => {
+        target.classList.remove("session-answer-transition-target--hidden");
+      });
+      await wait(VALIDATION_REVEAL_FADE_IN_MS);
+      clearAnswerTransitionTargets();
+    }
+    return generation === validationReviewGeneration && isSessionRunning && !paused;
+  }
+
+  function startAnswerPhaseControls(item, remainingMs) {
+    setValidationReviewPending(false);
+    phase = createPhase("ANSWER", Number.isFinite(remainingMs) ? remainingMs : Number.POSITIVE_INFINITY);
+
+    if (!Number.isFinite(remainingMs)) {
+      hideTimer();
+      refreshShellManualAction(item);
+      emitStateChange();
+      return;
+    }
+
+    refreshShellManualAction(item);
+    emitStateChange();
+    setTimerPhase("answer");
+    showTimer();
+    startGauge(remainingMs);
+
+    answerTimer = window.setTimeout(() => {
+      answerTimer = null;
+      completeAnswerPhase(item);
+    }, remainingMs);
+  }
+
+  async function runValidationReview(item, remainingMs, wasCorrect) {
+    const generation = validationReviewGeneration;
+    const startedAt = performance.now();
+    const hasAnswerDisplayApi = typeof activeRuntime?.getShellAnswerDisplayState === "function"
+      && typeof activeRuntime?.setShellAnswerDisplayMode === "function";
+    const answerPrepared = hasAnswerDisplayApi;
+
+    try {
+      if (wasCorrect === true) {
+        await invokeRuntimeShowAnswer(item);
+        if (generation !== validationReviewGeneration || !isSessionRunning || paused) return;
+        captureHistoryStage(item, "correction");
+        startAnswerPhaseControls(item, remainingMs);
+        return;
+      }
+
+      // Les outils qui savent distinguer Réponse élève / Correction peuvent
+      // produire leur feedback immédiatement : on les force alors sur la vue élève.
+      // Pour les anciens outils sans cette séparation, on conserve la réponse brute
+      // pendant le délai et on ne révèle leur correction qu'au moment du basculement.
+      if (answerPrepared) {
+        await invokeRuntimeShowAnswer(item);
+        if (generation !== validationReviewGeneration || !isSessionRunning || paused) return;
+
+        const displayState = getRuntimeAnswerDisplayState(item);
+        if (wasCorrect === false && displayState?.canToggle === true) {
+          await setRuntimeAnswerDisplayMode(item, "student");
+        }
+      }
+
+      const elapsedMs = Math.max(0, performance.now() - startedAt);
+      const delayMs = Math.max(0, VALIDATION_REVIEW_DELAY_MS - elapsedMs);
+
+      await new Promise((resolve) => {
+        validationReviewTimer = window.setTimeout(() => {
+          validationReviewTimer = null;
+          resolve();
+        }, delayMs);
+      });
+
+      if (generation !== validationReviewGeneration || !isSessionRunning || paused) return;
+      const revealed = await fadeToCorrection(item, generation, { answerPrepared });
+      if (!revealed) return;
+      startAnswerPhaseControls(item, remainingMs);
+    } catch (err) {
+      if (generation !== validationReviewGeneration) return;
+      setValidationReviewPending(false);
+      onFatalError?.(err?.message || "Erreur pendant l’affichage de la correction.");
+    }
+  }
+
+  function flashValidationFeedback(wasCorrect) {
+    if (wasCorrect !== true && wasCorrect !== false) return;
+
+    let overlay = document.querySelector(".session-validation-flash");
+    const overlayHost = document.fullscreenElement || document.body || document.documentElement;
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "session-validation-flash";
+      overlay.setAttribute("aria-hidden", "true");
+      overlay.innerHTML = `
+        <svg class="session-validation-flash__icon session-validation-flash__icon--correct" viewBox="0 -960 960 960" focusable="false">
+          <path d="m424-296 282-282-56-56-226 226-114-114-56 56 170 170Zm56 216q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/>
+        </svg>
+        <svg class="session-validation-flash__icon session-validation-flash__icon--incorrect" viewBox="0 -960 960 960" focusable="false">
+          <path d="M330-120 120-330v-300l210-210h300l210 210v300L630-120H330Zm36-190 114-114 114 114 56-56-114-114 114-114-56-56-114 114-114-114-56 56 114 114-114 114 56 56Zm-2 110h232l164-164v-232L596-760H364L200-596v232l164 164Zm116-280Z"/>
+        </svg>
+      `;
+    }
+
+    if (overlay.parentElement !== overlayHost) {
+      overlayHost.appendChild(overlay);
+    }
+
+    overlay.classList.remove("is-correct", "is-incorrect", "is-flashing");
+    // Force le redémarrage de l'animation lors de validations rapprochées.
+    void overlay.offsetWidth;
+    overlay.classList.add(wasCorrect ? "is-correct" : "is-incorrect", "is-flashing");
   }
 
   function isCatalogTestSequence(value) {
@@ -490,7 +748,7 @@ export function createSessionEngine({
       canGoPrevTool: !paused && !toolMaxTimeAdvancePending && currentToolIndex > 0,
       canGoNextTool: !paused && !toolMaxTimeAdvancePending && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
       canRevealAnswer: !paused && !toolMaxTimeExpired && !!item && phase.kind === "QUESTION" && item.hasAnswerPhase !== false && shellValidation.visible !== true,
-      canAdvanceQuestion: !paused && !toolMaxTimeExpired && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
+      canAdvanceQuestion: !paused && !validationReviewPending && !toolMaxTimeExpired && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
       shellValidateVisible: shellValidation.visible === true,
       shellValidateEnabled: shellValidation.enabled === true,
       shellAnswerToggleVisible: shellAnswerToggle.visible === true,
@@ -572,7 +830,14 @@ export function createSessionEngine({
       icon: "sync"
     };
 
-    if (!item || !isBoxedResponseProfile() || !activeRuntime || session[currentToolIndex] !== item || phase.kind !== "ANSWER") {
+    if (
+      !item
+      || validationReviewPending
+      || !isBoxedResponseProfile()
+      || !activeRuntime
+      || session[currentToolIndex] !== item
+      || phase.kind !== "ANSWER"
+    ) {
       return hiddenState;
     }
 
@@ -711,9 +976,12 @@ export function createSessionEngine({
 
   function stop({ attemptStatus = "interrupted" } = {}) {
     const item = session[currentToolIndex] || null;
+    let attemptFinalizePromise = Promise.resolve(null);
     if (item && item.historyFinalized !== true) {
       finalizeOpenHistoryQuestion(item, "unanswered");
-      void finalizeActivityAttempt(item, normalizeActivityAttemptStatus(attemptStatus));
+      attemptFinalizePromise = Promise.resolve(
+        finalizeActivityAttempt(item, normalizeActivityAttemptStatus(attemptStatus))
+      ).catch(() => null);
     }
 
     stopAllTimers();
@@ -739,6 +1007,7 @@ export function createSessionEngine({
     hideManualAction();
     clearWorkArea();
     emitStateChange();
+    return attemptFinalizePromise;
   }
 
   async function startSession() {
@@ -1124,7 +1393,11 @@ export function createSessionEngine({
     }, remainingMs);
   }
 
-  function beginAnswerPhase(item, durationMs, { showAnswerNow = true } = {}) {
+  function beginAnswerPhase(
+    item,
+    durationMs,
+    { showAnswerNow = true, validationReview = false, validationWasCorrect = null } = {}
+  ) {
     stopAllTimers();
 
     if (!activeTool || !item) return;
@@ -1135,13 +1408,29 @@ export function createSessionEngine({
     const remainingMs = clampPhaseDuration(durationMs);
     pauseHistoryQuestion(item);
     captureHistoryStage(item, "answer");
+
+    engineState = "RUNNING_ANSWER";
+    phase = createPhase("ANSWER", item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : remainingMs);
+
+    if (showAnswerNow && validationReview === true && (validationWasCorrect === true || validationWasCorrect === false)) {
+      validationReviewGeneration += 1;
+      setValidationReviewPending(true);
+      hideTimer();
+      hideManualAction();
+      flashValidationFeedback(validationWasCorrect);
+      emitStateChange();
+      void runValidationReview(item, remainingMs, validationWasCorrect);
+      return;
+    }
+
     if (showAnswerNow) {
-      const showCtx = getToolContext(item);
-      const maybePromise = activeRuntime?.showAnswer?.(els.workArea, showCtx);
+      const wasCorrect = item.currentQuestionResolvedCorrectly === true;
+      const maybePromise = invokeRuntimeShowAnswer(item);
       if (maybePromise && typeof maybePromise.then === "function") {
         Promise.resolve(maybePromise)
           .then(() => {
             if (!isSessionRunning) return;
+            flashValidationFeedback(wasCorrect);
             captureHistoryStage(item, "correction");
             emitStateChange();
           })
@@ -1149,37 +1438,12 @@ export function createSessionEngine({
             onFatalError?.(err?.message || "Erreur pendant la séance.");
           });
       } else {
+        flashValidationFeedback(wasCorrect);
         captureHistoryStage(item, "correction");
       }
     }
 
-    engineState = "RUNNING_ANSWER";
-    phase = createPhase("ANSWER", item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : remainingMs);
-
-    if (!Number.isFinite(remainingMs)) {
-      hideTimer();
-
-      if (item.usesCustomQuestionFlow === true) {
-        refreshShellManualAction(item);
-        emitStateChange();
-        return;
-      }
-
-      refreshShellManualAction(item);
-      emitStateChange();
-      return;
-    }
-
-    refreshShellManualAction(item);
-    emitStateChange();
-    setTimerPhase("answer");
-    showTimer();
-    startGauge(remainingMs);
-
-    answerTimer = window.setTimeout(() => {
-      answerTimer = null;
-      completeAnswerPhase(item);
-    }, remainingMs);
+    startAnswerPhaseControls(item, remainingMs);
   }
 
   function beginQuestionTransition(item, durationMs = getQuestionTransitionDurationMs(item)) {
@@ -1794,9 +2058,11 @@ export function createSessionEngine({
 
   function finishSession({ title = null } = {}) {
     const currentItem = session[currentToolIndex] || null;
+    let attemptFinalizePromise = Promise.resolve(null);
     if (currentItem && currentItem.historyFinalized !== true) {
       finalizeOpenHistoryQuestion(currentItem, "unanswered");
-      void finalizeActivityAttempt(currentItem, "completed");
+      attemptFinalizePromise = Promise.resolve(finalizeActivityAttempt(currentItem, "completed"))
+        .catch(() => null);
     }
 
     const finalTitle = title || (sessionProgressMode === "practice" ? "Entrainement terminé." : "Bravo, la séance est terminée.");
@@ -1818,7 +2084,11 @@ export function createSessionEngine({
       bodyHtml: sessionProgressMode === "practice" ? "" : renderGroupSessionSummaryHtml(),
       cardClass: sessionProgressMode === "practice" ? "" : (getGroupScoreRows().length ? "session-message-card-group-summary" : ""),
       buttonLabel: "Retour aux activités",
-      onClick: onExitToActivities
+      onClick: () => {
+        void attemptFinalizePromise.finally(() => {
+          onExitToActivities?.();
+        });
+      }
     });
   }
 
@@ -2461,7 +2731,7 @@ export function createSessionEngine({
 
   function createToolSessionControls(item) {
     return {
-      requestAnswerPhase({ manual = false, showAnswerNow = true, wasCorrect = false } = {}) {
+      requestAnswerPhase({ manual = false, showAnswerNow = true, wasCorrect = null, skipValidationReview = false } = {}) {
         if (!item || !isSessionRunning || paused) return false;
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "QUESTION") return false;
@@ -2471,14 +2741,23 @@ export function createSessionEngine({
         const durationMs = manual
           ? Number.POSITIVE_INFINITY
           : (item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000);
+        const validationReview = skipValidationReview !== true
+          && manual !== true
+          && showAnswerNow === true
+          && (wasCorrect === true || wasCorrect === false)
+          && isBoxedResponseProfile();
 
-        beginAnswerPhase(item, durationMs, { showAnswerNow });
+        beginAnswerPhase(item, durationMs, {
+          showAnswerNow,
+          validationReview,
+          validationWasCorrect: wasCorrect
+        });
         emitStateChange();
         return true;
       },
 
       requestNextQuestion() {
-        if (!item || !isSessionRunning || paused) return false;
+        if (!item || !isSessionRunning || paused || validationReviewPending) return false;
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "ANSWER") return false;
         completeAnswerPhase(item);
@@ -2838,6 +3117,7 @@ export function createSessionEngine({
   }
 
   function stopAllTimers() {
+    cancelValidationReview();
     if (questionTimer) {
       clearTimeout(questionTimer);
       questionTimer = null;
@@ -2872,6 +3152,11 @@ export function createSessionEngine({
   }
 
   function refreshShellManualAction(item) {
+    if (validationReviewPending) {
+      hideManualAction();
+      return;
+    }
+
     if (runMode === "projected-teacher") {
       hideManualAction();
       return;

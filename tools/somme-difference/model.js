@@ -58,16 +58,16 @@ const COLLECTION_OBJECTS = Object.freeze([
 const SUM_INSTRUCTIONS = Object.freeze([
   { id: "sum_plain", template: "Quelle est la somme ?" },
   { id: "sum_operation", template: "Écris l'addition correspondante." },
-  { id: "sum_together", template: "Combien ont-ils de {objects} ensemble ?" },
-  { id: "sum_total", template: "Combien ont-ils de {objects} en tout ?" },
+  { id: "sum_together", template: "Combien ont-ils {de}{objects} ensemble ?" },
+  { id: "sum_total", template: "Combien ont-ils {de}{objects} en tout ?" },
   { id: "sum_calculation", template: "Écris le calcul qui donne la somme." }
 ]);
 
 const DIFFERENCE_INSTRUCTIONS = Object.freeze([
   { id: "diff_plain", template: "Quelle est la différence ?" },
   { id: "diff_operation", template: "Écris la soustraction correspondante." },
-  { id: "diff_more", template: "Combien de {objects} {a} {verb} de plus que {b} ?", relation: "more" },
-  { id: "diff_less", template: "Combien de {objects} {a} {verb} de moins que {b} ?", relation: "less" },
+  { id: "diff_more", template: "Combien {de}{objects} {a} {verb} de plus que {b} ?", relation: "more" },
+  { id: "diff_less", template: "Combien {de}{objects} {a} {verb} de moins que {b} ?", relation: "less" },
   { id: "diff_gap", template: "De combien leurs collections diffèrent-elles ?" },
   { id: "diff_calculation", template: "Écris le calcul qui donne la différence." }
 ]);
@@ -246,11 +246,18 @@ function buildInstruction({ operationType, topCount, bottomCount, topCharacter, 
 }
 
 function fillTemplate(template, { object, a, b }) {
+  const objects = String(object?.plural || "objets");
   return String(template || "")
-    .replaceAll("{objects}", String(object?.plural || "objets"))
+    .replaceAll("{de}", startsWithVowel(objects) ? "d'" : "de ")
+    .replaceAll("{objects}", objects)
     .replaceAll("{a}", String(a?.name || ""))
     .replaceAll("{b}", String(b?.name || ""))
     .replaceAll("{verb}", getAvoirVerb(a));
+}
+
+function startsWithVowel(value) {
+  const first = String(value || "").trim().charAt(0).toLocaleLowerCase("fr-FR");
+  return "aàâäeéèêëiîïoôöuùûüyÿœ".includes(first);
 }
 
 function getAvoirVerb(character) {

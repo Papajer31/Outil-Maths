@@ -85,7 +85,8 @@ export function createActivity(initialContext = {}) {
     getShellAnswerDisplayState() {
       return {
         canToggle: canToggleStudentAnswerDisplay(state),
-        mode: normalizeAnswerDisplayMode(state.answerDisplayMode)
+        mode: normalizeAnswerDisplayMode(state.answerDisplayMode),
+        transitionTargets: [state.answerEl]
       };
     },
 
@@ -389,30 +390,56 @@ function renderResponseArea(state, { readOnly = false } = {}) {
   const mode = state.currentSettings.responseMode;
   const snapshot = readOnly ? getDisplayedSnapshot(state) : captureAnswerSnapshot(state);
   const evaluation = state.lastEvaluation;
+  const showStudentAnswer = readOnly
+    && canToggleStudentAnswerDisplay(state)
+    && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
+  const showCorrection = readOnly && !showStudentAnswer;
   const classes = [
     "sd-answer-card",
     `sd-answer-card--${mode}`,
     readOnly ? "sd-answer-card--readonly" : "",
     evaluation?.isCorrect ? "is-correct" : "",
-    evaluation && !evaluation.isCorrect ? "is-incorrect" : "",
-    evaluation?.reason === "impossible_subtraction" ? "is-impossible" : ""
+    evaluation && !evaluation.isCorrect && showStudentAnswer ? "is-incorrect" : "",
+    evaluation && !evaluation.isCorrect && showCorrection ? "is-correction" : "",
+    evaluation?.reason === "impossible_subtraction" && showStudentAnswer ? "is-impossible" : ""
   ].filter(Boolean).join(" ");
 
   state.answerEl.innerHTML = `
     <div class="${escapeHtml(classes)}">
       ${renderOperationInput(state, { mode, snapshot, readOnly })}
-      ${readOnly ? renderReadOnlyKeypadReplacement(evaluation) : renderOperationKeypad()}
+      ${readOnly ? renderReadOnlyKeypadReplacement(state, evaluation, { showStudentAnswer }) : renderOperationKeypad()}
     </div>
   `;
 }
 
-function renderReadOnlyKeypadReplacement(evaluation) {
+function renderReadOnlyKeypadReplacement(state, evaluation, { showStudentAnswer = false } = {}) {
   const isImpossible = evaluation?.reason === "impossible_subtraction";
+  const impossibleMessage = isImpossible
+    ? (showStudentAnswer
+      ? "Cette soustraction est impossible."
+      : buildImpossibleSubtractionCorrectionMessage(state))
+    : "";
   return `
     <div class="sd-keypad-replacement" ${isImpossible ? 'role="status"' : 'aria-hidden="true"'}>
-      ${isImpossible ? "Cette soustraction est impossible." : ""}
+      ${escapeHtml(impossibleMessage)}
     </div>
   `;
+}
+
+function buildImpossibleSubtractionCorrectionMessage(state) {
+  const snapshot = state?.studentAnswerSnapshot;
+  let left = String(snapshot?.left || "").trim();
+  let right = String(snapshot?.right || "").trim();
+
+  if ((!left || !right) && snapshot?.mode === RESPONSE_MODES.COMPLETE) {
+    const match = String(snapshot.complete || "").match(/^\s*(\d+)\s*-\s*(\d+)/);
+    left = left || String(match?.[1] || "");
+    right = right || String(match?.[2] || "");
+  }
+
+  return left && right
+    ? `Ta soustraction ${left} - ${right} était impossible.`
+    : "Ta soustraction était impossible.";
 }
 
 function renderOperationInput(state, { mode, snapshot, readOnly = false }) {

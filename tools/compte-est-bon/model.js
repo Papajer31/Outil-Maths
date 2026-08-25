@@ -569,6 +569,230 @@ export function evaluateTargetedCalculationResponse(question, steps = []) {
   };
 }
 
+/**
+ * Construit une correction du « Compte est bon » qui respecte au maximum la
+ * démarche de l’élève. On conserve le plus long préfixe de ses calculs depuis
+ * lequel la cible reste atteignable, puis on calcule une continuation valide.
+ */
+export function buildClassicCorrectionPlan(question, steps = []) {
+  if (String(question?.exerciseType ?? "") !== EXERCISE_TYPES.CLASSIC_CHALLENGE) return null;
+
+  const target = Number(question?.target);
+  if (!Number.isFinite(target)) return null;
+
+  const safeSteps = (Array.isArray(steps) ? steps : [])
+    .map(normalizeTargetedStep)
+    .filter((step) => step.op && Number.isFinite(step.result));
+
+  const allowedOperations = normalizeAllowedOperations(
+    question?.allowedOperations,
+    DEFAULT_ALLOWED_OPERATIONS
+  ).filter((op) => op !== "÷" || Boolean(question?.allowExactDivision) || question?.allowedOperations?.includes?.("÷"));
+
+  for (let preservedStepCount = safeSteps.length; preservedStepCount >= 0; preservedStepCount -= 1) {
+    const preservedSteps = safeSteps.slice(0, preservedStepCount);
+    const activeNodes = rebuildClassicActiveNodes(question, preservedSteps);
+    if (!activeNodes) continue;
+
+    const continuationSteps = solveClassicContinuation(activeNodes, target, {
+      allowedOperations
+    });
+    if (continuationSteps === null) continue;
+
+    return {
+      preservedStepCount,
+      preservedSteps,
+      continuationSteps,
+      correctionSteps: [...preservedSteps, ...continuationSteps],
+      usedReferenceFallback: false
+    };
+  }
+
+  // Sécurité : une question classique est générée avec une solution connue.
+  // Si l’état soumis était exceptionnellement incohérent, on retombe dessus.
+  const referenceSteps = (Array.isArray(question?.solutionSteps) ? question.solutionSteps : [])
+    .map(normalizeTargetedStep)
+    .filter((step) => step.op && Number.isFinite(step.result));
+
+  return {
+    preservedStepCount: 0,
+    preservedSteps: [],
+    continuationSteps: referenceSteps,
+    correctionSteps: referenceSteps,
+    usedReferenceFallback: true
+  };
+}
+
+function rebuildClassicActiveNodes(question, steps = []) {
+  const numbers = Array.isArray(question?.numbers)
+    ? question.numbers
+    : (Array.isArray(question?.initialNumbers) ? question.initialNumbers : []);
+  if (!numbers.length) return null;
+
+  let active = makeInitialNodes(numbers).map((node) => ({
+    ...node,
+    expr: String(node.expr ?? node.value ?? "")
+  }));
+
+  for (const rawStep of steps) {
+    const step = normalizeTargetedStep(rawStep);
+    const leftKey = sourceKey(step.leftSources);
+    const rightKey = sourceKey(step.rightSources);
+    if (!leftKey || !rightKey || leftKey === rightKey) return null;
+
+    const leftIndex = active.findIndex((node) => sourceKey(node.sourceIds) === leftKey);
+    const rightIndex = active.findIndex((node) => sourceKey(node.sourceIds) === rightKey);
+    if (leftIndex < 0 || rightIndex < 0 || leftIndex === rightIndex) return null;
+
+    const left = active[leftIndex];
+    const right = active[rightIndex];
+    const expected = calculateClassicContinuationValue(left.value, step.op, right.value);
+    if (!Number.isFinite(expected) || expected !== Number(step.result)) return null;
+
+    const combined = makeClassicContinuationNode(left, step.op, right);
+    if (!combined || Number(combined.value) !== Number(step.result)) return null;
+
+    active = active.filter((_, index) => index !== leftIndex && index !== rightIndex);
+    active.push(combined);
+  }
+
+  return active;
+}
+
+function solveClassicContinuation(activeNodes, target, options = {}) {
+  const allowedOperations = normalizeAllowedOperations(
+    options.allowedOperations,
+    DEFAULT_ALLOWED_OPERATIONS
+  );
+  const atoms = (Array.isArray(activeNodes) ? activeNodes : []).map((node) => ({
+    ...node,
+    steps: []
+  }));
+  if (!atoms.length) return null;
+  if (atoms.some((node) => Number(node.value) === target)) return [];
+
+  // Avec au plus six tuiles, une programmation dynamique par sous-ensembles est
+  // à la fois exhaustive et bien plus rapide qu’un parcours récursif de toutes
+  // les séquences de calculs. Pour un sous-ensemble donné, un seul chemin par
+  // valeur suffit : la suite ne dépend que de cette valeur.
+  const stateCount = 1 << atoms.length;
+  const valuesByMask = Array.from({ length: stateCount }, () => new Map());
+  atoms.forEach((node, index) => {
+    valuesByMask[1 << index].set(Number(node.value), node);
+  });
+
+  for (let size = 2; size <= atoms.length; size += 1) {
+    for (let mask = 1; mask < stateCount; mask += 1) {
+      if (countBits(mask) !== size) continue;
+      const targetMap = valuesByMask[mask];
+
+      for (let leftMask = (mask - 1) & mask; leftMask; leftMask = (leftMask - 1) & mask) {
+        const rightMask = mask ^ leftMask;
+        if (!rightMask || leftMask >= rightMask) continue;
+        const leftMap = valuesByMask[leftMask];
+        const rightMap = valuesByMask[rightMask];
+        if (!leftMap.size || !rightMap.size) continue;
+
+        for (const left of leftMap.values()) {
+          for (const right of rightMap.values()) {
+            addClassicContinuationCombinations(targetMap, left, right, allowedOperations);
+          }
+        }
+      }
+
+      const solved = targetMap.get(target);
+      if (solved) return [...(solved.steps ?? [])];
+    }
+  }
+
+  return null;
+}
+
+function addClassicContinuationCombinations(targetMap, left, right, allowedOperations) {
+  const add = (a, op, b) => {
+    const value = calculateClassicContinuationValue(a?.value, op, b?.value);
+    if (!Number.isFinite(value) || value < 0 || value > CLASSIC_SOLUTION_VALUE_LIMIT) return;
+    if (targetMap.has(value)) return;
+    const node = makeClassicContinuationNode(a, op, b);
+    if (node) targetMap.set(value, node);
+  };
+
+  if (allowedOperations.includes("+")) add(left, "+", right);
+  if (allowedOperations.includes("×")) add(left, "×", right);
+  if (allowedOperations.includes("-")) {
+    add(left, "-", right);
+    add(right, "-", left);
+  }
+  if (allowedOperations.includes("÷")) {
+    add(left, "÷", right);
+    add(right, "÷", left);
+  }
+}
+
+function countBits(value) {
+  let n = Number(value) >>> 0;
+  let count = 0;
+  while (n) {
+    n &= n - 1;
+    count += 1;
+  }
+  return count;
+}
+
+function makeClassicContinuationNode(left, op, right) {
+  const safeOp = normalizeOperation(op);
+  const value = calculateClassicContinuationValue(left?.value, safeOp, right?.value);
+  if (!safeOp || !Number.isFinite(value) || value < 0 || value > CLASSIC_SOLUTION_VALUE_LIMIT) return null;
+
+  const sourceIds = [
+    ...(left?.sourceIds ?? left?.sources ?? []),
+    ...(right?.sourceIds ?? right?.sources ?? [])
+  ].map(String);
+
+  const node = {
+    id: `c_${sourceKey(sourceIds)}_${safeOp}_${value}`,
+    value,
+    expr: `${wrapExpr(left)} ${safeOp} ${wrapExpr(right)}`,
+    sources: sourceIds,
+    sourceIds,
+    kind: "result",
+    label: String(value),
+    steps: []
+  };
+
+  node.step = normalizeTargetedStep({
+    leftValue: Number(left.value),
+    rightValue: Number(right.value),
+    result: value,
+    op: safeOp,
+    leftSources: [...(left.sourceIds ?? left.sources ?? [])],
+    rightSources: [...(right.sourceIds ?? right.sources ?? [])],
+    leftExpression: String(left.expr ?? left.value ?? ""),
+    rightExpression: String(right.expr ?? right.value ?? "")
+  });
+  node.steps = [
+    ...(Array.isArray(left?.steps) ? left.steps : []),
+    ...(Array.isArray(right?.steps) ? right.steps : []),
+    node.step
+  ];
+  return node;
+}
+
+function calculateClassicContinuationValue(left, op, right) {
+  const a = Number(left);
+  const b = Number(right);
+  const safeOp = normalizeOperation(op);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !safeOp) return Number.NaN;
+  if (safeOp === "+") return a + b;
+  if (safeOp === "-") return a >= b ? a - b : Number.NaN;
+  if (safeOp === "×") return a * b;
+  if (safeOp === "÷") {
+    if (b === 0 || !Number.isInteger(a) || !Number.isInteger(b) || a % b !== 0) return Number.NaN;
+    return a / b;
+  }
+  return Number.NaN;
+}
+
 function pickTargetedCalculationQuestion(settings, {
   avoidKey = null,
   attempts = TARGETED_RANDOM_PICK_MAX_ATTEMPTS

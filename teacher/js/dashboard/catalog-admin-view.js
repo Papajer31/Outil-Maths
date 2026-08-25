@@ -46,12 +46,20 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "lecture",
     label: "Lecture",
-    toolIds: ["encodage", "reperage-graphemes", "nuage-lettres", "segmenter-mots", "recomposer-mots-syllabes", "mot-cache"]
+    toolIds: [
+      "reperage-graphemes",
+      "nuage-lettres",
+      "segmenter-mots",
+      "recomposer-mots-syllabes",
+      "mot-cache",
+      "reperage-occurrences",
+      "reperage-mots"
+    ]
   },
   {
     id: "ecriture",
     label: "Écriture",
-    toolIds: ["geste-graphique"]
+    toolIds: ["encodage", "dictee-muette", "geste-graphique"]
   },
   {
     id: "conjugaison",
@@ -93,7 +101,8 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
       "tables-multiplication",
       "boites-jetons",
       "calcul-cible",
-      "compte-est-bon"
+      "compte-est-bon",
+      "somme-difference"
     ]
   },
   {

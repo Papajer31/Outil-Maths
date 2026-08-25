@@ -409,6 +409,11 @@
   border-color: rgba(239,68,68,.95);
   box-shadow: 0 0 0 .16rem rgba(239,68,68,.12);
 }
+.sd-answer-card.is-correction .sd-correction-frame {
+  border-style: dashed;
+  border-color: rgba(34,197,94,.95);
+  box-shadow: 0 0 0 .16rem rgba(34,197,94,.12);
+}
 
 .sd-keypad {
   width: min(70rem, 100%);

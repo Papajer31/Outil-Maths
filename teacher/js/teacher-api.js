@@ -559,7 +559,7 @@ async function queryPedagogicalNodes() {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("pedagogical_nodes")
-      .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+      .select("id, parent_id, name, node_type, student_label, student_navigation_mode, display_order, is_active, created_at, updated_at")
       .order("parent_id", { ascending: true, nullsFirst: true })
       .order("display_order", { ascending: true })
       .order("name", { ascending: true })
@@ -609,11 +609,15 @@ export async function createPedagogicalNodeAsAdmin(folder = {}) {
     parent_id: parentId,
     name,
     node_type: nodeType,
+    student_label: nodeType === "grade_level" ? null : (cleanDisplayName(folder.student_label) || null),
+    student_navigation_mode: nodeType === "grade_level"
+      ? "folder"
+      : (String(folder.student_navigation_mode || "").trim() === "transparent" ? "transparent" : "folder"),
     display_order: Math.max(0, Math.trunc(Number(folder.display_order) || 0)),
     is_active: folder.is_active !== false
   };
   const { data, error } = await supabase.from("pedagogical_nodes").insert(payload)
-    .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+    .select("id, parent_id, name, node_type, student_label, student_navigation_mode, display_order, is_active, created_at, updated_at")
     .single();
   if (error) throw error;
   return normalizePedagogicalNode(data);
@@ -630,12 +634,18 @@ export async function updatePedagogicalNodeAsAdmin(folderId, updates = {}) {
       throw new Error("Un dossier de niveau doit être nommé CP, CE1, CE2, CM1 ou CM2.");
     }
   }
+  if ("student_label" in updates) payload.student_label = cleanDisplayName(updates.student_label) || null;
+  if ("student_navigation_mode" in updates) {
+    payload.student_navigation_mode = String(updates.student_navigation_mode || "").trim() === "transparent"
+      ? "transparent"
+      : "folder";
+  }
   if ("parent_id" in updates) payload.parent_id = String(updates.parent_id || "").trim() || null;
   if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
   if ("is_active" in updates) payload.is_active = updates.is_active !== false;
   if (!Object.keys(payload).length) return null;
   const { data, error } = await supabase.from("pedagogical_nodes").update(payload).eq("id", id)
-    .select("id, parent_id, name, node_type, display_order, is_active, created_at, updated_at")
+    .select("id, parent_id, name, node_type, student_label, student_navigation_mode, display_order, is_active, created_at, updated_at")
     .single();
   if (error) throw error;
   return normalizePedagogicalNode(data);
@@ -1950,6 +1960,7 @@ export async function syncPhonologyWordsAsAdmin(words, {
 function normalizeImageAssetRecord(row = {}) {
   return {
     slug: String(row.slug || "").trim().toLowerCase(),
+    word_slug: String(row.word_slug || "").trim().toLocaleLowerCase("fr-FR"),
     resource_id: row.resource_id ? String(row.resource_id) : null,
     storage_path: String(row.storage_path || "").trim(),
     tags: Array.isArray(row.tags) ? row.tags.map((tag) => String(tag || "").trim()).filter(Boolean) : [],
@@ -1964,12 +1975,48 @@ function normalizeImageAssetRecord(row = {}) {
 }
 
 export async function listImageAssetsAsAdmin() {
-  const { data, error } = await supabase
-    .from("image_assets")
-    .select("slug, resource_id, storage_path, tags, notes, metadata, is_active, created_at, updated_at")
-    .order("slug", { ascending: true });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map(normalizeImageAssetRecord);
+  const pageSize = 1000;
+  const rows = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("image_assets")
+      .select("slug, word_slug, resource_id, storage_path, tags, notes, metadata, is_active, created_at, updated_at")
+      .order("slug", { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows.map(normalizeImageAssetRecord);
+}
+
+export async function listPhonologyWordLexiconAsAdmin() {
+  const pageSize = 1000;
+  const rows = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("phonology_words")
+      .select("slug, word")
+      .order("slug", { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows
+    .map((row) => ({
+      slug: String(row?.slug || "").trim().toLocaleLowerCase("fr-FR"),
+      word: String(row?.word || "").trim().normalize("NFC")
+    }))
+    .filter((row) => row.slug && row.word);
 }
 
 function isDuplicateStorageObjectError(error) {
@@ -1981,10 +2028,12 @@ function isDuplicateStorageObjectError(error) {
 export async function importSystemImageAssetAsAdmin(file, asset = {}) {
   if (!(file instanceof Blob)) throw new Error("Fichier image invalide.");
   const slug = String(asset.slug || "").trim().toLowerCase();
+  const wordSlug = String(asset.word_slug || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
   const storagePath = String(asset.storage_path || "").trim();
   const mimeType = String(file.type || asset?.metadata?.mime_type || "").trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9_-]{0,119}$/.test(slug)) throw new Error("Identifiant d’image invalide.");
   if (!storagePath.startsWith(`bank/${slug}/`)) throw new Error("Chemin Storage invalide.");
+  if (!wordSlug) throw new Error("Mot associé manquant.");
   if (!mimeType.startsWith("image/")) throw new Error("Le fichier sélectionné n’est pas une image.");
 
   let uploadedNewObject = false;
@@ -2008,7 +2057,8 @@ export async function importSystemImageAssetAsAdmin(file, asset = {}) {
     p_tags: tags,
     p_notes: String(asset.notes || "").trim(),
     p_metadata: metadata,
-    p_folder_path: String(asset.folder_path || "").trim()
+    p_folder_path: String(asset.folder_path || "").trim(),
+    p_word_slug: wordSlug
   });
 
   if (error) {

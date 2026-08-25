@@ -62,7 +62,6 @@ adverbe|a/d/v/e_ouvert/r/b/*e|ad/verbe|70
 adversaire|a/d/v/e_ouvert/r/s_s/ai_ouvert/r/*e|ad/ver/saire|72
 aéroport|a/e_aigu/r/o/p/o/r/*t|a/é/ro/port|63
 affaire|a/ff/ai_ouvert/r/*e|a/ffaire|92
-affaires|a/ff/ai_ouvert/r/*e/*s|a/ffaires|49
 affamé|a/ff/a/m/e_aigu|a/ffa/mé|53
 affection|a/ff/e_ouvert/c_k/t_s/i_yod/on|a/ffec/tion|54
 affectueux|a/ff/e_ouvert/c_k/t/u_glisse/eu/*x|a/ffec/tueux|39
@@ -121,7 +120,6 @@ allongé|a/ll/on/g_j/e_aigu|a/llon/gé|46
 allonger|a/ll/on/g_j/er|a/llon/ger|78
 allumer|a/ll/u/m/er|a/llu/mer|82
 allumette|a/ll/u/m/e_ouvert/tt/*e|a/llu/mette|70
-allumettes|a/ll/u/m/e_ouvert/tt/*e/*s|a/llu/mettes|37
 allure|a/ll/u/r/*e|a/llure|75
 alouette|a/l/ou_glisse/e_ouvert/tt/*e|a/louette|48
 alphabet|a/l/ph/a/b/et_ouvert|al/pha/bet|74
@@ -479,7 +477,6 @@ bord|b/o/r/*d|bord|96
 bordure|b/o/r/d/u/r/*e|bor/dure|47
 borne|b/o/r/n/*e|borne|32
 bosse|b/o/ss/*e|bosse|75
-bosses|b/o/ss/*e/*s|bosses|38
 botte|b/o/tt/*e|botte|80
 botté|b/o/tt/e_aigu|bo/tté|40
 bouc|b/ou/c_k|bouc|47
@@ -699,11 +696,9 @@ cendre|c_s/en_an/d/r/*e|cendre|59
 cent|c_s/en_an/*t|cent|86
 centaine|c_s/en_an/t/ai_ouvert/n/*e|cen/taine|70
 centime|c_s/en_an/t/i/m/*e|cen/time|44
-centimes|c_s/en_an/t/i/m/*e/*s|cen/times|37
 centimètre|c_s/en_an/t/i/m/e_grave/t/r/*e|cen/ti/mètre|61
 central|c_s/en_an/t/r/a/l|cen/tral|71
 centre|c_s/en_an/t/r/*e|centre|83
-cents|c_s/en_an/*t/*s|cents|72
 cerceau|c_s/e_ouvert/r/c_s/eau|cer/ceau|39
 cercle|c_s/e_ouvert/r/c_k/l/*e|cercle|78
 céréale|c_s/e_aigu/r/e_aigu/a/l/*e|cé/ré/ale|47
@@ -770,7 +765,6 @@ châtaigne|ch/a=â/t/ai_ouvert/gn/*e|châ/taigne|55
 châtaignier|ch/a=â/t/ai_ferme/gn/*i/er|châ/tai/gnier|44
 château|ch/a=â/t/eau|châ/teau|92
 chaton|ch/a/t/on|cha/ton|72
-chatons|ch/a/t/on/*s|cha/tons|35
 chatouiller|ch/a/t/ou/ill/er|cha/tou/iller|41
 chaud|ch/au/*d|chaud|95
 chaudière|ch/au/d/i_yod/e_grave/r/*e|chau/dière|48
@@ -1567,7 +1561,6 @@ endroit|en_an/d/r/oi/*t|en/droit|96
 énerver|e_aigu/n/e_ouvert/r/v/er|é/ner/ver|61
 enfance|en_an/f/an/c_s/*e|en/fance|68
 enfant|en_an/f/an/*t|en/fant|99
-enfants|en_an/f/an/*t/*s|en/fants|50
 enfer|en_an/f/e_ouvert/r|en/fer|71
 enfermer|en_an/f/e_ouvert/r/m/er|en/fer/mer|76
 enfiler|en_an/f/i/l/er|en/fi/ler|63
@@ -1714,7 +1707,7 @@ estrade|e_ouvert/s_s/t/r/a/d/*e|es/trade|42
 étudiant|e_aigu/t/u/d/i_yod/an/*t|é/tu/diant|54
 étudier|e_aigu/t/u/d/i_yod/er|é/tu/dier|75
 étui|e_aigu/t/u_glisse/i|é/tui|54
-évanouir|e_aigu/v/a/n/ou/i/r|é/va/nou/ir|43
+évanouir|e_aigu/v/a/n/ou_glisse/i/r|é/va/nouir|43
 évasion|e_aigu/v/a/s_z/i_yod/on|é/va/sion|54
 éveil|e_aigu/v/e_ouvert/il_yod|é/veil|48
 éveiller|e_aigu/v/e_ferme/ill/er|é/ve/iller|64
@@ -2206,7 +2199,6 @@ hésitation|*h/e_aigu/s_z/i/t/a/t_s/i_yod/on|hé/si/ta/tion|47
 hésiter|*h/e_aigu/s_z/i/t/er|hé/si/ter|71
 hêtre|*h/e_circonflexe/t/r/*e|hêtre|54
 heure|*h/eu/r/*e|heure|99
-heures|*h/eu/r/*e/*s|heures|50
 heureusement|*h/eu/r/eu/s_z/e_schwa/m/en_an/*t|heu/reu/se/ment|77
 heureux|*h/eu/r/eu/*x|heu/reux|95
 heurter|*h/eu/r/t/er|heur/ter|56
@@ -2253,7 +2245,6 @@ hurlement|*h/u/r/l/e_schwa/m/en_an/*t|hur/le/ment|61
 hurler|*h/u/r/l/er|hur/ler|82
 hutte|*h/u/tt/*e|hutte|61
 hygiène|*h/y_i/g_j/i_yod/e_grave/n/*e|hy/giène|40
-iceberg|i/c_s/*e/b/e_ouvert/r/g_g|ice/berg|42
 idéal|i/d/e_aigu/a/l|i/dé/al|46
 idée|i/d/e_aigu/*e|i/dée|97
 identique|i/d/en_an/t/i/qu/*e|i/den/tique|61
@@ -2410,7 +2401,6 @@ jardinier|j/a/r/d/i/n/i_yod/er|jar/di/nier|73
 jars|j/a/r/*s|jars|48
 jaunâtre|j/au/n/a=â/t/r/*e|jau/nâtre|31
 jaune|j/au/n/*e|jaune|91
-jet|j/et_ouvert|jet|56
 jetée|j/e_schwa/t/e_aigu/*e|je/tée|47
 jeter|j/e_schwa/t/er|je/ter|95
 jeu|j/eu|jeu|97
@@ -2469,7 +2459,6 @@ lac|l/a/c_k|lac|79
 lacet|l/a/c_s/et_ouvert|la/cet|49
 lâche|l/a=â/ch/*e|lâche|53
 lâcher|l/a=â/ch/er|lâ/cher|76
-lacs|l/a/c_k/*s|lacs|47
 laid|l/ai_ouvert/*d|laid|68
 laine|l/ai_ouvert/n/*e|laine|71
 laisse|l/ai_ouvert/ss/*e|laisse|71
@@ -2513,7 +2502,6 @@ lentille|l/en_an/t/ill_ij/*e|len/tille|47
 léopard|l/e_aigu/o/p/a/r/*d|lé/o/pard|67
 lessive|l/e_ferme/ss/i/v/*e|le/ssive|56
 lettre|l/e_ouvert/tt/r/*e|lettre|97
-leu|l/eu|leu|31
 levant|l/e_schwa/v/an/*t|le/vant|42
 levé|l/e_schwa/v/e_aigu|le/vé|47
 lever|l/e_schwa/v/er|le/ver|92
@@ -2551,7 +2539,6 @@ lionceau|l/i_yod/on/c_s/eau|lion/ceau|32
 liqueur|l/i/qu/eu/r|li/queur|35
 liquide|l/i/qu/i/d/*e|li/quide|76
 lire|l/i/r/*e|lire|96
-lis|l/i/*s|lis|80
 lisible|l/i/s_z/i/b/l/*e|li/sible|32
 lisière|l/i/s_z/i_yod/e_grave/r/*e|li/sière|45
 lisse|l/i/ss/*e|lisse|59
@@ -2583,7 +2570,6 @@ loterie|l/o/t/e_schwa/r/i/*e|lo/te/rie|54
 loto|l/o/t/o|lo/to|58
 louche|l/ou/ch/*e|louche|46
 louer|l/ou_glisse/er|louer|54
-loulou|l/ou/l/ou|lou/lou|54
 loup|l/ou/*p|loup|94
 loupe|l/ou/p/*e|loupe|56
 lourd|l/ou/r/*d|lourd|89
@@ -2813,7 +2799,6 @@ miniature|m/i/n/i_yod/a/t/u/r/*e|mi/nia/ture|44
 minimal|m/i/n/i/m/a/l|mi/ni/mal|55
 ministère|m/i/n/i/s_s/t/e_grave/r/*e|mi/nis/tère|50
 ministre|m/i/n/i/s_s/t/r/*e|mi/nistre|72
-minitel|m/i/n/i/t/e_ouvert/l|mi/ni/tel|51
 minou|m/i/n/ou|mi/nou|46
 minuit|m/i/n/u_glisse/i/*t|mi/nuit|76
 minuscule|m/i/n/u/s_s/c_k/u/l/*e|mi/nus/cule|77
@@ -2825,7 +2810,6 @@ mis|m/i/*s|mis|67
 mise|m/i/s_z/*e|mise|72
 misérable|m/i/s_z/e_aigu/r/a/b/l/*e|mi/sé/rable|55
 misère|m/i/s_z/e_grave/r/*e|mi/sère|53
-miss|m/i/ss|miss|58
 mission|m/i/ss/i_yod/on|mi/ssion|72
 mistral|m/i/s_s/t/r/a/l|mis/tral|40
 mobile|m/o/b/i/l/*e|mo/bile|47
@@ -3585,14 +3569,9 @@ quartier|qu/a/r/t/i_yod/er|quar/tier|86
 quatorze|qu/a/t/o/r/z/*e|qua/torze|44
 quatre|qu/a/t/r/*e|quatre|98
 quatrième|qu/a/t/r/i_ij/e_grave/m/*e|qua/tri/ème|74
-quel|qu/e_ouvert/l|quel|99
 quelconque|qu/e_ouvert/l/c_k/on/qu/*e|quel/conque|44
-quelle|qu/e_ouvert/ll/*e|quelle|98
-quelles|qu/e_ouvert/ll/*e/*s|quelles|89
-quelque|qu/e_ouvert/l/qu/*e|quelque|97
 quelquefois|qu/e_ouvert/l/qu/e_schwa/f/oi/*s|quel/que/fois|62
 quelques|qu/e_ouvert/l/qu/*e/*s|quelques|98
-quels|qu/e_ouvert/l/*s|quels|91
 question|qu/e_ouvert/s_s/t/i_yod/on|ques/tion|99
 questionner|qu/e_ouvert/s_s/t/i_yod/o/nn/er|ques/tio/nner|46
 quête|qu/e_circonflexe/t/*e|quête|53
@@ -4306,10 +4285,7 @@ téléphonique|t/e_aigu/l/e_aigu/ph/o/n/i/qu/*e|té/lé/pho/nique|48
 télescope|t/e_aigu/l/e_ouvert/s_s/c_k/o/p/*e|té/les/cope|49
 télévisé|t/e_aigu/l/e_aigu/v/i/s_z/e_aigu|té/lé/vi/sé|43
 télévision|t/e_aigu/l/e_aigu/v/i/s_z/i_yod/on|té/lé/vi/sion|88
-telle|t/e_ouvert/ll/*e|telle|72
 tellement|t/e_ouvert/ll/e_schwa/m/en_an/*t|te/lle/ment|91
-telles|t/e_ouvert/ll/*e/*s|telles|38
-tels|t/e_ouvert/l/*s|tels|44
 témoin|t/e_aigu/m/oin|té/moin|74
 température|t/em/p/e_aigu/r/a/t/u/r/*e|tem/pé/ra/ture|78
 tempête|t/em/p/e_circonflexe/t/*e|tem/pête|84

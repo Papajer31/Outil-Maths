@@ -1,6 +1,6 @@
 # Backlog consolidé
 
-Dernière mise à jour : 2026-08-07.
+Dernière mise à jour : 2026-08-14.
 
 ## Priorité principale — Aventure
 
@@ -32,6 +32,8 @@ Après le MVP : vieillissement au-dessus de 40, rangs de maîtrise, reporting en
 
 ## Exploration et catalogue de secours
 
+- [x] Ajouter la projection élève sans dupliquer l’arborescence : libellé court, nœuds transparents et dossiers de niveau masqués automatiquement.
+- [x] Ajouter les réglages super-admin `Nom pour les élèves` et `Afficher cette étape dans Exploration`.
 - [ ] Vérifier régulièrement la cohérence entre `tools/registry.js`, `shared/catalogue.js` et Supabase.
 - [ ] Décider si `reperage-graphemes`, `dictee-muette`, `nuage-lettres`, `nombres-lettres`, `conjugaison` ou `quiz` doivent rejoindre le secours local.
 

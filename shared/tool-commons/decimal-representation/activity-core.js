@@ -2599,7 +2599,8 @@ function getShellAnswerDisplayState(state) {
     canToggle: canToggleStudentNumericAnswerDisplay(state),
     mode: canToggleStudentNumericAnswerDisplay(state)
       ? normalizeAnswerDisplayMode(state.answerDisplayMode)
-      : "correction"
+      : "correction",
+    transitionTargets: [state.numberResponseShellEl]
   };
 }
 

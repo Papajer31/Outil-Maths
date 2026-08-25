@@ -61,6 +61,7 @@ import {
   createResourceSignedUrl,
   syncPhonologyWordsAsAdmin,
   listImageAssetsAsAdmin,
+  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin
 } from "./teacher-api.js";
 import { createHeaderPopupController } from "./dashboard/header-popups.js";
@@ -530,6 +531,7 @@ systemImagesImportDialog = createSystemImagesImportDialog({
   openButton: btnManageSystemImages,
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listImageAssetsAsAdmin,
+  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin,
   showToast: showDashboardShareToast,
   onImported: () => resourcesViewController?.refresh?.({ forceRefresh:false })

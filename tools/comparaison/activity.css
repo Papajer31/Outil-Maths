@@ -503,3 +503,26 @@
 .comparaison-correction-remainder-path.is-animated {
   animation: comparaison-assisted-remainder-draw .56s ease-out forwards;
 }
+
+/* Feedback de correction — mode « Jetons à compléter ». */
+.comparaison-token--feedback-error {
+  outline: clamp(.18rem, .34vw, .26rem) solid rgba(239, 107, 115, .96);
+  outline-offset: 0;
+}
+
+.comparaison-token--missing {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.comparaison-token--feedback-correction {
+  outline: clamp(.18rem, .34vw, .26rem) dashed rgba(87, 208, 122, .98);
+  outline-offset: -0.12rem;
+}
+
+.comparaison-numeric-answer.tool-numeric-answer.tool-answer-box.is-correction {
+  border-style: dashed;
+  border-color: var(--tool-ui-success, #57d07a);
+  box-shadow: 0 0 0 2px rgba(87, 208, 122, .16) inset;
+}

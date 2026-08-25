@@ -1,4 +1,4 @@
-const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words"]);
+const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words", "categories"]);
 const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "qcm-text", "selection-words"]);
 
 export const QUESTION_MODELS = Object.freeze([
@@ -225,6 +225,7 @@ function getIndicatorForWidget(widget = {}){
   if (widget.type === "answer") return "RÉPONSE";
   if (widget.type === "qcm-text") return "QCM";
   if (widget.type === "selection-words") return "SÉLECTION";
+  if (widget.type === "categories") return "CATÉGORIES";
   if (widget.type === "text" && !isVisibleInQuestion(widget) && isVisibleInCorrection(widget)) return "EXPLICATION";
   if (widget.type === "text") return "TEXTE";
   return "";

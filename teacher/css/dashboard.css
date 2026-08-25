@@ -1136,6 +1136,7 @@ body .dashboard-share-popup.cfg-share-popup{
   inset:0;
   padding:0 !important;
   overflow:hidden !important;
+  scrollbar-gutter:auto;
   align-items:stretch !important;
   justify-content:stretch !important;
   box-sizing:border-box;
@@ -1493,6 +1494,12 @@ body .dashboard-share-popup.cfg-share-popup{
   overflow:auto;
   scrollbar-gutter:stable;
   padding:16px;
+}
+
+/* L'explorateur gère le défilement dans ses propres panneaux : ne pas réserver
+   une seconde gouttière sur son conteneur externe. */
+.dashboard-content-scroll:has(> .dashboard-activities-explorer){
+  scrollbar-gutter:auto;
 }
 
 .dashboard-content-scroll.dashboard-class-list,
@@ -3081,7 +3088,7 @@ body .dashboard-share-popup.cfg-share-popup{
 .super-admin-editor-scroll{
   padding:0 !important;
   overflow:auto !important;
-  scrollbar-gutter:stable;
+  scrollbar-gutter:auto;
 }
 
 .super-admin-editor-header-main{

@@ -21,7 +21,8 @@ const DEFAULT_INPUT_STYLE = INPUT_STYLES.SINGLE;
 const IMAGE_FOLDER_NAME = "Imagier";
 
 let WORD_CATALOG = [];
-let IMAGE_CATALOG = new Map();
+let IMAGE_CATALOG_BY_WORD = new Map();
+let IMAGE_CATALOG_BY_LEGACY_SLUG = new Map();
 let PLAYABLE_CACHE = new Map();
 
 export function getDefaultSettings() {
@@ -97,14 +98,18 @@ export function setWordCatalog(words = []) {
 }
 
 export function setImageCatalog(rows = []) {
-  const map = new Map();
+  const byWord = new Map();
+  const byLegacySlug = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const slug = normalizeSlug(row?.slug);
+    const wordSlug = normalizeSlug(row?.word_slug);
     const storagePath = String(row?.storage_path || "").trim();
-    if (!slug || !storagePath) continue;
-    map.set(slug, storagePath);
+    if (!storagePath) continue;
+    if (wordSlug && !byWord.has(wordSlug)) byWord.set(wordSlug, storagePath);
+    if (slug && !byLegacySlug.has(slug)) byLegacySlug.set(slug, storagePath);
   }
-  IMAGE_CATALOG = map;
+  IMAGE_CATALOG_BY_WORD = byWord;
+  IMAGE_CATALOG_BY_LEGACY_SLUG = byLegacySlug;
   PLAYABLE_CACHE = new Map();
 }
 
@@ -258,7 +263,7 @@ function getPlayableWordsForTarget(target, enabledSpellings = null, excludedGrap
     ? normalizeSpellings(target?.spellings)
     : normalizeSpellings(enabledSpellings);
   const exclusions = target?.kind === "graphemic" ? normalizeGraphemicEntries(excludedGraphemicEntries) : [];
-  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${IMAGE_CATALOG.size}::exclude:${exclusions.join("|")}`;
+  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${IMAGE_CATALOG_BY_WORD.size}:${IMAGE_CATALOG_BY_LEGACY_SLUG.size}::exclude:${exclusions.join("|")}`;
   if (PLAYABLE_CACHE.has(cacheKey)) return PLAYABLE_CACHE.get(cacheKey);
 
   const words = WORD_CATALOG
@@ -291,14 +296,12 @@ function getSpellings(settings, target) {
 }
 
 function buildPlayableWord(entry, target, enabledSpellings, excludedGraphemicEntries = []) {
-  // phonology_words.slug conserve désormais les diacritiques afin que deux
-  // lexèmes comme « cache » et « caché » puissent coexister. Les slugs des
-  // images système restent historiquement ASCII : on calcule donc la clé
-  // d’image depuis le mot, indépendamment de l’identifiant lexical.
   if (target?.kind === "graphemic" && wordContainsAnyGraphemicEntry(entry.word, excludedGraphemicEntries)) return null;
 
   const imageLookupSlug = normalizeLegacyImageSlug(entry.word);
-  const imageStoragePath = IMAGE_CATALOG.get(imageLookupSlug) || IMAGE_CATALOG.get(entry.slug);
+  const imageStoragePath = IMAGE_CATALOG_BY_WORD.get(entry.slug)
+    || IMAGE_CATALOG_BY_LEGACY_SLUG.get(imageLookupSlug)
+    || IMAGE_CATALOG_BY_LEGACY_SLUG.get(entry.slug);
   if (!imageStoragePath) return null;
 
   const occurrences = target?.kind === "graphemic"

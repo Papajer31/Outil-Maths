@@ -1,0 +1,176 @@
+@font-face{
+  font-family:"BelleAllureGS";
+  src:url("../../shared/ui-assets/fonts/BELLEALLUREGS-FIN.OTF") format("opentype");
+  font-weight:400;
+  font-style:normal;
+}
+
+.rm-root{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+  overflow:hidden;
+  font-family:"Andika",system-ui,sans-serif;
+}
+
+.rm-board{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px 26px 30px;
+  overflow:auto;
+}
+
+.rm-board.is-empty{
+  color:#667085;
+  font-size:1.15rem;
+  font-weight:650;
+}
+
+.rm-items{
+  width:min(1480px,100%);
+  display:flex;
+  flex-wrap:wrap;
+  /* Aligne les lignes de base, et non les rectangles des deux polices. */
+  align-items:baseline;
+  justify-content:center;
+  align-content:center;
+  column-gap:clamp(18px,2.3vw,38px);
+  row-gap:clamp(16px,2.1vh,30px);
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+.rm-board--medium .rm-items{
+  column-gap:clamp(14px,1.8vw,30px);
+  row-gap:clamp(12px,1.7vh,24px);
+}
+
+.rm-board--dense .rm-items{
+  column-gap:clamp(10px,1.3vw,22px);
+  row-gap:clamp(9px,1.2vh,18px);
+}
+
+.rm-item{
+  appearance:none;
+  border:4px solid transparent;
+  border-radius:16px;
+  margin:0;
+  padding:.10em .22em .16em;
+  min-width:1.25em;
+  min-height:1.35em;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:transparent;
+  color:var(--text, #f5f7fb);
+  line-height:1;
+  font-weight:600;
+  cursor:pointer;
+  touch-action:manipulation;
+  transition:background-color .12s ease,border-color .12s ease,box-shadow .12s ease,transform .08s ease;
+}
+
+.rm-item:focus-visible{
+  outline:3px solid rgba(37,99,235,.35);
+  outline-offset:3px;
+}
+
+.rm-item:active:not(:disabled){
+  transform:scale(.96);
+}
+
+.rm-item--script{
+  font-family:"Andika",system-ui,sans-serif;
+}
+
+.rm-item--cursive{
+  font-family:"BelleAllureGS","Andika",cursive;
+  font-weight:400;
+  line-height:1;
+}
+
+/* La lettre ne bouge pas : seul son cadre gagne l'espace nécessaire pour
+   entourer les hampes et les jambages. */
+.rm-item--cursive-lower-ascender{ padding-top:.70em; }
+.rm-item--cursive-lower-dt{ padding-top:.30em; }
+.rm-item--cursive-lower-f{ padding-top:.70em; padding-bottom:.70em; }
+.rm-item--cursive-lower-descender{ padding-bottom:.70em; }
+.rm-item--cursive-upper{ padding-top:.70em; }
+
+.rm-board--letters .rm-item{
+  font-size:clamp(50px,5.4vw,84px);
+}
+
+.rm-board--letters .rm-item--cursive{
+  font-size:clamp(61px,6.3vw,98px);
+}
+
+.rm-board--short .rm-item{
+  font-size:clamp(42px,4.4vw,70px);
+}
+
+.rm-board--short .rm-item--cursive{
+  font-size:clamp(50px,5.1vw,82px);
+}
+
+.rm-board--words .rm-item{
+  font-size:clamp(32px,3.3vw,52px);
+}
+
+.rm-board--words .rm-item--cursive{
+  font-size:clamp(38px,3.9vw,62px);
+}
+
+.rm-board--long .rm-item{
+  font-size:clamp(26px,2.7vw,44px);
+}
+
+.rm-board--long .rm-item--cursive{
+  font-size:clamp(31px,3.2vw,52px);
+}
+
+.rm-board--dense.rm-board--letters .rm-item{ font-size:clamp(38px,4vw,62px); }
+.rm-board--dense.rm-board--letters .rm-item--cursive{ font-size:clamp(46px,4.7vw,74px); }
+.rm-board--dense.rm-board--words .rm-item{ font-size:clamp(25px,2.6vw,40px); }
+.rm-board--dense.rm-board--words .rm-item--cursive{ font-size:clamp(30px,3.1vw,48px); }
+
+.rm-item.is-selected{
+  background:transparent;
+  border-color:rgba(255,216,94,.82);
+  box-shadow:none;
+}
+
+.rm-item.is-correct,
+.rm-item.is-correction{
+  background:rgba(87,208,122,.14);
+  border-color:#57d07a;
+  color:inherit;
+}
+
+.rm-item.is-wrong{
+  background:rgba(239,107,115,.14);
+  border-color:#ef6b73;
+  color:inherit;
+}
+
+.rm-board.is-answer .rm-item{
+  cursor:default;
+}
+
+@media (max-height:800px){
+  .rm-root{ gap:12px; }
+  .rm-board{ padding-top:8px; padding-bottom:14px; }
+  .rm-items{ row-gap:12px; }
+  .rm-board--letters .rm-item{ font-size:clamp(42px,4.7vw,68px); }
+  .rm-board--letters .rm-item--cursive{ font-size:clamp(50px,5.5vw,80px); }
+  .rm-board--words .rm-item{ font-size:clamp(28px,2.9vw,44px); }
+  .rm-board--words .rm-item--cursive{ font-size:clamp(33px,3.4vw,52px); }
+}

@@ -145,6 +145,14 @@
   box-shadow: inset 0 0 0 2px rgba(239, 107, 115, 0.15);
 }
 
+.calc-family-response-wrap--correction .calc-family-response-input,
+.calc-family-response-input--correction {
+  border-style: dashed;
+  border-color: #57d07a;
+  background: rgba(87, 208, 122, 0.13);
+  box-shadow: inset 0 0 0 2px rgba(87, 208, 122, 0.15);
+}
+
 .calc-family-root.calc-runtime--compact {
   --calc-item-font-size: clamp(58px, 8.6vw, 132px);
 }

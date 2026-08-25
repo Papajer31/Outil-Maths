@@ -307,6 +307,20 @@ export function openCatalogTreeAdminDialog({
             <small>Clique sur un niveau pour modifier son dossier.</small>
           </div>`
         : "";
+      const studentProjectionFields = model.node_type === "grade_level"
+        ? ""
+        : `
+          <label class="catalog-tree-admin-field">
+            <span>Nom pour les élèves</span>
+            <input class="modal-text-input" type="text" data-field="student_label" value="${escapeAttr(model.student_label || "")}" maxlength="120" placeholder="${escapeAttr(model.name || "Nom pédagogique")}" />
+            <small>Laisse vide pour utiliser automatiquement le nom pédagogique.</small>
+          </label>
+
+          <label class="catalog-tree-admin-toggle">
+            <input type="checkbox" data-field="student_navigation_visible" ${model.student_navigation_mode !== "transparent" ? "checked" : ""}/>
+            <span>Afficher cette étape dans Exploration</span>
+          </label>
+          <p class="catalog-tree-admin-help">Si cette étape est masquée, elle reste dans l’arborescence pédagogique mais ses enfants remontent au premier niveau visible côté élève.</p>`;
       const childLabel = childType === "grade_level" ? "Ajouter un niveau" : TYPE_META[childType]?.label;
 
       editorHost.innerHTML = `
@@ -321,6 +335,8 @@ export function openCatalogTreeAdminDialog({
         ${nameField}
 
         ${gradesField}
+
+        ${studentProjectionFields}
 
         <label class="catalog-tree-admin-field">
           <span>Parent</span>
@@ -380,6 +396,12 @@ export function openCatalogTreeAdminDialog({
         ? null
         : String(editorHost.querySelector("[data-field='parent_id']")?.value || "").trim() || null;
       const isActive = editorHost.querySelector("[data-field='is_active']")?.checked !== false;
+      const studentLabel = model.node_type === "grade_level"
+        ? null
+        : String(editorHost.querySelector("[data-field='student_label']")?.value || "").trim() || null;
+      const studentNavigationMode = model.node_type === "grade_level"
+        ? "folder"
+        : (editorHost.querySelector("[data-field='student_navigation_visible']")?.checked === false ? "transparent" : "folder");
       if (!name) return setMessage("Le nom est obligatoire.", true);
       if (model.node_type === "grade_level" && !normalizeCatalogGradeLevel(name)) {
         return setMessage("Choisis un niveau CP, CE1, CE2, CM1 ou CM2.", true);
@@ -402,6 +424,8 @@ export function openCatalogTreeAdminDialog({
             parent_id: parentId,
             name,
             node_type: model.node_type,
+            student_label: studentLabel,
+            student_navigation_mode: studentNavigationMode,
             display_order: nextDisplayOrder(siblings),
             is_active: isActive
           });
@@ -411,6 +435,8 @@ export function openCatalogTreeAdminDialog({
           await updatePedagogicalNodeAsAdmin?.(model.id, {
             name,
             parent_id: parentId,
+            student_label: studentLabel,
+            student_navigation_mode: studentNavigationMode,
             is_active: isActive
           });
           selectedId = model.id;
@@ -500,6 +526,8 @@ export function openCatalogTreeAdminDialog({
         parent_id: parentFolder?.id || null,
         name: nodeType === "grade_level" ? defaultGrade : "",
         node_type: nodeType || "learning_objective",
+        student_label: null,
+        student_navigation_mode: "folder",
         display_order: 0,
         is_active: true
       };

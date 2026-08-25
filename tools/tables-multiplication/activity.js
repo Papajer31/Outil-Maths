@@ -385,9 +385,13 @@ function renderDisplayedResponse(state) {
     "calc-family-response-wrap--inline",
     "tm-response-wrap",
     "tm-response-wrap--inline",
-    evaluation.isCorrect === true ? "calc-family-response-wrap--correct" : "calc-family-response-wrap--incorrect",
-    evaluation.isCorrect === true ? "tm-response-wrap--correct" : "tm-response-wrap--incorrect"
-  ].join(" ");
+    evaluation.isCorrect === true
+      ? "calc-family-response-wrap--correct"
+      : (showStudentAnswer ? "calc-family-response-wrap--incorrect" : "calc-family-response-wrap--correction"),
+    evaluation.isCorrect === true
+      ? "tm-response-wrap--correct"
+      : (showStudentAnswer ? "tm-response-wrap--incorrect" : "")
+  ].filter(Boolean).join(" ");
 
   state.equationEl.innerHTML = renderQuestionEquationMarkup(state.currentQuestion, {
     holeMarkup: `
@@ -416,7 +420,9 @@ function renderSnapshotMarkup(snapshot, { showStudentAnswer, evaluation } = {}) 
     ? (evaluation.isCorrect
       ? " calc-family-response-input--correct tm-response-input--correct"
       : " calc-family-response-input--incorrect tm-response-input--incorrect")
-    : "";
+    : (evaluation.isCorrect
+      ? " calc-family-response-input--correct tm-response-input--correct"
+      : " calc-family-response-input--correction");
   return renderNumericAnswerDisplayMarkup(snapshot?.value ?? "", {
     className: `calc-family-response-input calc-family-response-input--inline tm-response-input tm-response-input--inline${stateClass}`,
     ariaLabel: "Réponse affichée"
@@ -523,7 +529,8 @@ function computeStoredEvaluation(state) {
 function getShellAnswerDisplayState(state) {
   return {
     canToggle: canToggleStudentAnswerDisplay(state),
-    mode: normalizeAnswerDisplayMode(state.answerDisplayMode)
+    mode: normalizeAnswerDisplayMode(state.answerDisplayMode),
+    transitionTargets: [state.responseWrap]
   };
 }
 

@@ -2,10 +2,13 @@ import { studentState } from "../student-state.js";
 import {
   goBackToSelectStudents,
   openActivityFolder,
+  openAdventureEntry,
+  refreshAdventureDay,
   refreshMissionsForCurrentSelection,
   selectActivity,
   selectActivityEntry,
-  selectMission
+  selectMission,
+  startNextAdventurePassage
 } from "../student-actions.js";
 import { requestAppFullscreen, escapeHtml, escapeAttr } from "../../shared/dom-helpers.js";
 import { createPlanetSvg, nextSeed } from "../../shared/planetGenerator.js";
@@ -64,7 +67,9 @@ export function renderActivitiesView(root){
               ? renderExplorationContent(treeState)
               : entry === "missions"
                 ? renderMissionsContent()
-                : renderEntryHub()}
+                : entry === "adventure"
+                  ? renderAdventureContent()
+                  : renderEntryHub()}
           </div>
         </div>
       </div>
@@ -85,11 +90,23 @@ export function renderActivitiesView(root){
   document.querySelectorAll("[data-entry]").forEach((button) => {
     button.addEventListener("click", async () => {
       const nextEntry = String(button.dataset.entry || "").trim();
+      if (nextEntry === "adventure") {
+        await openAdventureEntry();
+        return;
+      }
       if (nextEntry === "missions") {
         await refreshMissionsForCurrentSelection();
       }
       selectActivityEntry(nextEntry);
     });
+  });
+
+  document.querySelector("[data-adventure-next]")?.addEventListener("click", () => {
+    void startNextAdventurePassage();
+  });
+
+  document.querySelector("[data-adventure-refresh]")?.addEventListener("click", () => {
+    void refreshAdventureDay();
   });
 
   document.querySelectorAll("[data-mission-id]").forEach((button) => {
@@ -159,9 +176,8 @@ function renderEntryHub(){
       ${isGroup ? "" : renderEntryTile({
         entry: "adventure",
         label: "Aventure",
-        subtitle: "Bientôt : le site choisira la prochaine étape.",
-        planetKey: "entry:adventure",
-        disabled: true
+        subtitle: "Continue ton parcours du jour.",
+        planetKey: "entry:adventure"
       })}
       ${missionTile}
     </div>
@@ -241,6 +257,86 @@ function renderExplorationContent(treeState = buildActivityTreeState()){
   return `${childRows}${emptyFolderPlaceholder}`;
 }
 
+function renderAdventureContent(){
+  if (studentState.isLoadingAdventure) {
+    return `
+      <div class="activities-placeholder">
+        Préparation de ton Aventure…
+      </div>
+    `;
+  }
+
+  const day = studentState.adventureDay;
+  const message = String(studentState.adventureMessage || "").trim();
+
+  if (!day || day.availability !== "ready") {
+    return `
+      <div class="activities-placeholder">
+        <div>${escapeHtml(message || "Aucune Aventure disponible pour le moment.")}</div>
+        <button type="button" class="btn" data-adventure-refresh style="margin-top:1rem;">Réessayer</button>
+      </div>
+    `;
+  }
+
+  const requiredPassages = (Array.isArray(day.passages) ? day.passages : [])
+    .filter((passage) => String(passage?.passage_type || "") === "required")
+    .sort((a, b) => Number(a?.passage_number || 0) - Number(b?.passage_number || 0));
+  const completedCount = requiredPassages.filter((passage) => String(passage?.status || "") === "completed").length;
+  const nextPassage = requiredPassages.find((passage) => !["completed", "skipped"].includes(String(passage?.status || ""))) || null;
+  const isCompleted = String(day?.day_status || "") === "completed" || completedCount >= 6;
+
+  if (isCompleted) {
+    return `
+      <div class="activities-placeholder">
+        <div style="font-size:1.35rem;font-weight:700;">Bravo !</div>
+        <div style="margin-top:.5rem;">Ton Aventure du jour est terminée.</div>
+        <div style="margin-top:.35rem;opacity:.75;">6 activités sur 6</div>
+      </div>
+    `;
+  }
+
+  if (!nextPassage) {
+    return `
+      <div class="activities-placeholder">
+        <div>Finalisation de ton Aventure…</div>
+        <button type="button" class="btn" data-adventure-refresh style="margin-top:1rem;">Actualiser</button>
+      </div>
+    `;
+  }
+
+  const activityId = String(nextPassage?.catalog_activity_id || "").trim();
+  const activity = (studentState.activities || []).find((item) => String(item?.id || "").trim() === activityId) || null;
+  const activityLabel = String(activity?.config_name || "Activité").trim() || "Activité";
+  const passageNumber = Math.max(1, Math.trunc(Number(nextPassage?.passage_number) || (completedCount + 1)));
+  const status = String(nextPassage?.status || "");
+  const verb = status === "interrupted" || status === "running" ? "Reprendre" : "Commencer";
+
+  return `
+    <div class="activities-row">
+      <button
+        class="activity-tile"
+        type="button"
+        data-adventure-next
+      >
+        <span
+          class="activity-planet-visual ${shouldAnimateActivityPlanets() ? "is-levitating" : ""}"
+          aria-hidden="true"
+          style="${buildActivityPlanetMotionStyle(`adventure:passage:${passageNumber}`)}"
+        >
+          ${renderActivityPlanet(`adventure:passage:${passageNumber}`)}
+        </span>
+        <span class="activity-tile-label">${escapeHtml(`${verb} · ${passageNumber}/6`)}</span>
+        <span class="activity-tile-hint" style="display:block;text-align:center;font-size:0.8rem;opacity:0.78;">
+          ${escapeHtml(activityLabel)}
+        </span>
+      </button>
+    </div>
+    <div class="activities-placeholder" style="padding-top:.5rem;">
+      ${escapeHtml(`${completedCount} activité${completedCount > 1 ? "s" : ""} terminée${completedCount > 1 ? "s" : ""} sur 6`)}
+    </div>
+  `;
+}
+
 function renderMissionsContent(){
   const missions = Array.isArray(studentState.missions) ? studentState.missions : [];
   if (!missions.length) {
@@ -288,7 +384,7 @@ function renderActivitiesBreadcrumb(treeState = buildActivityTreeState(), entry 
   const currentFolder = currentFolderId ? treeState.folderById.get(currentFolderId) || null : null;
   const trail = entry === "exploration"
     ? buildBreadcrumbTrail(treeState, currentFolder)
-    : [{ label: "Mission", folderId: "", clickable: false }];
+    : [{ label: entry === "adventure" ? "Aventure" : "Mission", folderId: "", clickable: false }];
 
   return `
     <nav class="activities-breadcrumb" aria-label="Navigation dossiers">
@@ -465,6 +561,8 @@ function buildActivityTreeState(){
     ...folder,
     id: String(folder?.id || ""),
     parent_id: normalizeFolderId(folder?.parent_id),
+    student_label: String(folder?.student_label || "").trim() || null,
+    student_navigation_mode: normalizeStudentNavigationMode(folder?.student_navigation_mode),
     display_order: Number.isFinite(Number(folder?.display_order))
       ? Math.max(0, Math.trunc(Number(folder.display_order)))
       : index
@@ -499,25 +597,91 @@ function buildActivityTreeState(){
       folderId = folderById.get(folderId)?.parent_id || null;
     }
   });
-  const visibleFolders = folders.filter((folder) => usefulFolderIds.has(folder.id));
-  const visibleFolderById = new Map(visibleFolders.map((folder) => [folder.id, folder]));
+
+  const usefulFolders = folders.filter((folder) => usefulFolderIds.has(folder.id));
+  const projectedFolders = usefulFolders
+    .filter((folder) => !isStudentTransparentFolder(folder))
+    .map((folder) => {
+      const projectedParentId = findStudentProjectedParentId(folder.parent_id, folderById, usefulFolderIds);
+      return {
+        ...folder,
+        parent_id: projectedParentId,
+        pedagogical_name: folder.name,
+        name: getStudentFolderLabel(folder),
+        student_sort_path: buildStudentProjectionOrderPath(folder.id, projectedParentId, folderById)
+      };
+    });
+  const projectedFolderById = new Map(projectedFolders.map((folder) => [folder.id, folder]));
 
   const folderChildren = new Map();
   const activityChildren = new Map();
 
-  visibleFolders.forEach((folder) => {
+  projectedFolders.forEach((folder) => {
     ensureBucket(folderChildren, folder.parent_id).push(folder);
   });
 
   visibleActivities.forEach((activity) => {
-    ensureBucket(activityChildren, activity.folder_id).push(activity);
+    const projectedParentId = findStudentProjectedParentId(activity.folder_id, folderById, usefulFolderIds);
+    const folderPath = buildStudentProjectionOrderPath(activity.folder_id, projectedParentId, folderById);
+    const projectedActivity = {
+      ...activity,
+      student_sort_path: [...folderPath, activity.display_order]
+    };
+    ensureBucket(activityChildren, projectedParentId).push(projectedActivity);
   });
 
   return {
-    folderById: visibleFolderById,
+    folderById: projectedFolderById,
     folderChildren,
     activityChildren
   };
+}
+
+function normalizeStudentNavigationMode(value){
+  return String(value || "").trim() === "transparent" ? "transparent" : "folder";
+}
+
+function isStudentTransparentFolder(folder){
+  return String(folder?.node_type || "").trim() === "grade_level"
+    || normalizeStudentNavigationMode(folder?.student_navigation_mode) === "transparent";
+}
+
+function getStudentFolderLabel(folder){
+  return String(folder?.student_label || "").trim()
+    || String(folder?.name || "Dossier").trim()
+    || "Dossier";
+}
+
+function findStudentProjectedParentId(startFolderId, folderById, usefulFolderIds){
+  let folderId = normalizeFolderId(startFolderId);
+  const seen = new Set();
+
+  while (folderId && folderById.has(folderId) && !seen.has(folderId)) {
+    seen.add(folderId);
+    const folder = folderById.get(folderId);
+    if (usefulFolderIds.has(folderId) && !isStudentTransparentFolder(folder)) {
+      return folderId;
+    }
+    folderId = folder?.parent_id || null;
+  }
+
+  return null;
+}
+
+function buildStudentProjectionOrderPath(startFolderId, stopFolderId, folderById){
+  const reversedPath = [];
+  let folderId = normalizeFolderId(startFolderId);
+  const stopId = normalizeFolderId(stopFolderId);
+  const seen = new Set();
+
+  while (folderId && folderId !== stopId && folderById.has(folderId) && !seen.has(folderId)) {
+    seen.add(folderId);
+    const folder = folderById.get(folderId);
+    reversedPath.push(Number.isFinite(Number(folder?.display_order)) ? Number(folder.display_order) : 0);
+    folderId = folder?.parent_id || null;
+  }
+
+  return reversedPath.reverse();
 }
 
 function getOrderedChildNodes(state, parentId = null){
@@ -526,6 +690,7 @@ function getOrderedChildNodes(state, parentId = null){
     id: folder.id,
     label: folder.name,
     display_order: folder.display_order,
+    sort_path: folder.student_sort_path,
     item: folder
   }));
 
@@ -534,6 +699,7 @@ function getOrderedChildNodes(state, parentId = null){
     id: activity.id,
     label: activity.config_name,
     display_order: activity.display_order,
+    sort_path: activity.student_sort_path,
     item: activity
   }));
 
@@ -541,6 +707,9 @@ function getOrderedChildNodes(state, parentId = null){
 }
 
 function compareOrderedTreeNodes(a, b){
+  const pathComparison = compareStudentOrderPaths(a?.sort_path, b?.sort_path);
+  if (pathComparison !== 0) return pathComparison;
+
   const orderA = Number(a?.display_order);
   const orderB = Number(b?.display_order);
   if (Number.isFinite(orderA) && Number.isFinite(orderB) && orderA !== orderB) {
@@ -559,6 +728,22 @@ function compareOrderedTreeNodes(a, b){
   return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { sensitivity: "base" });
 }
 
+function compareStudentOrderPaths(a, b){
+  const pathA = Array.isArray(a) ? a : [];
+  const pathB = Array.isArray(b) ? b : [];
+  const length = Math.max(pathA.length, pathB.length);
+
+  for (let index = 0; index < length; index += 1) {
+    if (index >= pathA.length) return -1;
+    if (index >= pathB.length) return 1;
+    const valueA = Number(pathA[index]) || 0;
+    const valueB = Number(pathB[index]) || 0;
+    if (valueA !== valueB) return valueA - valueB;
+  }
+
+  return 0;
+}
+
 function ensureBucket(map, key){
   if (!map.has(key)) {
     map.set(key, []);
@@ -573,7 +758,7 @@ function normalizeFolderId(value){
 
 function normalizeEntry(value){
   const entry = String(value || "").trim().toLowerCase();
-  return entry === "exploration" || entry === "missions" ? entry : "";
+  return ["exploration", "missions", "adventure"].includes(entry) ? entry : "";
 }
 
 function getActivityRowSize(){

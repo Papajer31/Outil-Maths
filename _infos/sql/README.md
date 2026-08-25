@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-08-08.
+Dernière mise à jour : 2026-08-22.
 
 ## Règle absolue
 
@@ -27,6 +27,8 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `27` | syllabation de `phonology_words` et import synchronisé | migration active historique |
 | `28` | remplacement atomique complet de `phonology_words` | migration à appliquer avant d’utiliser « Remplacer complètement la base » |
 | `29` | familiarité lexicale 0–100 de `phonology_words` et import associé | migration active |
+| `30` | projection élève d’Exploration : libellé court et nœuds transparents | migration active |
+| `31` | runtime MVP Aventure pour les 6 passages obligatoires de type Activité | **migration à appliquer pour le patch Aventure courant** |
 
 ## Script spécial d’arborescence
 
@@ -52,3 +54,5 @@ La recréation des sous-dossiers est une évolution applicative et ne nécessite
 `01_first_request.sql`, `05_superadmin_resources_banks_delete.sql` et `06_question_bank_instruction.sql` contiennent des éléments liés aux banques supprimées. Ils sont conservés uniquement comme historique.
 
 `10_remove_question_banks.sql` documente leur suppression ; il ne doit pas être rejoué sans audit spécifique.
+
+- `30_unicode_image_word_mapping.sql` associe explicitement chaque image système à un mot Unicode (`word_slug`) et permet à l’imagier de distinguer correctement `pâte` / `pâté`, `école`, `hameçon`, etc.

@@ -30,7 +30,7 @@ const QCM_DEFAULT_CHOICES = 4;
 const QCM_MAX_CHOICES = 6;
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
-const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words"]);
+const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words", "categories"]);
 const CORRECTION_VISIBILITY_STATES = ["visible", "correct", "incorrect", "hidden"];
 const QUESTION_ELEMENT_GROUPS = [
   { id:"content", title:"Contenu" },
@@ -80,6 +80,14 @@ const QUESTION_ELEMENTS = [
     detail: "Lecture manuelle dans le runtime."
   },
   {
+    id: "labels",
+    group: "content",
+    icon: "label",
+    title: "Étiquettes",
+    description: "Étiquettes texte à déplacer librement.",
+    detail: "La zone du widget devient leur surface de manipulation."
+  },
+  {
     id: "numeric-keypad",
     group: "input",
     icon: "apps",
@@ -102,6 +110,13 @@ const QUESTION_ELEMENTS = [
     title: "Sélection de mots",
     description: "Sélection de mots dans une phrase.",
     detail: "Les groupes continus sont détectés automatiquement."
+  },
+  {
+    id: "categories",
+    group: "response",
+    icon: "category",
+    title: "Catégories",
+    description: "Zones pour classer des étiquettes. Doit être relié à un widget Étiquettes."
   }
 ];
 
@@ -120,6 +135,113 @@ function clamp(value, min, max){
 
 function cloneValue(value){
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeLabelItems(sourceItems, { ensureDefault = false } = {}){
+  const source = Array.isArray(sourceItems) ? sourceItems : [];
+  const items = source.map((item) => {
+    const safe = item && typeof item === "object" && !Array.isArray(item) ? item : { text:item };
+    return {
+      id:String(safe.id || createId("label")),
+      text:String(safe.text ?? safe.label ?? "")
+    };
+  });
+  if (ensureDefault && !items.length) {
+    return Array.from({ length:2 }, () => ({ id:createId("label"), text:"" }));
+  }
+  return items;
+}
+
+function normalizeCategoryItems(sourceItems, { ensureDefault = false } = {}){
+  const source = Array.isArray(sourceItems) ? sourceItems : [];
+  const items = source.map((item) => {
+    const safe = item && typeof item === "object" && !Array.isArray(item) ? item : { title:item };
+    return {
+      id:String(safe.id || createId("category")),
+      title:String(safe.title ?? safe.label ?? ""),
+      labelIds:Array.from(new Set((Array.isArray(safe.labelIds ?? safe.label_ids) ? (safe.labelIds ?? safe.label_ids) : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)))
+    };
+  });
+  if (ensureDefault && !items.length) {
+    return [1, 2].map(() => ({ id:createId("category"), title:"", labelIds:[] }));
+  }
+  return items;
+}
+
+function getCategoryAssignmentState(labelItems = [], categoryItems = []){
+  const validLabelIds = new Set(normalizeLabelItems(labelItems).map((item) => item.id));
+  const assignments = new Map();
+  const duplicateLabelIds = new Set();
+  normalizeCategoryItems(categoryItems).forEach((category) => {
+    category.labelIds.forEach((labelId) => {
+      if (!validLabelIds.has(labelId)) return;
+      if (assignments.has(labelId)) duplicateLabelIds.add(labelId);
+      else assignments.set(labelId, category.id);
+    });
+  });
+  const missingLabelIds = Array.from(validLabelIds).filter((labelId) => !assignments.has(labelId));
+  return { assignments, duplicateLabelIds, missingLabelIds };
+}
+
+function parseLabelsQuickEntry(value, previousItems = []){
+  const values = String(value ?? "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!values.length) return { error:"le widget Étiquettes doit contenir au moins une étiquette.", items:[] };
+  const previous = normalizeLabelItems(previousItems);
+  return {
+    error:"",
+    items:values.map((text, index) => ({ id:previous[index]?.id || createId("label"), text }))
+  };
+}
+
+function parseCategoriesQuickEntry(value, labelItems = [], previousItems = []){
+  const labels = normalizeLabelItems(labelItems);
+  const segments = String(value ?? "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (segments.length < 2) {
+    return { error:"le widget Catégories doit contenir au moins deux catégories.", items:[] };
+  }
+
+  const previous = normalizeCategoryItems(previousItems);
+  const usedIndexes = new Set();
+  const items = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const separatorIndex = segments[index].indexOf(":");
+    if (separatorIndex <= 0) {
+      return { error:`la catégorie « ${segments[index]} » doit suivre le format Titre:1,2.`, items:[] };
+    }
+    const title = segments[index].slice(0, separatorIndex).trim();
+    const rawIndexes = segments[index].slice(separatorIndex + 1).trim();
+    if (!title) return { error:"chaque catégorie doit avoir un titre.", items:[] };
+    const indexes = rawIndexes
+      ? rawIndexes.split(",").map((part) => Number.parseInt(part.trim(), 10))
+      : [];
+    if (indexes.some((position) => !Number.isInteger(position) || position < 1 || position > labels.length)) {
+      return { error:`les numéros d’étiquettes de « ${title} » doivent être compris entre 1 et ${labels.length}.`, items:[] };
+    }
+    for (const position of indexes) {
+      if (usedIndexes.has(position)) {
+        return { error:`l’étiquette n°${position} est affectée à plusieurs catégories.`, items:[] };
+      }
+      usedIndexes.add(position);
+    }
+    items.push({
+      id:previous[index]?.id || createId("category"),
+      title,
+      labelIds:indexes.map((position) => labels[position - 1].id)
+    });
+  }
+  if (usedIndexes.size !== labels.length) {
+    const missing = labels.map((_, index) => index + 1).filter((position) => !usedIndexes.has(position));
+    return { error:`toutes les étiquettes doivent être classées. Il manque : ${missing.join(", ")}.`, items:[] };
+  }
+  return { error:"", items };
 }
 
 function isResponseWidget(widget = {}){
@@ -190,6 +312,26 @@ function getQuestionCompositionIssues(widgets = []){
       label:"Le clavier numérique nécessite un champ Réponse"
     });
   }
+
+  safeWidgets.filter((widget) => widget.type === "categories").forEach((widget) => {
+    const source = safeWidgets.find((entry) => entry.id === widget.labelsSourceWidgetId && entry.type === "labels");
+    if (!source) {
+      issues.push({
+        code:`categories-source-${widget.id}`,
+        label:"Catégories sans source d’étiquettes"
+      });
+      return;
+    }
+    const labels = normalizeLabelItems(source.labelItems).filter((item) => item.text.trim());
+    const categories = normalizeCategoryItems(widget.categoryItems);
+    const assignmentState = getCategoryAssignmentState(labels, categories);
+    if (labels.length === 0 || categories.length < 2 || assignmentState.missingLabelIds.length || assignmentState.duplicateLabelIds.size) {
+      issues.push({
+        code:`categories-incomplete-${widget.id}`,
+        label:"Classement des catégories incomplet"
+      });
+    }
+  });
 
   return issues;
 }
@@ -502,20 +644,31 @@ function getQcmGridColumnCount(widgetView, choices = []){
   return width >= 9 ? 3 : 2;
 }
 
+function getWidgetMinimumGridSize(type = ""){
+  if (type === "numeric-keypad") return { columnSpan:6, rowSpan:1 };
+  if (type === "categories") return { columnSpan:4, rowSpan:2 };
+  if (type === "labels") return { columnSpan:4, rowSpan:3 };
+  if (type === "qcm-text") return { columnSpan:3, rowSpan:1 };
+  if (type === "image" || type === "audio") return { columnSpan:2, rowSpan:2 };
+  return { columnSpan:1, rowSpan:1 };
+}
+
 function createWidget(source = {}){
   const rawType = String(source.type || "text").trim().toLowerCase();
-  const type = ["text", "answer", "image", "audio", "numeric-keypad", "qcm-text", "selection-words"].includes(rawType) ? rawType : "text";
+  const type = ["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
   const isAnswer = type === "answer";
   const isImage = type === "image";
   const isAudio = type === "audio";
+  const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
   const isQcmText = type === "qcm-text";
   const isSelectionWords = type === "selection-words";
+  const isCategories = type === "categories";
   const defaultQuestionPlaceholder = isAnswer
     ? "Réponse de l’élève"
     : isSelectionWords
       ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
-      : isNumericKeypad || isImage || isAudio
+      : isNumericKeypad || isImage || isAudio || isLabels || isCategories
         ? ""
         : "Saisissez le texte";
   const defaultCorrectionPlaceholder = isAnswer ? "Saisissez la réponse attendue" : defaultQuestionPlaceholder;
@@ -557,10 +710,11 @@ function createWidget(source = {}){
         source.correctionVisibility ?? source.correction_visibility,
         correctionVisible ? "visible" : "hidden"
       );
+  const minimumGridSize = getWidgetMinimumGridSize(type);
   const column = clamp(Number(source.column) || 1, 1, GRID_COLUMNS);
   const row = clamp(Number(source.row) || 1, 1, GRID_ROWS);
-  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad ? GRID_COLUMNS : isQcmText || isSelectionWords ? 8 : isImage || isAudio ? 3 : 5), 1, GRID_COLUMNS);
-  const rowSpan = clamp(Number(source.rowSpan) || (isQcmText ? 3 : isSelectionWords ? 2 : isImage || isAudio ? 2 : 1), 1, GRID_ROWS);
+  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : 5), minimumGridSize.columnSpan, GRID_COLUMNS);
+  const rowSpan = clamp(Number(source.rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords ? 2 : isImage || isAudio ? 2 : 1), minimumGridSize.rowSpan, GRID_ROWS);
   const textAlign = source.textAlign || "center";
   const verticalAlign = source.verticalAlign || "middle";
   const sourceOverrides = source.correctionOverrides || {};
@@ -581,7 +735,7 @@ function createWidget(source = {}){
   return {
     id: source.id || createId("widget"),
     type,
-    label: source.label || (isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : "Texte"),
+    label: source.label || (isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte"),
     questionText,
     correctionText,
     questionPlaceholder: String(source.questionPlaceholder ?? defaultQuestionPlaceholder),
@@ -600,8 +754,8 @@ function createWidget(source = {}){
     rowSpan,
     correctionColumn: clamp(Number(source.correctionColumn) || column, 1, GRID_COLUMNS),
     correctionRow: clamp(Number(source.correctionRow) || row, 1, GRID_ROWS),
-    correctionColumnSpan: clamp(Number(source.correctionColumnSpan) || columnSpan, 1, GRID_COLUMNS),
-    correctionRowSpan: clamp(Number(source.correctionRowSpan) || rowSpan, 1, GRID_ROWS),
+    correctionColumnSpan: clamp(Number(source.correctionColumnSpan) || columnSpan, minimumGridSize.columnSpan, GRID_COLUMNS),
+    correctionRowSpan: clamp(Number(source.correctionRowSpan) || rowSpan, minimumGridSize.rowSpan, GRID_ROWS),
     questionVisible: Boolean(questionVisible),
     correctionVisible: correctionVisibility !== "hidden",
     correctionVisibility,
@@ -614,6 +768,15 @@ function createWidget(source = {}){
     qcmLayout: normalizeQcmLayout(source.qcmLayout ?? source.qcm_layout),
     qcmChoices: isQcmText
       ? normalizeQcmChoices(source.qcmChoices ?? source.qcm_choices ?? source.choices)
+      : [],
+    labelItems: isLabels
+      ? normalizeLabelItems(source.labelItems ?? source.label_items ?? source.labels, { ensureDefault:true })
+      : [],
+    labelsSourceWidgetId: isCategories
+      ? String(source.labelsSourceWidgetId ?? source.labels_source_widget_id ?? source.sourceWidgetId ?? source.source_widget_id ?? "")
+      : "",
+    categoryItems: isCategories
+      ? normalizeCategoryItems(source.categoryItems ?? source.category_items ?? source.categories, { ensureDefault:true })
       : [],
     selectionExpectedTokenIndexes: isSelectionWords
       ? normalizeQuizSelectionIndexes(
@@ -645,6 +808,45 @@ function getWidgetView(widget, mode = "question"){
       rowSpan: widget.rowSpan,
       textAlign: "center",
       verticalAlign: "middle",
+      ...visibilityState
+    };
+  }
+
+  if (widget?.type === "labels") {
+    const overrides = widget.correctionOverrides || {};
+    const correctionMode = mode === "correction";
+    return {
+      html:"",
+      text:"",
+      formatting:[],
+      placeholder:"",
+      labelItems:normalizeLabelItems(widget.labelItems),
+      column:correctionMode && overrides.position ? widget.correctionColumn : widget.column,
+      row:correctionMode && overrides.position ? widget.correctionRow : widget.row,
+      columnSpan:correctionMode && overrides.size ? widget.correctionColumnSpan : widget.columnSpan,
+      rowSpan:correctionMode && overrides.size ? widget.correctionRowSpan : widget.rowSpan,
+      textAlign:"center",
+      verticalAlign:"middle",
+      ...visibilityState
+    };
+  }
+
+  if (widget?.type === "categories") {
+    const overrides = widget.correctionOverrides || {};
+    const correctionMode = mode === "correction";
+    return {
+      html:"",
+      text:"",
+      formatting:[],
+      placeholder:"",
+      labelsSourceWidgetId:String(widget.labelsSourceWidgetId || ""),
+      categoryItems:normalizeCategoryItems(widget.categoryItems),
+      column:correctionMode && overrides.position ? widget.correctionColumn : widget.column,
+      row:correctionMode && overrides.position ? widget.correctionRow : widget.row,
+      columnSpan:correctionMode && overrides.size ? widget.correctionColumnSpan : widget.columnSpan,
+      rowSpan:correctionMode && overrides.size ? widget.correctionRowSpan : widget.rowSpan,
+      textAlign:"center",
+      verticalAlign:"middle",
       ...visibilityState
     };
   }
@@ -810,6 +1012,12 @@ function captureWidgetVariantContent(widget){
   if (widget.type === "qcm-text") {
     content.qcmChoices = normalizeQcmChoices(widget.qcmChoices, { ensureDefaultSlots:true }).map((choice) => cloneValue(choice));
   }
+  if (widget.type === "labels") {
+    content.labelItems = normalizeLabelItems(widget.labelItems).map((item) => cloneValue(item));
+  }
+  if (widget.type === "categories") {
+    content.categoryItems = normalizeCategoryItems(widget.categoryItems).map((item) => cloneValue(item));
+  }
   if (widget.type === "selection-words") {
     content.selectionExpectedTokenIndexes = normalizeQuizSelectionIndexes(
       widget.selectionExpectedTokenIndexes,
@@ -834,6 +1042,8 @@ function ensureVariantContentShape(widget){
   if (!Array.isArray(widget.questionFormatting)) widget.questionFormatting = [];
   if (!Array.isArray(widget.correctionFormatting)) widget.correctionFormatting = [];
   if (widget.type === "qcm-text") widget.qcmChoices = normalizeQcmChoices(widget.qcmChoices, { ensureDefaultSlots:true });
+  if (widget.type === "labels") widget.labelItems = normalizeLabelItems(widget.labelItems, { ensureDefault:true });
+  if (widget.type === "categories") widget.categoryItems = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true });
   if (widget.type === "selection-words") {
     widget.selectionExpectedTokenIndexes = normalizeQuizSelectionIndexes(
       widget.selectionExpectedTokenIndexes,
@@ -854,6 +1064,12 @@ function applyWidgetVariantContent(widget, source = {}){
   ensureVariantContentShape(widget);
   if (widget.type === "qcm-text") {
     widget.qcmChoices = normalizeQcmChoices(source.qcmChoices ?? source.qcm_choices ?? widget.qcmChoices, { ensureDefaultSlots:true });
+  }
+  if (widget.type === "labels") {
+    widget.labelItems = normalizeLabelItems(source.labelItems ?? source.label_items ?? widget.labelItems, { ensureDefault:true });
+  }
+  if (widget.type === "categories") {
+    widget.categoryItems = normalizeCategoryItems(source.categoryItems ?? source.category_items ?? widget.categoryItems, { ensureDefault:true });
   }
   if (widget.type === "selection-words") {
     widget.selectionExpectedTokenIndexes = normalizeQuizSelectionIndexes(
@@ -907,6 +1123,12 @@ function createVariantFromWidgets(widgets = [], source = {}){
           correctionFormattingOverridden: Boolean(content.correctionFormattingOverridden ?? content.correction_formatting_overridden),
           ...(widget.type === "qcm-text" ? {
             qcmChoices: normalizeQcmChoices(content.qcmChoices ?? content.qcm_choices ?? widget.qcmChoices, { ensureDefaultSlots:true })
+          } : {}),
+          ...(widget.type === "labels" ? {
+            labelItems: normalizeLabelItems(content.labelItems ?? content.label_items ?? widget.labelItems, { ensureDefault:true })
+          } : {}),
+          ...(widget.type === "categories" ? {
+            categoryItems: normalizeCategoryItems(content.categoryItems ?? content.category_items ?? widget.categoryItems, { ensureDefault:true })
           } : {}),
           ...(widget.type === "selection-words" ? {
             selectionExpectedTokenIndexes: normalizeQuizSelectionIndexes(
@@ -1516,6 +1738,7 @@ export function createQuizWorkshopViewController({
     const variant = draftVariants[activeVariantIndex];
     if (!variant.widgetContents || typeof variant.widgetContents !== "object") variant.widgetContents = {};
     variant.widgetContents[widget.id] = captureWidgetVariantContent(widget);
+    renderQuestionWarnings();
   }
 
   function renderVariantNavigation(){
@@ -1870,6 +2093,121 @@ export function createQuizWorkshopViewController({
           ${expectedIndexes.length
             ? `Sélection attendue : ${escapeHtml(formatQuizSelectionIndexes(text, expectedIndexes))}`
             : "Cliquez sur les mots attendus."}
+        </div>
+      </div>
+    `;
+  }
+
+  function getLabelsEditorMarkup(widget, widgetView, isSelected){
+    const items = normalizeLabelItems(widgetView.labelItems ?? widget.labelItems, { ensureDefault:true });
+    const labels = items.map((item, index) => `
+      <span class="quiz-workshop-label-chip" data-quiz-label-chip="${escapeHtml(item.id)}">
+        <span
+          class="quiz-workshop-label-chip-text${item.text ? "" : " is-empty"}"
+          ${isSelected ? `contenteditable="true" role="textbox" spellcheck="true" data-quiz-label-editor="${escapeHtml(widget.id)}" data-quiz-label-id="${escapeHtml(item.id)}"` : ""}
+          data-placeholder="Étiquette ${index + 1}"
+        >${escapeHtml(item.text)}</span>
+        <button type="button" class="quiz-workshop-label-chip-remove" data-remove-quiz-label="${escapeHtml(widget.id)}" data-quiz-label-id="${escapeHtml(item.id)}" aria-label="Supprimer cette étiquette" title="Supprimer"${isSelected ? "" : ' tabindex="-1" aria-hidden="true"'}>×</button>
+      </span>
+    `).join("");
+    return `
+      <div class="quiz-workshop-labels-editor" data-quiz-labels-editor="${escapeHtml(widget.id)}">
+        <button type="button" class="quiz-workshop-labels-add${isSelected ? "" : " is-hidden"}" data-add-quiz-label="${escapeHtml(widget.id)}"${isSelected ? "" : ' tabindex="-1" aria-hidden="true"'}>
+          <span class="dashboard-material-icon" aria-hidden="true">add</span>
+          <span>Ajouter une étiquette</span>
+        </button>
+        <div class="quiz-workshop-labels-editor-zone">${labels}</div>
+      </div>
+    `;
+  }
+
+  function getCategoriesEditorMarkup(widget, widgetView, isSelected){
+    if (previewMode === "question") {
+      return `
+        <div class="quiz-workshop-categories-question-message">
+          <span class="dashboard-material-icon" aria-hidden="true">category</span>
+          <strong>Le classement se configure dans la correction.</strong>
+          <span>Passez en vue « Correction » pour répartir les étiquettes dans les catégories.</span>
+        </div>
+      `;
+    }
+
+    const labelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
+    const sourceWidgetId = String(widget.labelsSourceWidgetId || "");
+    const sourceWidget = labelWidgets.find((entry) => entry.id === sourceWidgetId) || null;
+    const sourceLabels = normalizeLabelItems(sourceWidget?.labelItems || []);
+    const labelById = new Map(sourceLabels.map((item) => [item.id, item]));
+    const categories = normalizeCategoryItems(widgetView.categoryItems ?? widget.categoryItems, { ensureDefault:true });
+    const assigned = new Set(categories.flatMap((category) => category.labelIds));
+    const unassigned = sourceLabels.filter((item) => !assigned.has(item.id));
+
+    const sourceControl = labelWidgets.length === 0
+      ? `<div class="quiz-workshop-categories-source-empty"><span class="dashboard-material-icon" aria-hidden="true">label_off</span><span>Ajoutez d’abord un widget Étiquettes.</span></div>`
+      : labelWidgets.length === 1
+        ? `<div class="quiz-workshop-categories-source-static"><span>Source</span><strong>${escapeHtml(labelWidgets[0].label || "Étiquettes")}</strong></div>`
+        : `
+          <label class="quiz-workshop-categories-source-select-wrap">
+            <span>Source</span>
+            <select data-quiz-categories-source="${escapeHtml(widget.id)}">
+              ${labelWidgets.map((entry, index) => {
+                const preview = normalizeLabelItems(entry.labelItems).map((item) => item.text.trim()).filter(Boolean).slice(0, 3).join(", ");
+                return `<option value="${escapeHtml(entry.id)}"${entry.id === sourceWidgetId ? " selected" : ""}>${escapeHtml(entry.label || `Étiquettes ${index + 1}`)}${preview ? ` — ${escapeHtml(preview)}${normalizeLabelItems(entry.labelItems).length > 3 ? "…" : ""}` : ""}</option>`;
+              }).join("")}
+            </select>
+          </label>
+        `;
+
+    const renderDraggableLabel = (item, originCategoryId = "") => `
+      <span
+        class="quiz-workshop-category-label-chip"
+        draggable="true"
+        data-quiz-category-label-chip="${escapeHtml(item.id)}"
+        data-quiz-category-label-source="${escapeHtml(sourceWidgetId)}"
+        data-quiz-category-label-origin="${escapeHtml(originCategoryId)}"
+        title="Glisser vers une catégorie"
+      >${escapeHtml(item.text || "(vide)")}</span>
+    `;
+
+    const unassignedMarkup = `
+      <div class="quiz-workshop-categories-unassigned" data-quiz-category-drop-widget="${escapeHtml(widget.id)}" data-quiz-category-drop-id="">
+        <div class="quiz-workshop-category-pool-labels">
+          ${unassigned.map((item) => renderDraggableLabel(item)).join("")}
+        </div>
+      </div>
+    `;
+
+    const categoriesMarkup = categories.map((category, index) => {
+      const categoryLabels = category.labelIds.map((labelId) => labelById.get(labelId)).filter(Boolean);
+      return `
+        <div class="quiz-workshop-category-pool" data-quiz-category-drop-widget="${escapeHtml(widget.id)}" data-quiz-category-drop-id="${escapeHtml(category.id)}">
+          <div class="quiz-workshop-category-pool-heading">
+            <span
+              class="quiz-workshop-category-title${category.title ? "" : " is-empty"}"
+              ${isSelected ? `contenteditable="true" role="textbox" spellcheck="true" data-quiz-category-title-editor="${escapeHtml(widget.id)}" data-quiz-category-id="${escapeHtml(category.id)}"` : ""}
+              data-placeholder="Catégorie ${index + 1}"
+            >${escapeHtml(category.title)}</span>
+            ${categories.length > 2 ? `
+              <button type="button" class="quiz-workshop-category-remove" data-remove-quiz-category="${escapeHtml(widget.id)}" data-quiz-category-id="${escapeHtml(category.id)}" aria-label="Supprimer cette catégorie" title="Supprimer"${isSelected ? "" : ' tabindex="-1" aria-hidden="true"'}>×</button>
+            ` : ""}
+          </div>
+          <div class="quiz-workshop-category-pool-labels">
+            ${categoryLabels.length ? categoryLabels.map((item) => renderDraggableLabel(item, category.id)).join("") : `<span class="quiz-workshop-category-pool-empty">Déposez des étiquettes ici.</span>`}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="quiz-workshop-categories-editor" data-quiz-categories-editor="${escapeHtml(widget.id)}">
+        <div class="quiz-workshop-categories-toolbar">
+          ${sourceWidget ? unassignedMarkup : '<div class="quiz-workshop-categories-toolbar-spacer"></div>'}
+          ${sourceControl}
+        </div>
+        <div class="quiz-workshop-categories-table">
+          <div class="quiz-workshop-categories-grid" style="--quiz-category-count:${categories.length}">${categoriesMarkup}</div>
+          <button type="button" class="quiz-workshop-categories-add" data-add-quiz-category="${escapeHtml(widget.id)}" aria-label="Ajouter une catégorie" title="Ajouter une catégorie">
+            <span class="dashboard-material-icon" aria-hidden="true">add</span>
+          </button>
         </div>
       </div>
     `;
@@ -2572,13 +2910,17 @@ export function createQuizWorkshopViewController({
       const isAnswerWidget = widget.type === "answer";
       const isImageWidget = widget.type === "image";
       const isAudioWidget = widget.type === "audio";
+      const isLabelsWidget = widget.type === "labels";
       const isNumericKeypadWidget = widget.type === "numeric-keypad";
       const isQcmTextWidget = widget.type === "qcm-text";
       const isSelectionWordsWidget = widget.type === "selection-words";
+      const isCategoriesWidget = widget.type === "categories";
       const canEditContent = !isImageWidget
         && !isAudioWidget
+        && !isLabelsWidget
         && !isNumericKeypadWidget
         && !isQcmTextWidget
+        && !isCategoriesWidget
         && (!isAnswerWidget || previewMode === "correction")
         && (!isSelectionWordsWidget || previewMode === "question");
       const isContentEmpty = !widgetView.text;
@@ -2588,6 +2930,10 @@ export function createQuizWorkshopViewController({
       const editorHtml = widgetView.html || (canEditContent ? "<br>" : "");
       const widgetContentMarkup = isNumericKeypadWidget
         ? getNumericKeypadPreviewMarkup()
+        : isLabelsWidget
+          ? getLabelsEditorMarkup(widget, widgetView, isSelected)
+          : isCategoriesWidget
+            ? getCategoriesEditorMarkup(widget, widgetView, isSelected)
         : isImageWidget
           ? getImageEditorMarkup(widget, widgetView, isSelected)
           : isAudioWidget
@@ -2875,14 +3221,16 @@ export function createQuizWorkshopViewController({
   }
 
   function addWidget(elementType = "text", { column = null, row = null, columnSpan = null, rowSpan = null } = {}){
-    const normalizedType = ["text", "answer", "image", "audio", "numeric-keypad", "qcm-text", "selection-words"].includes(elementType) ? elementType : "text";
+    const normalizedType = ["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
     const isAnswer = normalizedType === "answer";
     const isImage = normalizedType === "image";
     const isAudio = normalizedType === "audio";
+    const isLabels = normalizedType === "labels";
     const isNumericKeypad = normalizedType === "numeric-keypad";
     const isQcmText = normalizedType === "qcm-text";
     const isSelectionWords = normalizedType === "selection-words";
-    if (isAnswer || isQcmText || isSelectionWords) {
+    const isCategories = normalizedType === "categories";
+    if (isAnswer || isQcmText || isSelectionWords || isCategories) {
       const existingResponse = draftWidgets.find(isResponseWidget);
       if (existingResponse) {
         selectWidget(existingResponse.id);
@@ -2897,26 +3245,28 @@ export function createQuizWorkshopViewController({
       }
     }
 
-    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isQcmText || isSelectionWords ? 8 : isImage || isAudio ? 3 : isAnswer ? 7 : 5);
-    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isQcmText ? 3 : isSelectionWords ? 2 : isImage || isAudio ? 2 : 1));
+    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isAnswer ? 7 : 5);
+    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords ? 2 : isImage || isAudio ? 2 : 1));
     const requested = column && row
       ? { column, row, columnSpan: resolvedColumnSpan, rowSpan: resolvedRowSpan }
       : findAvailablePosition(resolvedColumnSpan, resolvedRowSpan);
     if (!requested) return;
 
+    const availableLabelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
     const widget = ensureWidgetContent(normalizeWidgetPosition(createWidget({
       type: normalizedType,
-      label: isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : "Texte",
+      label: isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
       questionText: "",
       correctionText: "",
       questionPlaceholder: isAnswer
         ? "Réponse de l’élève"
         : isSelectionWords
           ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
-          : isNumericKeypad || isImage || isAudio
+          : isNumericKeypad || isImage || isAudio || isLabels || isCategories
             ? ""
             : "Saisissez le texte",
-      correctionPlaceholder: isAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isImage || isAudio ? "" : "Saisissez le texte",
+      correctionPlaceholder: isAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : "Saisissez le texte",
+      labelsSourceWidgetId:isCategories && availableLabelWidgets.length ? availableLabelWidgets[0].id : "",
       column: requested.column,
       row: requested.row,
       columnSpan: resolvedColumnSpan,
@@ -2928,13 +3278,21 @@ export function createQuizWorkshopViewController({
 
     if (!canPlaceWidget(widget.id, getWidgetView(widget, previewMode))) return;
     draftWidgets.push(widget);
+    if (isLabels) {
+      const labelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
+      if (labelWidgets.length === 1) {
+        draftWidgets.filter((entry) => entry.type === "categories" && !entry.labelsSourceWidgetId).forEach((categoriesWidget) => {
+          categoriesWidget.labelsSourceWidgetId = widget.id;
+        });
+      }
+    }
     ensureDraftVariants();
     draftVariants.forEach((variant) => {
       if (!variant.widgetContents || typeof variant.widgetContents !== "object") variant.widgetContents = {};
       variant.widgetContents[widget.id] = captureWidgetVariantContent(widget);
     });
     selectedWidgetId = widget.id;
-    editingWidgetId = isImage || isAudio || isNumericKeypad || isQcmText || (isAnswer && previewMode === "question") || (isSelectionWords && previewMode === "correction") ? "" : widget.id;
+    editingWidgetId = isImage || isAudio || isLabels || isCategories || isNumericKeypad || isQcmText || (isAnswer && previewMode === "question") || (isSelectionWords && previewMode === "correction") ? "" : widget.id;
     editingChoiceId = "";
     markLayoutAsCustom();
     renderEditor();
@@ -2945,6 +3303,15 @@ export function createQuizWorkshopViewController({
     draftWidgets = draftWidgets.filter((widget) => widget.id !== widgetId);
     draftVariants.forEach((variant) => {
       if (variant.widgetContents) delete variant.widgetContents[widgetId];
+    });
+    const fallbackLabelsWidgetId = draftWidgets.find((widget) => widget.type === "labels")?.id || "";
+    draftWidgets.filter((widget) => widget.type === "categories" && widget.labelsSourceWidgetId === widgetId).forEach((widget) => {
+      widget.labelsSourceWidgetId = fallbackLabelsWidgetId;
+      widget.categoryItems = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true }).map((category) => ({ ...category, labelIds:[] }));
+      draftVariants.forEach((variant) => {
+        const content = variant.widgetContents?.[widget.id];
+        if (content) content.categoryItems = normalizeCategoryItems(content.categoryItems, { ensureDefault:true }).map((category) => ({ ...category, labelIds:[] }));
+      });
     });
     if (selectedWidgetId === widgetId) selectedWidgetId = draftWidgets[0]?.id || "";
     if (editingWidgetId === widgetId) {
@@ -2977,8 +3344,10 @@ export function createQuizWorkshopViewController({
     let answerIndex = 0;
     let qcmIndex = 0;
     let selectionIndex = 0;
+    let labelsIndex = 0;
+    let categoriesIndex = 0;
     return draftWidgets
-      .filter((widget) => widget.type === "text" || widget.type === "answer" || widget.type === "qcm-text" || widget.type === "selection-words")
+      .filter((widget) => ["text", "answer", "qcm-text", "selection-words", "labels", "categories"].includes(widget.type))
       .map((widget, originalIndex) => ({
         widget,
         originalIndex,
@@ -3006,6 +3375,20 @@ export function createQuizWorkshopViewController({
           return {
             widget,
             token:`sélection${selectionIndex}_phrase avec [mots] à sélectionner`
+          };
+        }
+        if (widget.type === "labels") {
+          labelsIndex += 1;
+          return {
+            widget,
+            token:`étiquette${labelsIndex}_1;étiquette${labelsIndex}_2;étiquette${labelsIndex}_3`
+          };
+        }
+        if (widget.type === "categories") {
+          categoriesIndex += 1;
+          return {
+            widget,
+            token:`catégorie${categoriesIndex}_A:1,2;catégorie${categoriesIndex}_B:3`
           };
         }
         textIndex += 1;
@@ -3037,6 +3420,16 @@ export function createQuizWorkshopViewController({
         )
       };
     }
+    if (field.widget.type === "labels") {
+      return {
+        labelItems:normalizeLabelItems(content.labelItems ?? content.label_items ?? field.widget.labelItems, { ensureDefault:true })
+      };
+    }
+    if (field.widget.type === "categories") {
+      return {
+        categoryItems:normalizeCategoryItems(content.categoryItems ?? content.category_items ?? field.widget.categoryItems, { ensureDefault:true })
+      };
+    }
     return {
       text:String(content.questionText ?? ""),
       formatting:content.questionFormatting || []
@@ -3061,6 +3454,27 @@ export function createQuizWorkshopViewController({
         if (field.widget.type === "selection-words") {
           return serializeQuizSelectionQuickEntry(model.text, model.formatting, model.expectedTokenIndexes);
         }
+        if (field.widget.type === "labels") {
+          return (model.labelItems || [])
+            .map((item) => String(item.text || "").trim())
+            .filter(Boolean)
+            .join(";");
+        }
+        if (field.widget.type === "categories") {
+          const sourceWidgetId = String(field.widget.labelsSourceWidgetId || "");
+          const sourceWidget = draftWidgets.find((widget) => widget.id === sourceWidgetId && widget.type === "labels");
+          const sourceContent = sourceWidget
+            ? variant?.widgetContents?.[sourceWidget.id] || captureWidgetVariantContent(sourceWidget)
+            : null;
+          const labelItems = normalizeLabelItems(sourceContent?.labelItems ?? sourceWidget?.labelItems ?? []);
+          const indexById = new Map(labelItems.map((item, index) => [item.id, index + 1]));
+          return (model.categoryItems || []).map((category) => {
+            const indexes = category.labelIds
+              .map((labelId) => indexById.get(labelId))
+              .filter(Boolean);
+            return `${String(category.title || "").trim()}:${indexes.join(",")}`;
+          }).join(";");
+        }
         return serializeMiniMarkup(model.text, model.formatting);
       })
       .join("|"));
@@ -3070,7 +3484,14 @@ export function createQuizWorkshopViewController({
   function buildVariantFromQuickEntry(fields, values, sourceVariant = null){
     const variant = createVariantFromWidgets(draftWidgets, sourceVariant || {});
     fields.forEach((field, index) => {
+      if (field.widget.type === "categories") return;
       const content = variant.widgetContents[field.widget.id] || captureWidgetVariantContent(field.widget);
+      if (field.widget.type === "labels") {
+        const parsedLabels = parseLabelsQuickEntry(values[index], content.labelItems ?? field.widget.labelItems);
+        if (!parsedLabels.error) content.labelItems = parsedLabels.items;
+        variant.widgetContents[field.widget.id] = content;
+        return;
+      }
       if (field.widget.type === "qcm-text") {
         const previousChoices = normalizeQcmChoices(content.qcmChoices ?? field.widget.qcmChoices, { ensureDefaultSlots:true });
         const choiceValues = String(values[index] ?? "")
@@ -3124,6 +3545,20 @@ export function createQuizWorkshopViewController({
       }
       variant.widgetContents[field.widget.id] = content;
     });
+
+    fields.forEach((field, index) => {
+      if (field.widget.type !== "categories") return;
+      const content = variant.widgetContents[field.widget.id] || captureWidgetVariantContent(field.widget);
+      const sourceWidget = draftWidgets.find((widget) => widget.id === field.widget.labelsSourceWidgetId && widget.type === "labels");
+      const sourceContent = sourceWidget ? variant.widgetContents[sourceWidget.id] : null;
+      const parsedCategories = parseCategoriesQuickEntry(
+        values[index],
+        sourceContent?.labelItems ?? sourceWidget?.labelItems ?? [],
+        content.categoryItems ?? field.widget.categoryItems
+      );
+      if (!parsedCategories.error) content.categoryItems = parsedCategories.items;
+      variant.widgetContents[field.widget.id] = content;
+    });
     return variant;
   }
 
@@ -3163,6 +3598,8 @@ export function createQuizWorkshopViewController({
     const example = fields.map((field) => field.token).join("|");
     const hasQcmField = fields.some((field) => field.widget.type === "qcm-text");
     const hasSelectionField = fields.some((field) => field.widget.type === "selection-words");
+    const hasLabelsField = fields.some((field) => field.widget.type === "labels");
+    const hasCategoriesField = fields.some((field) => field.widget.type === "categories");
     const overlay = quickEntryDrawer;
     overlay.classList.remove("is-open", "is-visible", "is-animating");
     overlay.setAttribute("aria-hidden", "true");
@@ -3222,6 +3659,18 @@ export function createQuizWorkshopViewController({
           <aside class="quiz-workshop-quick-entry-qcm-callout" aria-label="Consigne de saisie de la sélection de mots">
             <span class="dashboard-material-icon" aria-hidden="true">touch_app</span>
             <span>Sélection → Entourez chaque mot ou groupe de mots attendu de crochets : <code>[Le] lion est mort [ce] soir.</code></span>
+          </aside>
+        ` : ""}
+        ${hasLabelsField ? `
+          <aside class="quiz-workshop-quick-entry-qcm-callout" aria-label="Consigne de saisie des étiquettes">
+            <span class="dashboard-material-icon" aria-hidden="true">label</span>
+            <span>Étiquettes → Séparez les étiquettes avec <kbd>;</kbd> : <code>chat;chien;rose;tulipe</code>.</span>
+          </aside>
+        ` : ""}
+        ${hasCategoriesField ? `
+          <aside class="quiz-workshop-quick-entry-qcm-callout" aria-label="Consigne de saisie des catégories">
+            <span class="dashboard-material-icon" aria-hidden="true">category</span>
+            <span>Catégories → Écrivez <code>Titre:1,2;Autre:3,4</code>. Les numéros correspondent à l’ordre des étiquettes de la source.</span>
           </aside>
         ` : ""}
         <div class="quiz-workshop-quick-entry-textarea-wrap">
@@ -3402,6 +3851,43 @@ export function createQuizWorkshopViewController({
             return;
           }
         }
+        const parsedLabelsByWidgetId = new Map();
+        for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+          const field = fields[fieldIndex];
+          if (field.widget.type !== "labels") continue;
+          const previousItems = draftVariants[index]?.widgetContents?.[field.widget.id]?.labelItems
+            ?? draftVariants[0]?.widgetContents?.[field.widget.id]?.labelItems
+            ?? field.widget.labelItems;
+          const parsedLabels = parseLabelsQuickEntry(values[fieldIndex], previousItems);
+          if (parsedLabels.error) {
+            message.textContent = `Ligne ${index + 1} : ${parsedLabels.error}`;
+            message.classList.add("is-error");
+            input.focus();
+            return;
+          }
+          parsedLabelsByWidgetId.set(field.widget.id, parsedLabels.items);
+        }
+        for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+          const field = fields[fieldIndex];
+          if (field.widget.type !== "categories") continue;
+          const sourceItems = parsedLabelsByWidgetId.get(field.widget.labelsSourceWidgetId);
+          if (!sourceItems) {
+            message.textContent = `Ligne ${index + 1} : le widget Catégories n’a pas de source Étiquettes valide.`;
+            message.classList.add("is-error");
+            input.focus();
+            return;
+          }
+          const previousItems = draftVariants[index]?.widgetContents?.[field.widget.id]?.categoryItems
+            ?? draftVariants[0]?.widgetContents?.[field.widget.id]?.categoryItems
+            ?? field.widget.categoryItems;
+          const parsedCategories = parseCategoriesQuickEntry(values[fieldIndex], sourceItems, previousItems);
+          if (parsedCategories.error) {
+            message.textContent = `Ligne ${index + 1} : ${parsedCategories.error}`;
+            message.classList.add("is-error");
+            input.focus();
+            return;
+          }
+        }
         rows.push(values);
       }
       applyQuickEntryLines(fields, rows);
@@ -3506,6 +3992,83 @@ export function createQuizWorkshopViewController({
         }
         return;
       }
+    }
+
+    const addLabelButton = event.target.closest("[data-add-quiz-label]");
+    if (addLabelButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const widget = draftWidgets.find((entry) => entry.id === String(addLabelButton.dataset.addQuizLabel || "") && entry.type === "labels");
+      if (!widget) return;
+      const item = { id:createId("label"), text:"" };
+      widget.labelItems = normalizeLabelItems(widget.labelItems);
+      widget.labelItems.push(item);
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      selectedWidgetId = widget.id;
+      renderCanvas();
+      window.requestAnimationFrame(() => {
+        const editor = canvas?.querySelector(`[data-quiz-label-editor="${CSS.escape(widget.id)}"][data-quiz-label-id="${CSS.escape(item.id)}"]`);
+        editor?.focus?.();
+      });
+      return;
+    }
+
+    const removeLabelButton = event.target.closest("[data-remove-quiz-label]");
+    if (removeLabelButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const widgetId = String(removeLabelButton.dataset.removeQuizLabel || "");
+      const labelId = String(removeLabelButton.dataset.quizLabelId || "");
+      const widget = draftWidgets.find((entry) => entry.id === widgetId && entry.type === "labels");
+      if (!widget || !labelId) return;
+      widget.labelItems = normalizeLabelItems(widget.labelItems).filter((item) => item.id !== labelId);
+      syncActiveVariantWidget(widget);
+      draftWidgets.filter((entry) => entry.type === "categories" && entry.labelsSourceWidgetId === widget.id).forEach((categoriesWidget) => {
+        categoriesWidget.categoryItems = normalizeCategoryItems(categoriesWidget.categoryItems, { ensureDefault:true })
+          .map((category) => ({ ...category, labelIds:category.labelIds.filter((id) => id !== labelId) }));
+        syncActiveVariantWidget(categoriesWidget);
+      });
+      markLayoutAsCustom();
+      renderCanvas();
+      return;
+    }
+
+    const addCategoryButton = event.target.closest("[data-add-quiz-category]");
+    if (addCategoryButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const widget = draftWidgets.find((entry) => entry.id === String(addCategoryButton.dataset.addQuizCategory || "") && entry.type === "categories");
+      if (!widget) return;
+      widget.categoryItems = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true });
+      const category = { id:createId("category"), title:"", labelIds:[] };
+      widget.categoryItems.push(category);
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      selectedWidgetId = widget.id;
+      renderCanvas();
+      window.requestAnimationFrame(() => {
+        const editor = canvas?.querySelector(`[data-quiz-category-title-editor="${CSS.escape(widget.id)}"][data-quiz-category-id="${CSS.escape(category.id)}"]`);
+        editor?.focus?.();
+        if (editor) document.getSelection()?.selectAllChildren?.(editor);
+      });
+      return;
+    }
+
+    const removeCategoryButton = event.target.closest("[data-remove-quiz-category]");
+    if (removeCategoryButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const widget = draftWidgets.find((entry) => entry.id === String(removeCategoryButton.dataset.removeQuizCategory || "") && entry.type === "categories");
+      const categoryId = String(removeCategoryButton.dataset.quizCategoryId || "");
+      if (!widget || !categoryId) return;
+      const categories = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true });
+      if (categories.length <= 2) return;
+      widget.categoryItems = categories.filter((category) => category.id !== categoryId);
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      renderCanvas();
+      return;
     }
 
     const formatButton = event.target.closest("[data-quiz-format-command]");
@@ -3748,7 +4311,7 @@ export function createQuizWorkshopViewController({
     }
 
     const widgetNode = event.target.closest("[data-quiz-widget-id]");
-    if (widgetNode && !event.target.closest("[data-quiz-widget-editor-id]")) {
+    if (widgetNode && !event.target.closest("[data-quiz-widget-editor-id], [data-quiz-label-editor], [data-quiz-category-title-editor], select")) {
       editingWidgetId = "";
       editingChoiceId = "";
       hideTextToolbar();
@@ -3763,6 +4326,53 @@ export function createQuizWorkshopViewController({
   }
 
   function handleDrawerInput(event){
+    const labelsSourceSelect = event.target.closest("[data-quiz-categories-source]");
+    if (labelsSourceSelect) {
+      const widget = draftWidgets.find((entry) => entry.id === String(labelsSourceSelect.dataset.quizCategoriesSource || "") && entry.type === "categories");
+      if (!widget) return;
+      const nextSourceId = String(labelsSourceSelect.value || "");
+      if (widget.labelsSourceWidgetId === nextSourceId) return;
+      widget.labelsSourceWidgetId = nextSourceId;
+      widget.categoryItems = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true })
+        .map((category) => ({ ...category, labelIds:[] }));
+      draftVariants.forEach((variant) => {
+        const content = variant.widgetContents?.[widget.id];
+        if (!content) return;
+        content.categoryItems = normalizeCategoryItems(content.categoryItems, { ensureDefault:true })
+          .map((category) => ({ ...category, labelIds:[] }));
+      });
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      renderCanvas();
+      return;
+    }
+
+    const labelEditor = event.target.closest("[data-quiz-label-editor]");
+    if (labelEditor) {
+      const widget = draftWidgets.find((entry) => entry.id === String(labelEditor.dataset.quizLabelEditor || "") && entry.type === "labels");
+      const labelId = String(labelEditor.dataset.quizLabelId || "");
+      const item = widget?.labelItems?.find?.((entry) => entry.id === labelId);
+      if (!widget || !item) return;
+      item.text = String(labelEditor.textContent || "").replace(/\r?\n/g, " ");
+      labelEditor.classList.toggle("is-empty", !item.text);
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      return;
+    }
+
+    const categoryTitleEditor = event.target.closest("[data-quiz-category-title-editor]");
+    if (categoryTitleEditor) {
+      const widget = draftWidgets.find((entry) => entry.id === String(categoryTitleEditor.dataset.quizCategoryTitleEditor || "") && entry.type === "categories");
+      const categoryId = String(categoryTitleEditor.dataset.quizCategoryId || "");
+      const category = widget?.categoryItems?.find?.((entry) => entry.id === categoryId);
+      if (!widget || !category) return;
+      category.title = String(categoryTitleEditor.textContent || "").replace(/\r?\n/g, " ");
+      categoryTitleEditor.classList.toggle("is-empty", !category.title);
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      return;
+    }
+
     const audioSeek = event.target.closest("[data-quiz-audio-seek]");
     if (audioSeek) {
       const host = audioSeek.closest(".quiz-workshop-audio-content");
@@ -3822,6 +4432,15 @@ export function createQuizWorkshopViewController({
   }
 
   function handleDrawerDragStart(event){
+    const labelChip = event.target.closest("[data-quiz-category-label-chip]");
+    if (labelChip) {
+      const labelId = String(labelChip.dataset.quizCategoryLabelChip || "");
+      const sourceWidgetId = String(labelChip.dataset.quizCategoryLabelSource || "");
+      if (!labelId || !sourceWidgetId) return;
+      event.dataTransfer?.setData("text/plain", `quiz-label:${sourceWidgetId}:${labelId}`);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      return;
+    }
     const element = event.target.closest("[data-quiz-element-id]");
     if (!element) return;
     event.dataTransfer?.setData("text/plain", `element:${String(element.dataset.quizElementId || "text")}`);
@@ -3829,19 +4448,53 @@ export function createQuizWorkshopViewController({
   }
 
   function handleCanvasDragOver(event){
+    const transfer = event.dataTransfer?.getData("text/plain") || "";
+    const categoryDrop = event.target.closest?.("[data-quiz-category-drop-widget]");
+    if (categoryDrop || transfer.startsWith("quiz-label:")) {
+      event.preventDefault();
+      canvas?.querySelectorAll("[data-quiz-category-drop-widget].is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
+      categoryDrop?.classList?.add("is-drop-target");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      return;
+    }
     event.preventDefault();
     canvas?.classList.add("is-drag-over");
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
   }
 
   function handleCanvasDragLeave(event){
+    if (!canvas?.contains(event.relatedTarget)) {
+      canvas?.querySelectorAll("[data-quiz-category-drop-widget].is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
+    }
     if (!canvas?.contains(event.relatedTarget)) canvas?.classList.remove("is-drag-over");
   }
 
   function handleCanvasDrop(event){
     event.preventDefault();
     canvas?.classList.remove("is-drag-over");
+    canvas?.querySelectorAll("[data-quiz-category-drop-widget].is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
     const transfer = event.dataTransfer?.getData("text/plain") || "";
+    if (transfer.startsWith("quiz-label:")) {
+      const [, sourceWidgetId = "", labelId = ""] = transfer.split(":");
+      const dropZone = event.target.closest?.("[data-quiz-category-drop-widget]");
+      if (!dropZone) return;
+      const widget = draftWidgets.find((entry) => entry.id === String(dropZone.dataset.quizCategoryDropWidget || "") && entry.type === "categories");
+      if (!widget || widget.labelsSourceWidgetId !== sourceWidgetId) return;
+      const categoryId = String(dropZone.dataset.quizCategoryDropId || "");
+      widget.categoryItems = normalizeCategoryItems(widget.categoryItems, { ensureDefault:true }).map((category) => ({
+        ...category,
+        labelIds:category.labelIds.filter((id) => id !== labelId)
+      }));
+      if (categoryId) {
+        const target = widget.categoryItems.find((category) => category.id === categoryId);
+        if (target && !target.labelIds.includes(labelId)) target.labelIds.push(labelId);
+      }
+      syncActiveVariantWidget(widget);
+      markLayoutAsCustom();
+      selectedWidgetId = widget.id;
+      renderCanvas();
+      return;
+    }
     if (!transfer.startsWith("element:")) return;
     const elementType = transfer.slice("element:".length) || "text";
     const cell = getCanvasCell(event);
@@ -3897,12 +4550,11 @@ export function createQuizWorkshopViewController({
     let candidate;
 
     if (interactionState.type === "resize") {
-      const minimumColumnSpan = widget.type === "numeric-keypad" ? 6 : widget.type === "qcm-text" ? 3 : widget.type === "image" || widget.type === "audio" ? 2 : 1;
-      const minimumRowSpan = widget.type === "image" || widget.type === "audio" ? 2 : 1;
+      const minimumGridSize = getWidgetMinimumGridSize(widget.type);
       candidate = {
         ...currentView,
-        columnSpan: clamp(interactionState.startColumnSpan + columnDelta, minimumColumnSpan, GRID_COLUMNS - currentView.column + 1),
-        rowSpan: clamp(interactionState.startRowSpan + rowDelta, minimumRowSpan, GRID_ROWS - currentView.row + 1)
+        columnSpan: clamp(interactionState.startColumnSpan + columnDelta, minimumGridSize.columnSpan, GRID_COLUMNS - currentView.column + 1),
+        rowSpan: clamp(interactionState.startRowSpan + rowDelta, minimumGridSize.rowSpan, GRID_ROWS - currentView.row + 1)
       };
     } else {
       candidate = {
@@ -4319,6 +4971,9 @@ export function createQuizWorkshopViewController({
       widgetIdMap.set(widget.id, nextId);
       return { ...widget, id:nextId };
     });
+    duplicate.widgets = duplicate.widgets.map((widget) => widget.type === "categories"
+      ? { ...widget, labelsSourceWidgetId:widgetIdMap.get(widget.labelsSourceWidgetId) || "" }
+      : widget);
     duplicate.variants = duplicate.variants.map((variant) => {
       const widgetContents = {};
       Object.entries(variant.widgetContents || {}).forEach(([widgetId, content]) => {

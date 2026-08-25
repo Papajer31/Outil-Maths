@@ -77,7 +77,8 @@ export function createActivity(initialContext = {}) {
       syncRuntimeState(state, context ?? state.latestContext);
       return {
         canToggle:canToggleAnswerDisplay(state),
-        mode:state.answerDisplayMode === "student" ? "student" : "correction"
+        mode:state.answerDisplayMode === "student" ? "student" : "correction",
+        transitionTargets:[state.workspace]
       };
     },
 

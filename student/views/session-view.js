@@ -180,6 +180,7 @@ export function renderSessionView(root){
   let fitResizeObserver = null;
   let toolCountdownTicker = null;
   let attemptStopStatus = "interrupted";
+  let pendingAdventureAttemptFinalize = Promise.resolve();
   const detailedHistoryIdentityByAttempt = new Map();
 
   const SESSION_SCENE_WIDTH = 1920;
@@ -297,7 +298,7 @@ export function renderSessionView(root){
             return;
           }
 
-          goBackToActivities();
+          void exitToActivitiesAfterAttemptFinalization();
         },
         onFatalError: (message) => {
           showFatalError(message);
@@ -732,12 +733,25 @@ export function renderSessionView(root){
     if (!Number.isFinite(identity.studentId) || identity.studentId <= 0 || !identity.studentCode.trim()) return null;
 
     try {
+      const historyContext = String(payload.context || "exploration").trim().toLowerCase();
+      const metadata = {
+        ...(payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {})
+      };
+
+      if (historyContext === "adventure") {
+        const passageId = String(studentState.selectedConfig?.progression_context?.adventurePassageId || "").trim();
+        if (!passageId) {
+          throw new Error("Passage Aventure introuvable pour cette tentative.");
+        }
+        metadata.adventure_passage_id = passageId;
+      }
+
       const attemptId = await startPublicStudentActivityAttempt({
         accessCode: identity.accessCode,
         studentId: identity.studentId,
         studentCode: identity.studentCode,
         catalogActivityId: payload.catalogActivityId,
-        context: payload.context,
+        context: historyContext,
         missionId: payload.missionId || studentState.selectedMission?.id || studentState.selectedConfig?.mission_id || null,
         missionStepId: payload.missionStepId || null,
         clientAttemptId: payload.clientAttemptId,
@@ -745,7 +759,7 @@ export function renderSessionView(root){
         toolInstanceId: payload.toolInstanceId,
         activityTitle: payload.activityTitle,
         startedLevel: payload.startedLevel,
-        metadata: payload.metadata,
+        metadata,
         configSnapshot: payload.configSnapshot
       });
       if (attemptId) detailedHistoryIdentityByAttempt.set(String(attemptId), identity);
@@ -785,7 +799,15 @@ export function renderSessionView(root){
     }
   }
 
-  async function finishDetailedActivityAttempt(payload = {}){
+  function finishDetailedActivityAttempt(payload = {}){
+    const task = finishDetailedActivityAttemptRequest(payload);
+    if (String(payload.context || "").trim().toLowerCase() === "adventure") {
+      pendingAdventureAttemptFinalize = task.catch(() => null);
+    }
+    return task;
+  }
+
+  async function finishDetailedActivityAttemptRequest(payload = {}){
     const attemptId = String(payload.attemptId || "").trim();
     const identity = detailedHistoryIdentityByAttempt.get(attemptId);
     if (!identity || !attemptId) return null;
@@ -811,6 +833,22 @@ export function renderSessionView(root){
       console.warn("Impossible de finaliser l’historique détaillé de l’activité.", error);
       return null;
     }
+  }
+
+  function isAdventureSessionContext(){
+    return String(
+      studentState.selectedConfig?.progression_context?.context
+        || studentState.selectedConfig?.catalog_context
+        || ""
+    ).trim().toLowerCase() === "adventure";
+  }
+
+  async function exitToActivitiesAfterAttemptFinalization(){
+    if (isAdventureSessionContext()) {
+      await pendingAdventureAttemptFinalize.catch(() => null);
+    }
+
+    goBackToActivities();
   }
 
   function syncFinishedExplorationLevel(summary){
@@ -943,11 +981,17 @@ export function renderSessionView(root){
     syncProjectedControls();
   }
 
-  function leaveSessionFromExitConfirm(){
+  async function leaveSessionFromExitConfirm(){
     attemptStopStatus = "abandoned";
+    let finalizePromise = null;
     try {
-      engine?.stop?.({ attemptStatus: "abandoned" });
+      finalizePromise = engine?.stop?.({ attemptStatus: "abandoned" }) || null;
     } catch {}
+
+    if (isAdventureSessionContext() && finalizePromise) {
+      await Promise.resolve(finalizePromise).catch(() => null);
+    }
+
     leaveSessionImmediately();
   }
 

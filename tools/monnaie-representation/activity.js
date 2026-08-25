@@ -812,7 +812,10 @@ function getShellAnswerDisplayState(state) {
   const canToggle = canToggleReadAnswerDisplay(state) || canToggleComposeAnswerDisplay(state);
   return {
     canToggle,
-    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+    transitionTargets: state.currentQuestion?.exerciseType === EXERCISE_TYPES.COMPOSE_SUM
+      ? [state.stageEl]
+      : [state.answerEl]
   };
 }
 

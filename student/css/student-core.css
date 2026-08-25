@@ -1130,6 +1130,23 @@ body.student-route-selectstudents .student-selection-class{
   height:100%;
 }
 
+.session-workarea.session-workarea--validation-review{
+  pointer-events:none;
+}
+
+.session-answer-transition-target{
+  --session-answer-transition-duration:500ms;
+  transition:opacity var(--session-answer-transition-duration) ease;
+}
+
+.session-answer-transition-target.session-answer-transition-target--revealing{
+  --session-answer-transition-duration:500ms;
+}
+
+.session-answer-transition-target.session-answer-transition-target--hidden{
+  opacity:0;
+}
+
 .session-stage-layer{
   position:absolute;
   inset:0;
@@ -2509,4 +2526,68 @@ body.student-orientation-blocked{
 .session-shell-btn-icon .material-icon-svg,
 .student-icon .material-icon-svg{
   display:block;
+}
+
+/* =========================
+   VALIDATION FEEDBACK FLASH
+   ========================= */
+
+.session-validation-flash{
+  position:fixed;
+  inset:0;
+  z-index:2147483646;
+  display:grid;
+  place-items:center;
+  pointer-events:none;
+  opacity:0;
+}
+
+.session-validation-flash__icon{
+  display:none;
+  width:clamp(16rem, 40vw, 30rem);
+  height:clamp(16rem, 40vw, 30rem);
+  fill:currentColor;
+  filter:drop-shadow(0 .35rem .7rem rgba(0, 0, 0, .35));
+}
+
+.session-validation-flash.is-correct .session-validation-flash__icon--correct,
+.session-validation-flash.is-incorrect .session-validation-flash__icon--incorrect{
+  display:block;
+  animation:session-validation-icon-zoom 800ms linear both;
+}
+
+.session-validation-flash.is-correct{
+  color:#22c55e;
+}
+
+.session-validation-flash.is-incorrect{
+  color:#ef4444;
+}
+
+.session-validation-flash.is-flashing{
+  animation:session-validation-flash 800ms ease-out both;
+}
+
+@keyframes session-validation-flash{
+  0%{ opacity:0; }
+  25%{ opacity:.75; }
+  50%{ opacity:1; }
+  75%{ opacity:.75; }
+  100%{ opacity:0; }
+}
+
+@keyframes session-validation-icon-zoom{
+  0%{ transform:scale(.18); }
+  100%{ transform:scale(1.22); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .session-validation-flash.is-flashing{
+    animation-duration:600ms;
+  }
+
+  .session-validation-flash.is-correct .session-validation-flash__icon--correct,
+  .session-validation-flash.is-incorrect .session-validation-flash__icon--incorrect{
+    animation-duration:600ms;
+  }
 }

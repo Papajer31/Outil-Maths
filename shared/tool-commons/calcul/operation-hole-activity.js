@@ -328,9 +328,13 @@ function renderDisplayedResponse(state) {
     "calc-family-response-wrap",
     "calc-family-response-wrap--inline",
     "op-response-wrap",
-    evaluation.isCorrect === true ? "calc-family-response-wrap--correct" : "calc-family-response-wrap--incorrect",
-    evaluation.isCorrect === true ? "op-response-wrap--correct" : "op-response-wrap--incorrect"
-  ].join(" ");
+    evaluation.isCorrect === true
+      ? "calc-family-response-wrap--correct"
+      : (showStudentAnswer ? "calc-family-response-wrap--incorrect" : "calc-family-response-wrap--correction"),
+    evaluation.isCorrect === true
+      ? "op-response-wrap--correct"
+      : (showStudentAnswer ? "op-response-wrap--incorrect" : "")
+  ].filter(Boolean).join(" ");
 
   state.equationEl.innerHTML = renderEquationMarkup(state.currentQuestion, {
     holeMarkup: `
@@ -409,7 +413,7 @@ function renderFreeHole(value = "", { visible = false } = {}) {
 function renderSnapshotMarkup(snapshot, { showStudentAnswer, evaluation }) {
   if (!snapshot) return "";
   return renderNumericAnswerDisplayMarkup(snapshot.value, {
-    className: `calc-family-response-input calc-family-response-input--inline op-response-input op-response-input--single${showStudentAnswer ? (evaluation.isCorrect ? " calc-family-response-input--correct is-correct op-response-input--correct" : " calc-family-response-input--incorrect is-incorrect op-response-input--incorrect") : ""}`,
+    className: `calc-family-response-input calc-family-response-input--inline op-response-input op-response-input--single${showStudentAnswer ? (evaluation.isCorrect ? " calc-family-response-input--correct is-correct op-response-input--correct" : " calc-family-response-input--incorrect is-incorrect op-response-input--incorrect") : (evaluation.isCorrect ? " calc-family-response-input--correct is-correct op-response-input--correct" : " calc-family-response-input--correction is-correction")}`,
     ariaLabel: "Réponse affichée"
   });
 }
@@ -445,7 +449,8 @@ function getShellAnswerDisplayState(state) {
     canToggle: canToggleStudentAnswerDisplay(state),
     mode: canToggleStudentAnswerDisplay(state)
       ? normalizeAnswerDisplayMode(state.answerDisplayMode)
-      : "correction"
+      : "correction",
+    transitionTargets: [state.equationEl]
   };
 }
 

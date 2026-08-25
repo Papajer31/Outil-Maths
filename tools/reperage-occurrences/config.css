@@ -1,0 +1,144 @@
+.ro-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.ro-config-possibilities{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.ro-config-rows{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+
+.ro-config-row{
+  display:grid;
+  grid-template-columns:minmax(190px,.75fr) minmax(360px,1.8fr) 38px 38px;
+  gap:10px;
+  align-items:center;
+}
+
+.ro-config-inline-field{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  color:var(--text,#101828);
+  font-size:20px;
+  font-weight:650;
+  white-space:nowrap;
+}
+
+.ro-config-inline-field .tv-input{
+  width:100%;
+  min-width:0;
+  height:38px;
+  min-height:38px;
+  padding:0 12px;
+  border-radius:12px;
+  box-sizing:border-box;
+  font-size:20px;
+  font-weight:700;
+}
+
+.ro-config-row-button{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  padding:0;
+  border:none;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  color:var(--text);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:background-color .12s ease,box-shadow .12s ease,opacity .12s ease;
+}
+
+.ro-config-row-button:hover:not(:disabled){
+  background:rgba(255,255,255,.16);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.ro-config-row-button:active:not(:disabled){
+  background:rgba(255,255,255,.22);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.20);
+}
+
+.ro-config-row-button:focus-visible{
+  outline:3px solid rgba(37,99,235,.28);
+  outline-offset:2px;
+}
+
+.ro-config-remove:disabled{
+  visibility:hidden;
+  pointer-events:none;
+}
+
+.ro-config-count-row{
+  display:flex;
+  flex:0 0 auto;
+  flex-wrap:nowrap;
+  gap:24px;
+  align-items:center;
+}
+
+.ro-config-count-row .tv-stepper-field{
+  flex:0 0 auto;
+  flex-direction:row;
+  align-items:center;
+  gap:10px;
+}
+
+.ro-config-count-row .tv-stepper-field-label{
+  white-space:nowrap;
+  font-size:20px;
+}
+
+.ro-config-counts{
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.ro-config-counts > .tv-group-title{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+.ro-config-root .tv-radio-options{
+  flex-wrap:wrap;
+}
+
+@media (max-width:1050px){
+  .ro-config-row{
+    grid-template-columns:minmax(0,1fr) 38px 38px;
+  }
+
+  .ro-config-inline-target,
+  .ro-config-inline-distractors{
+    grid-column:1;
+  }
+
+  .ro-config-add{
+    grid-column:2;
+    grid-row:1 / span 2;
+    align-self:center;
+  }
+
+  .ro-config-remove{
+    grid-column:3;
+    grid-row:1 / span 2;
+    align-self:center;
+  }
+}

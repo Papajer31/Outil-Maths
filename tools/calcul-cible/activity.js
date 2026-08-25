@@ -1409,7 +1409,8 @@ function getShellAnswerDisplayState(state) {
   const canToggle = canToggleStudentAnswerDisplay(state);
   return {
     canToggle,
-    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+    transitionTargets: [state.answersEl]
   };
 }
 

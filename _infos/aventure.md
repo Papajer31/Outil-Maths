@@ -1,6 +1,6 @@
 # Aventure — contrat fonctionnel et technique
 
-Dernière mise à jour : 2026-08-07.
+Dernière mise à jour : 2026-08-22.
 
 ## Objectif de rentrée
 
@@ -164,14 +164,32 @@ La séparation des contextes doit être respectée : le niveau atteint en Explor
 
 Les anciennes tables `adventure_objective_registry` et `teacher_adventure_objectives` sont historiques et ne sont plus utilisées par l’écran des menus.
 
+## MVP rentrée — état après le patch SQL 31
+
+Le premier parcours élève est volontairement réduit aux **six passages obligatoires de type `activity`**. Pour ouvrir une nouvelle journée dans ce MVP, les six cases du jour doivent donc cibler des activités précises. Les cases `objective` restent dans les menus et seront réactivées dès que leur résolution automatique sera branchée.
+
+Le patch SQL `31_adventure_required_activity_runtime.sql` prépare le runtime serveur :
+
+- niveau initial Aventure d’une activité = `2` ;
+- reprise du dernier `ended_level` de cette même activité en contexte `adventure` ;
+- liaison tentative ↔ passage via `metadata_json.adventure_passage_id` ;
+- matrice lente calculée côté serveur à chaque question ;
+- variation réellement appliquée stockée dans `student_activity_session_questions.points_awarded` ;
+- jauge bornée entre `0` et `50` ;
+- retries d’une même question idempotents ;
+- passage terminé lorsque la tentative est terminée ;
+- après les six obligatoires, passages 7 à 10 temporairement `skipped` et journée `completed` ;
+- une journée déjà figée reste reprenable même si le menu enseignant est ensuite modifié.
+
+`open_student_adventure_day` renvoie désormais `started_level` pour chaque passage possédant une activité. Le prochain patch client doit utiliser ce niveau pour construire la configuration d’exécution et fournir l’identifiant du passage dans les métadonnées de la tentative.
+
 ## Ordre de réalisation restant
 
-1. Confirmer le déploiement et la validation des fondations SQL.
-2. Sélectionner et lancer un passage obligatoire de type Activité.
-3. Sélectionner une activité pour une case Objectif selon le palier.
-4. Appliquer la matrice lente question par question et mettre à jour la jauge.
-5. Enchaîner et reprendre les six passages obligatoires.
-6. Générer de manière stable les quatre passages adaptatifs.
-7. Finaliser l’interface élève et la fin de journée.
-8. Tester plusieurs élèves, niveaux, rechargements et changements de curseur.
-9. Ajouter ensuite vieillissement, rangs de maîtrise et reporting.
+1. Appliquer et valider `31_adventure_required_activity_runtime.sql`.
+2. Activer l’entrée Aventure côté élève et ouvrir/reprendre le jour courant.
+3. Lancer le premier passage `activity` avec son `started_level` et son `adventure_passage_id`.
+4. Revenir automatiquement à Aventure après l’activité et enchainer jusqu’au passage 6.
+5. Tester jauges, niveaux, interruption/reprise, retries et fin de journée avec plusieurs élèves.
+6. Réactiver les cases Objectif par sélection automatique du palier et de l’activité.
+7. Générer ensuite les quatre passages adaptatifs.
+8. Ajouter enfin vieillissement, rangs de maîtrise et reporting.

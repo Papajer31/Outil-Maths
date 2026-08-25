@@ -26,6 +26,7 @@ const EXTRA_COLUMNS = 4;
 const FILLER_ALPHABET = Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZEEEEAAAAIIIIOOONNRRSTTLUCDMPBVFGHJQXYZÉÈÀÇ");
 
 let WORD_CATALOG = [];
+let WORD_LEXICON = new Set();
 let PLAYABLE_WORDS_BY_TARGET = new Map();
 
 export function getDefaultSettings() {
@@ -109,6 +110,10 @@ export function normalizeSettings(settings = {}) {
 
 export function setWordCatalog(words = []) {
   WORD_CATALOG = normalizeWordCatalog(words);
+  WORD_LEXICON = new Set(WORD_CATALOG
+    .filter((entry) => isLettersOnly(entry.word))
+    .map((entry) => normalizeLexicalWord(entry.word))
+    .filter(Boolean));
   PLAYABLE_WORDS_BY_TARGET = new Map();
 }
 
@@ -403,7 +408,16 @@ function buildLetterGrid(word, requestedRowCount) {
     letters.forEach((letter, offset) => {
       characters[expectedIndices[offset]] = letter;
     });
-    if (countForwardOccurrences(characters, letters, rowCount, columnCount) === 1) break;
+    const hasSingleTargetOccurrence = countForwardOccurrences(characters, letters, rowCount, columnCount) === 1;
+    const createsLongerKnownWord = hasLexicalExtensionAtTarget(
+      characters,
+      letters.length,
+      expectedIndices,
+      orientation,
+      rowCount,
+      columnCount
+    );
+    if (hasSingleTargetOccurrence && !createsLongerKnownWord) break;
   }
 
   const cells = characters.map((text, index) => ({
@@ -416,6 +430,38 @@ function buildLetterGrid(word, requestedRowCount) {
   }));
 
   return { rowCount, columnCount, orientation, cells, expectedIndices };
+}
+
+function hasLexicalExtensionAtTarget(characters, targetLength, expectedIndices, orientation, rows, cols) {
+  if (!(WORD_LEXICON instanceof Set) || !WORD_LEXICON.size || !expectedIndices.length) return false;
+
+  const targetStart = expectedIndices[0];
+  const targetRow = Math.floor(targetStart / cols);
+  const targetCol = targetStart % cols;
+  const line = orientation === "vertical"
+    ? Array.from({ length:rows }, (_, row) => characters[row * cols + targetCol])
+    : Array.from({ length:cols }, (_, col) => characters[targetRow * cols + col]);
+  const targetAxisStart = orientation === "vertical" ? targetRow : targetCol;
+  const targetAxisEnd = targetAxisStart + targetLength - 1;
+
+  // Test only the contiguous strings that actually contain the hidden word.
+  // The line is tiny (<= grid width, or <= 5 vertically), so this avoids any
+  // scan of the full 4,714-word catalog during question generation.
+  for (let start = 0; start <= targetAxisStart; start += 1) {
+    for (let end = targetAxisEnd; end < line.length; end += 1) {
+      const length = end - start + 1;
+      if (length <= targetLength) continue;
+      const candidate = line.slice(start, end + 1).join("");
+      if (WORD_LEXICON.has(candidate)) return true;
+    }
+  }
+  return false;
+}
+
+function normalizeLexicalWord(word) {
+  return splitWordLetters(word)
+    .map((letter) => letter.toLocaleUpperCase("fr-FR"))
+    .join("");
 }
 
 function countForwardOccurrences(characters, needle, rows, cols) {

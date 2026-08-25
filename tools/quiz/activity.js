@@ -13,6 +13,10 @@ import { resolveQuizAudioSourceUrl } from "../../shared/quiz-audio-source.js";
 import { ensureToolUiStyles } from "../../shared/tool-ui/tool-ui.js";
 import { bindNumericKeypadEvents, renderNumericKeypad } from "../../shared/tool-ui/numeric-keypad.js";
 import {
+  clientPointToLocalPoint,
+  clientRectToLocalRect
+} from "../../shared/tool-ui/drag-core.js";
+import {
   normalizeQuizSelectionIndexes,
   renderQuizSelectionTextToHtml
 } from "../../shared/quiz-selection-text.js";
@@ -92,6 +96,9 @@ function createRuntimeState(initialContext = {}){
     keypadAbortController: null,
     qcmAbortController: null,
     selectionAbortController: null,
+    labelsAbortController: null,
+    labelsResizeObserver: null,
+    labelsLayoutFrame: 0,
     audioAbortController: null,
     activeAudioEl: null,
     qcmResizeObserver: null,
@@ -106,6 +113,11 @@ function createRuntimeState(initialContext = {}){
     selectedChoiceId: "",
     selectedTokenIndexes: [],
     submittedTokenIndexes: [],
+    categoryAssignments: new Map(),
+    submittedCategoryAssignments: new Map(),
+    submittedCategoryLabelOrder: new Map(),
+    labelPositions: new Map(),
+    activeLabelDrag: null,
     answerDisplayMode: "correction"
   };
 }
@@ -137,6 +149,11 @@ function loadNextQuestion(state, context = {}){
   state.selectedChoiceId = "";
   state.selectedTokenIndexes = [];
   state.submittedTokenIndexes = [];
+  state.categoryAssignments.clear();
+  state.submittedCategoryAssignments.clear();
+  state.submittedCategoryLabelOrder.clear();
+  state.labelPositions.clear();
+  state.activeLabelDrag = null;
   state.answerDisplayMode = "correction";
   state.qcmChoiceFontSizes.clear();
   state.currentQuestion = pickNextQuestion(state, settings);
@@ -174,7 +191,8 @@ function buildRunnableQuestion(question){
     const answerWidgets = widgets.filter((widget) => widget?.type === "answer");
     const qcmWidgets = widgets.filter((widget) => widget?.type === "qcm-text");
     const selectionWidgets = widgets.filter((widget) => widget?.type === "selection-words");
-    if (answerWidgets.length + qcmWidgets.length + selectionWidgets.length !== 1) return null;
+    const categoriesWidgets = widgets.filter((widget) => widget?.type === "categories");
+    if (answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length !== 1) return null;
 
     if (qcmWidgets.length === 1) {
       const qcmWidget = qcmWidgets[0];
@@ -221,6 +239,38 @@ function buildRunnableQuestion(question){
       };
     }
 
+    if (categoriesWidgets.length === 1) {
+      const categoriesWidget = categoriesWidgets[0];
+      const labelsWidget = widgets.find((widget) => widget?.type === "labels" && widget.id === categoriesWidget.labelsSourceWidgetId) || null;
+      const questionView = getWidgetView(categoriesWidget, "question");
+      const labelsView = labelsWidget ? getWidgetView(labelsWidget, "question") : null;
+      const labelItems = Array.isArray(labelsWidget?.labelItems)
+        ? labelsWidget.labelItems.filter((item) => String(item?.text || "").trim())
+        : [];
+      const categoryItems = Array.isArray(categoriesWidget.categoryItems) ? categoriesWidget.categoryItems : [];
+      const expectedAssignments = variant.expectedCategoryAssignments && typeof variant.expectedCategoryAssignments === "object"
+        ? variant.expectedCategoryAssignments
+        : {};
+      const assignedIds = Object.keys(expectedAssignments);
+      if (!questionView?.visible || !labelsView?.visible || !labelsWidget || labelItems.length === 0 || categoryItems.length < 2) return null;
+      if (!variant.categoryAssignmentValid || assignedIds.length !== labelItems.length) return null;
+      return {
+        ...variant,
+        widgets,
+        responseType:"categories",
+        categoriesWidgetCount:1,
+        answerWidgetCount:0,
+        qcmWidgetCount:0,
+        selectionWidgetCount:0,
+        primaryCategoriesWidgetId:categoriesWidget.id || "",
+        primaryCategoriesVisibleInQuestion:true,
+        primaryLabelsWidgetId:labelsWidget.id || "",
+        expectedCategoryAssignments:{ ...expectedAssignments },
+        expectedAnswer:JSON.stringify(expectedAssignments),
+        expectedAnswerLabel:"Classement attendu"
+      };
+    }
+
     const answerWidget = answerWidgets[0];
     const questionView = getWidgetView(answerWidget, "question");
     const correctionView = getWidgetView(answerWidget, "correction");
@@ -259,6 +309,8 @@ function pickNextQuestion(state, settings){
     widgets:(selected.widgets || []).map((widget) => ({
       ...widget,
       qcmChoices:Array.isArray(widget.qcmChoices) ? widget.qcmChoices.map((choice) => ({ ...choice })) : [],
+      labelItems:Array.isArray(widget.labelItems) ? widget.labelItems.map((item) => ({ ...item })) : [],
+      categoryItems:Array.isArray(widget.categoryItems) ? widget.categoryItems.map((item) => ({ ...item, labelIds:Array.isArray(item.labelIds) ? [...item.labelIds] : [] })) : [],
       selectionExpectedTokenIndexes:Array.isArray(widget.selectionExpectedTokenIndexes)
         ? [...widget.selectionExpectedTokenIndexes]
         : []
@@ -266,16 +318,24 @@ function pickNextQuestion(state, settings){
   };
   if (current.responseType === "qcm-text") {
     const qcmWidget = current.widgets.find((widget) => widget.type === "qcm-text");
-    if (qcmWidget) qcmWidget.qcmChoices = shuffleChoices(qcmWidget.qcmChoices);
+    if (qcmWidget) qcmWidget.qcmChoices = shuffleItems(qcmWidget.qcmChoices);
+  }
+  if (current.responseType === "categories") {
+    const labelsWidget = current.widgets.find((widget) => widget.type === "labels" && widget.id === current.primaryLabelsWidgetId);
+    if (labelsWidget) labelsWidget.labelItems = shuffleItems(labelsWidget.labelItems, { ensureDifferent:true });
   }
   return current;
 }
 
-function shuffleChoices(choices = []){
-  const shuffled = Array.isArray(choices) ? choices.map((choice) => ({ ...choice })) : [];
+function shuffleItems(items = [], { ensureDifferent = false } = {}){
+  const source = Array.isArray(items) ? items : [];
+  const shuffled = source.map((item) => ({ ...item }));
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  if (ensureDifferent && shuffled.length > 1 && shuffled.every((item, index) => item.id === source[index]?.id)) {
+    [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
   }
   return shuffled;
 }
@@ -314,6 +374,7 @@ function renderCurrentView(state){
   bindRuntimeNumericKeypad(state);
   bindRuntimeQcm(state);
   bindRuntimeSelection(state);
+  bindRuntimeLabels(state);
   bindRuntimeAudios(state);
   hydrateRuntimeImages(state);
   hydrateRuntimeAudios(state);
@@ -357,6 +418,8 @@ function patchCorrectionView(state){
       && widget.type !== "numeric-keypad"
       && widget.type !== "qcm-text"
       && widget.type !== "selection-words"
+      && widget.type !== "labels"
+      && widget.type !== "categories"
       && getRuntimeWidgetViewSignature(widget, questionView) === getRuntimeWidgetViewSignature(widget, view);
     if (unchangedStaticWidget) return;
 
@@ -377,6 +440,7 @@ function patchCorrectionView(state){
   });
 
   bindRuntimeAudios(state);
+  bindRuntimeLabels(state);
   if (needsImageHydration) hydrateRuntimeImages(state);
   if (needsAudioHydration) hydrateRuntimeAudios(state);
   scheduleRuntimeTextFit(state);
@@ -392,7 +456,10 @@ function getRuntimeWidgetViewSignature(widget, view){
     label: String(widget?.label || ""),
     html: String(view?.html || ""),
     imageSource: view?.imageSource || null,
-    audioSource: view?.audioSource || null
+    audioSource: view?.audioSource || null,
+    labelItems: view?.labelItems || null,
+    labelsSourceWidgetId: String(view?.labelsSourceWidgetId || ""),
+    categoryItems: view?.categoryItems || null
   });
 }
 
@@ -473,6 +540,10 @@ function renderWidget(state, widget, mode){
     return renderAudioWidget(widget, view, style);
   }
 
+  if (widget.type === "labels") {
+    return renderLabelsWidget(state, widget, view, mode, style);
+  }
+
   if (widget.type === "answer") {
     return renderAnswerWidget(state, widget, view, mode, style);
   }
@@ -489,6 +560,10 @@ function renderWidget(state, widget, mode){
     return renderSelectionWordsWidget(state, widget, view, mode, style);
   }
 
+  if (widget.type === "categories") {
+    return renderCategoriesWidget(state, widget, view, mode, style);
+  }
+
   return `
     <section
       class="quiz-runtime-widget quiz-runtime-widget--text"
@@ -497,6 +572,119 @@ function renderWidget(state, widget, mode){
       aria-label="${escapeHtml(widget.label || "Texte")}" 
     >
       <div class="quiz-runtime-widget-content" data-quiz-runtime-text-fit>${sanitizeRichHtml(view.html)}</div>
+    </section>
+  `;
+}
+
+function getCategoryAssignmentMapForMode(state, mode){
+  // Pour Catégories, la phase de correction conserve toujours la disposition
+  // réellement soumise par l’élève. La correction est un feedback visuel sur
+  // cet état, pas une redistribution automatique des étiquettes.
+  if (state.answerRevealed && state.currentQuestion?.responseType === "categories") {
+    return new Map(state.submittedCategoryAssignments);
+  }
+  if (mode === "correction") {
+    return new Map(Object.entries(state.currentQuestion?.expectedCategoryAssignments || {}));
+  }
+  return new Map(state.categoryAssignments);
+}
+
+function getLabelsWidgetById(state, widgetId){
+  return (state.currentQuestion?.widgets || []).find((widget) => widget?.type === "labels" && widget.id === widgetId) || null;
+}
+
+function renderRuntimeLabelChip(item, sourceWidgetId, feedbackClass = ""){
+  const normalizedFeedbackClass = ["is-correct", "is-incorrect"].includes(feedbackClass) ? feedbackClass : "";
+  return `
+    <span
+      class="quiz-runtime-label-chip${normalizedFeedbackClass ? ` ${normalizedFeedbackClass}` : ""}"
+      data-quiz-runtime-label-id="${escapeHtml(item.id)}"
+      data-quiz-runtime-label-source="${escapeHtml(sourceWidgetId)}"
+      tabindex="0"
+      role="button"
+      aria-label="Étiquette ${escapeHtml(item.text)}"
+    >${escapeHtml(item.text)}</span>
+  `;
+}
+
+function renderLabelsWidget(state, widget, view, mode, style){
+  const assignments = getCategoryAssignmentMapForMode(state, mode);
+  const items = (Array.isArray(view.labelItems) ? view.labelItems : [])
+    .filter((item) => String(item?.text || "").trim())
+    .filter((item) => !assignments.has(String(item.id || "")));
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--labels"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      aria-label="${escapeHtml(widget.label || "Étiquettes")}"
+    >
+      <div class="quiz-runtime-labels-zone" data-quiz-runtime-labels-zone="${escapeHtml(widget.id)}">
+        ${items.map((item) => renderRuntimeLabelChip(item, widget.id)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function getSubmittedCategoryLabelIds(state, categoryId, assignments){
+  const normalizedCategoryId = String(categoryId || "");
+  const retainedOrder = state.answerRevealed
+    ? (state.submittedCategoryLabelOrder.get(normalizedCategoryId) || [])
+    : [];
+  const orderedIds = retainedOrder.filter((labelId) => assignments.get(labelId) === normalizedCategoryId);
+  const orderedSet = new Set(orderedIds);
+  assignments.forEach((assignedCategoryId, labelId) => {
+    if (String(assignedCategoryId || "") === normalizedCategoryId && !orderedSet.has(labelId)) {
+      orderedIds.push(labelId);
+      orderedSet.add(labelId);
+    }
+  });
+  return orderedIds;
+}
+
+function renderCategoriesWidget(state, widget, view, mode, style){
+  const assignments = getCategoryAssignmentMapForMode(state, mode);
+  const sourceWidgetId = String(widget.labelsSourceWidgetId || view.labelsSourceWidgetId || "");
+  const sourceWidget = getLabelsWidgetById(state, sourceWidgetId);
+  const labelItems = Array.isArray(sourceWidget?.labelItems) ? sourceWidget.labelItems : [];
+  const labelById = new Map(labelItems.map((item) => [String(item.id || ""), item]));
+  const categories = Array.isArray(view.categoryItems) ? view.categoryItems : [];
+  const interactive = mode === "question" && getResponseUi(state.latestContext) === "boxed";
+  const showCorrectionFeedback = mode === "correction"
+    && state.answerRevealed
+    && normalizeAnswerDisplayMode(state.answerDisplayMode) === "correction";
+  const expectedAssignments = state.currentQuestion?.expectedCategoryAssignments || {};
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--categories${showCorrectionFeedback ? " is-correction" : ""}"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      aria-label="${escapeHtml(widget.label || "Catégories")}"
+    >
+      <div class="quiz-runtime-categories" style="--quiz-runtime-category-count:${Math.max(1, categories.length)}">
+        ${categories.map((category) => {
+          const labels = getSubmittedCategoryLabelIds(state, category.id, assignments)
+            .map((labelId) => labelById.get(labelId))
+            .filter(Boolean);
+          return `
+            <div
+              class="quiz-runtime-category${interactive ? " is-interactive" : ""}"
+              data-quiz-runtime-category-id="${escapeHtml(category.id)}"
+              data-quiz-runtime-category-source="${escapeHtml(sourceWidgetId)}"
+            >
+              <div class="quiz-runtime-category-title">${escapeHtml(category.title)}</div>
+              <div class="quiz-runtime-category-labels">
+                ${labels.map((item) => {
+                  const feedbackClass = showCorrectionFeedback
+                    ? (String(expectedAssignments[String(item.id || "")] || "") === String(category.id || "") ? "is-correct" : "is-incorrect")
+                    : "";
+                  return renderRuntimeLabelChip(item, sourceWidgetId, feedbackClass);
+                }).join("")}
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
     </section>
   `;
 }
@@ -1048,6 +1236,352 @@ function bindRuntimeSelection(state){
   });
 }
 
+function serializeCategoryAssignments(assignments){
+  const entries = assignments instanceof Map ? Array.from(assignments.entries()) : Object.entries(assignments || {});
+  return JSON.stringify(Object.fromEntries(entries
+    .map(([labelId, categoryId]) => [String(labelId || ""), String(categoryId || "")])
+    .filter(([labelId, categoryId]) => labelId && categoryId)
+    .sort(([left], [right]) => left.localeCompare(right))));
+}
+
+function createRuntimeLabelsLayout(measurements, zoneWidth, zoneHeight){
+  const preferredGap = Math.max(6, Math.min(14, zoneWidth * .025));
+  const candidateGaps = Array.from(new Set([preferredGap, 4, 2]));
+
+  for (const gap of candidateGaps) {
+    const contentWidth = zoneWidth - gap * 2;
+    const contentHeight = zoneHeight - gap * 2;
+    if (contentWidth <= 0 || contentHeight <= 0) continue;
+    if (measurements.some(({ width, height }) => width > contentWidth || height > contentHeight)) continue;
+
+    const rows = [];
+    let currentRow = null;
+    measurements.forEach((measurement) => {
+      const nextWidth = currentRow
+        ? currentRow.width + gap + measurement.width
+        : measurement.width;
+      if (currentRow && nextWidth > contentWidth) currentRow = null;
+      if (!currentRow) {
+        currentRow = { items:[], width:0, height:0 };
+        rows.push(currentRow);
+      }
+      currentRow.width += (currentRow.items.length ? gap : 0) + measurement.width;
+      currentRow.height = Math.max(currentRow.height, measurement.height);
+      currentRow.items.push(measurement);
+    });
+
+    const rowsHeight = rows.reduce((total, row) => total + row.height, 0) + Math.max(0, rows.length - 1) * gap;
+    if (rowsHeight > contentHeight) continue;
+
+    const layout = [];
+    let top = gap;
+    rows.forEach((row) => {
+      let left = gap;
+      row.items.forEach((measurement) => {
+        layout.push({ ...measurement, left, top:top + (row.height - measurement.height) / 2 });
+        left += measurement.width + gap;
+      });
+      top += row.height + gap;
+    });
+    return layout;
+  }
+
+  return null;
+}
+
+function layoutRuntimeLabels(state){
+  const zones = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-labels-zone]") || []);
+  let hasPendingZone = false;
+  zones.forEach((zone) => {
+    if (zone.dataset.quizRuntimeLabelsLaidOut === "true") return;
+    const sourceWidgetId = String(zone.dataset.quizRuntimeLabelsZone || "");
+    const chips = Array.from(zone.querySelectorAll(":scope > .quiz-runtime-label-chip"));
+    if (!chips.length) return;
+    const zoneWidth = zone.clientWidth || zone.offsetWidth;
+    const zoneHeight = zone.clientHeight || zone.offsetHeight;
+    const measurements = chips.map((chip) => {
+      const localRect = clientRectToLocalRect(zone, chip.getBoundingClientRect());
+      return { chip, width:localRect.width, height:localRect.height };
+    });
+    if (zoneWidth < 24 || zoneHeight < 24 || measurements.some(({ width, height }) => width < 2 || height < 2)) {
+      hasPendingZone = true;
+      return;
+    }
+    const savedLayout = measurements.every(({ chip }) => {
+      const labelId = String(chip.dataset.quizRuntimeLabelId || "");
+      const saved = state.labelPositions.get(`${sourceWidgetId}:${labelId}`);
+      return Number.isFinite(Number(saved?.x)) && Number.isFinite(Number(saved?.y));
+    }) ? measurements.map(({ chip, width, height }) => {
+      const labelId = String(chip.dataset.quizRuntimeLabelId || "");
+      const saved = state.labelPositions.get(`${sourceWidgetId}:${labelId}`);
+      return {
+        chip,
+        width,
+        height,
+        left:Math.max(0, Math.min(zoneWidth - width, Number(saved.x) * Math.max(0, zoneWidth - width))),
+        top:Math.max(0, Math.min(zoneHeight - height, Number(saved.y) * Math.max(0, zoneHeight - height)))
+      };
+    }) : null;
+    const layout = savedLayout || createRuntimeLabelsLayout(measurements, zoneWidth, zoneHeight);
+    if (!layout) {
+      hasPendingZone = true;
+      return;
+    }
+
+    layout.forEach(({ chip, width, height, left, top }) => {
+      const labelId = String(chip.dataset.quizRuntimeLabelId || "");
+      const key = `${sourceWidgetId}:${labelId}`;
+      const maxLeft = Math.max(0, zoneWidth - width);
+      const maxTop = Math.max(0, zoneHeight - height);
+      chip.style.left = `${left}px`;
+      chip.style.top = `${top}px`;
+      if (!state.labelPositions.has(key)) {
+        state.labelPositions.set(key, {
+          x:maxLeft > 0 ? left / maxLeft : 0,
+          y:maxTop > 0 ? top / maxTop : 0
+        });
+      }
+    });
+    zone.dataset.quizRuntimeLabelsLaidOut = "true";
+  });
+  return hasPendingZone;
+}
+
+function scheduleRuntimeLabelsLayout(state, signal){
+  const zones = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-labels-zone]") || []);
+  if (!zones.length) return;
+  let typographyReady = !document.fonts?.ready || document.fonts.status === "loaded";
+
+  const runLayout = () => {
+    state.labelsLayoutFrame = 0;
+    if (signal.aborted) return;
+    const hasPendingZone = layoutRuntimeLabels(state);
+    if (!hasPendingZone) {
+      state.labelsResizeObserver?.disconnect();
+      state.labelsResizeObserver = null;
+    }
+  };
+  const scheduleLayout = () => {
+    if (signal.aborted || !typographyReady || state.labelsLayoutFrame) return;
+    state.labelsLayoutFrame = window.requestAnimationFrame(runLayout);
+  };
+  const beginLayout = () => {
+    if (signal.aborted) return;
+    typographyReady = true;
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scheduleLayout));
+  };
+
+  if (typeof ResizeObserver !== "undefined") {
+    state.labelsResizeObserver?.disconnect();
+    state.labelsResizeObserver = new ResizeObserver(scheduleLayout);
+    zones.forEach((zone) => state.labelsResizeObserver.observe(zone));
+  }
+  if (typographyReady) beginLayout();
+  else document.fonts.ready.then(beginLayout, beginLayout);
+}
+
+function clearRuntimeLabelDropTargets(state){
+  state.canvasEl?.querySelectorAll?.(".quiz-runtime-category.is-drop-target")
+    .forEach((node) => node.classList.remove("is-drop-target"));
+}
+
+function getRuntimeLabelDropTargets(state, sourceWidgetId){
+  const categories = Array.from(state.canvasEl?.querySelectorAll?.(`[data-quiz-runtime-category-source="${CSS.escape(sourceWidgetId)}"]`) || []);
+  const sourceZone = state.canvasEl?.querySelector?.(`[data-quiz-runtime-labels-zone="${CSS.escape(sourceWidgetId)}"]`) || null;
+  return {
+    categories:categories.map((element) => ({
+      type:"category",
+      element,
+      categoryId:String(element.dataset.quizRuntimeCategoryId || ""),
+      rect:element.getBoundingClientRect()
+    })),
+    source:sourceZone ? { type:"labels", element:sourceZone, categoryId:"", rect:sourceZone.getBoundingClientRect() } : null
+  };
+}
+
+function getRuntimeLabelDropTarget(targets, clientX, clientY){
+  const containsPoint = ({ rect }) => clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  const category = targets?.categories?.find(containsPoint);
+  if (category) return category;
+  if (targets?.source && containsPoint(targets.source)) return targets.source;
+  return null;
+}
+
+function bindRuntimeLabels(state){
+  state.labelsAbortController?.abort();
+  state.labelsAbortController = null;
+  if (!state.canvasEl || state.answerRevealed) return;
+  const chips = Array.from(state.canvasEl.querySelectorAll(".quiz-runtime-label-chip[data-quiz-runtime-label-id]"));
+  if (!chips.length) return;
+
+  const controller = new AbortController();
+  state.labelsAbortController = controller;
+  const signal = controller.signal;
+  scheduleRuntimeLabelsLayout(state, signal);
+
+  chips.forEach((chip) => {
+    chip.draggable = false;
+    chip.addEventListener("dragstart", (event) => event.preventDefault(), { signal });
+    chip.addEventListener("pointerdown", (downEvent) => {
+      if (downEvent.button != null && downEvent.button !== 0) return;
+      const labelId = String(chip.dataset.quizRuntimeLabelId || "");
+      const sourceWidgetId = String(chip.dataset.quizRuntimeLabelSource || "");
+      if (!labelId || !sourceWidgetId) return;
+      downEvent.preventDefault();
+
+      const root = state.canvasEl;
+      const startClientX = downEvent.clientX;
+      const startClientY = downEvent.clientY;
+      let floating = null;
+      let dragged = false;
+      let pointerOffsetX = 0;
+      let pointerOffsetY = 0;
+      let lastX = 0;
+      let lastY = 0;
+      let moveFrame = 0;
+      let pendingPoint = null;
+      let dropTargets = null;
+      let highlightedCategory = null;
+      const pointerId = downEvent.pointerId;
+
+      try { chip.setPointerCapture?.(pointerId); } catch {}
+
+      const startFloatingDrag = (event) => {
+        const chipRect = chip.getBoundingClientRect();
+        const localRect = clientRectToLocalRect(root, chipRect);
+        const pointer = clientPointToLocalPoint(root, event.clientX, event.clientY);
+        floating = chip.cloneNode(true);
+        floating.removeAttribute("tabindex");
+        floating.classList.add("is-floating");
+        floating.style.width = `${localRect.width}px`;
+        floating.style.height = `${localRect.height}px`;
+        floating.style.left = `${localRect.left}px`;
+        floating.style.top = `${localRect.top}px`;
+        root.appendChild(floating);
+        chip.classList.add("is-drag-origin");
+        pointerOffsetX = pointer.x - localRect.left;
+        pointerOffsetY = pointer.y - localRect.top;
+        lastX = localRect.left;
+        lastY = localRect.top;
+        dropTargets = getRuntimeLabelDropTargets(state, sourceWidgetId);
+        dragged = true;
+      };
+
+      const moveFloating = (clientX, clientY) => {
+        if (!floating) return;
+        const pointer = clientPointToLocalPoint(root, clientX, clientY);
+        const width = Number.parseFloat(floating.style.width) || floating.offsetWidth || 1;
+        const height = Number.parseFloat(floating.style.height) || floating.offsetHeight || 1;
+        lastX = Math.max(0, Math.min((root.clientWidth || 0) - width, pointer.x - pointerOffsetX));
+        lastY = Math.max(0, Math.min((root.clientHeight || 0) - height, pointer.y - pointerOffsetY));
+        floating.style.left = `${lastX}px`;
+        floating.style.top = `${lastY}px`;
+
+        const target = getRuntimeLabelDropTarget(dropTargets, clientX, clientY);
+        const nextHighlightedCategory = target?.type === "category" ? target.element : null;
+        if (nextHighlightedCategory !== highlightedCategory) {
+          highlightedCategory?.classList.remove("is-drop-target");
+          nextHighlightedCategory?.classList.add("is-drop-target");
+          highlightedCategory = nextHighlightedCategory;
+        }
+      };
+
+      const scheduleFloatingMove = (clientX, clientY) => {
+        pendingPoint = { clientX, clientY };
+        if (moveFrame) return;
+        moveFrame = window.requestAnimationFrame(() => {
+          moveFrame = 0;
+          const point = pendingPoint;
+          pendingPoint = null;
+          if (point) moveFloating(point.clientX, point.clientY);
+        });
+      };
+
+      const onMove = (event) => {
+        if (event.pointerId !== pointerId) return;
+        event.preventDefault();
+        if (!dragged) {
+          const distance = Math.hypot(event.clientX - startClientX, event.clientY - startClientY);
+          if (distance < 6) return;
+          startFloatingDrag(event);
+        }
+        scheduleFloatingMove(event.clientX, event.clientY);
+      };
+
+      const finish = (event) => {
+        if (event.pointerId !== pointerId) return;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", cancel);
+        try { chip.releasePointerCapture?.(pointerId); } catch {}
+        if (!dragged || !floating) {
+          state.activeLabelDrag = null;
+          return;
+        }
+
+        if (moveFrame) window.cancelAnimationFrame(moveFrame);
+        moveFrame = 0;
+        pendingPoint = null;
+        moveFloating(event.clientX, event.clientY);
+        const target = getRuntimeLabelDropTarget(dropTargets, event.clientX, event.clientY);
+        if (target?.type === "category" && target.categoryId) {
+          state.categoryAssignments.set(labelId, target.categoryId);
+          target.element.querySelector(".quiz-runtime-category-labels")?.append(chip);
+          chip.style.removeProperty("left");
+          chip.style.removeProperty("top");
+        } else if (target?.type === "labels") {
+          state.categoryAssignments.delete(labelId);
+          const zone = target.element;
+          const floatingLocal = clientRectToLocalRect(zone, floating.getBoundingClientRect());
+          const maxLeft = Math.max(0, (zone.clientWidth || 0) - floatingLocal.width);
+          const maxTop = Math.max(0, (zone.clientHeight || 0) - floatingLocal.height);
+          const left = Math.max(0, Math.min(maxLeft, floatingLocal.left));
+          const top = Math.max(0, Math.min(maxTop, floatingLocal.top));
+          state.labelPositions.set(`${sourceWidgetId}:${labelId}`, {
+            x:maxLeft > 0 ? left / maxLeft : 0,
+            y:maxTop > 0 ? top / maxTop : 0
+          });
+          zone.append(chip);
+          chip.style.left = `${left}px`;
+          chip.style.top = `${top}px`;
+        }
+
+        state.responseDraftValue = serializeCategoryAssignments(state.categoryAssignments);
+        clearRuntimeLabelDropTargets(state);
+        floating.remove();
+        chip.classList.remove("is-drag-origin");
+        state.activeLabelDrag = null;
+        syncValidateState(state);
+      };
+
+      const cancel = (event) => {
+        if (event.pointerId !== pointerId) return;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", cancel);
+        if (moveFrame) window.cancelAnimationFrame(moveFrame);
+        moveFrame = 0;
+        pendingPoint = null;
+        clearRuntimeLabelDropTargets(state);
+        floating?.remove?.();
+        chip.classList.remove("is-drag-origin");
+        state.activeLabelDrag = null;
+      };
+
+      state.activeLabelDrag = { labelId, sourceWidgetId };
+      window.addEventListener("pointermove", onMove, { passive:false, signal });
+      window.addEventListener("pointerup", finish, { passive:false, signal });
+      window.addEventListener("pointercancel", cancel, { passive:false, signal });
+      signal.addEventListener("abort", () => {
+        if (moveFrame) window.cancelAnimationFrame(moveFrame);
+        clearRuntimeLabelDropTargets(state);
+        floating?.remove?.();
+        chip.classList.remove("is-drag-origin");
+      }, { once:true });
+    }, { signal, passive:false });
+  });
+}
+
 function scheduleRuntimeTextFit(state){
   const fit = () => fitRuntimeTextWidgets(state);
   state.textFitTimers.forEach((timer) => window.clearTimeout(timer));
@@ -1184,12 +1718,30 @@ function fitRuntimeQcmChoices(state){
   });
 }
 
+function captureSubmittedCategoryLabelOrder(state){
+  const order = new Map();
+  const categories = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-category-id]") || []);
+  categories.forEach((categoryNode) => {
+    const categoryId = String(categoryNode.dataset.quizRuntimeCategoryId || "");
+    if (!categoryId) return;
+    const labelIds = Array.from(categoryNode.querySelectorAll(".quiz-runtime-category-labels > .quiz-runtime-label-chip[data-quiz-runtime-label-id]"))
+      .map((chip) => String(chip.dataset.quizRuntimeLabelId || ""))
+      .filter(Boolean);
+    order.set(categoryId, labelIds);
+  });
+  return order;
+}
+
 function revealAnswer(state){
   if (!state.currentQuestion) return;
   fitRuntimeQcmChoices(state);
   state.submittedAnswer = getCurrentResponseValue(state);
   if (state.currentQuestion?.responseType === "selection-words") {
     state.submittedTokenIndexes = normalizeQuizSelectionIndexes(state.selectedTokenIndexes, Infinity);
+  }
+  if (state.currentQuestion?.responseType === "categories") {
+    state.submittedCategoryAssignments = new Map(state.categoryAssignments);
+    state.submittedCategoryLabelOrder = captureSubmittedCategoryLabelOrder(state);
   }
   state.pendingValidationValue = "";
   state.answerRevealed = true;
@@ -1210,6 +1762,10 @@ function canSubmitAnswer(state){
   if (state.answerRevealed || !state.currentQuestion) return false;
   if (state.currentQuestion.responseType === "qcm-text") return Boolean(state.selectedChoiceId);
   if (state.currentQuestion.responseType === "selection-words") return state.selectedTokenIndexes.length > 0;
+  if (state.currentQuestion.responseType === "categories") {
+    const expectedIds = Object.keys(state.currentQuestion.expectedCategoryAssignments || {});
+    return expectedIds.length > 0 && expectedIds.every((labelId) => state.categoryAssignments.has(labelId));
+  }
   if (!state.answerInputEl) return false;
   return getCurrentResponseValue(state).length > 0;
 }
@@ -1220,6 +1776,10 @@ function getCurrentResponseValue(state){
   if (state.currentQuestion?.responseType === "selection-words") {
     const indexes = state.answerRevealed ? state.submittedTokenIndexes : state.selectedTokenIndexes;
     return normalizeQuizSelectionIndexes(indexes, Infinity).join(",");
+  }
+  if (state.currentQuestion?.responseType === "categories") {
+    const assignments = state.answerRevealed ? state.submittedCategoryAssignments : state.categoryAssignments;
+    return serializeCategoryAssignments(assignments);
   }
   return String(
     state.pendingValidationValue
@@ -1241,12 +1801,17 @@ function isCurrentAnswerCorrect(state){
   if (!state.currentQuestion) return false;
   if (state.currentQuestion.responseType === "qcm-text") return Boolean(state.selectedChoiceId && getCurrentEvaluation(state).isCorrect);
   if (state.currentQuestion.responseType === "selection-words") return Boolean(state.selectedTokenIndexes.length && getCurrentEvaluation(state).isCorrect);
+  if (state.currentQuestion.responseType === "categories") return Boolean(state.categoryAssignments.size && getCurrentEvaluation(state).isCorrect);
   return Boolean(state.answerInputEl && getCurrentEvaluation(state).isCorrect);
 }
 
 function canToggleStudentAnswerDisplay(state){
   if (!state.answerRevealed || !state.currentQuestion) return false;
   if (state.currentQuestion.responseType === "qcm-text") return false;
+  if (state.currentQuestion.responseType === "categories") {
+    if (!state.submittedCategoryAssignments.size) return false;
+    return !getStoredEvaluation(state).isCorrect;
+  }
   if (state.currentQuestion.responseType === "selection-words") {
     if (!state.submittedTokenIndexes.length) return false;
     return !getStoredEvaluation(state).isCorrect;
@@ -1260,8 +1825,38 @@ function getShellAnswerDisplayState(state){
     canToggle: canToggleStudentAnswerDisplay(state),
     mode: canToggleStudentAnswerDisplay(state)
       ? normalizeAnswerDisplayMode(state.answerDisplayMode)
-      : "correction"
+      : "correction",
+    transitionTargets: getShellAnswerTransitionTargets(state)
   };
+}
+
+function getShellAnswerTransitionTargets(state){
+  if (!state.canvasEl || !state.currentQuestion) return [];
+
+  const responseWidgetTypes = new Set([
+    "answer",
+    "numeric-keypad",
+    "qcm-text",
+    "selection-words",
+    "labels",
+    "categories"
+  ]);
+  const widgetIds = (Array.isArray(state.currentQuestion.widgets) ? state.currentQuestion.widgets : [])
+    .filter((widget) => {
+      if (responseWidgetTypes.has(widget?.type)) return true;
+      const questionView = getWidgetView(widget, "question");
+      const correctionView = getWidgetView(widget, "correction");
+      return isRuntimeWidgetVisible(state, questionView, "question")
+        !== isRuntimeWidgetVisible(state, correctionView, "correction")
+        || getRuntimeWidgetViewSignature(widget, questionView)
+          !== getRuntimeWidgetViewSignature(widget, correctionView);
+    })
+    .map((widget) => String(widget?.id || ""))
+    .filter(Boolean);
+
+  return widgetIds
+    .map((widgetId) => findRuntimeWidgetNode(state.canvasEl, widgetId))
+    .filter(Boolean);
 }
 
 function applyShellAnswerDisplayMode(state, mode){
@@ -1281,7 +1876,7 @@ function normalizeAnswerDisplayMode(value){
 }
 
 function focusPrimaryInput(state){
-  if (state.currentQuestion?.responseType === "qcm-text" || state.currentQuestion?.responseType === "selection-words") return;
+  if (["qcm-text", "selection-words", "categories"].includes(state.currentQuestion?.responseType)) return;
   if (!state.answerInputEl) return;
   queueMicrotask(() => {
     try {
@@ -1430,6 +2025,15 @@ function teardownInputBindings(state){
   state.qcmAbortController = null;
   state.selectionAbortController?.abort();
   state.selectionAbortController = null;
+  state.labelsAbortController?.abort();
+  state.labelsAbortController = null;
+  state.labelsResizeObserver?.disconnect();
+  state.labelsResizeObserver = null;
+  if (state.labelsLayoutFrame) window.cancelAnimationFrame(state.labelsLayoutFrame);
+  state.labelsLayoutFrame = 0;
+  state.canvasEl?.querySelectorAll?.(".quiz-runtime-label-chip.is-floating").forEach((node) => node.remove());
+  clearRuntimeLabelDropTargets(state);
+  state.activeLabelDrag = null;
   state.audioAbortController?.abort();
   state.audioAbortController = null;
   stopRuntimeAudio(state);
@@ -1455,6 +2059,11 @@ function teardownState(state, container){
   state.selectedChoiceId = "";
   state.selectedTokenIndexes = [];
   state.submittedTokenIndexes = [];
+  state.categoryAssignments.clear();
+  state.submittedCategoryAssignments.clear();
+  state.submittedCategoryLabelOrder.clear();
+  state.labelPositions.clear();
+  state.activeLabelDrag = null;
   state.answerDisplayMode = "correction";
   state.qcmResizeObserver?.disconnect?.();
   state.qcmResizeObserver = null;

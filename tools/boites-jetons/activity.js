@@ -452,7 +452,7 @@ function buildCorrectionRows(state, evaluation) {
       rows.push({
         boxIds: replacement.boxIds,
         key: replacement.key,
-        stateClass: "is-incorrect"
+        stateClass: "is-correction"
       });
     }
   }
@@ -461,7 +461,7 @@ function buildCorrectionRows(state, evaluation) {
     rows.push({
       boxIds: solution.boxIds,
       key: solution.key,
-      stateClass: "is-neutral"
+      stateClass: "is-correction"
     });
   });
 
@@ -1409,7 +1409,8 @@ function getShellAnswerDisplayState(state) {
   const canToggle = canToggleStudentAnswerDisplay(state);
   return {
     canToggle,
-    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+    transitionTargets: [state.answersEl]
   };
 }
 

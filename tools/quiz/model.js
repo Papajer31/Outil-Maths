@@ -18,13 +18,71 @@ const GRID_COLUMNS = 12;
 const GRID_ROWS = 8;
 const DEFAULT_DRAW_MODE = "random";
 const DRAW_MODES = new Set(["in_order", "random"]);
-const SUPPORTED_WIDGET_TYPES = new Set(["text", "answer", "image", "audio", "numeric-keypad", "qcm-text", "selection-words"]);
+const SUPPORTED_WIDGET_TYPES = new Set(["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
 const QCM_MAX_CHOICES = 6;
 const CORRECTION_VISIBILITY_MODES = new Set(["visible", "correct", "incorrect", "hidden"]);
 const normalizedQuizSnapshots = new WeakSet();
+
+function normalizeLabelItems(sourceItems, widgetIndex = 0){
+  const source = Array.isArray(sourceItems) ? sourceItems : [];
+  return source.map((item, index) => {
+    const safe = item && typeof item === "object" && !Array.isArray(item) ? item : { text:item };
+    return {
+      id:String(safe.id || `labels-${widgetIndex + 1}-item-${index + 1}`).trim() || `labels-${widgetIndex + 1}-item-${index + 1}`,
+      text:String(safe.text ?? safe.label ?? "")
+    };
+  });
+}
+
+function normalizeCategoryItems(sourceItems, widgetIndex = 0){
+  const source = Array.isArray(sourceItems) ? sourceItems : [];
+  return source.map((item, index) => {
+    const safe = item && typeof item === "object" && !Array.isArray(item) ? item : { title:item };
+    return {
+      id:String(safe.id || `categories-${widgetIndex + 1}-item-${index + 1}`).trim() || `categories-${widgetIndex + 1}-item-${index + 1}`,
+      title:String(safe.title ?? safe.label ?? `Catégorie ${index + 1}`),
+      labelIds:Array.from(new Set((Array.isArray(safe.labelIds ?? safe.label_ids) ? (safe.labelIds ?? safe.label_ids) : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)))
+    };
+  });
+}
+
+function getCategoryAssignments(labelItems = [], categoryItems = []){
+  const validLabelIds = new Set(normalizeLabelItems(labelItems)
+    .filter((item) => String(item.text || "").trim())
+    .map((item) => item.id));
+  const assignments = {};
+  const duplicates = new Set();
+  normalizeCategoryItems(categoryItems).forEach((category) => {
+    category.labelIds.forEach((labelId) => {
+      if (!validLabelIds.has(labelId)) return;
+      if (assignments[labelId]) duplicates.add(labelId);
+      else assignments[labelId] = category.id;
+    });
+  });
+  const missing = Array.from(validLabelIds).filter((labelId) => !assignments[labelId]);
+  return { assignments, duplicates, missing };
+}
+
+function normalizeCategoryAnswerMap(value){
+  let source = value;
+  if (typeof source === "string") {
+    try { source = JSON.parse(source); } catch { source = {}; }
+  }
+  const safe = source && typeof source === "object" && !Array.isArray(source) ? source : {};
+  return Object.fromEntries(Object.entries(safe)
+    .map(([labelId, categoryId]) => [String(labelId || "").trim(), String(categoryId || "").trim()])
+    .filter(([labelId, categoryId]) => labelId && categoryId)
+    .sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function serializeCategoryAnswerMap(value){
+  return JSON.stringify(normalizeCategoryAnswerMap(value));
+}
 
 export function getDefaultSettings(){
   return {
@@ -148,14 +206,17 @@ export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = 
     answerWidgetCount: sample.answerWidgetCount,
     qcmWidgetCount: sample.qcmWidgetCount,
     selectionWidgetCount: sample.selectionWidgetCount,
+    categoriesWidgetCount: sample.categoriesWidgetCount,
     responseWidgetCount: sample.responseWidgetCount,
     responseType: sample.responseType,
     primaryAnswerWidgetId: sample.primaryAnswerWidgetId,
     primaryQcmWidgetId: sample.primaryQcmWidgetId,
     primarySelectionWidgetId: sample.primarySelectionWidgetId,
+    primaryCategoriesWidgetId: sample.primaryCategoriesWidgetId,
     primaryAnswerVisibleInQuestion: sample.primaryAnswerVisibleInQuestion,
     primaryQcmVisibleInQuestion: sample.primaryQcmVisibleInQuestion,
     primarySelectionVisibleInQuestion: sample.primarySelectionVisibleInQuestion,
+    primaryCategoriesVisibleInQuestion: sample.primaryCategoriesVisibleInQuestion,
     expectedAnswer: sample.expectedAnswer,
     expectedAnswerLabel: sample.expectedAnswerLabel
   };
@@ -168,12 +229,14 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const isAnswer = type === "answer";
   const isImage = type === "image";
   const isAudio = type === "audio";
+  const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
   const isQcmText = type === "qcm-text";
   const isSelectionWords = type === "selection-words";
+  const isCategories = type === "categories";
 
-  const questionText = isNumericKeypad || isImage || isAudio ? "" : String(safe.questionText ?? safe.question_text ?? "");
-  const correctionText = isNumericKeypad || isImage || isAudio ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
+  const questionText = isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : String(safe.questionText ?? safe.question_text ?? "");
+  const correctionText = isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
   const questionImageSource = isImage
     ? normalizeQuizImageSource(safe.questionImageSource ?? safe.question_image_source ?? safe.imageSource ?? safe.image_source)
     : null;
@@ -199,7 +262,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     safe.column,
     safe.columnSpan ?? safe.column_span,
     sourceGridColumns,
-    isNumericKeypad ? GRID_COLUMNS : isQcmText || isSelectionWords ? 8 : isImage ? 4 : isAudio ? 4 : isAnswer ? 8 : 5
+    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isAnswer ? 8 : 5
   );
   const correctionArea = migrateHorizontalArea(
     safe.correctionColumn ?? safe.correction_column ?? safe.column,
@@ -210,7 +273,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const column = questionArea.column;
   const row = clampInt(safe.row, 1, GRID_ROWS, 1);
   const columnSpan = questionArea.columnSpan;
-  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isImage || isQcmText ? 3 : isSelectionWords || isAudio ? 2 : 1);
+  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio ? 2 : 1);
   const overrides = normalizeCorrectionOverrides(safe.correctionOverrides || safe.correction_overrides || {});
   const questionVisible = isNumericKeypad
     ? true
@@ -232,7 +295,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   return {
     id: String(safe.id || `widget-${index + 1}`).trim() || `widget-${index + 1}`,
     type,
-    label: String(safe.label || (isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : "Texte")).trim(),
+    label: String(safe.label || (isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
     questionText,
     correctionText,
     questionHtml,
@@ -265,6 +328,15 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     qcmLayout: normalizeQcmLayout(safe.qcmLayout ?? safe.qcm_layout),
     qcmChoices: isQcmText
       ? normalizeQcmChoices(safe.qcmChoices ?? safe.qcm_choices ?? safe.choices, index)
+      : [],
+    labelItems: isLabels
+      ? normalizeLabelItems(safe.labelItems ?? safe.label_items ?? safe.labels, index)
+      : [],
+    labelsSourceWidgetId: isCategories
+      ? String(safe.labelsSourceWidgetId ?? safe.labels_source_widget_id ?? safe.sourceWidgetId ?? safe.source_widget_id ?? "").trim()
+      : "",
+    categoryItems: isCategories
+      ? normalizeCategoryItems(safe.categoryItems ?? safe.category_items ?? safe.categories, index)
       : [],
     selectionExpectedTokenIndexes: isSelectionWords
       ? normalizeQuizSelectionIndexes(
@@ -323,6 +395,12 @@ function captureVariantWidgetContent(widget){
   if (widget?.type === "qcm-text") {
     content.qcmChoices = normalizeQcmChoices(widget.qcmChoices).map((choice) => ({ ...choice }));
   }
+  if (widget?.type === "labels") {
+    content.labelItems = normalizeLabelItems(widget.labelItems).map((item) => ({ ...item }));
+  }
+  if (widget?.type === "categories") {
+    content.categoryItems = normalizeCategoryItems(widget.categoryItems).map((item) => ({ ...item, labelIds:[...item.labelIds] }));
+  }
   if (widget?.type === "selection-words") {
     content.selectionExpectedTokenIndexes = normalizeQuizSelectionIndexes(
       widget.selectionExpectedTokenIndexes,
@@ -365,6 +443,12 @@ function normalizeVariantWidgetContent(source = {}, widget){
     ),
     ...(widget?.type === "qcm-text" ? {
       qcmChoices: normalizeQcmChoices(source.qcmChoices ?? source.qcm_choices ?? widget.qcmChoices)
+    } : {}),
+    ...(widget?.type === "labels" ? {
+      labelItems: normalizeLabelItems(source.labelItems ?? source.label_items ?? widget.labelItems)
+    } : {}),
+    ...(widget?.type === "categories" ? {
+      categoryItems: normalizeCategoryItems(source.categoryItems ?? source.category_items ?? widget.categoryItems)
     } : {}),
     ...(widget?.type === "selection-words" ? {
       selectionExpectedTokenIndexes: normalizeQuizSelectionIndexes(
@@ -435,6 +519,8 @@ function applyVariantContentToWidget(widget, content = {}){
     correctionFormatting: normalized.correctionFormatting,
     correctionHtml: richTextModelToHtml(normalized.correctionText, normalized.correctionFormatting),
     ...(widget.type === "qcm-text" ? { qcmChoices:normalized.qcmChoices } : {}),
+    ...(widget.type === "labels" ? { labelItems:normalized.labelItems } : {}),
+    ...(widget.type === "categories" ? { categoryItems:normalized.categoryItems } : {}),
     ...(widget.type === "selection-words" ? { selectionExpectedTokenIndexes:normalized.selectionExpectedTokenIndexes } : {}),
     ...(widget.type === "image" ? {
       questionImageSource: normalized.questionImageSource,
@@ -468,9 +554,11 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
   const answerWidgets = materializedWidgets.filter((widget) => widget.type === "answer");
   const qcmWidgets = materializedWidgets.filter((widget) => widget.type === "qcm-text");
   const selectionWidgets = materializedWidgets.filter((widget) => widget.type === "selection-words");
+  const categoriesWidgets = materializedWidgets.filter((widget) => widget.type === "categories");
   const primaryAnswerWidget = answerWidgets[0] || null;
   const primaryQcmWidget = qcmWidgets[0] || null;
   const primarySelectionWidget = selectionWidgets[0] || null;
+  const primaryCategoriesWidget = categoriesWidgets[0] || null;
   const correctionView = primaryAnswerWidget ? getWidgetView(primaryAnswerWidget, "correction") : null;
   const correctQcmChoice = primaryQcmWidget?.qcmChoices?.find((choice) => choice.isCorrect) || null;
   const selectionExpectedTokenIndexes = primarySelectionWidget
@@ -479,6 +567,13 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
         getQuizSelectionWordCount(primarySelectionWidget.questionText)
       )
     : [];
+  const primaryLabelsWidget = primaryCategoriesWidget
+    ? materializedWidgets.find((widget) => widget.type === "labels" && widget.id === primaryCategoriesWidget.labelsSourceWidgetId) || null
+    : null;
+  const categoryAssignmentState = primaryCategoriesWidget && primaryLabelsWidget
+    ? getCategoryAssignments(primaryLabelsWidget.labelItems, primaryCategoriesWidget.categoryItems)
+    : { assignments:{}, duplicates:new Set(), missing:[] };
+  const expectedCategoryAssignments = categoryAssignmentState.assignments;
   return {
     ...question,
     widgets: materializedWidgets,
@@ -488,25 +583,34 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
     answerWidgetCount: answerWidgets.length,
     qcmWidgetCount: qcmWidgets.length,
     selectionWidgetCount: selectionWidgets.length,
-    responseWidgetCount: answerWidgets.length + qcmWidgets.length + selectionWidgets.length,
-    responseType: primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryAnswerWidget ? "answer" : "",
+    categoriesWidgetCount: categoriesWidgets.length,
+    responseWidgetCount: answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length,
+    responseType: primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryCategoriesWidget ? "categories" : primaryAnswerWidget ? "answer" : "",
     primaryAnswerWidgetId: primaryAnswerWidget?.id || "",
     primaryQcmWidgetId: primaryQcmWidget?.id || "",
     primarySelectionWidgetId: primarySelectionWidget?.id || "",
+    primaryCategoriesWidgetId: primaryCategoriesWidget?.id || "",
     primaryAnswerVisibleInQuestion: Boolean(primaryAnswerWidget && getWidgetView(primaryAnswerWidget, "question")?.visible),
     primaryQcmVisibleInQuestion: Boolean(primaryQcmWidget && getWidgetView(primaryQcmWidget, "question")?.visible),
     primarySelectionVisibleInQuestion: Boolean(primarySelectionWidget && getWidgetView(primarySelectionWidget, "question")?.visible),
+    primaryCategoriesVisibleInQuestion: Boolean(primaryCategoriesWidget && getWidgetView(primaryCategoriesWidget, "question")?.visible),
     expectedAnswer: primaryQcmWidget
       ? String(correctQcmChoice?.id || "")
       : primarySelectionWidget
         ? selectionExpectedTokenIndexes.join(",")
+        : primaryCategoriesWidget
+          ? serializeCategoryAnswerMap(expectedCategoryAssignments)
         : String(correctionView?.text || "").trim(),
     expectedAnswerLabel: primaryQcmWidget
       ? String(correctQcmChoice?.text || "").trim()
       : primarySelectionWidget
         ? formatQuizSelectionIndexes(primarySelectionWidget.questionText, selectionExpectedTokenIndexes)
+        : primaryCategoriesWidget
+          ? "Classement attendu"
         : String(correctionView?.text || "").trim(),
-    expectedTokenIndexes: selectionExpectedTokenIndexes
+    expectedTokenIndexes: selectionExpectedTokenIndexes,
+    expectedCategoryAssignments,
+    categoryAssignmentValid:Boolean(primaryCategoriesWidget && primaryLabelsWidget && primaryCategoriesWidget.categoryItems.length >= 2 && !categoryAssignmentState.missing.length && categoryAssignmentState.duplicates.size === 0)
   };
 }
 
@@ -525,6 +629,43 @@ export function getWidgetView(widget, mode = "question"){
       rowSpan: widget.rowSpan,
       textAlign: "center",
       verticalAlign: "middle",
+      ...visibilityState
+    });
+  }
+  if (widget.type === "labels") {
+    const correctionMode = mode === "correction";
+    const overrides = widget.correctionOverrides || {};
+    return normalizeViewBounds({
+      html:"",
+      text:"",
+      formatting:[],
+      placeholder:"",
+      labelItems:normalizeLabelItems(widget.labelItems),
+      column:correctionMode && overrides.position ? widget.correctionColumn : widget.column,
+      row:correctionMode && overrides.position ? widget.correctionRow : widget.row,
+      columnSpan:correctionMode && overrides.size ? widget.correctionColumnSpan : widget.columnSpan,
+      rowSpan:correctionMode && overrides.size ? widget.correctionRowSpan : widget.rowSpan,
+      textAlign:"center",
+      verticalAlign:"middle",
+      ...visibilityState
+    });
+  }
+  if (widget.type === "categories") {
+    const correctionMode = mode === "correction";
+    const overrides = widget.correctionOverrides || {};
+    return normalizeViewBounds({
+      html:"",
+      text:"",
+      formatting:[],
+      placeholder:"",
+      labelsSourceWidgetId:String(widget.labelsSourceWidgetId || ""),
+      categoryItems:normalizeCategoryItems(widget.categoryItems),
+      column:correctionMode && overrides.position ? widget.correctionColumn : widget.column,
+      row:correctionMode && overrides.position ? widget.correctionRow : widget.row,
+      columnSpan:correctionMode && overrides.size ? widget.correctionColumnSpan : widget.columnSpan,
+      rowSpan:correctionMode && overrides.size ? widget.correctionRowSpan : widget.rowSpan,
+      textAlign:"center",
+      verticalAlign:"middle",
       ...visibilityState
     });
   }
@@ -736,6 +877,22 @@ export function createQuestionDeck(questions = [], drawMode = DEFAULT_DRAW_MODE)
 }
 
 export function evaluateAnswer(question, rawAnswer = ""){
+  if (question?.responseType === "categories") {
+    const expected = normalizeCategoryAnswerMap(question?.expectedCategoryAssignments ?? question?.expectedAnswer);
+    const submitted = normalizeCategoryAnswerMap(rawAnswer);
+    const expectedEntries = Object.entries(expected);
+    const submittedEntries = Object.entries(submitted);
+    const isCorrect = expectedEntries.length > 0
+      && submittedEntries.length === expectedEntries.length
+      && expectedEntries.every(([labelId, categoryId]) => submitted[labelId] === categoryId);
+    return {
+      submittedAnswer:serializeCategoryAnswerMap(submitted),
+      submittedCategoryAssignments:submitted,
+      expectedCategoryAssignments:expected,
+      expectedAnswer:"Classement attendu",
+      isCorrect
+    };
+  }
   if (question?.responseType === "selection-words") {
     const expectedIndexes = normalizeQuizSelectionIndexes(question?.expectedTokenIndexes ?? question?.expectedAnswer, Infinity);
     const submittedIndexes = normalizeQuizSelectionIndexes(rawAnswer, Infinity);
@@ -774,13 +931,17 @@ export function getQuizTestIssues(snapshot = {}){
     variants.forEach((variant, variantIndex) => {
       const suffix = variants.length > 1 ? `, variante ${variantIndex + 1}` : "";
       if (variant.responseWidgetCount !== 1) {
-        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « QCM » ou « Sélection de mots »).`);
+        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « QCM », « Sélection de mots » ou « Catégories »).`);
       } else if (variant.responseType === "answer" && !variant.primaryAnswerVisibleInQuestion) {
         issues.push(`Affichez la zone « Réponse de l’élève » de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "qcm-text" && !variant.primaryQcmVisibleInQuestion) {
         issues.push(`Affichez le QCM de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "selection-words" && !variant.primarySelectionVisibleInQuestion) {
         issues.push(`Affichez la sélection de mots de la question ${index + 1}${suffix} dans la vue Question.`);
+      } else if (variant.responseType === "categories" && !variant.primaryCategoriesVisibleInQuestion) {
+        issues.push(`Affichez les catégories de la question ${index + 1}${suffix} dans la vue Question.`);
+      } else if (variant.responseType === "categories" && !variant.categoryAssignmentValid) {
+        issues.push(`Reliez le widget Catégories à des Étiquettes et classez toutes les étiquettes renseignées dans la question ${index + 1}${suffix}.`);
       } else if (variant.responseType === "qcm-text") {
         const qcm = variant.widgets.find((widget) => widget.type === "qcm-text");
         const filledChoices = (qcm?.qcmChoices || []).filter((choice) => String(choice.text || "").trim());

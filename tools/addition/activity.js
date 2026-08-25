@@ -316,12 +316,13 @@ function renderDisplayedResponse(state) {
 
   state.responseWrap.className = "tool-answer-panel calc-family-response-wrap add-response-wrap";
   state.responseWrap.classList.toggle("calc-family-response-wrap--correct", evaluation.isCorrect === true);
-  state.responseWrap.classList.toggle("calc-family-response-wrap--incorrect", evaluation.isCorrect !== true);
+  state.responseWrap.classList.toggle("calc-family-response-wrap--incorrect", showStudentAnswer && evaluation.isCorrect !== true);
+  state.responseWrap.classList.toggle("calc-family-response-wrap--correction", !showStudentAnswer && evaluation.isCorrect !== true);
   state.responseWrap.classList.toggle("add-response-wrap--correct", evaluation.isCorrect === true);
-  state.responseWrap.classList.toggle("add-response-wrap--incorrect", evaluation.isCorrect !== true);
+  state.responseWrap.classList.toggle("add-response-wrap--incorrect", showStudentAnswer && evaluation.isCorrect !== true);
   destroyAnswerControl(state);
   state.responseWrap.innerHTML = renderNumericAnswerDisplayMarkup(snapshot?.value ?? "", {
-    className: `calc-family-response-input add-response-input${showStudentAnswer ? (evaluation.isCorrect ? " calc-family-response-input--correct add-response-input--correct" : " calc-family-response-input--incorrect add-response-input--incorrect") : ""}`,
+    className: `calc-family-response-input add-response-input${showStudentAnswer ? (evaluation.isCorrect ? " calc-family-response-input--correct add-response-input--correct" : " calc-family-response-input--incorrect add-response-input--incorrect") : (!evaluation.isCorrect ? " calc-family-response-input--correction" : " calc-family-response-input--correct add-response-input--correct")}`,
     ariaLabel: "Réponse affichée"
   });
   state.input = null;
@@ -350,7 +351,8 @@ function computeStoredEvaluation(state) {
 function getShellAnswerDisplayState(state) {
   return {
     canToggle: canToggleStudentAnswerDisplay(state),
-    mode: normalizeAnswerDisplayMode(state.answerDisplayMode)
+    mode: normalizeAnswerDisplayMode(state.answerDisplayMode),
+    transitionTargets: [state.responseWrap]
   };
 }
 

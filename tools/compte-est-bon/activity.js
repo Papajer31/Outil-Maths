@@ -1,6 +1,7 @@
 import {
   EXERCISE_TYPES,
   createTargetedInitialTiles,
+  buildClassicCorrectionPlan,
   evaluateTargetedCalculationResponse,
   evaluateTokenBoxesResponse,
   formatSelection,
@@ -143,6 +144,7 @@ function createRuntimeState(initialContext = {}) {
     targetedTiles: [],
     targetedSteps: [],
     submittedTargetedSteps: [],
+    classicCorrectionPlan: null,
     targetedEntry: createEmptyTargetedEntry(),
     targetedPendingStep: null,
     targetedStepAnimationTimers: [],
@@ -230,6 +232,7 @@ function loadNextQuestion(state, context = {}) {
   state.targetedTiles = isCalculationTileQuestion(nextQuestion) ? createTargetedInitialTiles(nextQuestion) : [];
   state.targetedSteps = [];
   state.submittedTargetedSteps = [];
+  state.classicCorrectionPlan = null;
   state.targetedEntry = createEmptyTargetedEntry();
   state.targetedSolved = false;
   state.targetedNextStepAppearing = false;
@@ -863,6 +866,15 @@ function buildTargetedCorrectionRows(state, evaluation) {
     }));
   }
 
+  if (isClassic && state.classicCorrectionPlan?.correctionSteps?.length) {
+    const plan = state.classicCorrectionPlan;
+    return plan.correctionSteps.map((step, index) => ({
+      step,
+      className: index < plan.preservedStepCount ? "is-correct" : "is-correction",
+      isFinalStep: Number(step?.result) === Number(state.currentQuestion?.target)
+    }));
+  }
+
   const submittedByKey = new Map();
   submitted.forEach((step) => {
     const key = targetedStepKey(step);
@@ -1339,6 +1351,9 @@ function revealAnswer(state) {
     state.answerRevealed = true;
     state.answerDisplayMode = state.showResponseWrappers ? "correction" : "correction";
     const evaluation = evaluateTargetedCalculationResponse(state.currentQuestion, state.submittedTargetedSteps);
+    state.classicCorrectionPlan = isClassicChallengeQuestion(state.currentQuestion) && !evaluation.isCorrect
+      ? buildClassicCorrectionPlan(state.currentQuestion, state.submittedTargetedSteps)
+      : null;
     state.root?.classList.add("nc-root--revealed");
     if (state.showResponseWrappers) {
       state.root?.classList.toggle("nc-root--correct", evaluation.isCorrect);
@@ -1409,7 +1424,8 @@ function getShellAnswerDisplayState(state) {
   const canToggle = canToggleStudentAnswerDisplay(state);
   return {
     canToggle,
-    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction"
+    mode: canToggle ? normalizeAnswerDisplayMode(state.answerDisplayMode) : "correction",
+    transitionTargets: [state.answersEl]
   };
 }
 
@@ -1591,6 +1607,7 @@ function teardownState(state, container) {
   state.targetedTiles = [];
   state.targetedSteps = [];
   state.submittedTargetedSteps = [];
+  state.classicCorrectionPlan = null;
   state.targetedEntry = createEmptyTargetedEntry();
   state.targetedPendingStep = null;
   state.targetedFlyingTileId = "";

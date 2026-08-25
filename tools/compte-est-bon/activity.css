@@ -515,8 +515,9 @@ button.nc-calc-tile:focus-visible {
 }
 
 .nc-calc-step.is-correction {
-  border-color: rgba(255, 216, 94, .72);
-  background: rgba(255, 216, 94, .12);
+  border-style: dashed;
+  border-color: rgba(78, 211, 122, .98);
+  background: rgba(78, 211, 122, .14);
 }
 
 .nc-calc-back {

@@ -106,10 +106,14 @@ function normalizeImageAssetStoragePath(value) {
   return String(value || "").trim();
 }
 
+function normalizeImageAssetWordSlug(value) {
+  return String(value || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+}
+
 export async function listPublicImageAssets({ activeOnly = true } = {}) {
   let query = supabase
     .from("image_assets")
-    .select("slug, storage_path, is_active")
+    .select("slug, word_slug, storage_path, is_active")
     .order("slug", { ascending: true });
 
   if (activeOnly) {
@@ -122,6 +126,7 @@ export async function listPublicImageAssets({ activeOnly = true } = {}) {
   return (Array.isArray(data) ? data : [])
     .map((row) => ({
       slug: normalizeImageAssetSlug(row?.slug),
+      word_slug: normalizeImageAssetWordSlug(row?.word_slug),
       storage_path: normalizeImageAssetStoragePath(row?.storage_path),
       is_active: row?.is_active !== false
     }))
@@ -141,6 +146,7 @@ export async function listPublicImageAssetsInSystemFolder(folderName) {
   return (Array.isArray(data) ? data : [])
     .map((row) => ({
       slug: normalizeImageAssetSlug(row?.slug),
+      word_slug: normalizeImageAssetWordSlug(row?.word_slug),
       storage_path: normalizeImageAssetStoragePath(row?.storage_path)
     }))
     .filter((row) => row.slug && row.storage_path);
@@ -229,14 +235,17 @@ export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
 }
 
 export async function listPublicPedagogicalNodesForSpace(accessCode) {
-  try {
+  const selectWithStudentProjection = "id, parent_id, name, node_type, student_label, student_navigation_mode, display_order, is_active";
+  const selectLegacy = "id, parent_id, name, node_type, display_order, is_active";
+
+  const loadRows = async (selectColumns) => {
     const pageSize = 1000;
     const rows = [];
 
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabase
         .from("pedagogical_nodes")
-        .select("id, parent_id, name, node_type, display_order, is_active")
+        .select(selectColumns)
         .order("parent_id", { ascending: true, nullsFirst: true })
         .order("display_order", { ascending: true })
         .order("name", { ascending: true })
@@ -249,6 +258,19 @@ export async function listPublicPedagogicalNodesForSpace(accessCode) {
       if (page.length < pageSize) break;
     }
 
+    return rows;
+  };
+
+  try {
+    let rows;
+    try {
+      rows = await loadRows(selectWithStudentProjection);
+    } catch (projectionError) {
+      if (!isMissingStudentProjectionColumnError(projectionError)) throw projectionError;
+      console.warn("Projection élève non migrée en base : chargement de l’arborescence sans métadonnées de présentation.");
+      rows = await loadRows(selectLegacy);
+    }
+
     return filterEffectivelyActivePedagogicalNodes(
       sortPedagogicalNodes(rows.map((folder, index) => normalizePedagogicalNode(normalizeFolderRecord(folder, index), index)))
     );
@@ -257,6 +279,15 @@ export async function listPublicPedagogicalNodesForSpace(accessCode) {
     return filterEffectivelyActivePedagogicalNodes(getPedagogicalNodes())
       .map((folder, index) => normalizeFolderRecord(folder, index));
   }
+}
+
+function isMissingStudentProjectionColumnError(error) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || error?.details || "").toLowerCase();
+  return code === "42703"
+    || code === "PGRST204"
+    || message.includes("student_label")
+    || message.includes("student_navigation_mode");
 }
 
 export async function listPublicClassesForSpace(accessCode) {

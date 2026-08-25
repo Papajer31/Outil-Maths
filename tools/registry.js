@@ -227,6 +227,20 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "mots-mêlés", "grille", "tablette", "sélection", "projection"]
   },
   {
+    id: "reperage-occurrences",
+    label: "Repérage personnalisé",
+    entry: "../tools/reperage-occurrences/tool.js",
+    description: "Repérer toutes les occurrences d’une cible tirée parmi plusieurs possibilités personnalisées.",
+    tags: ["français", "lecture", "étude-du-code", "discrimination-visuelle", "lettres", "graphèmes", "mots", "sélection", "projection"]
+  },
+  {
+    id: "reperage-mots",
+    label: "Repérage de mots",
+    entry: "../tools/reperage-mots/tool.js",
+    description: "Repérer toutes les occurrences d’un mot de la banque parmi des distracteurs graphiquement proches.",
+    tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "mots", "discrimination-visuelle", "sélection", "projection"]
+  },
+  {
     id: "geste-graphique",
     label: "Geste graphique",
     entry: "../tools/geste-graphique/tool.js",

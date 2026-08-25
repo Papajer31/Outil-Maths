@@ -1,0 +1,66 @@
+.rm-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.rm-config-counts{
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.rm-config-counts > .tv-group-title{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+.rm-config-count-row{
+  display:flex;
+  flex:0 0 auto;
+  flex-wrap:nowrap;
+  gap:24px;
+  align-items:center;
+}
+
+.rm-config-count-row .tv-stepper-field{
+  flex:0 0 auto;
+  flex-direction:row;
+  align-items:center;
+  gap:10px;
+}
+
+.rm-config-count-row .tv-stepper-field-label{
+  white-space:nowrap;
+  font-size:20px;
+}
+
+.rm-config-root .tv-radio-options{
+  flex-wrap:wrap;
+}
+
+.rm-config-bank-status{
+  min-height:24px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(15,23,42,.05);
+  color:var(--muted,#667085);
+  font-weight:650;
+  line-height:1.35;
+}
+
+.rm-config-bank-status.is-ready{
+  background:rgba(22,163,74,.10);
+  color:#166534;
+}
+
+.rm-config-bank-status.is-warning{
+  background:rgba(217,119,6,.12);
+  color:#92400e;
+}
+
+.rm-config-bank-status.is-error{
+  background:rgba(220,38,38,.10);
+  color:#991b1b;
+}

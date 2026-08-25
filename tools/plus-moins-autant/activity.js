@@ -638,7 +638,8 @@ function requestReveal(state) {
   state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isCurrentAnswerCorrect(state)
+    wasCorrect: isCurrentAnswerCorrect(state),
+    skipValidationReview: true
   });
 }
 
