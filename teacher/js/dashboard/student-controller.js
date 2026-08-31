@@ -2,6 +2,7 @@ import {
   escapeAttr,
   escapeHtml
 } from "./text-utils.js";
+import { mountStudentHistoryView } from "./student-history-view.js";
 
 function ensureDropIndicator(container){
   let indicator = container.querySelector(":scope > .dashboard-drop-indicator");
@@ -48,7 +49,8 @@ export function createStudentDashboardController({
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
-  studentNotesDrafts = new Map(),
+  listStudentActivityHistory,
+  deleteStudentActivityHistoryAttempt,
   showToast
 } = {}){
   let primaryModalMode = "create-space";
@@ -222,8 +224,6 @@ export function createStudentDashboardController({
     try {
       const deletedId = pendingStudent.id;
       await deleteStudent?.(deletedId);
-
-      studentNotesDrafts.delete(String(deletedId));
 
       if (String(getCurrentStudent?.()?.id || "") === String(deletedId)){
         setCurrentStudent?.(null);
@@ -764,39 +764,19 @@ export function createStudentDashboardController({
       const currentStudent = getCurrentStudent?.();
       if (currentStudent){
         studentsList.classList.remove("is-tile-view");
-        const studentId = String(currentStudent.id);
-        const noteValue = studentNotesDrafts.get(studentId) || "";
         const subtitle = buildStudentSubtitle(currentStudent);
 
-        studentsList.innerHTML = `
-          <div class="dashboard-student-profile">
-            <div class="dashboard-profile-header">
-              <div>
-                <div class="dashboard-student-name">${escapeHtml(currentStudent.first_name || "")}</div>
-                ${subtitle ? `<div class="dashboard-student-meta">${escapeHtml(subtitle)}</div>` : ""}
-              </div>
-
-              <button class="dashboard-profile-back" type="button" id="btnBackToClassList">Retour à la liste</button>
-            </div>
-
-            <label class="dashboard-student-notes-label" for="studentNotesTextarea">Notes</label>
-            <textarea
-              id="studentNotesTextarea"
-              class="dashboard-student-notes"
-              placeholder="Placeholder : tu pourras noter ici des observations sur cet élève."
-            >${escapeHtml(noteValue)}</textarea>
-
-            <div class="dashboard-student-help">Ces notes ne sont pas encore sauvegardées.</div>
-          </div>
-        `;
-
-        document.getElementById("studentNotesTextarea")?.addEventListener("input", (event) => {
-          studentNotesDrafts.set(studentId, event.target.value);
-        });
-
-        document.getElementById("btnBackToClassList")?.addEventListener("click", async () => {
-          setCurrentStudent?.(null);
-          await renderStudentsColumn({ skipRefresh: true });
+        await mountStudentHistoryView({
+          host: studentsList,
+          student: currentStudent,
+          subtitle,
+          loadHistory: listStudentActivityHistory,
+          deleteHistoryAttempt: deleteStudentActivityHistoryAttempt,
+          showToast,
+          onBack: async () => {
+            setCurrentStudent?.(null);
+            await renderStudentsColumn({ skipRefresh: true });
+          }
         });
         return;
       }

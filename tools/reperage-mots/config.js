@@ -52,7 +52,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"rm",
           allTargetId:ALL_TARGET_ID,
-          showRelevanceLevels:true,
+          showSchoolLevels:true,
           bankStatusMarkup:'<div class="rm-config-bank-status" data-rm-bank-status aria-live="polite"></div>'
         })
       )}
@@ -173,18 +173,14 @@ function refreshBankStatus(container) {
   const targetCount = getEligibleTargetCount(settings);
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
-  const levelLabel = settings.relevanceLevel === "simple"
-    ? "Simple"
-    : settings.relevanceLevel === "complexe"
-      ? "Complexe"
-      : "Normal";
+  const levelLabel = settings.schoolLevel;
 
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
-    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} cible${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} ». Les distracteurs sont cherchés dans toute la banque.`;
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} cible${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} ». Les distracteurs respectent le même niveau lexical.`;
     return;
   }
 
-  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} cible${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} ». Les distracteurs sont cherchés dans toute la banque.`;
+  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} cible${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} ». Les distracteurs respectent le même niveau lexical.`;
 }
 
 async function ensureWordCatalogLoaded() {

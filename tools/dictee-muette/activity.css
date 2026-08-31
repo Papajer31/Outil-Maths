@@ -209,6 +209,12 @@
   background:var(--tool-ui-error-bg);
 }
 
+.dm-answer-display--boxes .dm-letter-slot.is-correction{
+  border-style:dashed;
+  border-color:var(--tool-ui-success);
+  background:var(--tool-ui-success-bg);
+}
+
 .dm-answer-display--single.is-correct{
   border-style:solid;
   border-color:var(--tool-ui-success);
@@ -219,6 +225,12 @@
   border-style:solid;
   border-color:var(--tool-ui-error);
   background:var(--tool-ui-error-bg);
+}
+
+.dm-answer-display--single.is-correction{
+  border-style:dashed;
+  border-color:var(--tool-ui-success);
+  background:var(--tool-ui-success-bg);
 }
 
 .dm-keyboard-host{

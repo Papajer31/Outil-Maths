@@ -28,6 +28,25 @@ export function createDecimalRepresentationActivity(modelApi = {}) {
 const DRAG_THRESHOLD_PX = 8;
 const ORGANIZE_SNAP_THRESHOLD_PX = 4;
 
+// Point de réglage unique de toute la chorégraphie de correction du mode
+// « Nombre → Représentation ». Modifier uniquement ces valeurs pour tester
+// le rythme sans avoir à chercher des durées dispersées dans le moteur/CSS.
+const BUILD_REVIEW_TIMING = Object.freeze({
+  organizeStaggerMs: 90,
+  organizeMoveMs: 280,
+  extraArrivalPauseMs: 120,
+  extraPulseMs: 260,
+  extraAfterPulsePauseMs: 120,
+  studentReviewHoldMs: 3000,
+  correctionPanelPauseMs: 180,
+  extraFadeMs: 280,
+  overflowArrivalMs: 220,
+  betweenExtrasMs: 90,
+  beforeMissingMs: 180,
+  missingFadeMs: 320,
+  betweenMissingMs: 100
+});
+
 const BUILD_PIECE_SIZES = Object.freeze({
   picbille: {
     ones: { width: 30, height: 30 },
@@ -116,7 +135,7 @@ function createActivity(initialContext = {}) {
     showAnswer(container, context = initialContext) {
       state.container = container || state.container;
       state.latestContext = context ?? state.latestContext;
-      revealAnswer(state);
+      return revealAnswer(state);
     },
 
     getShellAnswerDisplayState(container, context = state.latestContext) {
@@ -198,11 +217,17 @@ function createRuntimeState(initialContext = {}) {
     randomPlacementUsesTimeout: false,
     builderAnimating: false,
     correctionReveal: false,
+    showExtraFeedback: false,
+    builderPaletteHiddenForReview: false,
     phaseMonitorId: null,
     lastObservedPhaseKind: null,
     answerDisplayMode: "correction",
     studentAnswerSnapshot: null,
     correctionSnapshot: null,
+    studentBuildSnapshot: null,
+    correctionBuildSnapshot: null,
+    buildCorrectionAnimated: false,
+    validationRevealRequested: false,
     lastEvaluation: null
   };
 }
@@ -340,6 +365,10 @@ function loadNextQuestion(state, context = {}) {
   state.answerDisplayMode = "correction";
   state.studentAnswerSnapshot = null;
   state.correctionSnapshot = null;
+  state.studentBuildSnapshot = null;
+  state.correctionBuildSnapshot = null;
+  state.buildCorrectionAnimated = false;
+  state.validationRevealRequested = false;
   state.lastEvaluation = null;
 
   if (state.renderedShowResponseBox !== state.showResponseBox) {
@@ -582,7 +611,7 @@ function renderBuilderPanel(state, settings) {
     state.builderSidebarEl.innerHTML = `
       <div class="rd-builder-palette" id="rd_builder_palette">
         <div class="rd-builder-palette-items">${renderBuilderPalette(question.themeId, settings)}</div>
-        ${orderedBuild ? "" : `<button class="btn secondary rd-organize-btn" id="rd_organize_btn" type="button">Organiser</button>`}
+        ${orderedBuild ? "" : renderOrganizeButton()}
       </div>
     `;
   }
@@ -612,12 +641,44 @@ function hideBuilderSidebar(state) {
   state.builderSidebarEl.style.flexBasis = "";
 }
 
+function clearBuilderSidebarContentForReview(state) {
+  if (!state.builderSidebarEl) return;
+
+  state.builderSidebarEl.hidden = false;
+  state.builderSidebarEl.classList.remove("is-hidden", "rd-builder-sidebar--overflow");
+  state.builderSidebarEl.style.width = "";
+  state.builderSidebarEl.style.flexBasis = "";
+  state.builderSidebarEl.innerHTML = "";
+  state.builderPaletteEl = null;
+  state.builderOverflowEl = null;
+  state.organizeBtnEl = null;
+}
+
 function hideNumberKeypad(state) {
   if (!state.numberKeypadEl) return;
 
   state.numberKeypadEl.hidden = true;
   state.numberKeypadEl.classList.add("is-hidden");
   state.numberKeypadEl.innerHTML = "";
+}
+
+function renderOrganizeButton({ disabled = false } = {}) {
+  return `
+    <button
+      class="btn secondary rd-organize-btn"
+      id="rd_organize_btn"
+      type="button"
+      aria-label="Organiser"
+      title="Organiser"
+      ${disabled ? "disabled" : ""}
+    >
+      <span class="rd-organize-btn__icons" aria-hidden="true">
+        <svg viewBox="0 -960 960 960" focusable="false"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h133v-133H200v133Zm213 0h134v-133H413v133Zm214 0h133v-133H627v133ZM200-413h133v-134H200v134Zm213 0h134v-134H413v134Zm214 0h133v-134H627v134ZM200-627h133v-133H200v133Zm213 0h134v-133H413v133Zm214 0h133v-133H627v133Z"/></svg>
+        <svg viewBox="0 -960 960 960" focusable="false"><path d="M120-200v-80h720v80H120Zm0-160v-80h720v80H120Zm0-160v-80h720v80H120Zm0-160v-80h720v80H120Z"/></svg>
+        <svg viewBox="0 -960 960 960" focusable="false"><path d="M360-160q-33 0-56.5-23.5T280-240q0-33 23.5-56.5T360-320q33 0 56.5 23.5T440-240q0 33-23.5 56.5T360-160Zm240 0q-33 0-56.5-23.5T520-240q0-33 23.5-56.5T600-320q33 0 56.5 23.5T680-240q0 33-23.5 56.5T600-160ZM360-400q-33 0-56.5-23.5T280-480q0-33 23.5-56.5T360-560q33 0 56.5 23.5T440-480q0 33-23.5 56.5T360-400Zm240 0q-33 0-56.5-23.5T520-480q0-33 23.5-56.5T600-560q33 0 56.5 23.5T680-480q0 33-23.5 56.5T600-400ZM360-640q-33 0-56.5-23.5T280-720q0-33 23.5-56.5T360-800q33 0 56.5 23.5T440-720q0 33-23.5 56.5T360-640Zm240 0q-33 0-56.5-23.5T520-720q0-33 23.5-56.5T600-800q33 0 56.5 23.5T680-720q0 33-23.5 56.5T600-640Z"/></svg>
+      </span>
+    </button>
+  `;
 }
 
 function renderBuilderPalette(themeId, settings) {
@@ -734,24 +795,30 @@ function renderDisplayedNumericResponse(state) {
   const isCorrect = evaluation.isCorrect === true;
   const showStudentAnswer = canToggleStudentNumericAnswerDisplay(state)
     && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
+  const showCorrectionFeedback = !isCorrect && !showStudentAnswer;
   const snapshot = showStudentAnswer ? state.studentAnswerSnapshot : state.correctionSnapshot;
+  const feedbackClass = isCorrect
+    ? "is-correct"
+    : (showCorrectionFeedback ? "is-correction" : "is-incorrect");
+
   state.numberResponseShellEl.innerHTML = renderNumericAnswerDisplayMarkup(String(snapshot?.value ?? ""), {
-    className: `rd-number-response-input rd-number-response-input--readonly ${isCorrect ? "is-correct" : "is-incorrect"}`,
+    className: `rd-number-response-input rd-number-response-input--readonly ${feedbackClass}`,
     ariaLabel: showStudentAnswer ? "Réponse de l’élève" : "Correction"
   });
 
   state.inputEl = state.numberResponseShellEl.querySelector(".rd-number-response-input");
-  applyNumberColumnFeedback(state, isCorrect);
+  applyNumberColumnFeedback(state, isCorrect ? "correct" : (showCorrectionFeedback ? "correction" : "incorrect"));
 }
 
-function applyNumberColumnFeedback(state, isCorrect) {
+function applyNumberColumnFeedback(state, feedbackKind) {
   if (!state.numberColumnEl) return;
-  state.numberColumnEl.classList.toggle("rd-number-column--correct", isCorrect === true);
-  state.numberColumnEl.classList.toggle("rd-number-column--incorrect", isCorrect !== true);
+  state.numberColumnEl.classList.toggle("rd-number-column--correct", feedbackKind === "correct");
+  state.numberColumnEl.classList.toggle("rd-number-column--incorrect", feedbackKind === "incorrect");
+  state.numberColumnEl.classList.toggle("rd-number-column--correction", feedbackKind === "correction");
 }
 
 function clearNumberColumnFeedback(state) {
-  state.numberColumnEl?.classList.remove("rd-number-column--correct", "rd-number-column--incorrect");
+  state.numberColumnEl?.classList.remove("rd-number-column--correct", "rd-number-column--incorrect", "rd-number-column--correction");
 }
 
 function bindNumericResponseEvents(state) {
@@ -862,7 +929,11 @@ function createBuildItemElement(state, item, settings, interactionMode) {
 function updateBuildItemElement(state, button, item, settings) {
   const size = getBuildItemSize(state, item);
   const bounds = getPlacementBounds(state.builderWorkspaceEl, size, getPlacementInsetForSizeMode(item.sizeMode));
-  const statusClass = item.status && item.status !== "normal" ? ` rd-build-piece--${item.status}` : "";
+  const statusClass = item.status === "missing"
+    ? " rd-build-piece--missing"
+    : item.status === "extra" && (state.showExtraFeedback || item.reviewFeedbackVisible === true)
+      ? " rd-build-piece--extra"
+      : "";
   const className = `rd-build-piece rd-build-piece--${item.kind}${statusClass}`;
   const left = `${round(clamp(item.x, bounds.minX, bounds.maxX))}px`;
   const top = `${round(clamp(item.y, bounds.minY, bounds.maxY))}px`;
@@ -1015,8 +1086,10 @@ function getOverflowGroups(items) {
 function createOverflowGroupElement(themeId, kind, count, settings, options = {}) {
   const size = getPalettePieceSize(themeId, kind);
   const targetOnly = options.targetOnly === true;
+  const startHidden = options.startHidden === true;
   const groupEl = document.createElement("div");
-  groupEl.className = `rd-overflow-group rd-overflow-group--${kind}${targetOnly ? " rd-overflow-group--target" : ""}`;
+  groupEl.className = `rd-overflow-group rd-overflow-group--${kind}${targetOnly ? " rd-overflow-group--target" : ""}${startHidden ? " is-empty" : ""}`;
+  groupEl.dataset.overflowKind = kind;
 
   const pieceEl = document.createElement("div");
   pieceEl.className = targetOnly
@@ -1032,10 +1105,10 @@ function createOverflowGroupElement(themeId, kind, count, settings, options = {}
   }
   groupEl.appendChild(pieceEl);
 
-  if (count > 1) {
+  if (!targetOnly) {
     const countEl = document.createElement("span");
     countEl.className = "rd-overflow-count";
-    countEl.textContent = `× ${count}`;
+    countEl.textContent = `× ${Math.max(0, Number(count) || 0)}`;
     groupEl.appendChild(countEl);
   }
 
@@ -1421,7 +1494,9 @@ function organizeBuildPieces(state, settings, options = {}) {
 
   clearOrganizeTimers(state);
 
-  const assignments = computeOrganizedAssignments(state, sourceItems, settings);
+  const assignments = Array.isArray(options.assignments)
+    ? options.assignments
+    : computeOrganizedAssignments(state, sourceItems, settings);
   if (!assignments.length) {
     options.onComplete?.();
     return;
@@ -1496,6 +1571,118 @@ function organizeBuildPieces(state, settings, options = {}) {
   state.organizeTimers.push(finishId);
 }
 
+
+function organizeBuildPiecesForValidationReview(state, settings, assignments, onComplete) {
+  if (!state.builderWorkspaceEl || !state.currentQuestion) {
+    onComplete?.();
+    return;
+  }
+
+  const safeAssignments = Array.isArray(assignments) ? assignments : [];
+  if (!safeAssignments.length) {
+    onComplete?.();
+    return;
+  }
+
+  clearOrganizeTimers(state);
+  state.builderAnimating = true;
+  state.organizeBtnEl?.setAttribute("disabled", "disabled");
+
+  const elements = state.buildItemElementsById;
+  let cursorMs = 0;
+  let latestMoveEndMs = 0;
+
+  const schedule = (callback, delayMs) => {
+    const timerId = window.setTimeout(callback, Math.max(0, delayMs));
+    state.organizeTimers.push(timerId);
+    return timerId;
+  };
+
+  safeAssignments.forEach((assignment) => {
+    const item = getBuildItemById(state, assignment.id);
+    const element = elements.get(String(assignment.id || ""));
+    if (!item || !element) return;
+
+    const dx = Math.abs((Number(item.x) || 0) - assignment.x);
+    const dy = Math.abs((Number(item.y) || 0) - assignment.y);
+    const needsMove = dx > ORGANIZE_SNAP_THRESHOLD_PX || dy > ORGANIZE_SNAP_THRESHOLD_PX;
+    const startMs = cursorMs;
+    const moveMs = needsMove ? BUILD_REVIEW_TIMING.organizeMoveMs : 0;
+
+    if (needsMove) {
+      schedule(() => {
+        const liveItem = getBuildItemById(state, assignment.id);
+        const liveElement = getBuildItemElement(state, assignment.id);
+        if (!liveItem || !liveElement) return;
+        liveItem.x = assignment.x;
+        liveItem.y = assignment.y;
+        liveElement.style.setProperty("--rd-organize-move-duration", `${BUILD_REVIEW_TIMING.organizeMoveMs}ms`);
+        liveElement.classList.add("is-organizing");
+        liveElement.style.left = `${round(assignment.x)}px`;
+        liveElement.style.top = `${round(assignment.y)}px`;
+      }, startMs);
+      latestMoveEndMs = Math.max(latestMoveEndMs, startMs + moveMs);
+    } else {
+      item.x = assignment.x;
+      item.y = assignment.y;
+      element.style.left = `${round(assignment.x)}px`;
+      element.style.top = `${round(assignment.y)}px`;
+    }
+
+    cursorMs += BUILD_REVIEW_TIMING.organizeStaggerMs;
+  });
+
+  // Complete the one-and-only spatial reorganization first. Only once every
+  // asset is settled do we reveal the student's surplus assets, one by one.
+  const organizationEndMs = Math.max(cursorMs, latestMoveEndMs);
+  const extraAssignments = safeAssignments.filter((assignment) => {
+    return getBuildItemById(state, assignment.id)?.status === "extra";
+  });
+
+  let pulseCursorMs = organizationEndMs;
+  if (extraAssignments.length) {
+    pulseCursorMs += BUILD_REVIEW_TIMING.extraArrivalPauseMs;
+
+    extraAssignments.forEach((assignment) => {
+      const pulseAtMs = pulseCursorMs;
+      schedule(() => {
+        const liveItem = getBuildItemById(state, assignment.id);
+        const liveElement = getBuildItemElement(state, assignment.id);
+        if (!liveItem || !liveElement) return;
+        liveItem.reviewFeedbackVisible = true;
+        updateBuildItemElement(state, liveElement, liveItem, settings);
+        liveElement.style.setProperty("--rd-extra-pulse-duration", `${BUILD_REVIEW_TIMING.extraPulseMs}ms`);
+        liveElement.classList.remove("is-review-pulsing");
+        void liveElement.offsetWidth;
+        liveElement.classList.add("is-review-pulsing");
+      }, pulseAtMs);
+      schedule(() => {
+        getBuildItemElement(state, assignment.id)?.classList.remove("is-review-pulsing");
+      }, pulseAtMs + BUILD_REVIEW_TIMING.extraPulseMs);
+
+      pulseCursorMs += BUILD_REVIEW_TIMING.extraPulseMs
+        + BUILD_REVIEW_TIMING.extraAfterPulsePauseMs;
+    });
+  }
+
+  const totalDurationMs = Math.max(organizationEndMs, pulseCursorMs);
+  const finish = () => {
+    state.builderAnimating = false;
+    state.organizeBtnEl?.removeAttribute("disabled");
+    state.buildItemElementsById.forEach((element) => {
+      element.classList.remove("is-organizing", "is-review-pulsing");
+    });
+    onComplete?.();
+  };
+
+  if (totalDurationMs <= 0) {
+    finish();
+    return;
+  }
+
+  schedule(finish, totalDurationMs);
+}
+
 function applyOrderedBuildLayout(state, settings, focusItemId = "", options = {}) {
   if (!state.builderWorkspaceEl || !state.currentQuestion) return;
   const assignments = computeOrganizedAssignments(state, state.buildItems, settings);
@@ -1568,7 +1755,8 @@ function computeOrganizedAssignments(state, sourceItems = state.buildItems, sett
   let slots = [];
   if (themeId === "picbille") {
     slots = computePicbilleBuildSlots(workspace, counts, sizes, {
-      useLooseUnitsLayout: normalizeSettings(settings).allowLooseTens === true
+      useLooseUnitsLayout: normalizeSettings(settings).allowLooseTens === true,
+      tenGroupCounts: getPicbilleReviewTenGroupCounts(sourceItems)
     });
   } else if (themeId === "dede") {
     slots = computeDedeBuildSlots(workspace, counts, sizes);
@@ -1600,6 +1788,13 @@ function computeOrganizedAssignments(state, sourceItems = state.buildItems, sett
   });
 
   return assignments;
+}
+
+function getPicbilleReviewTenGroupCounts(items) {
+  const source = Array.isArray(items) ? items : [];
+  const existingCount = source.filter((item) => item.kind === "tens" && item.status !== "missing").length;
+  const missingCount = source.filter((item) => item.kind === "tens" && item.status === "missing").length;
+  return existingCount > 0 && missingCount > 0 ? [existingCount, missingCount] : null;
 }
 
 function computeSectionedBuildSlots(workspace, counts, sizes, options = {}) {
@@ -2045,7 +2240,15 @@ function computePicbilleBuildSlots(workspace, counts, sizes, options = {}) {
     ? hundredRows.length * sizes.hundreds.height + Math.max(0, hundredRows.length - 1) * hundredRowGap
     : 0;
 
-  const tenGroups = getPicbilleBuilderTenGroups(tensCount, onesCount, bigGap, smallGap);
+  const requestedTenGroupCounts = Array.isArray(options.tenGroupCounts)
+    ? options.tenGroupCounts.map((count) => Math.max(0, Number(count) || 0)).filter(Boolean)
+    : null;
+  const tenGroups = requestedTenGroupCounts?.length
+    ? requestedTenGroupCounts.map((count, index) => ({
+        count,
+        gapAfter: index < requestedTenGroupCounts.length - 1 ? bigGap : 0
+      }))
+    : getPicbilleBuilderTenGroups(tensCount, onesCount, bigGap, smallGap);
   const tensWidth = tenGroups.length ? sizes.tens.width : 0;
   const tensHeight = tenGroups.length ? computeBuilderPicbilleStackHeight(tenGroups, sizes.tens.height, barGap) : 0;
 
@@ -2254,7 +2457,10 @@ function revealAnswer(state) {
   if (state.answerRevealed) return;
 
   const isRepresentationToNumber = question.direction === REPRESENTATION_DIRECTIONS.REPRESENTATION_TO_NUMBER;
+  const validationRevealRequested = state.validationRevealRequested === true;
+  state.validationRevealRequested = false;
   state.answerRevealed = true;
+  let revealResult = null;
 
   if (isRepresentationToNumber) {
     state.studentAnswerSnapshot = captureStudentNumericAnswerSnapshot(state);
@@ -2270,11 +2476,12 @@ function revealAnswer(state) {
       revealNumericFeedback(state);
     }
   } else {
-    revealBuildFeedback(state);
+    revealResult = revealBuildFeedback(state, { validationReview: validationRevealRequested });
   }
 
   state.root?.classList.add("rd-root--revealed");
   syncValidateState(state);
+  return revealResult;
 }
 
 function revealNumericFeedback(state) {
@@ -2292,34 +2499,70 @@ function revealNumericFeedback(state) {
 
 }
 
-function revealBuildFeedback(state) {
+function revealBuildFeedback(state, { validationReview = false } = {}) {
   if (shouldUsePassiveFreeBuildQuestion(state)) {
     revealPassiveFreeBuildCorrection(state);
     return;
   }
 
   const isCorrect = isBuildAnswerCorrect(state);
+  state.lastEvaluation = { isCorrect };
   state.panelEl?.classList.toggle("rd-panel--correct", isCorrect);
   state.panelEl?.classList.toggle("rd-panel--incorrect", !isCorrect);
+  state.panelEl?.classList.remove("rd-panel--corrected");
 
   const settings = normalizeSettings(state.latestContext?.settings);
 
   if (isCorrect) {
-    organizeBuildPieces(state, settings, {
-      items: state.buildItems,
-      onComplete: () => {
-        if (state.builderSidebarEl) {
-          state.builderSidebarEl.hidden = false;
-          state.builderSidebarEl.classList.add("is-hidden");
-          state.builderSidebarEl.classList.remove("rd-builder-sidebar--overflow");
-          state.builderSidebarEl.innerHTML = "";
-        }
-      }
+    state.answerDisplayMode = "correction";
+    // La palette ne fait pas partie de la correction : on la masque avant
+    // toute organisation forcée afin que l'animation ne se joue que dans
+    // l'espace de représentation.
+    hideBuilderSidebar(state);
+    return new Promise((resolve) => {
+      organizeBuildPieces(state, settings, {
+        items: state.buildItems,
+        onComplete: resolve
+      });
     });
-    return;
   }
 
-  prepareBuildCorrection(state, settings);
+  // Réponse fausse : une seule réorganisation est autorisée. Le gabarit de
+  // rangement est l'union chiffre par chiffre de la cible et de la réponse
+  // de l'élève (max des centaines, dizaines et unités). Les emplacements
+  // nécessaires aux éléments manquants sont donc réservés dès maintenant.
+  computeBuildCorrectionDiff(state);
+  state.correctionReveal = false;
+  state.showExtraFeedback = false;
+  state.answerDisplayMode = "student";
+  state.builderPaletteHiddenForReview = true;
+  clearBuilderSidebarContentForReview(state);
+  renderBuildItems(state, settings);
+
+  return new Promise((resolve) => {
+    organizeBuildPiecesForValidationReview(
+      state,
+      settings,
+      buildStudentReviewAssignments(state, settings),
+      () => {
+        state.studentBuildSnapshot = captureBuildSnapshot(state.buildItems);
+        state.correctionBuildSnapshot = buildCorrectionBuildSnapshot(
+          state,
+          settings,
+          state.studentBuildSnapshot
+        );
+        state.buildCorrectionAnimated = false;
+        renderBuildItems(state, settings);
+
+        if (validationReview) {
+          resolve();
+          return;
+        }
+
+        void startBuildCorrectionAnimation(state, settings).then(resolve);
+      }
+    );
+  });
 }
 
 function revealPassiveFreeBuildCorrection(state) {
@@ -2336,34 +2579,91 @@ function revealPassiveFreeBuildCorrection(state) {
   hideBuilderSidebar(state);
 }
 
-function prepareBuildCorrection(state, settings) {
-  if (!state.currentQuestion || !state.builderWorkspaceEl || !state.builderItemsLayerEl) return;
+function captureBuildSnapshot(items) {
+  return (Array.isArray(items) ? items : []).map((item) => ({ ...item }));
+}
 
-  computeBuildCorrectionDiff(state);
-  const missingKinds = [];
+function buildCorrectionBuildSnapshot(state, settings, studentSnapshot) {
+  const items = captureBuildSnapshot(studentSnapshot);
+  const expected = state.currentQuestion?.expectedBuild || { hundreds: 0, tens: 0, ones: 0 };
+
   ["hundreds", "tens", "ones"].forEach((kind) => {
-    const count = state.currentQuestion?.expectedBuild?.[kind] || 0;
-    const current = state.buildItems.filter((item) => item.kind === kind && item.status !== "extra").length;
-    for (let i = 0; i < Math.max(0, count - current); i += 1) {
-      missingKinds.push(kind);
+    const expectedCount = Math.max(0, Number(expected[kind]) || 0);
+    const studentCount = items.filter((item) => item.kind === kind).length;
+    for (let i = studentCount; i < expectedCount; i += 1) {
+      items.push({
+        id: `piece_${state.nextBuildItemId++}`,
+        kind,
+        zIndex: state.nextBuildZIndex++,
+        x: 0,
+        y: 0,
+        status: "missing",
+        reviewFeedbackVisible: false
+      });
     }
   });
 
-  missingKinds.forEach((kind) => {
-    const size = getWorkspacePieceSize(state.currentQuestion.themeId, kind);
-    const position = findBuildPiecePlacement(state, size);
-    appendBuildItem(state, {
-      id: `piece_${state.nextBuildItemId++}`,
-      kind,
-      zIndex: state.nextBuildZIndex++,
-      x: position.x,
-      y: position.y,
-      status: "missing"
-    });
+  // La correction utilise exactement le même gabarit-union que la vue élève :
+  // max(chiffre cible, chiffre élève) pour chaque ordre. Aucun élément déjà
+  // rangé ne doit donc changer de place lors du basculement vers la correction.
+  const assignments = computeOrganizedAssignments(state, items, settings);
+  const assignmentById = new Map(assignments.map((entry) => [String(entry.id || ""), entry]));
+  items.forEach((item) => {
+    const target = assignmentById.get(String(item.id || ""));
+    if (!target) return;
+    item.x = target.x;
+    item.y = target.y;
   });
 
-  renderBuildItems(state, settings);
-  startBuildCorrectionAnimation(state, settings);
+  return items;
+}
+
+
+function findCorrectionMissingPlacement(state, item, occupiedRects, target = null) {
+  const workspace = state.builderWorkspaceEl;
+  const size = getBuildItemSize(state, item);
+  const bounds = getPlacementBounds(workspace, size, getPlacementInsetForSizeMode(item.sizeMode));
+  const candidates = [];
+  if (target) {
+    candidates.push({
+      x: clamp(Number(target.x) || 0, bounds.minX, bounds.maxX),
+      y: clamp(Number(target.y) || 0, bounds.minY, bounds.maxY)
+    });
+  }
+
+  const step = Math.max(18, Math.round(Math.min(size.width, size.height) / 2));
+  for (let y = bounds.minY; y <= bounds.maxY; y += step) {
+    for (let x = bounds.minX; x <= bounds.maxX; x += step) {
+      candidates.push({ x, y });
+    }
+  }
+
+  let best = candidates[0] || { x: bounds.minX, y: bounds.minY };
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const rect = { x: candidate.x, y: candidate.y, width: size.width, height: size.height };
+    const score = occupiedRects.reduce(
+      (sum, occupied) => sum + getExpandedIntersectionArea(rect, occupied, 10),
+      0
+    );
+    if (score <= 0) return candidate;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function orderBuildItemsForCorrection(items) {
+  const source = Array.isArray(items) ? items : [];
+  return ["hundreds", "tens", "ones"].flatMap((kind) => {
+    const sameKind = source.filter((item) => item.kind === kind);
+    return [
+      ...sameKind.filter((item) => item.status !== "missing"),
+      ...sameKind.filter((item) => item.status === "missing")
+    ];
+  });
 }
 
 function computeBuildCorrectionDiff(state) {
@@ -2380,38 +2680,100 @@ function computeBuildCorrectionDiff(state) {
     const validCount = Math.min(items.length, expectedCount);
     items.forEach((item, index) => {
       item.status = index < validCount ? "normal" : "extra";
+      item.reviewFeedbackVisible = false;
     });
   });
+}
+
+function buildStudentReviewLayoutItems(state) {
+  const expected = state.currentQuestion?.expectedBuild || { hundreds: 0, tens: 0, ones: 0 };
+  const layoutItems = captureBuildSnapshot(state.buildItems);
+  const studentCounts = countBuildPieces(layoutItems);
+
+  ["hundreds", "tens", "ones"].forEach((kind) => {
+    const targetCount = Math.max(0, Number(expected[kind]) || 0);
+    const studentCount = Math.max(0, Number(studentCounts[kind]) || 0);
+    const missingCount = Math.max(0, targetCount - studentCount);
+    for (let i = 0; i < missingCount; i += 1) {
+      layoutItems.push({
+        id: `__review_reserved_${kind}_${i}`,
+        kind,
+        zIndex: 0,
+        x: 0,
+        y: 0,
+        status: "missing"
+      });
+    }
+  });
+
+  return layoutItems;
+}
+
+function buildStudentReviewAssignments(state, settings) {
+  const realIds = new Set(state.buildItems.map((item) => String(item.id || "")));
+  const layoutItems = buildStudentReviewLayoutItems(state);
+  return computeOrganizedAssignments(state, layoutItems, settings)
+    .filter((assignment) => realIds.has(String(assignment.id || "")));
 }
 
 
 function startBuildCorrectionAnimation(state, settings) {
-  const extraItems = state.buildItems.filter((item) => item.status === "extra");
-  if (!extraItems.length) {
-    state.correctionReveal = true;
-    renderBuildItems(state, settings);
-    renderBuildOverflow(state, settings);
-    organizeBuildPieces(state, settings, {
-      items: state.buildItems.filter((item) => item.status !== "extra")
-    });
-    return;
-  }
+  const snapshot = captureBuildSnapshot(state.correctionBuildSnapshot);
+  if (!snapshot.length) return Promise.resolve();
 
-  prepareOverflowTargets(state, settings, extraItems);
-  const targetMap = collectOverflowTargetPositions(state, extraItems);
-  moveExtraPiecesToTransitionLayer(state, extraItems);
-  state.correctionReveal = true;
+  const extraItems = orderBuildItemsForCorrection(
+    snapshot.filter((item) => item.status === "extra")
+  );
+
+  clearOrganizeTimers(state);
+  clearOverflowCorrectionArtifacts(state);
+  state.answerDisplayMode = "correction";
+  state.correctionReveal = false;
+  state.builderPaletteHiddenForReview = true;
+  state.builderAnimating = true;
+  state.showExtraFeedback = true;
   renderBuildItems(state, settings);
 
-  animateExtraPiecesOut(state, extraItems, targetMap, () => {
-    renderBuildOverflow(state, settings);
-    organizeBuildPieces(state, settings, {
-      items: state.buildItems.filter((item) => item.status !== "extra")
-    });
+  // Le panneau annonce d'abord la correction. Les assets, eux, ne changent
+  // plus jamais de coordonnées après l'unique rangement de la vue élève.
+  state.panelEl?.classList.remove("rd-panel--incorrect", "rd-panel--correct");
+  state.panelEl?.classList.add("rd-panel--corrected");
+
+  return new Promise((resolve) => {
+    const begin = window.setTimeout(() => {
+      void fadeExtraBuildPiecesSequentially(state, settings, extraItems)
+        .then(() => waitBuildReviewTiming(state, BUILD_REVIEW_TIMING.beforeMissingMs))
+        .then(() => {
+          replaceBuildItems(state, captureBuildSnapshot(snapshot));
+          state.correctionReveal = true;
+          state.showExtraFeedback = true;
+          renderBuildItems(state, settings);
+          return revealMissingBuildPiecesSequentially(state);
+        })
+        .then(() => {
+          state.builderAnimating = false;
+          state.buildCorrectionAnimated = true;
+          resolve();
+        });
+    }, BUILD_REVIEW_TIMING.correctionPanelPauseMs);
+    state.organizeTimers.push(begin);
   });
 }
 
-function prepareOverflowTargets(state, settings, extraItems) {
+function waitBuildReviewTiming(state, delayMs) {
+  const safeDelay = Math.max(0, Number(delayMs) || 0);
+  if (safeDelay <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timerId = window.setTimeout(() => {
+      const index = state.organizeTimers.indexOf(timerId);
+      if (index >= 0) state.organizeTimers.splice(index, 1);
+      resolve();
+    }, safeDelay);
+    state.organizeTimers.push(timerId);
+  });
+}
+
+function prepareOverflowProgress(state, settings, extraItems) {
   if (!state.builderSidebarEl) return;
   state.builderSidebarEl.hidden = false;
   state.builderSidebarEl.classList.remove("is-hidden");
@@ -2421,78 +2783,111 @@ function prepareOverflowTargets(state, settings, extraItems) {
   state.builderSidebarEl.innerHTML = `<div class="rd-builder-overflow" id="rd_builder_overflow"></div>`;
   state.builderOverflowEl = state.builderSidebarEl.querySelector("#rd_builder_overflow");
   if (!state.builderOverflowEl) return;
+
   const themeId = state.currentQuestion?.themeId;
   getOverflowGroups(extraItems).forEach((group) => {
-    state.builderOverflowEl.appendChild(createOverflowGroupElement(themeId, group.kind, group.count, settings, {
-      targetOnly: true
+    state.builderOverflowEl.appendChild(createOverflowGroupElement(themeId, group.kind, 0, settings, {
+      startHidden: true
     }));
   });
 }
 
-function collectOverflowTargetPositions(state, extraItems) {
-  const shellRect = state.panelShellEl?.getBoundingClientRect();
-  if (!shellRect) return new Map();
-  const targetMap = new Map();
-  extraItems.forEach((item) => {
-    const targetEl = state.builderOverflowEl?.querySelector(`.rd-overflow-target[data-target-kind="${CSS.escape(String(item.kind))}"]`);
-    if (!targetEl) return;
-    const rect = targetEl.getBoundingClientRect();
-    targetMap.set(item.id, {
-      x: rect.left - shellRect.left,
-      y: rect.top - shellRect.top
-    });
-  });
-  return targetMap;
+function incrementOverflowProgress(state, kind, count) {
+  const group = state.builderOverflowEl?.querySelector?.(`[data-overflow-kind="${kind}"]`);
+  if (!group) return;
+  const countEl = group.querySelector(".rd-overflow-count");
+  if (countEl) countEl.textContent = `× ${Math.max(1, Number(count) || 1)}`;
+  group.classList.remove("is-empty", "is-arriving");
+  group.style.setProperty("--rd-overflow-arrival-duration", `${BUILD_REVIEW_TIMING.overflowArrivalMs}ms`);
+  void group.offsetWidth;
+  group.classList.add("is-arriving");
+  const timerId = window.setTimeout(() => {
+    group.classList.remove("is-arriving");
+  }, BUILD_REVIEW_TIMING.overflowArrivalMs);
+  state.organizeTimers.push(timerId);
 }
 
-function moveExtraPiecesToTransitionLayer(state, extraItems) {
-  const shellRect = state.panelShellEl?.getBoundingClientRect();
-  if (!state.transitionLayerEl || !shellRect) return;
-  const elementMap = state.buildItemElementsById;
-  extraItems.forEach((item) => {
-    const el = elementMap.get(item.id);
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    el.classList.add("rd-build-piece--transition-out");
-    el.style.left = `${round(rect.left - shellRect.left)}px`;
-    el.style.top = `${round(rect.top - shellRect.top)}px`;
-    state.transitionLayerEl.appendChild(el);
-    state.buildItemElementsById.delete(String(item.id || ""));
-  });
-}
+async function fadeExtraBuildPiecesSequentially(state, settings, extraItems) {
+  if (!extraItems.length) return;
 
-function animateExtraPiecesOut(state, extraItems, targetMap, onComplete) {
-  if (!state.transitionLayerEl) {
-    onComplete?.();
-    return;
+  prepareOverflowProgress(state, settings, extraItems);
+  const overflowCounts = { hundreds: 0, tens: 0, ones: 0 };
+
+  for (let index = 0; index < extraItems.length; index += 1) {
+    const item = extraItems[index];
+    const element = getBuildItemElement(state, item.id);
+    if (element) {
+      element.style.setProperty("--rd-extra-fade-duration", `${BUILD_REVIEW_TIMING.extraFadeMs}ms`);
+      element.classList.add("is-correction-exit");
+      await waitBuildReviewTiming(state, BUILD_REVIEW_TIMING.extraFadeMs);
+      state.buildItemElementsById.delete(String(item.id || ""));
+      element.remove();
+    }
+
+    overflowCounts[item.kind] = (overflowCounts[item.kind] || 0) + 1;
+    incrementOverflowProgress(state, item.kind, overflowCounts[item.kind]);
+    await waitBuildReviewTiming(state, BUILD_REVIEW_TIMING.overflowArrivalMs);
+
+    if (index < extraItems.length - 1) {
+      await waitBuildReviewTiming(state, BUILD_REVIEW_TIMING.betweenExtrasMs);
+    }
   }
-  const elements = new Map(
-    [...(state.transitionLayerEl.querySelectorAll?.(".rd-build-piece") || [])].map((el) => [String(el.dataset.id || ""), el])
-  );
-  state.builderAnimating = true;
-  state.organizeBtnEl?.setAttribute("disabled", "disabled");
+}
 
-  requestAnimationFrame(() => {
-    extraItems.forEach((item) => {
-      const el = elements.get(item.id);
-      const target = targetMap.get(item.id);
-      if (!el || !target) return;
-      el.classList.add("is-transitioning-out");
-      el.style.left = `${round(target.x)}px`;
-      el.style.top = `${round(target.y)}px`;
-    });
+function revealMissingBuildPiecesSequentially(state) {
+  const elementsById = new Map(
+    [...(state.builderItemsLayerEl?.querySelectorAll?.(".rd-build-piece--missing") || [])]
+      .map((element) => [String(element.dataset.id || ""), element])
+  );
+  const missingItems = orderBuildItemsForCorrection(
+    state.buildItems.filter((item) => item.status === "missing")
+  );
+  // Les dizaines Picbille forment une pile : leur lecture et leur ajout se
+  // font du bas vers le haut, contrairement aux emplacements calculés.
+  const orderedMissingItems = missingItems.sort((a, b) => {
+    if (a.kind !== "tens" || b.kind !== "tens") return 0;
+    return (Number(b.y) || 0) - (Number(a.y) || 0);
+  });
+  const missingElements = orderedMissingItems
+    .map((item) => elementsById.get(String(item.id || "")))
+    .filter(Boolean);
+  if (!missingElements.length) return Promise.resolve();
+
+  missingElements.forEach((element) => {
+    element.style.setProperty("--rd-missing-fade-duration", `${BUILD_REVIEW_TIMING.missingFadeMs}ms`);
+    element.classList.add("rd-build-piece--correction-enter");
   });
 
-  const finishId = window.setTimeout(() => {
-    state.builderAnimating = false;
-    state.organizeBtnEl?.removeAttribute("disabled");
-    state.transitionLayerEl?.querySelectorAll?.(".rd-build-piece--transition-out")?.forEach?.((el) => {
-      el.remove();
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        let index = 0;
+        const revealNext = () => {
+          const element = missingElements[index];
+          if (!element) {
+            resolve();
+            return;
+          }
+
+          element.classList.add("is-visible");
+          const fadeTimer = window.setTimeout(() => {
+            index += 1;
+            if (index >= missingElements.length) {
+              resolve();
+              return;
+            }
+            const pauseTimer = window.setTimeout(revealNext, BUILD_REVIEW_TIMING.betweenMissingMs);
+            state.organizeTimers.push(pauseTimer);
+          }, BUILD_REVIEW_TIMING.missingFadeMs);
+          state.organizeTimers.push(fadeTimer);
+        };
+        revealNext();
+      });
     });
-    onComplete?.();
-  }, 460);
-  state.organizeTimers.push(finishId);
+  });
 }
+
+
 function isBuildAnswerCorrect(state) {
   const expected = state.currentQuestion?.expectedBuild;
   if (!expected) return false;
@@ -2537,7 +2932,7 @@ function resetVisualState(state) {
   }
 
   state.panelShellEl?.classList.add("is-empty");
-  state.panelEl?.classList.remove("rd-panel--builder", "rd-panel--correct", "rd-panel--incorrect");
+  state.panelEl?.classList.remove("rd-panel--builder", "rd-panel--correct", "rd-panel--corrected", "rd-panel--incorrect");
   state.root?.classList.remove(
     "rd-root--revealed",
     "rd-root--question-number-to-representation",
@@ -2566,6 +2961,8 @@ function resetVisualState(state) {
     state.builderSidebarEl.style.width = "";
     state.builderSidebarEl.style.flexBasis = "";
   }
+  state.showExtraFeedback = false;
+  state.builderPaletteHiddenForReview = false;
   if (state.numberKeypadEl) {
     state.numberKeypadEl.hidden = false;
     state.numberKeypadEl.classList.add("is-hidden");
@@ -2583,6 +2980,10 @@ function resetVisualState(state) {
   state.answerDisplayMode = "correction";
   state.studentAnswerSnapshot = null;
   state.correctionSnapshot = null;
+  state.studentBuildSnapshot = null;
+  state.correctionBuildSnapshot = null;
+  state.buildCorrectionAnimated = false;
+  state.validationRevealRequested = false;
   state.lastEvaluation = null;
 }
 
@@ -2595,6 +2996,16 @@ function updateInstructionDisplay(state) {
 }
 
 function getShellAnswerDisplayState(state) {
+  if (canToggleStudentBuildAnswerDisplay(state)) {
+    return {
+      canToggle: true,
+      mode: normalizeAnswerDisplayMode(state.answerDisplayMode),
+      // La transition initiale est animée par le moteur de représentation lui-même
+      // (surplus vers la bibliothèque + manquants en fondu).
+      transitionTargets: []
+    };
+  }
+
   return {
     canToggle: canToggleStudentNumericAnswerDisplay(state),
     mode: canToggleStudentNumericAnswerDisplay(state)
@@ -2605,6 +3016,22 @@ function getShellAnswerDisplayState(state) {
 }
 
 function applyShellAnswerDisplayMode(state, mode) {
+  const normalizedMode = normalizeAnswerDisplayMode(mode);
+
+  if (canToggleStudentBuildAnswerDisplay(state)) {
+    if (normalizedMode === "student") {
+      applyStudentBuildSnapshot(state);
+      return true;
+    }
+
+    if (state.buildCorrectionAnimated !== true) {
+      return startBuildCorrectionAnimation(state, normalizeSettings(state.latestContext?.settings));
+    }
+
+    applyCorrectionBuildSnapshot(state);
+    return true;
+  }
+
   if (!shouldUseInlineNumberResponse(state) || !state.answerRevealed) {
     return false;
   }
@@ -2615,9 +3042,69 @@ function applyShellAnswerDisplayMode(state, mode) {
     return false;
   }
 
-  state.answerDisplayMode = normalizeAnswerDisplayMode(mode);
+  state.answerDisplayMode = normalizedMode;
   renderDisplayedNumericResponse(state);
   return true;
+}
+
+function canToggleStudentBuildAnswerDisplay(state) {
+  return state.answerRevealed === true
+    && state.currentQuestion?.direction === REPRESENTATION_DIRECTIONS.NUMBER_TO_REPRESENTATION
+    && !shouldUsePassiveFreeBuildQuestion(state)
+    && state.lastEvaluation?.isCorrect === false
+    && Array.isArray(state.studentBuildSnapshot)
+    && Array.isArray(state.correctionBuildSnapshot);
+}
+
+function restoreBuilderPaletteForReview(state, settings) {
+  if (!state.builderSidebarEl || !state.currentQuestion) return;
+  const orderedBuild = isOrderedNumberToRepresentation(state, settings);
+  state.builderSidebarEl.hidden = false;
+  state.builderSidebarEl.classList.remove("is-hidden", "rd-builder-sidebar--overflow");
+  state.builderSidebarEl.style.width = "";
+  state.builderSidebarEl.style.flexBasis = "";
+  state.builderSidebarEl.innerHTML = `
+    <div class="rd-builder-palette" id="rd_builder_palette">
+      <div class="rd-builder-palette-items">${renderBuilderPalette(state.currentQuestion.themeId, settings)}</div>
+      ${orderedBuild ? "" : renderOrganizeButton({ disabled: true })}
+    </div>
+  `;
+  state.builderPaletteEl = state.builderSidebarEl.querySelector("#rd_builder_palette");
+  state.builderOverflowEl = null;
+  state.organizeBtnEl = state.builderSidebarEl.querySelector("#rd_organize_btn");
+  state.builderPaletteEl?.querySelectorAll?.("button")?.forEach?.((button) => button.setAttribute("disabled", "disabled"));
+}
+
+function applyStudentBuildSnapshot(state) {
+  const settings = normalizeSettings(state.latestContext?.settings);
+  clearOrganizeTimers(state);
+  clearOverflowCorrectionArtifacts(state);
+  state.answerDisplayMode = "student";
+  state.correctionReveal = false;
+  state.showExtraFeedback = false;
+  replaceBuildItems(state, captureBuildSnapshot(state.studentBuildSnapshot));
+  renderBuildItems(state, settings);
+  if (state.builderPaletteHiddenForReview) {
+    clearBuilderSidebarContentForReview(state);
+  } else {
+    restoreBuilderPaletteForReview(state, settings);
+  }
+  state.panelEl?.classList.remove("rd-panel--correct", "rd-panel--corrected");
+  state.panelEl?.classList.add("rd-panel--incorrect");
+}
+
+function applyCorrectionBuildSnapshot(state) {
+  const settings = normalizeSettings(state.latestContext?.settings);
+  clearOrganizeTimers(state);
+  clearOverflowCorrectionArtifacts(state);
+  state.answerDisplayMode = "correction";
+  state.correctionReveal = true;
+  state.showExtraFeedback = true;
+  replaceBuildItems(state, captureBuildSnapshot(state.correctionBuildSnapshot));
+  renderBuildItems(state, settings);
+  renderBuildOverflow(state, settings);
+  state.panelEl?.classList.remove("rd-panel--incorrect", "rd-panel--correct");
+  state.panelEl?.classList.add("rd-panel--corrected");
 }
 
 function captureStudentNumericAnswerSnapshot(state) {
@@ -2667,11 +3154,24 @@ function isCurrentAnswerCorrect(state) {
 }
 
 function requestReveal(state) {
-  state.latestContext?.services?.requestAnswerPhase?.({
+  const wasCorrect = isCurrentAnswerCorrect(state);
+  const needsOrganizedBuildReview = wasCorrect === false
+    && state.currentQuestion?.direction === REPRESENTATION_DIRECTIONS.NUMBER_TO_REPRESENTATION
+    && !shouldUsePassiveFreeBuildQuestion(state);
+
+  state.validationRevealRequested = true;
+  const accepted = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isCurrentAnswerCorrect(state)
+    wasCorrect,
+    validationReviewDelayAfterPreparation: needsOrganizedBuildReview,
+    validationReviewDelayMs: needsOrganizedBuildReview
+      ? BUILD_REVIEW_TIMING.studentReviewHoldMs
+      : undefined
   });
+  if (accepted === false) {
+    state.validationRevealRequested = false;
+  }
 }
 
 function syncValidateState(state) {
@@ -2801,6 +3301,10 @@ function teardownState(state, container) {
   state.answerDisplayMode = "correction";
   state.studentAnswerSnapshot = null;
   state.correctionSnapshot = null;
+  state.studentBuildSnapshot = null;
+  state.correctionBuildSnapshot = null;
+  state.buildCorrectionAnimated = false;
+  state.validationRevealRequested = false;
   state.lastEvaluation = null;
   state.builderWorkspaceEl = null;
   state.builderItemsLayerEl = null;

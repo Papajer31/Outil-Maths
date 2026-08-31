@@ -86,9 +86,9 @@ export function createActivity(initialContext = {}) {
       state.container = container || state.container;
       syncRuntimeState(state, context ?? state.latestContext);
       return {
-        canToggle: canToggleAnswerDisplay(state),
-        mode: state.answerDisplayMode === "student" ? "student" : "correction",
-        transitionTargets: [state.gridEl]
+        canToggle: false,
+        mode: "correction",
+        transitionTargets: []
       };
     },
 
@@ -285,6 +285,7 @@ function renderLetter(state, word, letter) {
       class="${className}"
       type="button"
       data-rg-selection-key="${escapeAttr(key)}"
+      data-rg-letter-key="${escapeAttr(key)}"
       aria-pressed="${ariaPressed}"
       aria-label="Lettre ${escapeAttr(letter.text)} dans ${escapeAttr(word.word)}"
     >${escapeHtml(letter.text)}</button>
@@ -314,8 +315,16 @@ function getLetterClassName(state, key, isTarget, word) {
     return classes.join(" ");
   }
 
-  if (isTarget) { classes.push("is-correction"); addContinuousGroupClasses(classes, state, key, isTarget, word, "correction"); }
-  if (wasSelected && !isTarget) { classes.push("is-wrong"); addContinuousGroupClasses(classes, state, key, isTarget, word, "wrong"); }
+  if (isTarget && wasSelected) {
+    classes.push("is-correct");
+    addContinuousGroupClasses(classes, state, key, isTarget, word, "correct");
+  } else if (isTarget) {
+    classes.push("is-correction");
+    addContinuousGroupClasses(classes, state, key, isTarget, word, "correction");
+  } else if (wasSelected) {
+    classes.push("is-wrong");
+    addContinuousGroupClasses(classes, state, key, isTarget, word, "wrong");
+  }
   return classes.join(" ");
 }
 
@@ -331,7 +340,8 @@ function addContinuousGroupClasses(classes, state, key, isTarget, word, kind) {
     if (kind === "selected") return selected;
     if (kind === "correct") return selected && neighbor.isTarget;
     if (kind === "wrong") return selected && !neighbor.isTarget;
-    return neighbor.isTarget;
+    if (kind === "correction") return !selected && neighbor.isTarget;
+    return false;
   };
   const hasPrevious = isSameKind(letterIndex - 1);
   const hasNext = isSameKind(letterIndex + 1);
@@ -341,6 +351,7 @@ function addContinuousGroupClasses(classes, state, key, isTarget, word, kind) {
   if (hasPrevious && hasNext) classes.push("is-group-mid");
 }
 
+
 function submitCurrentAnswer(state) {
   state.studentSelectionSnapshot = new Set(state.selectedKeys);
   state.lastEvaluation = evaluateSelection(state.currentQuestion, [...state.studentSelectionSnapshot]);
@@ -348,7 +359,8 @@ function submitCurrentAnswer(state) {
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: state.lastEvaluation.isCorrect
+    wasCorrect: state.lastEvaluation.isCorrect,
+    skipValidationReview: true
   });
 
   if (!requested) {
@@ -398,11 +410,8 @@ function isQuestionInteractive(state) {
   return state.phaseMode === "question" && !!state.currentQuestion;
 }
 
-function canToggleAnswerDisplay(state) {
-  return state.responseUi === "boxed"
-    && state.phaseMode === "answer"
-    && !!state.studentSelectionSnapshot
-    && state.lastEvaluation?.isCorrect === false;
+function canToggleAnswerDisplay() {
+  return false;
 }
 
 function getStudentSelection(state) {

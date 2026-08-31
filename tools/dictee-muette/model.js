@@ -9,6 +9,12 @@ import {
   normalizeGraphemicEntries,
   wordContainsAnyGraphemicEntry
 } from "../../shared/graphemic-targets.js";
+import {
+  isPhonologyWordAllowedAtLevel,
+  normalizePhonologyRegularityScore,
+  normalizePhonologySchoolLevel,
+  pickPhonologyWordByRegularity
+} from "../../shared/phonology-word-level.js";
 
 export const ALL_TARGET_ID = "all";
 export const INPUT_STYLES = Object.freeze({
@@ -34,6 +40,7 @@ export function getDefaultSettings() {
     enabledSpellingsByTarget: {},
     graphemicEntries:[],
     excludedGraphemicEntries:[],
+    schoolLevel:"CP",
     inputStyle: DEFAULT_INPUT_STYLE,
     highlightWordLetters: false,
     showDiacritics: true
@@ -82,6 +89,7 @@ export function normalizeSettings(settings = {}) {
     excludedGraphemicEntries,
     enabledSpellings,
     enabledSpellingsByTarget,
+    schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
     inputStyle,
     highlightWordLetters:settings?.highlightWordLetters === true,
     showDiacritics:settings?.showDiacritics !== false
@@ -117,7 +125,7 @@ export function getEligibleWords(settings = {}) {
   const cfg = normalizeSettings(settings);
   const bySlug = new Map();
   for (const target of getSelectedTargets(cfg)) {
-    for (const word of getPlayableWordsForTarget(target, getSpellings(cfg, target), cfg.excludedGraphemicEntries)) {
+    for (const word of getPlayableWordsForTarget(target, getSpellings(cfg, target), cfg.schoolLevel, cfg.excludedGraphemicEntries)) {
       if (!bySlug.has(word.slug)) bySlug.set(word.slug, word);
     }
   }
@@ -137,7 +145,7 @@ export function getPhonemicSpellingUsage(settings = {}) {
   for (const target of targets) {
     usageByTarget[target.id] = buildSpellingUsage(
       target,
-      getPlayableWordsForTarget(target, getSpellings(cfg, target), [])
+      getPlayableWordsForTarget(target, getSpellings(cfg, target), cfg.schoolLevel, [])
     );
   }
   return usageByTarget;
@@ -187,7 +195,7 @@ export function pickQuestion(settings = {}, {
 
   for (const target of orderedTargets) {
     const spellings = getSpellings(cfg, target);
-    const pool = getPlayableWordsForTarget(target, spellings, cfg.excludedGraphemicEntries);
+    const pool = getPlayableWordsForTarget(target, spellings, cfg.schoolLevel, cfg.excludedGraphemicEntries);
     const available = pool.filter((word) => !usedSet.has(word.slug));
     // Tant qu'il reste des mots jamais vus dans la série, ne pas recycler
     // un mot déjà utilisé. Le runtime videra le cycle uniquement lorsque
@@ -199,7 +207,7 @@ export function pickQuestion(settings = {}, {
     const choices = source.length > 1
       ? source.filter((word) => word.slug !== previousSlug)
       : source;
-    const word = shuffleArray(choices.length ? choices : source)[0];
+    const word = pickPhonologyWordByRegularity(choices.length ? choices : source);
     if (!word) continue;
 
     return {
@@ -245,6 +253,8 @@ function normalizeWordCatalog(words) {
       slug: normalizeSlug(word?.slug),
       word: String(word?.word || "").trim().normalize("NFC"),
       prefix: String(word?.prefix || "").trim().normalize("NFC"),
+      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      regularityScore:normalizePhonologyRegularityScore(word?.regularityScore),
       units: (Array.isArray(word?.units) ? word.units : [])
         .map((unit) => ({
           graph: String(unit?.graph || "").trim(),
@@ -256,17 +266,19 @@ function normalizeWordCatalog(words) {
     .filter((word) => word.slug && /^\p{L}+$/u.test(word.word) && word.units.length > 0);
 }
 
-function getPlayableWordsForTarget(target, enabledSpellings = null, excludedGraphemicEntries = []) {
+function getPlayableWordsForTarget(target, enabledSpellings = null, schoolLevel = "CP", excludedGraphemicEntries = []) {
   const targetId = String(target?.id || "").trim();
   if (!targetId) return [];
   const allowedSpellings = enabledSpellings === null
     ? normalizeSpellings(target?.spellings)
     : normalizeSpellings(enabledSpellings);
   const exclusions = target?.kind === "graphemic" ? normalizeGraphemicEntries(excludedGraphemicEntries) : [];
-  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${IMAGE_CATALOG_BY_WORD.size}:${IMAGE_CATALOG_BY_LEGACY_SLUG.size}::exclude:${exclusions.join("|")}`;
+  const normalizedLevel = normalizePhonologySchoolLevel(schoolLevel);
+  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${normalizedLevel}::${IMAGE_CATALOG_BY_WORD.size}:${IMAGE_CATALOG_BY_LEGACY_SLUG.size}::exclude:${exclusions.join("|")}`;
   if (PLAYABLE_CACHE.has(cacheKey)) return PLAYABLE_CACHE.get(cacheKey);
 
   const words = WORD_CATALOG
+    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, normalizedLevel))
     .map((entry) => buildPlayableWord(entry, target, allowedSpellings, exclusions))
     .filter(Boolean);
   PLAYABLE_CACHE.set(cacheKey, words);
@@ -279,7 +291,7 @@ function getViableTargets(settings = {}) {
 
   return targets
     .filter(({ target }) => Boolean(target))
-    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.excludedGraphemicEntries).length > 0)
+    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, cfg.excludedGraphemicEntries).length > 0)
     .map(({ target }) => target);
 }
 
@@ -320,6 +332,8 @@ function buildPlayableWord(entry, target, enabledSpellings, excludedGraphemicEnt
     slug: entry.slug,
     word: entry.word,
     prefix: entry.prefix,
+    schoolLevel:entry.schoolLevel,
+    regularityScore:entry.regularityScore,
     imageStoragePath,
     targetSpellings: Array.from(new Set(occurrences.map((occurrence) => occurrence.spelling)))
   };

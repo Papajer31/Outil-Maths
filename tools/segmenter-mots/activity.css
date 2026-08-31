@@ -75,10 +75,16 @@
   background:rgba(255,255,255,.28);
 }
 
-.sm-letter.is-correct-cut::before,
-.sm-letter.is-correction-cut::before{
+.sm-letter.is-correct-cut::before{
   background:#57d07a;
   box-shadow:0 0 0 2px rgba(87,208,122,.12);
+}
+
+.sm-letter.is-correction-cut::before{
+  width:0;
+  background:transparent;
+  border-left:5px dotted #57d07a;
+  box-shadow:none;
 }
 
 .sm-letter.is-wrong-cut::before{

@@ -61,6 +61,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"nl",
           allTargetId:ALL_TARGET_ID,
+          showSchoolLevels:true,
           bankStatusMarkup:`<div class="nl-config-bank-status" data-nl-bank-status aria-live="polite"></div>`
         })
       )}

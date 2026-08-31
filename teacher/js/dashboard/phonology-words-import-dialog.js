@@ -43,10 +43,12 @@ function isMigrationMissingError(error){
     || message.includes("could not find the function")
     || message.includes("phonology_words.prefix")
     || message.includes("phonology_words.syllables")
-    || message.includes("phonology_words.familiarity")
+    || message.includes("phonology_words.school_level")
+    || message.includes("phonology_words.regularity_score")
     || (message.includes("prefix") && message.includes("column"))
     || (message.includes("syllables") && message.includes("column"))
-    || (message.includes("familiarity") && message.includes("column"))
+    || (message.includes("school_level") && message.includes("column"))
+    || (message.includes("regularity_score") && message.includes("column"))
     || message.includes("schema cache");
 }
 
@@ -78,7 +80,7 @@ export function createPhonologyWordsImportDialog({
         <header class="cfg-modal-header phonology-import-header">
           <div>
             <div id="phonologyImportTitle" class="cfg-modal-title">Banque phonologique</div>
-            <div class="cfg-modal-subtitle">Charge le fichier texte, vérifie la segmentation phonologique, la syllabation et la familiarité lexicale, puis synchronise Supabase.</div>
+            <div class="cfg-modal-subtitle">Charge le fichier texte, vérifie la segmentation phonologique, la syllabation, le niveau et le score de régularité, puis synchronise Supabase.</div>
           </div>
           <button class="btn cfg-modal-close" type="button" data-close-phonology-import="true" aria-label="Fermer">✕</button>
         </header>
@@ -100,11 +102,11 @@ export function createPhonologyWordsImportDialog({
           <label class="phonology-import-source-panel">
             <span class="phonology-import-panel-title">Contenu du fichier</span>
             <small class="phonology-import-format-hint">Codes canoniques obligatoires : <strong>c_k</strong>, <strong>s_z</strong>, <strong>y_i</strong>… Aucun ancien code ni valeur automatique.</small>
-            <small class="phonology-import-format-hint">Format final : <strong>mot|segmentation phonologique|syllabation|familiarité</strong>, par exemple <strong>cabane|c_k/a/b/a/n/*e|ca/bane|84</strong>. La familiarité est un entier de 0 à 100.</small>
+            <small class="phonology-import-format-hint">Format final : <strong>mot|segmentation phonologique|syllabation|niveau|score</strong>, par exemple <strong>cabane|c_k/a/b/a/n/*e|ca/bane|CP|90</strong>. Niveaux autorisés : CP, CE1, CE2, CM et X ; score : entier de 0 à 100.</small>
             <small class="phonology-import-format-hint">Préfixe d’affichage optionnel : <strong>(un) abricot|...|a/bri/cot</strong>, <strong>(des) affaires|...|a/ffaires</strong>. Le texte entre parenthèses est affiché mais n’entre ni dans la segmentation ni dans la syllabation.</small>
             <small class="phonology-import-format-hint">Syntaxe : code explicite pour une graphie ambiguë (<strong>c_k</strong>, <strong>s_z</strong>…), graphie directe lorsqu’elle est unique (<strong>ss</strong>, <strong>ll</strong>, <strong>rr</strong>), <strong>code=graphie</strong> pour une variante (<strong>a=â</strong>) et <strong>*lettres</strong> pour les lettres muettes.</small>
             <small class="phonology-import-format-hint">Les compositions d’encodage comme <strong>ec_cons</strong> ou <strong>ette</strong> sont déduites automatiquement : elles ne doivent pas apparaître dans la segmentation fine.</small>
-            <textarea class="modal-text-input phonology-import-source" spellcheck="false" placeholder="(une) couronne|c_k/ou/r/o/nn/*e|cou/ronne|70"></textarea>
+            <textarea class="modal-text-input phonology-import-source" spellcheck="false" placeholder="(une) couronne|c_k/ou/r/o/nn/*e|cou/ronne|CP|90"></textarea>
           </label>
 
           <section class="phonology-import-report-panel" aria-live="polite">
@@ -263,7 +265,8 @@ export function createPhonologyWordsImportDialog({
       <div class="phonology-import-summary ${summaryClass}">
         <div><strong>${stats.wordCount}</strong><span>mots prêts</span></div>
         <div><strong>${stats.syllabifiedWordCount}</strong><span>mots syllabés</span></div>
-        <div><strong>${stats.familiarityWordCount}</strong><span>mots familiarisés</span></div>
+        <div><strong>${stats.classifiedWordCount}</strong><span>mots classés</span></div>
+        <div><strong>${stats.averageRegularityScore}</strong><span>score moyen</span></div>
         <div><strong>${stats.graphCount}</strong><span>graphèmes utilisés</span></div>
         <div><strong>${stats.errorCount}</strong><span>erreur${stats.errorCount > 1 ? "s" : ""}</span></div>
         <div><strong>${stats.warningCount}</strong><span>alerte${stats.warningCount > 1 ? "s" : ""}</span></div>
@@ -309,9 +312,7 @@ export function createPhonologyWordsImportDialog({
     } catch (error) {
       console.error(error);
       const message = isMigrationMissingError(error)
-        ? replaceAll
-          ? "Les migrations 28 puis 29 doivent être exécutées dans Supabase avant d’utiliser le remplacement complet avec familiarité."
-          : "La migration 29_phonology_word_familiarity.sql doit être exécutée dans Supabase avant d’importer la familiarité."
+        ? "La migration 32_phonology_word_level_regularity.sql doit être exécutée dans Supabase avant d’importer la nouvelle banque."
         : String(error?.message || "La synchronisation Supabase a échoué.");
       reportHost.insertAdjacentHTML("afterbegin", `<div class="phonology-import-sync-error"><strong>Synchronisation impossible.</strong><span>${escapeHtml(message)}</span></div>`);
       showToast?.(message, { isError: true, duration: 7000 });

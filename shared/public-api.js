@@ -202,7 +202,7 @@ export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
   for (let from = 0; ; from += pageSize) {
     let query = supabase
       .from("phonology_words")
-      .select("slug, word, prefix, units, syllables, familiarity, is_active")
+      .select("slug, word, prefix, units, syllables, school_level, regularity_score, is_active")
       .order("slug", { ascending: true })
       .range(from, from + pageSize - 1);
 
@@ -225,8 +225,11 @@ export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
       prefix: normalizePhonologyWordLabel(row?.prefix),
       units: normalizePhonologyWordUnits(row?.units),
       syllables: normalizePhonologyWordSyllables(row?.syllables),
-      familiarity: Number.isFinite(Number(row?.familiarity))
-        ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+      schoolLevel: ["CP", "CE1", "CE2", "CM", "X"].includes(String(row?.school_level || "").toLocaleUpperCase("fr-FR"))
+        ? String(row.school_level).toLocaleUpperCase("fr-FR")
+        : "X",
+      regularityScore: Number.isFinite(Number(row?.regularity_score))
+        ? Math.max(0, Math.min(100, Math.round(Number(row.regularity_score))))
         : 50,
       is_active: row?.is_active !== false
     }))

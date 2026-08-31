@@ -48,7 +48,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"mc",
           allTargetId:ALL_TARGET_ID,
-          showRelevanceLevels:true,
+          showSchoolLevels:true,
           bankStatusMarkup:'<div class="mc-config-bank-status" data-mc-bank-status aria-live="polite"></div>'
         })
       )}
@@ -143,18 +143,14 @@ function refreshBankStatus(container) {
   const targetCount = getEligibleTargetCount(settings);
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
-  const levelLabel = settings.relevanceLevel === "simple"
-    ? "Simple"
-    : settings.relevanceLevel === "complexe"
-      ? "Complexe"
-      : "Normal";
+  const levelLabel = settings.schoolLevel;
 
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
-    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} »${enough ? "." : " : aucun mot disponible."}`;
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : aucun mot disponible."}`;
     return;
   }
 
-  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} »${enough ? "." : " : aucun mot disponible."}`;
+  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : aucun mot disponible."}`;
 }
 
 async function ensureWordCatalogLoaded() {

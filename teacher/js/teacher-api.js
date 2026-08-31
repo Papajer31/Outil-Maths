@@ -383,6 +383,180 @@ export async function listStudentsForSpace(teacherSpaceId) {
   return await listStudentsForTeacherSpace(teacherSpaceId);
 }
 
+function chunkHistoryValues(values = [], size = 100) {
+  const safeSize = Math.max(1, Math.trunc(Number(size) || 100));
+  const chunks = [];
+  for (let index = 0; index < values.length; index += safeSize) {
+    chunks.push(values.slice(index, index + safeSize));
+  }
+  return chunks;
+}
+
+function resolveHistoryNodeBranch(nodeId, nodesById) {
+  const branch = [];
+  const visited = new Set();
+  let current = nodesById.get(String(nodeId || "")) || null;
+
+  while (current && !visited.has(String(current.id))) {
+    visited.add(String(current.id));
+    branch.unshift(current);
+    current = current.parent_id ? (nodesById.get(String(current.parent_id)) || null) : null;
+  }
+
+  return branch;
+}
+
+/**
+ * Historique enseignant d'un élève.
+ * Les instantanés sont ceux sauvegardés au moment exact de l'exécution :
+ * on ne reconstruit jamais une question à partir de la configuration actuelle.
+ */
+export async function listStudentActivityHistory(studentId, { limit = 250 } = {}) {
+  const id = Number(studentId);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("Élève invalide.");
+  }
+
+  const safeLimit = Math.max(1, Math.min(500, Math.trunc(Number(limit) || 250)));
+  const { data: sessionsData, error: sessionsError } = await supabase
+    .from("student_activity_sessions")
+    .select([
+      "id",
+      "student_id",
+      "catalog_activity_id",
+      "context",
+      "status",
+      "tool_id",
+      "tool_instance_id",
+      "activity_title",
+      "started_level",
+      "ended_level",
+      "questions_count",
+      "correct_count",
+      "wrong_count",
+      "duration_ms",
+      "played_at",
+      "started_at",
+      "ended_at",
+      "metadata_json",
+      "created_at"
+    ].join(", "))
+    .eq("student_id", id)
+    .order("started_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (sessionsError) throw sessionsError;
+  const sessions = Array.isArray(sessionsData) ? sessionsData : [];
+  if (!sessions.length) return [];
+
+  const sessionIds = sessions.map((row) => String(row.id || "")).filter(Boolean);
+  const activityIds = [...new Set(sessions.map((row) => String(row.catalog_activity_id || "").trim()).filter(Boolean))];
+
+  const questionRows = [];
+  for (const ids of chunkHistoryValues(sessionIds, 100)) {
+    const { data, error } = await supabase
+      .from("student_activity_session_questions")
+      .select([
+        "id",
+        "session_id",
+        "question_index",
+        "tool_id",
+        "tool_instance_id",
+        "level_presented",
+        "level_after",
+        "outcome",
+        "is_correct",
+        "points_awarded",
+        "duration_ms",
+        "question_snapshot",
+        "answer_snapshot",
+        "correction_snapshot",
+        "answered_at",
+        "created_at"
+      ].join(", "))
+      .in("session_id", ids)
+      .order("question_index", { ascending: true });
+    if (error) throw error;
+    questionRows.push(...(Array.isArray(data) ? data : []));
+  }
+
+  const catalogRows = [];
+  for (const ids of chunkHistoryValues(activityIds, 100)) {
+    const { data, error } = await supabase
+      .from("catalog_activities")
+      .select("id, pedagogical_node_id, tool_id, title, description")
+      .in("id", ids);
+    if (error) throw error;
+    catalogRows.push(...(Array.isArray(data) ? data : []));
+  }
+
+  let pedagogicalNodes = [];
+  try {
+    pedagogicalNodes = await queryPedagogicalNodes();
+  } catch (error) {
+    console.warn("Arborescence indisponible pour qualifier l’historique élève.", error);
+    pedagogicalNodes = getPedagogicalNodes();
+  }
+
+  const nodesById = new Map(pedagogicalNodes.map((node) => [String(node.id), node]));
+  const catalogById = new Map(catalogRows.map((row) => [String(row.id), row]));
+  const questionsBySession = new Map();
+
+  questionRows.forEach((row) => {
+    const sessionId = String(row.session_id || "");
+    if (!questionsBySession.has(sessionId)) questionsBySession.set(sessionId, []);
+    questionsBySession.get(sessionId).push(row);
+  });
+
+  return sessions.map((session) => {
+    const activityId = String(session.catalog_activity_id || "");
+    const catalog = catalogById.get(activityId) || null;
+    const branch = resolveHistoryNodeBranch(catalog?.pedagogical_node_id, nodesById);
+    const discipline = branch.find((node) => node.node_type === "discipline") || null;
+    const domain = branch.find((node) => node.node_type === "domain") || null;
+    const questions = (questionsBySession.get(String(session.id)) || [])
+      .sort((a, b) => Number(a.question_index) - Number(b.question_index));
+
+    return {
+      ...session,
+      activity_title: String(session.activity_title || catalog?.title || activityId || "Activité").trim() || "Activité",
+      tool_id: String(session.tool_id || catalog?.tool_id || "").trim(),
+      pedagogical_node_id: String(catalog?.pedagogical_node_id || "").trim() || null,
+      discipline_id: discipline ? String(discipline.id) : null,
+      discipline_name: discipline ? String(discipline.name || "").trim() : "",
+      domain_id: domain ? String(domain.id) : null,
+      domain_name: domain ? String(domain.name || "").trim() : "",
+      questions
+    };
+  });
+}
+
+/**
+ * Supprime une tentative de l’historique enseignant.
+ * La suppression concerne uniquement la session et ses instantanés de questions.
+ * Les progressions déjà calculées ne sont pas recalculées.
+ */
+export async function deleteStudentActivityHistoryAttempt(attemptId, studentId) {
+  const id = String(attemptId || "").trim();
+  const sid = Number(studentId);
+  if (!id) throw new Error("Tentative invalide.");
+  if (!Number.isFinite(sid) || sid <= 0) throw new Error("Élève invalide.");
+
+  const { data, error } = await supabase
+    .from("student_activity_sessions")
+    .delete()
+    .eq("id", id)
+    .eq("student_id", sid)
+    .select("id");
+
+  if (error) throw error;
+  if (!Array.isArray(data) || !data.length) {
+    throw new Error("Cette tentative n’a pas pu être supprimée.");
+  }
+
+  return true;
+}
+
 export async function createStudent(teacherClassId, student = {}) {
   const firstName = String(student.first_name || "").trim();
   const gradeLevel = String(student.grade_level || "").trim() || null;
@@ -1916,11 +2090,11 @@ export async function syncPhonologyWordsAsAdmin(words, {
 } = {}) {
   // Préflight volontaire : une ancienne fonction RPC accepterait le JSON
   // enrichi mais pourrait ignorer silencieusement les nouveaux champs. On
-  // refuse donc la synchronisation tant que le schéma prefix + syllables + familiarity
-  // n’est pas présent (migration 29).
+  // refuse donc la synchronisation tant que le schéma prefix + syllables + niveau + score
+  // n’est pas présent (migration 32).
   const { error: phonologySchemaError } = await supabase
     .from("phonology_words")
-    .select("prefix, syllables, familiarity")
+    .select("prefix, syllables, school_level, regularity_score")
     .limit(1);
   if (phonologySchemaError) throw phonologySchemaError;
 
@@ -1936,8 +2110,11 @@ export async function syncPhonologyWordsAsAdmin(words, {
     syllables: Array.isArray(row?.syllables)
       ? row.syllables.map((syllable) => String(syllable || "").trim()).filter(Boolean)
       : [],
-    familiarity: Number.isFinite(Number(row?.familiarity))
-      ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+    school_level: ["CP", "CE1", "CE2", "CM", "X"].includes(String(row?.schoolLevel || "").toLocaleUpperCase("fr-FR"))
+      ? String(row.schoolLevel).toLocaleUpperCase("fr-FR")
+      : "X",
+    regularity_score: Number.isFinite(Number(row?.regularityScore))
+      ? Math.max(0, Math.min(100, Math.round(Number(row.regularityScore))))
       : 50,
     is_active: true
   }));

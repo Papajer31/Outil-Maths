@@ -1,0 +1,148 @@
+# SCORE DE RÉGULARITÉ GRAPHÈME-PHONÈME — RÉFÉRENTIEL
+#
+# Nouveau format de la banque :
+# mot|codage|syllabation|niveau|score_regularite
+#
+# Niveaux : CP / CE1 / CE2 / CM / X
+# CP est inclus dans CE1, inclus dans CE2, inclus dans CM.
+# X = hors sélection automatique.
+#
+# Principe du score :
+# - le niveau scolaire est la donnée principale et le filtre prioritaire ;
+# - le score ne doit jamais exclure un mot ;
+# - il sert seulement à préférer les correspondances les plus régulières ;
+# - score du mot = moyenne arithmétique des scores de ses codes ;
+# - résultat ramené au multiple de 5 inférieur ;
+# - aucune familiarité lexicale n'entre dans le calcul.
+#
+# Échelle :
+# 100 = canonique / très régulière
+#  90 = très régulière / fréquente
+#  80 = courante mais concurrente ou contextuelle
+#  70 = moins directe / variante / géminée
+#  55 = rare / ambiguë / polyphonémique
+#  60 = e muet fréquent
+#  40 = autre lettre muette
+#  30 = h muet
+#
+# code|score|interprétation
+*b|40|lettre muette non prédictible phonologiquement
+*c|40|lettre muette non prédictible phonologiquement
+*d|40|lettre muette non prédictible phonologiquement
+*e|60|e muet fréquent
+*f|40|lettre muette non prédictible phonologiquement
+*g|40|lettre muette non prédictible phonologiquement
+*h|30|h muet / sans correspondance phonologique
+*i|40|lettre muette non prédictible phonologiquement
+*l|40|lettre muette non prédictible phonologiquement
+*m|40|lettre muette non prédictible phonologiquement
+*n|40|lettre muette non prédictible phonologiquement
+*p|40|lettre muette non prédictible phonologiquement
+*r|40|lettre muette non prédictible phonologiquement
+*s|40|lettre muette non prédictible phonologiquement
+*t|40|lettre muette non prédictible phonologiquement
+*x|40|lettre muette non prédictible phonologiquement
+*z|40|lettre muette non prédictible phonologiquement
+a|100|canonique / très régulière
+a=à|55|rare / ambiguë / polyphonémique
+a=â|70|moins directe / variante / géminée
+ai_ferme|70|moins directe / variante / géminée
+ai_ouvert|80|courante mais concurrente / contextuelle
+ain|80|courante mais concurrente / contextuelle
+am|80|courante mais concurrente / contextuelle
+an|90|très régulière / fréquente
+au|90|très régulière / fréquente
+ay|55|rare / ambiguë / polyphonémique
+ay_ferme|55|rare / ambiguë / polyphonémique
+b|100|canonique / très régulière
+c_k|90|très régulière / fréquente
+c_s|80|courante mais concurrente / contextuelle
+cc|70|moins directe / variante / géminée
+ch|100|canonique / très régulière
+ch_k|55|rare / ambiguë / polyphonémique
+d|100|canonique / très régulière
+dd|70|moins directe / variante / géminée
+e_aigu|100|canonique / très régulière
+e_circonflexe|55|rare / ambiguë / polyphonémique
+e_circonflexe_ferme|55|rare / ambiguë / polyphonémique
+e_ferme|80|courante mais concurrente / contextuelle
+e_grave|100|canonique / très régulière
+e_ouvert|80|courante mais concurrente / contextuelle
+e_schwa|80|courante mais concurrente / contextuelle
+eau|90|très régulière / fréquente
+ei|70|moins directe / variante / géminée
+ein|70|moins directe / variante / géminée
+em|80|courante mais concurrente / contextuelle
+en_an|90|très régulière / fréquente
+en_in|70|moins directe / variante / géminée
+er|90|très régulière / fréquente
+et_ouvert|55|rare / ambiguë / polyphonémique
+eu|90|très régulière / fréquente
+ez|80|courante mais concurrente / contextuelle
+f|100|canonique / très régulière
+ff|70|moins directe / variante / géminée
+g_g|90|très régulière / fréquente
+g_j|80|courante mais concurrente / contextuelle
+ge|80|courante mais concurrente / contextuelle
+gg|70|moins directe / variante / géminée
+gn|90|très régulière / fréquente
+gu|80|courante mais concurrente / contextuelle
+i|100|canonique / très régulière
+i=ï|70|moins directe / variante / géminée
+i_ij|55|rare / ambiguë / polyphonémique
+i_yod|80|courante mais concurrente / contextuelle
+il_yod|70|moins directe / variante / géminée
+ill|70|moins directe / variante / géminée
+ill_ij|55|rare / ambiguë / polyphonémique
+im|80|courante mais concurrente / contextuelle
+in|90|très régulière / fréquente
+j|100|canonique / très régulière
+k|70|moins directe / variante / géminée
+l|100|canonique / très régulière
+ll|70|moins directe / variante / géminée
+m|100|canonique / très régulière
+mm|70|moins directe / variante / géminée
+n|100|canonique / très régulière
+nn|70|moins directe / variante / géminée
+o|100|canonique / très régulière
+o=ô|70|moins directe / variante / géminée
+oeu=œu|70|moins directe / variante / géminée
+oi|90|très régulière / fréquente
+oin|70|moins directe / variante / géminée
+om|80|courante mais concurrente / contextuelle
+on|100|canonique / très régulière
+ou|100|canonique / très régulière
+ou_glisse|70|moins directe / variante / géminée
+oy|70|moins directe / variante / géminée
+p|100|canonique / très régulière
+ph|70|moins directe / variante / géminée
+pp|70|moins directe / variante / géminée
+qu|90|très régulière / fréquente
+r|100|canonique / très régulière
+rr|70|moins directe / variante / géminée
+s_s|90|très régulière / fréquente
+s_z|70|moins directe / variante / géminée
+sc|55|rare / ambiguë / polyphonémique
+ss|90|très régulière / fréquente
+t|100|canonique / très régulière
+t_s|55|rare / ambiguë / polyphonémique
+th|70|moins directe / variante / géminée
+tt|70|moins directe / variante / géminée
+u|100|canonique / très régulière
+u=û|70|moins directe / variante / géminée
+u_eu|55|rare / ambiguë / polyphonémique
+u_glisse|80|courante mais concurrente / contextuelle
+um|55|rare / ambiguë / polyphonémique
+un|70|moins directe / variante / géminée
+v|100|canonique / très régulière
+w_v|55|rare / ambiguë / polyphonémique
+w_w|55|rare / ambiguë / polyphonémique
+x_gz|55|rare / ambiguë / polyphonémique
+x_ks|55|rare / ambiguë / polyphonémique
+x_z|55|rare / ambiguë / polyphonémique
+y_i|80|courante mais concurrente / contextuelle
+y_ij|55|rare / ambiguë / polyphonémique
+y_yod|55|rare / ambiguë / polyphonémique
+ym|55|rare / ambiguë / polyphonémique
+z|100|canonique / très régulière
+ç|80|courante mais concurrente / contextuelle

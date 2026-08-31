@@ -78,7 +78,7 @@ export function createActivity(initialContext = {}) {
       return {
         canToggle:canToggleAnswerDisplay(state),
         mode:state.answerDisplayMode === "student" ? "student" : "correction",
-        transitionTargets:[state.workspace]
+        transitionTargets:getCorrectionTransitionTargets(state)
       };
     },
 
@@ -205,6 +205,10 @@ function renderInteractiveQuestion(state) {
   }
 
   const displayedZoneOrders = getDisplayedZoneOrders(state);
+  const correctionZoneOrders = state.phaseMode === "answer" ? getCorrectionZoneOrders(state) : [];
+  const correctionMatchMask = state.phaseMode === "answer"
+    ? getCorrectionMatchMask(state, correctionZoneOrders)
+    : [];
   const assigned = new Set(displayedZoneOrders.flat());
   state.bankOrder = state.currentQuestion.items.filter((id) => !assigned.has(id));
 
@@ -215,6 +219,7 @@ function renderInteractiveQuestion(state) {
 
   state.bankOrder.forEach((id) => {
     const chip = state.chipsById.get(id);
+    resetChipFeedback(chip);
     chip.classList.add("oa-chip--floating");
     chip.style.left = "";
     chip.style.top = "";
@@ -232,22 +237,31 @@ function renderInteractiveQuestion(state) {
     marker.className = "rms-insert-marker hidden";
     zone.append(track, marker);
 
-    order.forEach((id) => {
+    order.forEach((id, tokenIndex) => {
       const chip = state.chipsById.get(id);
+      resetChipFeedback(chip);
       chip.classList.remove("oa-chip--floating");
       chip.style.left = "";
       chip.style.top = "";
+
+      if (state.phaseMode === "answer") {
+        const positionWasCorrect = correctionMatchMask?.[zoneIndex]?.[tokenIndex] === true;
+        if (state.answerDisplayMode === "student") {
+          chip.classList.add(positionWasCorrect ? "rms-chip--correct" : "rms-chip--wrong");
+        } else {
+          chip.classList.add(positionWasCorrect ? "rms-chip--correct" : "rms-chip--correction");
+        }
+      }
+
       track.appendChild(chip);
     });
 
     if (state.phaseMode === "answer") {
+      const isZoneCorrect = !!state.lastEvaluation?.zoneCorrect?.[zoneIndex];
       if (state.answerDisplayMode === "student") {
-        const isZoneCorrect = !!state.lastEvaluation?.zoneCorrect?.[zoneIndex];
         zone.classList.add(isZoneCorrect ? "rms-answer-zone--correct" : "rms-answer-zone--incorrect");
       } else {
-        // En vue correction, chaque zone contient réellement un mot correct.
-        // On colore donc toute la réponse en vert, comme les autres outils.
-        zone.classList.add("rms-answer-zone--correct");
+        zone.classList.add(isZoneCorrect ? "rms-answer-zone--correct" : "rms-answer-zone--correction");
       }
     }
 
@@ -268,6 +282,10 @@ function renderInteractiveQuestion(state) {
   }).catch?.(() => {});
 
   syncValidationState(state);
+}
+
+function resetChipFeedback(chip) {
+  chip?.classList?.remove("rms-chip--correct", "rms-chip--wrong", "rms-chip--correction");
 }
 
 function createChip(state, tokenId) {
@@ -447,19 +465,28 @@ function showMarker(state, zoneIndex, insertionIndex, draggedTokenId) {
   const chips = ids.map((id) => state.chipsById.get(id)).filter(Boolean);
   const zoneRect = zoneState.zone.getBoundingClientRect();
   let clientX = zoneRect.left + zoneRect.width / 2;
+  const edgeGap = 14;
+  const middleShift = 2;
 
   if (chips.length) {
-    if (insertionIndex <= 0) clientX = chips[0].getBoundingClientRect().left;
-    else if (insertionIndex >= chips.length) clientX = chips[chips.length - 1].getBoundingClientRect().right;
-    else {
+    if (insertionIndex <= 0) {
+      clientX = chips[0].getBoundingClientRect().left - edgeGap;
+    } else if (insertionIndex >= chips.length) {
+      clientX = chips[chips.length - 1].getBoundingClientRect().right + edgeGap;
+    } else {
       const prev = chips[insertionIndex - 1].getBoundingClientRect();
       const next = chips[insertionIndex].getBoundingClientRect();
-      clientX = (prev.right + next.left) / 2;
+      clientX = Math.round((prev.right + next.left) / 2) + middleShift;
     }
   }
 
-  const scale = getElementScale(zoneState.zone);
-  zoneState.marker.style.left = `${(clientX - zoneRect.left) / scale.x}px`;
+  const localPoint = clientPointToLocal(
+    zoneState.zone,
+    clientX,
+    zoneRect.top + zoneRect.height / 2
+  );
+  const markerLeft = clamp(Math.round(localPoint.x), 0, zoneState.zone.clientWidth || 0);
+  zoneState.marker.style.left = `${markerLeft}px`;
   zoneState.marker.classList.remove("hidden");
 }
 
@@ -552,6 +579,49 @@ function scaleTrack(track, zone) {
   const available = Math.max(100, zone.clientWidth - 24);
   const scale = width > available ? clamp(available / width, 0.58, 1) : 1;
   track.style.transform = `translate(-50%, -50%) scale(${scale})`;
+}
+
+function getCorrectionMatchMask(state, correctionZoneOrders = getCorrectionZoneOrders(state)) {
+  const student = state.studentZoneOrdersSnapshot || state.zoneOrders;
+  return (Array.isArray(correctionZoneOrders) ? correctionZoneOrders : []).map((expectedOrder, zoneIndex) => {
+    const studentOrder = Array.isArray(student?.[zoneIndex]) ? student[zoneIndex] : [];
+    return (Array.isArray(expectedOrder) ? expectedOrder : []).map((expectedId, tokenIndex) => {
+      const studentId = studentOrder[tokenIndex];
+      if (!studentId) return false;
+      return getTokenLabel(state.currentQuestion, studentId) === getTokenLabel(state.currentQuestion, expectedId);
+    });
+  });
+}
+
+function getChangedCorrectionTokenIds(state) {
+  if (state.phaseMode !== "answer" || !Array.isArray(state.studentZoneOrdersSnapshot)) return new Set();
+  const correction = getCorrectionZoneOrders(state);
+  const student = state.studentZoneOrdersSnapshot;
+  const changed = new Set();
+
+  correction.forEach((expectedOrder, zoneIndex) => {
+    const studentOrder = Array.isArray(student?.[zoneIndex]) ? student[zoneIndex] : [];
+    const length = Math.max(studentOrder.length, expectedOrder.length);
+    for (let tokenIndex = 0; tokenIndex < length; tokenIndex += 1) {
+      const studentId = studentOrder[tokenIndex];
+      const expectedId = expectedOrder[tokenIndex];
+      const studentLabel = studentId ? getTokenLabel(state.currentQuestion, studentId) : "";
+      const expectedLabel = expectedId ? getTokenLabel(state.currentQuestion, expectedId) : "";
+      if (studentLabel === expectedLabel) continue;
+      if (studentId) changed.add(studentId);
+      if (expectedId) changed.add(expectedId);
+    }
+  });
+
+  return changed;
+}
+
+function getCorrectionTransitionTargets(state) {
+  const changedIds = getChangedCorrectionTokenIds(state);
+  if (!changedIds.size) return [];
+  return [...changedIds]
+    .map((id) => state.chipsById.get(id))
+    .filter((chip) => chip?.isConnected);
 }
 
 function canValidate(state) {

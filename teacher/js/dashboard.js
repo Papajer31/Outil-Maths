@@ -12,6 +12,8 @@ import {
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
+  listStudentActivityHistory,
+  deleteStudentActivityHistoryAttempt,
   listPedagogicalNodesForTeacher,
   listPedagogicalNodesForAdmin,
   createPedagogicalNodeAsAdmin,
@@ -223,7 +225,6 @@ let mountedTeacherToolsTeacherSpaceId = "";
 let dashboardToast = null;
 let dashboardToastTimer = null;
 
-const studentNotesDrafts = new Map();
 let adventureViewController = null;
 let activitiesViewController = null;
 let missionsViewController = null;
@@ -284,7 +285,8 @@ studentController = createStudentDashboardController({
   updateStudent,
   deleteStudent,
   saveStudentOrderForTeacherSpace,
-  studentNotesDrafts,
+  listStudentActivityHistory,
+  deleteStudentActivityHistoryAttempt,
   showToast: showDashboardShareToast
 });
 

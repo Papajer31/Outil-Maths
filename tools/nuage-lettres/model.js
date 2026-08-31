@@ -9,6 +9,12 @@ import {
   normalizeGraphemicEntries,
   wordContainsAnyGraphemicEntry
 } from "../../shared/graphemic-targets.js";
+import {
+  isPhonologyWordAllowedAtLevel,
+  normalizePhonologyRegularityScore,
+  normalizePhonologySchoolLevel,
+  pickPhonologyWordByRegularity
+} from "../../shared/phonology-word-level.js";
 
 export const CLOUD_MODES = Object.freeze({
   FIXED: "fixed",
@@ -39,6 +45,7 @@ export function getDefaultSettings() {
     enabledSpellingsByTarget: { [DEFAULT_TARGET_ID]:normalizeSpellings(target?.spellings) },
     graphemicEntries:[],
     excludedGraphemicEntries:[],
+    schoolLevel:"CP",
     minLetters: DEFAULT_MIN_LETTERS,
     maxLetters: DEFAULT_MAX_LETTERS,
     showFirstLetter: false,
@@ -93,6 +100,7 @@ export function normalizeSettings(settings = {}) {
     excludedGraphemicEntries,
     enabledSpellings,
     enabledSpellingsByTarget,
+    schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
     minLetters,
     maxLetters,
     showFirstLetter:settings?.showFirstLetter === true,
@@ -126,11 +134,13 @@ function getEligibleWordsForTarget(cfg, target) {
     enabledSpellings.join("|"),
     cfg.minLetters,
     cfg.maxLetters,
+    cfg.schoolLevel,
     target.kind === "graphemic" ? `exclude:${cfg.excludedGraphemicEntries.join("|")}` : ""
   ].join("::");
   if (ELIGIBLE_CACHE.has(cacheKey)) return cloneData(ELIGIBLE_CACHE.get(cacheKey));
 
   const words = WORD_CATALOG
+    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, cfg.schoolLevel))
     .filter((entry) => isLettersOnly(entry.word))
     .filter((entry) => target.kind !== "graphemic"
       || !wordContainsAnyGraphemicEntry(entry.word, cfg.excludedGraphemicEntries))
@@ -218,7 +228,7 @@ export function pickQuestion(settings = {}, {
     if (withoutPrevious.length) candidates = withoutPrevious;
   }
 
-  const chosen = randomChoice(candidates);
+  const chosen = pickPhonologyWordByRegularity(candidates);
   if (!chosen) return null;
 
   const letters = chosen.letters.map((text, originalIndex) => ({
@@ -309,6 +319,8 @@ function normalizeWordCatalog(words) {
     .map((word) => ({
       slug: String(word?.slug || "").trim().toLocaleLowerCase("fr-FR"),
       word: String(word?.word || "").trim().normalize("NFC"),
+      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      regularityScore:normalizePhonologyRegularityScore(word?.regularityScore),
       units: (Array.isArray(word?.units) ? word.units : [])
         .map((unit) => ({
           graph: String(unit?.graph || "").trim(),

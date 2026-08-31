@@ -25,6 +25,7 @@ import {
   visibleTextOfGraph
 } from "./model.js";
 import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { PHONOLOGY_SCHOOL_LEVELS, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
 import {
   listTeacherPhonologyPresets,
   upsertTeacherPhonologyPreset,
@@ -85,6 +86,7 @@ export function renderToolSettings(container, settings, context = {}) {
       data-phono-length-hint-mode="${escapeAttr(cfg.lengthHintMode)}"
       data-phono-validation-mode="${escapeAttr(cfg.individualValidationMode)}"
       data-phono-validation-attempts="${escapeAttr(cfg.individualMaxAttempts)}"
+      data-phono-school-level="${escapeAttr(cfg.schoolLevel)}"
       data-graph-order-store="${escapeAttr(cfg.graphOrder.join("¦"))}"
     >
       <div class="phono-config-stack">
@@ -114,6 +116,16 @@ export function renderToolSettings(container, settings, context = {}) {
         })}
         </section>
 
+        <section class="tv-group tv-group-inline phono-mode-group">
+          ${renderInlineRadioControl({
+          title: "Niveau des mots",
+          id: "phono_school_level",
+          value: cfg.schoolLevel,
+          options: PHONOLOGY_SCHOOL_LEVELS.map((level) => ({ value:level.id, label:level.label })),
+          rootClassName: "phono-mode-radio-control"
+        })}
+        </section>
+
         ${showValidation ? renderValidationSettings(cfg) : ""}
         ${renderLibrarySettings(cfg)}
       </div>
@@ -126,6 +138,9 @@ export function renderToolSettings(container, settings, context = {}) {
     }
   });
   bindRadio(container, "phono_length_hint_mode");
+  bindRadio(container, "phono_school_level", {
+    onChange:() => refreshSelectionStats(container, readCurrentSettings(container))
+  });
 
   if (showValidation) {
     bindRadio(container, "phono_individual_validation", {
@@ -229,6 +244,7 @@ export function readToolSettings(container) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
+    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
     graphOrder: readGraphOrder(container, [])
   });
 }
@@ -429,6 +445,7 @@ function setGraphOrder(container, graphOrder) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
+    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
     graphOrder
   });
 
@@ -444,6 +461,7 @@ function readCurrentSettings(container) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
+    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
     graphOrder: readGraphOrder(container, [])
   });
 }
@@ -459,7 +477,12 @@ function storeCurrentSettings(container, cfg) {
   root.dataset.phonoLengthHintMode = cfg.lengthHintMode;
   root.dataset.phonoValidationMode = cfg.individualValidationMode;
   root.dataset.phonoValidationAttempts = String(cfg.individualMaxAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS);
+  root.dataset.phonoSchoolLevel = cfg.schoolLevel;
   root.dataset.graphOrderStore = cfg.graphOrder.join("¦");
+}
+
+function readStoredSchoolLevel(container) {
+  return normalizePhonologySchoolLevel(getConfigRoot(container)?.dataset.phonoSchoolLevel || "CP");
 }
 
 function readStoredInputMode(container) {

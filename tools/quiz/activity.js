@@ -577,11 +577,11 @@ function renderWidget(state, widget, mode){
 }
 
 function getCategoryAssignmentMapForMode(state, mode){
-  // Pour Catégories, la phase de correction conserve toujours la disposition
-  // réellement soumise par l’élève. La correction est un feedback visuel sur
-  // cet état, pas une redistribution automatique des étiquettes.
   if (state.answerRevealed && state.currentQuestion?.responseType === "categories") {
-    return new Map(state.submittedCategoryAssignments);
+    if (normalizeAnswerDisplayMode(state.answerDisplayMode) === "student") {
+      return new Map(state.submittedCategoryAssignments);
+    }
+    return new Map(Object.entries(state.currentQuestion?.expectedCategoryAssignments || {}));
   }
   if (mode === "correction") {
     return new Map(Object.entries(state.currentQuestion?.expectedCategoryAssignments || {}));
@@ -594,7 +594,7 @@ function getLabelsWidgetById(state, widgetId){
 }
 
 function renderRuntimeLabelChip(item, sourceWidgetId, feedbackClass = ""){
-  const normalizedFeedbackClass = ["is-correct", "is-incorrect"].includes(feedbackClass) ? feedbackClass : "";
+  const normalizedFeedbackClass = ["is-correct", "is-incorrect", "is-correction"].includes(feedbackClass) ? feedbackClass : "";
   return `
     <span
       class="quiz-runtime-label-chip${normalizedFeedbackClass ? ` ${normalizedFeedbackClass}` : ""}"
@@ -626,12 +626,52 @@ function renderLabelsWidget(state, widget, view, mode, style){
   `;
 }
 
-function getSubmittedCategoryLabelIds(state, categoryId, assignments){
+function getSubmittedCategoryGlobalLabelOrder(state, categories = [], fallbackLabelItems = []){
+  const orderedIds = [];
+  const seen = new Set();
+  categories.forEach((category) => {
+    const categoryId = String(category?.id || "");
+    const retainedOrder = state.submittedCategoryLabelOrder.get(categoryId) || [];
+    retainedOrder.forEach((labelId) => {
+      const normalizedLabelId = String(labelId || "");
+      if (!normalizedLabelId || seen.has(normalizedLabelId)) return;
+      seen.add(normalizedLabelId);
+      orderedIds.push(normalizedLabelId);
+    });
+  });
+  fallbackLabelItems.forEach((item) => {
+    const labelId = String(item?.id || "");
+    if (!labelId || seen.has(labelId)) return;
+    seen.add(labelId);
+    orderedIds.push(labelId);
+  });
+  return orderedIds;
+}
+
+function getCategoryLabelIdsForMode(state, categoryId, assignments, categories = [], labelItems = []){
   const normalizedCategoryId = String(categoryId || "");
-  const retainedOrder = state.answerRevealed
-    ? (state.submittedCategoryLabelOrder.get(normalizedCategoryId) || [])
-    : [];
-  const orderedIds = retainedOrder.filter((labelId) => assignments.get(labelId) === normalizedCategoryId);
+  const showStudentAnswer = state.answerRevealed
+    && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
+
+  if (showStudentAnswer || !state.answerRevealed) {
+    const retainedOrder = state.answerRevealed
+      ? (state.submittedCategoryLabelOrder.get(normalizedCategoryId) || [])
+      : [];
+    const orderedIds = retainedOrder.filter((labelId) => assignments.get(labelId) === normalizedCategoryId);
+    const orderedSet = new Set(orderedIds);
+    assignments.forEach((assignedCategoryId, labelId) => {
+      if (String(assignedCategoryId || "") === normalizedCategoryId && !orderedSet.has(labelId)) {
+        orderedIds.push(labelId);
+        orderedSet.add(labelId);
+      }
+    });
+    return orderedIds;
+  }
+
+  // En correction, on reconstruit le bon classement mais on conserve autant
+  // que possible l'ordre relatif laissé par l'élève dans sa réponse.
+  const globalStudentOrder = getSubmittedCategoryGlobalLabelOrder(state, categories, labelItems);
+  const orderedIds = globalStudentOrder.filter((labelId) => assignments.get(labelId) === normalizedCategoryId);
   const orderedSet = new Set(orderedIds);
   assignments.forEach((assignedCategoryId, labelId) => {
     if (String(assignedCategoryId || "") === normalizedCategoryId && !orderedSet.has(labelId)) {
@@ -650,20 +690,21 @@ function renderCategoriesWidget(state, widget, view, mode, style){
   const labelById = new Map(labelItems.map((item) => [String(item.id || ""), item]));
   const categories = Array.isArray(view.categoryItems) ? view.categoryItems : [];
   const interactive = mode === "question" && getResponseUi(state.latestContext) === "boxed";
-  const showCorrectionFeedback = mode === "correction"
-    && state.answerRevealed
+  const showAnswerFeedback = mode === "correction" && state.answerRevealed;
+  const showCorrection = showAnswerFeedback
     && normalizeAnswerDisplayMode(state.answerDisplayMode) === "correction";
   const expectedAssignments = state.currentQuestion?.expectedCategoryAssignments || {};
+  const submittedAssignments = state.submittedCategoryAssignments;
   return `
     <section
-      class="quiz-runtime-widget quiz-runtime-widget--categories${showCorrectionFeedback ? " is-correction" : ""}"
+      class="quiz-runtime-widget quiz-runtime-widget--categories${showCorrection ? " is-correction" : ""}"
       style="${style}"
       data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
       aria-label="${escapeHtml(widget.label || "Catégories")}"
     >
       <div class="quiz-runtime-categories" style="--quiz-runtime-category-count:${Math.max(1, categories.length)}">
         ${categories.map((category) => {
-          const labels = getSubmittedCategoryLabelIds(state, category.id, assignments)
+          const labels = getCategoryLabelIdsForMode(state, category.id, assignments, categories, labelItems)
             .map((labelId) => labelById.get(labelId))
             .filter(Boolean);
           return `
@@ -675,9 +716,17 @@ function renderCategoriesWidget(state, widget, view, mode, style){
               <div class="quiz-runtime-category-title">${escapeHtml(category.title)}</div>
               <div class="quiz-runtime-category-labels">
                 ${labels.map((item) => {
-                  const feedbackClass = showCorrectionFeedback
-                    ? (String(expectedAssignments[String(item.id || "")] || "") === String(category.id || "") ? "is-correct" : "is-incorrect")
-                    : "";
+                  const labelId = String(item.id || "");
+                  const expectedCategoryId = String(expectedAssignments[labelId] || "");
+                  const submittedCategoryId = String(submittedAssignments.get(labelId) || "");
+                  let feedbackClass = "";
+                  if (showAnswerFeedback) {
+                    if (showCorrection) {
+                      feedbackClass = submittedCategoryId === expectedCategoryId ? "is-correct" : "is-correction";
+                    } else {
+                      feedbackClass = submittedCategoryId === expectedCategoryId ? "is-correct" : "is-incorrect";
+                    }
+                  }
                   return renderRuntimeLabelChip(item, sourceWidgetId, feedbackClass);
                 }).join("")}
               </div>
@@ -694,19 +743,27 @@ function renderSelectionWordsWidget(state, widget, view, mode, style){
   const interactive = mode === "question" && responseUi === "boxed";
   let activeIndexes = state.selectedTokenIndexes;
   let activeKind = "selected";
+  let activeKindsByIndex = null;
 
   if (mode === "correction") {
     const evaluation = getStoredEvaluation(state);
-    if (evaluation.isCorrect) {
-      activeIndexes = evaluation.expectedTokenIndexes || state.currentQuestion?.expectedTokenIndexes || [];
-      activeKind = "correct";
-    } else if (normalizeAnswerDisplayMode(state.answerDisplayMode) === "student") {
-      activeIndexes = evaluation.submittedTokenIndexes || state.submittedTokenIndexes;
-      activeKind = "student";
-    } else {
-      activeIndexes = evaluation.expectedTokenIndexes || state.currentQuestion?.expectedTokenIndexes || [];
-      activeKind = "correction";
-    }
+    const expectedIndexes = normalizeQuizSelectionIndexes(
+      evaluation.expectedTokenIndexes || state.currentQuestion?.expectedTokenIndexes || [],
+      Infinity
+    );
+    const submittedIndexes = normalizeQuizSelectionIndexes(
+      evaluation.submittedTokenIndexes || state.submittedTokenIndexes || [],
+      Infinity
+    );
+    const expectedSet = new Set(expectedIndexes);
+    const submittedSet = new Set(submittedIndexes);
+    activeKindsByIndex = {};
+    new Set([...expectedIndexes, ...submittedIndexes]).forEach((index) => {
+      if (expectedSet.has(index) && submittedSet.has(index)) activeKindsByIndex[index] = "correct";
+      else if (submittedSet.has(index)) activeKindsByIndex[index] = "incorrect";
+      else activeKindsByIndex[index] = "correction";
+    });
+    activeIndexes = [];
   }
 
   return `
@@ -720,6 +777,7 @@ function renderSelectionWordsWidget(state, widget, view, mode, style){
         ${renderQuizSelectionTextToHtml(view.text, view.formatting, {
           activeIndexes,
           activeKind,
+          activeKindsByIndex,
           interactive,
           disabled:!interactive,
           ariaPrefix:"Mot à sélectionner"
@@ -1055,11 +1113,16 @@ function renderAnswerWidget(state, widget, view, mode, style){
 
   const showStudentAnswer = canToggleStudentAnswerDisplay(state) && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
   const displayValue = showStudentAnswer ? state.submittedAnswer : state.currentQuestion.expectedAnswer;
+  const feedbackClass = evaluation?.isCorrect
+    ? "is-correct"
+    : showStudentAnswer
+      ? "is-incorrect"
+      : "is-correction";
   const classNames = [
     "tool-answer-box",
     "quiz-runtime-answer-box",
     "quiz-runtime-answer-box--display",
-    evaluation?.isCorrect ? "is-correct" : "is-incorrect",
+    feedbackClass,
     showStudentAnswer ? "is-student-answer" : ""
   ].filter(Boolean).join(" ");
 
@@ -1750,10 +1813,12 @@ function revealAnswer(state){
 }
 
 function requestReveal(state){
+  const immediateFeedback = ["qcm-text", "selection-words"].includes(state.currentQuestion?.responseType);
   state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isCurrentAnswerCorrect(state)
+    wasCorrect: isCurrentAnswerCorrect(state),
+    skipValidationReview: immediateFeedback
   });
 }
 
@@ -1812,10 +1877,7 @@ function canToggleStudentAnswerDisplay(state){
     if (!state.submittedCategoryAssignments.size) return false;
     return !getStoredEvaluation(state).isCorrect;
   }
-  if (state.currentQuestion.responseType === "selection-words") {
-    if (!state.submittedTokenIndexes.length) return false;
-    return !getStoredEvaluation(state).isCorrect;
-  }
+  if (state.currentQuestion.responseType === "selection-words") return false;
   if (!String(state.submittedAnswer || "").trim()) return false;
   return !getStoredEvaluation(state).isCorrect;
 }
@@ -1833,30 +1895,31 @@ function getShellAnswerDisplayState(state){
 function getShellAnswerTransitionTargets(state){
   if (!state.canvasEl || !state.currentQuestion) return [];
 
-  const responseWidgetTypes = new Set([
-    "answer",
-    "numeric-keypad",
-    "qcm-text",
-    "selection-words",
-    "labels",
-    "categories"
-  ]);
-  const widgetIds = (Array.isArray(state.currentQuestion.widgets) ? state.currentQuestion.widgets : [])
-    .filter((widget) => {
-      if (responseWidgetTypes.has(widget?.type)) return true;
-      const questionView = getWidgetView(widget, "question");
-      const correctionView = getWidgetView(widget, "correction");
-      return isRuntimeWidgetVisible(state, questionView, "question")
-        !== isRuntimeWidgetVisible(state, correctionView, "correction")
-        || getRuntimeWidgetViewSignature(widget, questionView)
-          !== getRuntimeWidgetViewSignature(widget, correctionView);
-    })
-    .map((widget) => String(widget?.id || ""))
-    .filter(Boolean);
+  const responseType = state.currentQuestion.responseType;
+  if (responseType === "categories") {
+    // Le cadre Catégories et les autres widgets du quiz restent parfaitement
+    // fixes : seuls les mots/étiquettes participent au fondu de changement de vue.
+    return Array.from(state.canvasEl.querySelectorAll(
+      ".quiz-runtime-widget--categories .quiz-runtime-label-chip"
+    ));
+  }
 
-  return widgetIds
-    .map((widgetId) => findRuntimeWidgetNode(state.canvasEl, widgetId))
-    .filter(Boolean);
+  if (responseType === "answer") {
+    const node = findRuntimeWidgetNode(state.canvasEl, state.currentQuestion.primaryAnswerWidgetId);
+    return node ? [node] : [];
+  }
+
+  if (responseType === "qcm-text") {
+    const node = findRuntimeWidgetNode(state.canvasEl, state.currentQuestion.primaryQcmWidgetId);
+    return node ? [node] : [];
+  }
+
+  if (responseType === "selection-words") {
+    const node = findRuntimeWidgetNode(state.canvasEl, state.currentQuestion.primarySelectionWidgetId);
+    return node ? [node] : [];
+  }
+
+  return [];
 }
 
 function applyShellAnswerDisplayMode(state, mode){

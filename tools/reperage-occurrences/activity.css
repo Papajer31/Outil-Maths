@@ -148,17 +148,33 @@
   box-shadow:none;
 }
 
-.ro-item.is-correct,
-.ro-item.is-correction{
+.ro-item.is-correct{
   background:rgba(87,208,122,.14);
   border-color:#57d07a;
   color:inherit;
+  animation:ro-feedback-in 420ms ease both;
+}
+
+.ro-item.is-correction{
+  background:rgba(87,208,122,.10);
+  border-color:#57d07a;
+  border-style:dashed;
+  color:inherit;
+  animation:ro-feedback-in 420ms ease both;
 }
 
 .ro-item.is-wrong{
   background:rgba(239,107,115,.14);
   border-color:#ef6b73;
   color:inherit;
+  animation:ro-feedback-in 420ms ease both;
+}
+
+@keyframes ro-feedback-in{
+  from{
+    background-color:transparent;
+    border-color:transparent;
+  }
 }
 
 .ro-board.is-answer .ro-item{

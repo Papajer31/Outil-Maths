@@ -75,6 +75,12 @@
   box-shadow:0 0 0 2px rgba(239,107,115,.16) inset;
 }
 
+.rms-answer-zone--correction{
+  border-style:dashed;
+  border-color:#57d07a;
+  box-shadow:0 0 0 2px rgba(87,208,122,.16) inset;
+}
+
 .rms-answer-track{
   position:absolute;
   left:50%;
@@ -91,14 +97,27 @@
 .rms-insert-marker{
   position:absolute;
   top:50%;
-  width:4px;
+  width:7px;
   height:62px;
   border-radius:999px;
-  background:rgba(255,255,255,.88);
-  box-shadow:0 0 0 2px rgba(17,24,39,.25);
+  background:#ffb020;
+  box-shadow:0 0 0 2px rgba(255,176,32,.22);
   transform:translate(-50%,-50%);
   pointer-events:none;
   z-index:8;
+}
+
+.rms-answer-zone .oa-chip.rms-chip--correct{
+  box-shadow:0 0 0 3px #57d07a;
+}
+
+.rms-answer-zone .oa-chip.rms-chip--wrong{
+  box-shadow:0 0 0 3px #ef6b73;
+}
+
+.rms-answer-zone .oa-chip.rms-chip--correction{
+  outline:3px dotted #57d07a;
+  outline-offset:2px;
 }
 
 .rms-correction-lane{

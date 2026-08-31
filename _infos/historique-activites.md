@@ -1,6 +1,6 @@
 # Contrat d’exécution et historique des activités
 
-Dernière mise à jour : 2026-07-30.
+Dernière mise à jour : 2026-08-30.
 
 ## Périmètre du premier socle
 
@@ -111,11 +111,16 @@ RPC publiques :
 
 L’ancienne RPC `record_student_activity_session` est conservée uniquement pour sécuriser le déploiement d’un ancien onglet déjà ouvert. Le nouveau client ne l’utilise plus.
 
+## Consultation enseignant
+
+L’onglet `Classe` exploite désormais cet historique directement : un clic sur un élève remplace l’ancien placeholder de notes par une chronologie de ses tentatives. La liste peut être filtrée par période, mode, discipline et activité. Un clic sur une tentative déplie, dans le même écran, le détail question / réponse de l’élève / correction. Les anciennes tentatives qui ne possèdent que le résumé léger restent visibles mais sont signalées comme dépourvues de détail par question.
+
+L’interface lit les instantanés sauvegardés au moment de l’exécution et ne reconstruit jamais les anciennes questions à partir de la configuration actuelle de l’activité.
+
 ## Étapes ultérieures
 
 Ce socle ne comprend pas encore :
 
-- l’interface enseignant de consultation ;
 - l’archivage des anciens détails ;
 - la purge annuelle ;
 - les scores et jauges Aventure décrits dans `aventure.md` ;

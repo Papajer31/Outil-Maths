@@ -1,0 +1,19 @@
+OUTIL DE TRI DE LA BANQUE PHONOLOGIQUE
+
+1. Ouvrir tri_banque_mots.html dans un navigateur.
+2. Classer chaque mot :
+   1 = CP
+   2 = CE1
+   3 = CE2
+   4 = CM1
+   5 = CM2
+   X = exclu
+3. Retour arrière = annuler le dernier classement de la session.
+4. Les choix sont sauvegardés automatiquement dans le stockage local du navigateur.
+5. Le bouton « Sauvegarder la progression » permet de créer une sauvegarde JSON transportable.
+6. Le bouton « Exporter la banque classée » produit banque_ultime_classee.txt.
+
+Le cinquième champ ajouté à chaque ligne est le niveau minimal d'utilisation :
+mot|codage phonologique|syllabation|score|niveau
+
+Les mots non encore classés ont un cinquième champ vide.

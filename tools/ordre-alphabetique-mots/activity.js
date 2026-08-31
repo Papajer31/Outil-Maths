@@ -24,6 +24,10 @@ const DEFAULT_WORD_LIST_CACHE_KEY = "__default_vocabulary__";
 
 const DRAG_THRESHOLD_PX = 8;
 const CORRECTION_STAGGER_MS = 500;
+const CORRECTION_MOVE_MS = 2000;
+const CORRECT_CORRECTION_STAGGER_MS = 70;
+const CORRECT_CORRECTION_MOVE_MS = 360;
+const CORRECTION_CONTROLS_BUFFER_MS = 90;
 const GROUP_MARGIN = 18;
 const GROUP_ANSWER_GAP = 18;
 const GROUP_ANSWER_MIN_GAP = 8;
@@ -118,7 +122,8 @@ function createRuntimeState(initialContext = {}) {
     currentCorrectionScale: 1,
     showAnswerBox: shouldShowAnswerBox(initialContext),
     phaseMonitorId: null,
-    lastObservedPhaseKind: null
+    lastObservedPhaseKind: null,
+    fastCorrection: false
   };
 }
 
@@ -180,6 +185,8 @@ function resetQuestionRuntimeState(state) {
   resetVisualState(state);
   state.answerRevealed = false;
   state.locked = false;
+  state.fastCorrection = false;
+  state.root?.classList.remove("oa-root--fast-correction");
   state.chipsByValue.clear();
   state.bankOrder = [];
   state.bankPositions.clear();
@@ -300,6 +307,7 @@ function revealAnswer(state) {
 
   state.answerRevealed = true;
   state.locked = true;
+  state.root?.classList.toggle("oa-root--fast-correction", state.fastCorrection === true);
   syncValidateState(state);
   hideInsertMarker(state);
 
@@ -322,6 +330,8 @@ function revealBoxAnswer(state) {
 
   const isCorrect = isAnswerCorrect(currentAnswer, currentQuestion.answerItems);
   applyAnswerFeedback(state, isCorrect);
+
+  if (isCorrect) return;
 
   renderCorrectionLane(state, currentQuestion.answerItems);
   const laneMap = buildCorrectionLaneMap(state);
@@ -784,17 +794,19 @@ function showInsertMarker(state, insertionIndex, draggedValue) {
 
   const answerZoneRect = state.answerZone.getBoundingClientRect();
   let x = answerZoneRect.left + (answerZoneRect.width / 2);
+  const edgeGap = 14;
+  const middleShift = 2;
 
   if (chips.length > 0) {
     if (insertionIndex <= 0) {
-      x = chips[0].getBoundingClientRect().left;
+      x = chips[0].getBoundingClientRect().left - edgeGap;
     } else if (insertionIndex >= chips.length) {
       const lastRect = chips[chips.length - 1].getBoundingClientRect();
-      x = lastRect.right;
+      x = lastRect.right + edgeGap;
     } else {
       const prevRect = chips[insertionIndex - 1].getBoundingClientRect();
       const nextRect = chips[insertionIndex].getBoundingClientRect();
-      x = Math.round((prevRect.right + nextRect.left) / 2);
+      x = Math.round((prevRect.right + nextRect.left) / 2) + middleShift;
     }
   }
 
@@ -829,11 +841,26 @@ function canSubmitAnswer(state) {
 }
 
 function requestReveal(state) {
+  const isCorrect = isAnswerCorrect([...state.answerOrder], state.currentQuestion?.answerItems || []);
+  state.fastCorrection = isCorrect;
   state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isAnswerCorrect([...state.answerOrder], state.currentQuestion?.answerItems || [])
+    wasCorrect: isCorrect,
+    skipValidationReview: true,
+    answerControlsDelayMs: getCorrectionAnimationDurationMs(state, isCorrect)
   });
+}
+
+function getCorrectionAnimationDurationMs(state, isCorrect) {
+  const itemCount = Math.max(1, state.currentQuestion?.answerItems?.length || 1);
+  const staggerMs = isCorrect ? CORRECT_CORRECTION_STAGGER_MS : CORRECTION_STAGGER_MS;
+  const moveMs = isCorrect ? CORRECT_CORRECTION_MOVE_MS : CORRECTION_MOVE_MS;
+  return Math.max(0, (itemCount - 1) * staggerMs + moveMs + CORRECTION_CONTROLS_BUFFER_MS);
+}
+
+function getCorrectionStaggerMs(state) {
+  return state.fastCorrection ? CORRECT_CORRECTION_STAGGER_MS : CORRECTION_STAGGER_MS;
 }
 
 function startPhaseMonitor(state) {
@@ -958,7 +985,7 @@ function createCorrectionOverlay(state, originals, laneMap, workspace, { positio
       const targetTop = positionsAreLocal ? target.y : targetBox.top;
 
       startCorrectionMove(clone, targetLeft, targetTop);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });
@@ -987,7 +1014,7 @@ function animateBankOriginalsToLane(state, bankOriginalsByValue, laneMap, worksp
     const timerId = window.setTimeout(() => {
       const targetBox = clientRectToLocalBox(workspace, target);
       startCorrectionMove(chip, targetBox.left, targetBox.top);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });
@@ -1005,7 +1032,7 @@ function animateFreeOriginalsToAnswerLayout(state, positions) {
 
     const timerId = window.setTimeout(() => {
       startCorrectionMove(chip, target.x, target.y);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });

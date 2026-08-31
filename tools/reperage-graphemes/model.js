@@ -3,13 +3,11 @@ import { PHONOLOGY_GRAPH_BY_ID } from "../../shared/phonology-graph-data.js";
 import { getPhonemeTarget, getPhonemeTargets, normalizePhonologyTargetId } from "../../shared/phonology-targets.js";
 import { findPhonologyTargetOccurrences } from "../../shared/phonology-target-matcher.js";
 import {
-  getPhonologyRelevanceLabel,
-  isPhonologyRelevanceCategoryAllowed,
-  normalizePhonologyRelevanceLevel,
-  pickPhonologyRelevanceCategory,
-  scorePhonologyWord,
-  scoreGraphemicWord
-} from "../../shared/phonology-word-relevance.js";
+  isPhonologyWordAllowedAtLevel,
+  normalizePhonologyRegularityScore,
+  normalizePhonologySchoolLevel,
+  pickPhonologyWordByRegularity
+} from "../../shared/phonology-word-level.js";
 import {
   WORD_SELECTION_MODES,
   findGraphemicOccurrences,
@@ -74,7 +72,7 @@ export function getDefaultSettings() {
     enabledSpellingsByTarget: {},
     graphemicEntries: [],
     excludedGraphemicEntries: [],
-    relevanceLevel: "normal",
+    schoolLevel: "CP",
     showPossibleSpellings: false
   };
 }
@@ -138,7 +136,7 @@ export function normalizeSettings(settings = {}) {
     wordCount,
     enabledSpellings,
     enabledSpellingsByTarget,
-    relevanceLevel:normalizePhonologyRelevanceLevel(settings?.relevanceLevel),
+    schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
     showPossibleSpellings:settings?.showPossibleSpellings === true
   };
 }
@@ -192,7 +190,7 @@ export function getEligibleWords(settings = {}) {
   const targets = getSelectedTargets(cfg);
   for (const target of targets) {
     const spellings = getEnabledSpellingsForTarget(cfg, target);
-    for (const word of getPlayableWordsForTarget(target, spellings, cfg.relevanceLevel, cfg.excludedGraphemicEntries)) {
+    for (const word of getPlayableWordsForTarget(target, spellings, cfg.schoolLevel, cfg.excludedGraphemicEntries)) {
       if (!bySlug.has(word.slug)) bySlug.set(word.slug, word);
     }
   }
@@ -211,7 +209,7 @@ export function getPhonemicSpellingUsage(settings = {}) {
 
   for (const target of targets) {
     const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
-    const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.relevanceLevel, []);
+    const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, []);
     usageByTarget[target.id] = buildSpellingUsage(target, pool);
   }
   return usageByTarget;
@@ -260,19 +258,19 @@ export function pickQuestion(settings = {}, {
     : viableTargets;
   const target = shuffleArray(targetChoices.length ? targetChoices : viableTargets)[0];
   const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
-  const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.relevanceLevel, cfg.excludedGraphemicEntries);
+  const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, cfg.excludedGraphemicEntries);
 
   const usedSet = usedWordSlugs instanceof Set ? usedWordSlugs : new Set();
   const available = pool.filter((word) => !usedSet.has(word.slug));
   const source = available.length >= cfg.wordCount ? available : pool;
-  let selected = pickVariedWords(source, enabledSpellings, cfg.wordCount, cfg.relevanceLevel);
+  let selected = pickVariedWords(source, enabledSpellings, cfg.wordCount);
   if (selected.length < cfg.wordCount) return null;
 
   let key = buildQuestionKey(target.id, selected);
   if (avoidKey && key === avoidKey && pool.length > cfg.wordCount) {
     const alternativePool = shuffleArray(pool).filter((word) => !selected.some((chosen) => chosen.slug === word.slug));
     if (alternativePool.length) {
-      const replacement = pickVariedWords(alternativePool, enabledSpellings, 1, cfg.relevanceLevel)[0];
+      const replacement = pickVariedWords(alternativePool, enabledSpellings, 1)[0];
       if (replacement) selected[selected.length - 1] = replacement;
       key = buildQuestionKey(target.id, selected);
     }
@@ -361,30 +359,30 @@ function normalizeWordCatalog(words) {
       syllables: (Array.isArray(word?.syllables) ? word.syllables : [])
         .map((syllable) => String(syllable || "").trim().normalize("NFC"))
         .filter(Boolean),
-      familiarity: Number.isFinite(Number(word?.familiarity))
-        ? Math.max(0, Math.min(100, Math.round(Number(word.familiarity))))
-        : 50
+      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      regularityScore:normalizePhonologyRegularityScore(word?.regularityScore)
     }))
     .filter((word) => word.slug && word.word && word.units.length > 0);
 }
 
-function getPlayableWordsForTarget(target, enabledSpellings = null, relevanceLevel = "normal", excludedGraphemicEntries = []) {
+function getPlayableWordsForTarget(target, enabledSpellings = null, schoolLevel = "CP", excludedGraphemicEntries = []) {
   const targetId = String(target?.id || "").trim();
   if (!targetId) return [];
   const allowedSpellings = enabledSpellings === null
     ? normalizeSpellings(target?.spellings)
     : normalizeSpellings(enabledSpellings);
-  const normalizedRelevanceLevel = normalizePhonologyRelevanceLevel(relevanceLevel);
+  const normalizedSchoolLevel = normalizePhonologySchoolLevel(schoolLevel);
   const exclusions = target?.kind === "graphemic" ? normalizeGraphemicEntries(excludedGraphemicEntries) : [];
-  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${normalizedRelevanceLevel}::exclude:${exclusions.join("|")}`;
+  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${normalizedSchoolLevel}::exclude:${exclusions.join("|")}`;
   if (PLAYABLE_WORDS_BY_TARGET.has(cacheKey)) {
     return PLAYABLE_WORDS_BY_TARGET.get(cacheKey);
   }
 
   const words = WORD_CATALOG
+    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, normalizedSchoolLevel))
     .map((entry) => target?.kind === "graphemic"
-      ? buildGraphemicPlayableWord(entry, target, normalizedRelevanceLevel, exclusions)
-      : buildPlayableWord(entry, target, allowedSpellings, normalizedRelevanceLevel))
+      ? buildGraphemicPlayableWord(entry, target, normalizedSchoolLevel, exclusions)
+      : buildPlayableWord(entry, target, allowedSpellings, normalizedSchoolLevel))
     .filter(Boolean);
   PLAYABLE_WORDS_BY_TARGET.set(cacheKey, words);
   return words;
@@ -399,7 +397,7 @@ function getViableTargets(settings) {
 
   return targets
     .filter(({ target }) => !!target)
-    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.relevanceLevel, cfg.excludedGraphemicEntries).length >= cfg.wordCount)
+    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, cfg.excludedGraphemicEntries).length >= cfg.wordCount)
     .map(({ target }) => target);
 }
 
@@ -419,74 +417,6 @@ function getEnabledSpellingsForTarget(settings, target) {
   return cfg.enabledSpellingsByTarget[target.id] || target.spellings;
 }
 
-export function getRelevanceDiagnostics(settings = {}, { query = "", perCategory = 4 } = {}) {
-  const cfg = normalizeSettings(settings);
-  let target = null;
-  let scoreWord = null;
-
-  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
-    if (cfg.graphemicEntries.length !== 1) {
-      return { target:null, counts:{ simple:0, normal:0, complexe:0, excluded:0 }, rows:[], total:0 };
-    }
-    target = makeGraphemicTarget(cfg.graphemicEntries[0]);
-    scoreWord = (word) => scoreGraphemicWord(word, target);
-  } else {
-    if (cfg.targetIds.length !== 1 || cfg.targetIds[0] === ALL_TARGET_ID) {
-      return { target:null, counts:{ simple:0, normal:0, complexe:0, excluded:0 }, rows:[], total:0 };
-    }
-    target = getPhonemeTarget(cfg.targetIds[0]);
-    if (!target) return { target:null, counts:{ simple:0, normal:0, complexe:0, excluded:0 }, rows:[], total:0 };
-    const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
-    scoreWord = (word) => scorePhonologyWord(word, target, { enabledSpellings, requireAllOccurrencesAllowed:true });
-  }
-
-  const normalizedQuery = String(query || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
-  const scored = WORD_CATALOG
-    .filter((word) => cfg.wordSelectionMode !== WORD_SELECTION_MODES.GRAPHEMIC
-      || !wordContainsAnyGraphemicEntry(word.word, cfg.excludedGraphemicEntries))
-    .map((word) => ({ word, relevance:scoreWord(word) }))
-    .filter((entry) => entry.relevance.compatible);
-
-  const counts = { simple:0, normal:0, complexe:0, excluded:0 };
-  scored.forEach((entry) => { counts[entry.relevance.category] = (counts[entry.relevance.category] || 0) + 1; });
-
-  let rows;
-  if (normalizedQuery) {
-    rows = scored
-      .filter((entry) => String(entry.word.word || "").toLocaleLowerCase("fr-FR").includes(normalizedQuery))
-      .sort((left, right) => String(left.word.word).localeCompare(String(right.word.word), "fr"))
-      .slice(0, 24);
-  } else {
-    rows = ["simple", "normal", "complexe", "excluded"].flatMap((category) => scored
-      .filter((entry) => entry.relevance.category === category)
-      .sort((left, right) => right.relevance.score - left.relevance.score
-        || right.word.familiarity - left.word.familiarity
-        || String(left.word.word).localeCompare(String(right.word.word), "fr"))
-      .slice(0, Math.max(1, perCategory)));
-  }
-
-  return {
-    target,
-    counts,
-    total:scored.length,
-    rows:rows.map(({ word, relevance }) => ({
-      slug:word.slug,
-      word:word.word,
-      familiarity:word.familiarity,
-      score:relevance.score,
-      rawScore:relevance.rawScore,
-      category:relevance.category,
-      categoryLabel:getPhonologyRelevanceLabel(relevance.category),
-      severePurityIssue:relevance.severePurityIssue,
-      exclusionReason:relevance.exclusionReason,
-      components:cloneData(relevance.components),
-      cleanlinessCost:Number(relevance.cleanliness?.totalCost) || 0,
-      occurrenceCount:relevance.occurrenceCount,
-      occurrencePurities:(relevance.occurrences || []).map((occurrence) => occurrence.purity)
-    }))
-  };
-}
-
 function buildQuestionKey(targetId, words) {
   const wordKey = words.map((word) => word.slug).sort().join("|");
   return `${String(targetId || "").trim()}::${wordKey}`;
@@ -496,14 +426,12 @@ function getQuestionTargetIdFromKey(key) {
   return String(key || "").split("::", 1)[0].trim();
 }
 
-function buildPlayableWord(entry, target, enabledSpellings, relevanceLevel = "normal") {
-  const relevance = scorePhonologyWord(entry, target, {
-    enabledSpellings,
-    requireAllOccurrencesAllowed:true
-  });
-  if (!relevance.compatible || !isPhonologyRelevanceCategoryAllowed(relevance.category, relevanceLevel)) return null;
-
+function buildPlayableWord(entry, target, enabledSpellings, schoolLevel = "CP") {
+  if (!isPhonologyWordAllowedAtLevel(entry, schoolLevel)) return null;
   const occurrences = findPhonologyTargetOccurrences(entry.units, target);
+  if (!occurrences.length) return null;
+  const allowed = new Set(normalizeSpellings(enabledSpellings));
+  if (!allowed.size || occurrences.some((occurrence) => !allowed.has(occurrence.spelling))) return null;
 
   const targetUnitIndexes = new Set(occurrences.flatMap((occurrence) => occurrence.indexes));
   const letters = alignUnitsToWord(entry.word, entry.units, targetUnitIndexes);
@@ -521,18 +449,15 @@ function buildPlayableWord(entry, target, enabledSpellings, relevanceLevel = "no
     letters,
     targetGraphIds,
     targetSpellings,
-    relevanceScore: relevance.score,
-    relevanceCategory: relevance.category,
+    regularityScore:entry.regularityScore,
     characterCount: letters.filter((letter) => letter.selectable).length
       + (entry.prefix ? Array.from(entry.prefix).length + 1 : 0)
   };
 }
 
-function buildGraphemicPlayableWord(entry, target, relevanceLevel = "normal", excludedGraphemicEntries = []) {
+function buildGraphemicPlayableWord(entry, target, schoolLevel = "CP", excludedGraphemicEntries = []) {
+  if (!isPhonologyWordAllowedAtLevel(entry, schoolLevel)) return null;
   if (wordContainsAnyGraphemicEntry(entry.word, excludedGraphemicEntries)) return null;
-  const relevance = scoreGraphemicWord(entry, target);
-  if (!relevance.compatible || !isPhonologyRelevanceCategoryAllowed(relevance.category, relevanceLevel)) return null;
-
   const occurrences = findGraphemicOccurrences(entry.word, target?.grapheme);
   if (!occurrences.length) return null;
   const targetLetterIndexes = new Set(occurrences.flatMap((occurrence) => occurrence.indexes || []));
@@ -558,8 +483,7 @@ function buildGraphemicPlayableWord(entry, target, relevanceLevel = "normal", ex
     letters,
     targetGraphIds:[],
     targetSpellings:[target.grapheme],
-    relevanceScore:relevance.score,
-    relevanceCategory:relevance.category,
+    regularityScore:entry.regularityScore,
     characterCount:letters.filter((letter) => letter.selectable).length
       + (entry.prefix ? Array.from(entry.prefix).length + 1 : 0)
   };
@@ -668,32 +592,19 @@ function isSelectableCharacter(char) {
   return /^\p{L}$/u.test(String(char || ""));
 }
 
-function pickVariedWords(pool, spellings, count, relevanceLevel = "normal") {
-  const remaining = shuffleArray(pool);
+function pickVariedWords(pool, spellings, count) {
+  const remaining = Array.isArray(pool) ? [...pool] : [];
   const selected = [];
   const coveredSpellings = new Set();
   const requestedSpellings = normalizeSpellings(spellings);
 
   while (selected.length < count && remaining.length) {
-    const availableCategories = Array.from(new Set(remaining
-      .map((word) => String(word?.relevanceCategory || "").trim())
-      .filter(Boolean)));
-    const category = pickPhonologyRelevanceCategory(availableCategories, relevanceLevel);
-    if (!category) break;
-
-    const categoryCandidates = remaining.filter((word) => word.relevanceCategory === category);
-    if (!categoryCandidates.length) break;
-
-    // La catégorie est tirée d’abord afin que la taille des pools Simple /
-    // Normal / Complexe ne déforme pas les pourcentages. À l’intérieur de la
-    // catégorie choisie, on favorise simplement une graphie encore absente de
-    // la question pour conserver de la variété quand c’est possible.
     const uncoveredSpellings = requestedSpellings.filter((spelling) => !coveredSpellings.has(spelling));
     const variedCandidates = uncoveredSpellings.length
-      ? categoryCandidates.filter((word) => word.targetSpellings.some((spelling) => uncoveredSpellings.includes(spelling)))
+      ? remaining.filter((word) => word.targetSpellings.some((spelling) => uncoveredSpellings.includes(spelling)))
       : [];
-    const candidatePool = variedCandidates.length ? variedCandidates : categoryCandidates;
-    const chosen = candidatePool[Math.floor(Math.random() * candidatePool.length)];
+    const candidatePool = variedCandidates.length ? variedCandidates : remaining;
+    const chosen = pickPhonologyWordByRegularity(candidatePool);
     if (!chosen) break;
 
     selected.push(chosen);

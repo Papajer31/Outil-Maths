@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-08-22.
+Dernière mise à jour : 2026-08-30.
 
 ## Règle absolue
 
@@ -26,9 +26,11 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `26` | lecture publique ciblée d’un dossier d’images système | migration active historique |
 | `27` | syllabation de `phonology_words` et import synchronisé | migration active historique |
 | `28` | remplacement atomique complet de `phonology_words` | migration à appliquer avant d’utiliser « Remplacer complètement la base » |
-| `29` | familiarité lexicale 0–100 de `phonology_words` et import associé | migration active |
+| `29` | ancienne familiarité lexicale de `phonology_words` | historique ; colonne conservée provisoirement mais non utilisée |
 | `30` | projection élève d’Exploration : libellé court et nœuds transparents | migration active |
-| `31` | runtime MVP Aventure pour les 6 passages obligatoires de type Activité | **migration à appliquer pour le patch Aventure courant** |
+| `31` | runtime MVP Aventure pour les 6 passages obligatoires de type Activité | migration active |
+| `32` | niveau lexical CP/CE1/CE2/CM/X + score de régularité G-P de `phonology_words` | **migration à appliquer avant d’importer la nouvelle banque** |
+| `33` | suppression contrôlée d’une tentative dans l’historique élève | **migration à appliquer avant d’utiliser le bouton Supprimer de l’historique** |
 
 ## Script spécial d’arborescence
 

@@ -1168,9 +1168,7 @@ croute|c_k/r/ou/t/*e|croute|15
 cruche|c_k/r/u/ch/*e|cruche|42
 cruel|c_k/r/u/e_ouvert/l|cru/el|63
 cube|c_k/u/b/*e|cube|52
-cuiller|c_k/u_glisse/ill_ij/e_ouvert/r|cui/ller|38
 cuillère|c_k/u_glisse/ill_ij/e_grave/r/*e|cui/llère|66
-cuillerée|c_k/u_glisse/ill_ij/e_ferme/r/e_aigu/*e|cui/lle/rée|51
 cuir|c_k/u_glisse/i/r|cuir|77
 cuire|c_k/u_glisse/i/r/*e|cuire|79
 cuisine|c_k/u_glisse/i/s_z/i/n/*e|cui/sine|94
@@ -1183,7 +1181,6 @@ cuivre|c_k/u_glisse/i/v/r/*e|cuivre|60
 culotte|c_k/u/l/o/tt/*e|cu/lotte|71
 cultiver|c_k/u/l/t/i/v/er|cul/ti/ver|57
 culture|c_k/u/l/t/u/r/*e|cul/ture|66
-curé|c_k/u/r/e_aigu|cu/ré|63
 curieux|c_k/u/r/i_yod/eu/*x|cu/rieux|86
 curiosité|c_k/u/r/i_yod/o/s_z/i/t/e_aigu|cu/rio/si/té|68
 cuvette|c_k/u/v/e_ouvert/tt/*e|cu/vette|38
@@ -4506,7 +4503,6 @@ utile|u/t/i/l/*e|u/tile|82
 utilisation|u/t/i/l/i/s_z/a/t_s/i_yod/on|u/ti/li/sa/tion|51
 utilisé|u/t/i/l/i/s_z/e_aigu|u/ti/li/sé|67
 utiliser|u/t/i/l/i/s_z/er|u/ti/li/ser|97
-vacance|v/a/c_k/an/c_s/*e|va/cance|78
 vacances|v/a/c_k/an/c_s/*e/*s|va/cances|47
 vacarme|v/a/c_k/a/r/m/*e|va/carme|56
 vache|v/a/ch/*e|vache|87

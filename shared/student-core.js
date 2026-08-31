@@ -298,7 +298,7 @@ export function createSessionEngine({
     }, remainingMs);
   }
 
-  async function runValidationReview(item, remainingMs, wasCorrect) {
+  async function runValidationReview(item, remainingMs, wasCorrect, { delayAfterPreparation = false, reviewDelayMs = null } = {}) {
     const generation = validationReviewGeneration;
     const startedAt = performance.now();
     const hasAnswerDisplayApi = typeof activeRuntime?.getShellAnswerDisplayState === "function"
@@ -329,7 +329,16 @@ export function createSessionEngine({
       }
 
       const elapsedMs = Math.max(0, performance.now() - startedAt);
-      const delayMs = Math.max(0, VALIDATION_REVIEW_DELAY_MS - elapsedMs);
+      const hasCustomReviewDelay = reviewDelayMs !== null
+        && reviewDelayMs !== undefined
+        && String(reviewDelayMs).trim() !== ""
+        && Number.isFinite(Number(reviewDelayMs));
+      const requestedReviewDelayMs = hasCustomReviewDelay
+        ? Math.max(0, Number(reviewDelayMs))
+        : VALIDATION_REVIEW_DELAY_MS;
+      const delayMs = delayAfterPreparation
+        ? requestedReviewDelayMs
+        : Math.max(0, requestedReviewDelayMs - elapsedMs);
 
       await new Promise((resolve) => {
         validationReviewTimer = window.setTimeout(() => {
@@ -1396,7 +1405,14 @@ export function createSessionEngine({
   function beginAnswerPhase(
     item,
     durationMs,
-    { showAnswerNow = true, validationReview = false, validationWasCorrect = null } = {}
+    {
+      showAnswerNow = true,
+      validationReview = false,
+      validationWasCorrect = null,
+      validationReviewDelayAfterPreparation = false,
+      validationReviewDelayMs = null,
+      answerControlsDelayMs = 0
+    } = {}
   ) {
     stopAllTimers();
 
@@ -1419,8 +1435,22 @@ export function createSessionEngine({
       hideManualAction();
       flashValidationFeedback(validationWasCorrect);
       emitStateChange();
-      void runValidationReview(item, remainingMs, validationWasCorrect);
+      void runValidationReview(item, remainingMs, validationWasCorrect, {
+        delayAfterPreparation: validationReviewDelayAfterPreparation === true,
+        reviewDelayMs: validationReviewDelayMs
+      });
       return;
+    }
+
+    const safeControlsDelayMs = Math.max(0, Number(answerControlsDelayMs) || 0);
+    let delayedControlsGeneration = null;
+    if (safeControlsDelayMs > 0) {
+      validationReviewGeneration += 1;
+      delayedControlsGeneration = validationReviewGeneration;
+      setValidationReviewPending(true);
+      hideTimer();
+      hideManualAction();
+      emitStateChange();
     }
 
     if (showAnswerNow) {
@@ -1441,6 +1471,15 @@ export function createSessionEngine({
         flashValidationFeedback(wasCorrect);
         captureHistoryStage(item, "correction");
       }
+    }
+
+    if (safeControlsDelayMs > 0) {
+      validationReviewTimer = window.setTimeout(() => {
+        validationReviewTimer = null;
+        if (delayedControlsGeneration !== validationReviewGeneration || !isSessionRunning || paused) return;
+        startAnswerPhaseControls(item, remainingMs);
+      }, safeControlsDelayMs);
+      return;
     }
 
     startAnswerPhaseControls(item, remainingMs);
@@ -2731,7 +2770,15 @@ export function createSessionEngine({
 
   function createToolSessionControls(item) {
     return {
-      requestAnswerPhase({ manual = false, showAnswerNow = true, wasCorrect = null, skipValidationReview = false } = {}) {
+      requestAnswerPhase({
+        manual = false,
+        showAnswerNow = true,
+        wasCorrect = null,
+        skipValidationReview = false,
+        validationReviewDelayAfterPreparation = false,
+        validationReviewDelayMs = null,
+        answerControlsDelayMs = 0
+      } = {}) {
         if (!item || !isSessionRunning || paused) return false;
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "QUESTION") return false;
@@ -2750,7 +2797,10 @@ export function createSessionEngine({
         beginAnswerPhase(item, durationMs, {
           showAnswerNow,
           validationReview,
-          validationWasCorrect: wasCorrect
+          validationWasCorrect: wasCorrect,
+          validationReviewDelayAfterPreparation: validationReviewDelayAfterPreparation === true,
+          validationReviewDelayMs,
+          answerControlsDelayMs
         });
         emitStateChange();
         return true;

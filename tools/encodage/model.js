@@ -9,6 +9,12 @@ import {
   listPublicImageAssets,
   getPublicImageAssetUrl
 } from "../../shared/public-api.js";
+import {
+  isPhonologyWordAllowedAtLevel,
+  normalizePhonologyRegularityScore,
+  normalizePhonologySchoolLevel,
+  pickPhonologyWordByRegularity
+} from "../../shared/phonology-word-level.js";
 
 export const INPUT_MODES = Object.freeze({
   GRAPHEMES: "graphemes",
@@ -70,6 +76,7 @@ export function getDefaultSettings() {
     mode: RESPONSE_MODES.LIBRE,
     individualValidationMode: INDIVIDUAL_VALIDATION_MODES.UNLIMITED,
     individualMaxAttempts: DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
+    schoolLevel:"CP",
     graphOrder: getGraphsForStarterSelection()
   };
 }
@@ -231,6 +238,7 @@ export function normalizeSettings(settings) {
       MAX_INDIVIDUAL_MAX_ATTEMPTS,
       DEFAULT_INDIVIDUAL_MAX_ATTEMPTS
     ),
+    schoolLevel:normalizePhonologySchoolLevel(raw.schoolLevel ?? defaults.schoolLevel),
     graphOrder
   };
 }
@@ -238,7 +246,9 @@ export function normalizeSettings(settings) {
 export function getWordPool(settings) {
   const cfg = normalizeSettings(settings);
   const selectedGraphs = new Set(cfg.graphOrder);
-  const resolvedCatalog = WORD_CATALOG.map((word) => resolveWordCompositions(word, selectedGraphs));
+  const resolvedCatalog = WORD_CATALOG
+    .filter((word) => isPhonologyWordAllowedAtLevel(word, cfg.schoolLevel))
+    .map((word) => resolveWordCompositions(word, selectedGraphs));
 
   if (cfg.inputMode === INPUT_MODES.LETTERS) {
     const letterPlayable = resolvedCatalog.filter((word) => isWordLetterPlayable(word));
@@ -256,6 +266,7 @@ export function getSelectedGraphUsageStats(settings) {
   const cfg = normalizeSettings(settings);
   const selectedGraphs = new Set(cfg.graphOrder);
   const pool = WORD_CATALOG
+    .filter((word) => isPhonologyWordAllowedAtLevel(word, cfg.schoolLevel))
     .map((word) => resolveWordCompositions(word, selectedGraphs))
     .filter((word) => isWordGraphPlayable(word, selectedGraphs));
   const counts = new Map(cfg.graphOrder.map((graph) => [graph, 0]));
@@ -764,6 +775,8 @@ function normalizeWordCatalog(words) {
     .map((word) => ({
       word: String(word?.word || "").trim(),
       slug: String(word?.slug || "").trim().toLowerCase(),
+      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      regularityScore:normalizePhonologyRegularityScore(word?.regularityScore),
       units: normalizeWordUnits(word?.units)
     }))
     .filter((word) => word.word && word.slug && word.units.length > 0);
@@ -907,7 +920,7 @@ function pickRandomAvoiding(pool, avoidKey) {
     ? candidates.filter((item) => questionKey(item) !== avoidKey)
     : candidates;
   if (!usable.length) return null;
-  return usable[Math.floor(Math.random() * usable.length)] || null;
+  return pickPhonologyWordByRegularity(usable);
 }
 
 function isDisplayableLetter(char) {

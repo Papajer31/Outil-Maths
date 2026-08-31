@@ -15,42 +15,42 @@ export const PHONOLOGY_TARGET_CATEGORIES = Object.freeze([
 ]);
 
 const RAW_TARGETS = [
-  { id:"a", category:"vowels", ipa:"a", bubbleText:"a", example:"chat", graphIds:["a"], includedInGraphIds:["oi", "oy"] },
-  { id:"i", category:"vowels", ipa:"i", bubbleText:"i", example:"lit", graphIds:["i", "y_i"], includedInGraphIds:["i_ij", "ill_ij", "y_ij"] },
-  { id:"u", category:"vowels", ipa:"y", bubbleText:"u", example:"lune", graphIds:["u"] },
-  { id:"ou", category:"vowels", ipa:"u", bubbleText:"ou", example:"roue", graphIds:["ou"] },
-  { id:"e_aigu", category:"vowels", ipa:"e", bubbleText:"é", example:"vélo", graphIds:["e_aigu", "e_ferme", "e_circonflexe_ferme", "er", "ez", "ai_ferme"], includedInGraphIds:["ay_ferme"] },
-  { id:"e_ouvert", category:"vowels", ipa:"ɛ", bubbleText:"è", example:"père", graphIds:["e_grave", "e_circonflexe", "e_ouvert", "ai_ouvert", "ei", "et_ouvert"], includedInGraphIds:["ay"] },
+  { id:"a", category:"vowels", ipa:"a", bubbleText:"a", example:"chat", graphIds:["a"], rareSpellings:["à", "â"], includedInGraphIds:["oi", "oy"] },
+  { id:"i", category:"vowels", ipa:"i", bubbleText:"i", example:"lit", graphIds:["i", "y_i"], rareSpellings:["î", "ï", "y"], includedInGraphIds:["i_ij", "ill_ij", "y_ij"] },
+  { id:"u", category:"vowels", ipa:"y", bubbleText:"u", example:"lune", graphIds:["u"], rareSpellings:["û", "ü"] },
+  { id:"ou", category:"vowels", ipa:"u", bubbleText:"ou", example:"roue", graphIds:["ou"], rareSpellings:["où", "oû"] },
+  { id:"e_aigu", category:"vowels", ipa:"e", bubbleText:"é", example:"vélo", graphIds:["e_aigu", "e_ferme", "e_circonflexe_ferme", "er", "ez", "ai_ferme"], rareSpellings:["e", "ê", "ez", "ai"], includedInGraphIds:["ay_ferme"] },
+  { id:"e_ouvert", category:"vowels", ipa:"ɛ", bubbleText:"è", example:"père", graphIds:["e_grave", "e_circonflexe", "e_ouvert", "ai_ouvert", "ei", "et_ouvert"], rareSpellings:["ê", "ë", "ei"], includedInGraphIds:["ay"] },
   { id:"e", category:"vowels", ipa:"ə", bubbleText:"e", example:"cheval", graphIds:["e_schwa"] },
-  { id:"eu", category:"vowels", ipa:"ø;œ", bubbleText:"eu", example:"feu", graphIds:["eu", "oeu", "u_eu"] },
-  { id:"o", category:"vowels", ipa:"o;ɔ", bubbleText:"o", example:"moto", graphIds:["o", "au", "eau"] },
+  { id:"eu", category:"vowels", ipa:"ø;œ", bubbleText:"eu", example:"feu", graphIds:["eu", "oeu", "u_eu"], rareSpellings:["eû", "u"] },
+  { id:"o", category:"vowels", ipa:"o;ɔ", bubbleText:"o", example:"moto", graphIds:["o", "au", "eau"], rareSpellings:["ô"] },
 
-  { id:"an", category:"nasals", ipa:"ɑ̃", bubbleText:"an", example:"manteau", graphIds:["an", "am", "en_an", "em"] },
-  { id:"on", category:"nasals", ipa:"ɔ̃", bubbleText:"on", example:"pont", graphIds:["on", "om"] },
-  { id:"in", category:"nasals", ipa:"ɛ̃", bubbleText:"in", example:"lapin", graphIds:["in", "im", "ain", "ein", "en_in", "ym"], includedInGraphIds:["oin"] },
-  { id:"un", category:"nasals", ipa:"œ̃", bubbleText:"un", example:"brun", graphIds:["un", "um"] },
+  { id:"an", category:"nasals", ipa:"ɑ̃", bubbleText:"an", example:"manteau", graphIds:["an", "am", "en_an", "em"], rareSpellings:["am", "em"] },
+  { id:"on", category:"nasals", ipa:"ɔ̃", bubbleText:"on", example:"pont", graphIds:["on", "om"], rareSpellings:["om"] },
+  { id:"in", category:"nasals", ipa:"ɛ̃", bubbleText:"in", example:"lapin", graphIds:["in", "im", "ain", "ein", "en_in", "ym"], rareSpellings:["im", "en", "ym"], includedInGraphIds:["oin"] },
+  { id:"un", category:"nasals", ipa:"œ̃", bubbleText:"un", example:"brun", graphIds:["un", "um"], rareSpellings:["um"] },
 
-  { id:"y", category:"semivowels", ipa:"j", bubbleText:"y", example:"pied", graphIds:["i_yod", "y_yod", "il_yod", "ill"], includedInGraphIds:["ay", "ay_ferme", "i_ij", "ill_ij", "oy", "y_ij"] },
+  { id:"y", category:"semivowels", ipa:"j", bubbleText:"y", example:"pied", graphIds:["i_yod", "y_yod", "il_yod", "ill"], rareSpellings:["ï"], includedInGraphIds:["ay", "ay_ferme", "i_ij", "ill_ij", "oy", "y_ij"] },
   { id:"u_glisse", aliases:["uw", "ui"], category:"semivowels", ipa:"ɥ", bubbleText:"ɥ", example:"pluie", graphIds:["u_glisse"] },
-  { id:"w", category:"semivowels", ipa:"w", bubbleText:"w", example:"wapiti", graphIds:["ou_glisse", "w_w"], includedInGraphIds:["oi", "oin", "oy"] },
+  { id:"w", category:"semivowels", ipa:"w", bubbleText:"w", example:"wapiti", graphIds:["ou_glisse", "w_w"], rareSpellings:["w"], includedInGraphIds:["oi", "oin", "oy"] },
 
-  { id:"p", category:"consonants", ipa:"p", bubbleText:"p", example:"poule", graphIds:["p", "pp"] },
+  { id:"p", category:"consonants", ipa:"p", bubbleText:"p", example:"poule", graphIds:["p", "pp"], rareSpellings:["pp"] },
   { id:"b", category:"consonants", ipa:"b", bubbleText:"b", example:"bateau", graphIds:["b"] },
-  { id:"t", category:"consonants", ipa:"t", bubbleText:"t", example:"tapis", graphIds:["t", "tt", "th"] },
-  { id:"d", category:"consonants", ipa:"d", bubbleText:"d", example:"domino", graphIds:["d", "dd"] },
-  { id:"k", category:"consonants", ipa:"k", bubbleText:"k", example:"carte", graphIds:["c_k", "cc", "k", "qu", "ch_k"], includedInGraphIds:["x_ks"] },
-  { id:"g", category:"consonants", ipa:"g", bubbleText:"g", example:"gâteau", graphIds:["g_g", "gg", "gu"], includedInGraphIds:["x_gz"] },
-  { id:"f", category:"consonants", ipa:"f", bubbleText:"f", example:"farine", graphIds:["f", "ff", "ph"] },
-  { id:"v", category:"consonants", ipa:"v", bubbleText:"v", example:"vélo", graphIds:["v", "w_v"] },
-  { id:"s", category:"consonants", ipa:"s", bubbleText:"s", example:"salade", graphIds:["s_s", "ss", "c_s", "ç", "sc", "t_s"], includedInGraphIds:["x_ks"] },
-  { id:"z", category:"consonants", ipa:"z", bubbleText:"z", example:"zéro", graphIds:["z", "s_z", "x_z"], includedInGraphIds:["x_gz"] },
+  { id:"t", category:"consonants", ipa:"t", bubbleText:"t", example:"tapis", graphIds:["t", "tt", "th"], rareSpellings:["tt", "th"] },
+  { id:"d", category:"consonants", ipa:"d", bubbleText:"d", example:"domino", graphIds:["d", "dd"], rareSpellings:["dd"] },
+  { id:"k", category:"consonants", ipa:"k", bubbleText:"k", example:"carte", graphIds:["c_k", "cc", "k", "qu", "ch_k"], rareSpellings:["cc", "ch"], includedInGraphIds:["x_ks"] },
+  { id:"g", category:"consonants", ipa:"g", bubbleText:"g", example:"gâteau", graphIds:["g_g", "gg", "gu"], rareSpellings:["gg"], includedInGraphIds:["x_gz"] },
+  { id:"f", category:"consonants", ipa:"f", bubbleText:"f", example:"farine", graphIds:["f", "ff", "ph"], rareSpellings:["ph"] },
+  { id:"v", category:"consonants", ipa:"v", bubbleText:"v", example:"vélo", graphIds:["v", "w_v"], rareSpellings:["w"] },
+  { id:"s", category:"consonants", ipa:"s", bubbleText:"s", example:"salade", graphIds:["s_s", "ss", "c_s", "ç", "sc", "t_s"], rareSpellings:["sc", "t"], includedInGraphIds:["x_ks"] },
+  { id:"z", category:"consonants", ipa:"z", bubbleText:"z", example:"zéro", graphIds:["z", "s_z", "x_z"], rareSpellings:["x"], includedInGraphIds:["x_gz"] },
   { id:"ch", category:"consonants", ipa:"ʃ", bubbleText:"ch", example:"chat", graphIds:["ch"] },
-  { id:"j", category:"consonants", ipa:"ʒ", bubbleText:"j", example:"jupe", graphIds:["j", "g_j", "ge"] },
-  { id:"m", category:"consonants", ipa:"m", bubbleText:"m", example:"moto", graphIds:["m", "mm"] },
-  { id:"n", category:"consonants", ipa:"n", bubbleText:"n", example:"nid", graphIds:["n", "nn"] },
+  { id:"j", category:"consonants", ipa:"ʒ", bubbleText:"j", example:"jupe", graphIds:["j", "g_j", "ge"], rareSpellings:["ge"] },
+  { id:"m", category:"consonants", ipa:"m", bubbleText:"m", example:"moto", graphIds:["m", "mm"], rareSpellings:["mm"] },
+  { id:"n", category:"consonants", ipa:"n", bubbleText:"n", example:"nid", graphIds:["n", "nn"], rareSpellings:["nn"] },
   { id:"gn", category:"consonants", ipa:"ɲ", bubbleText:"gn", example:"montagne", graphIds:["gn"] },
-  { id:"l", category:"consonants", ipa:"l", bubbleText:"l", example:"lune", graphIds:["l", "ll"] },
-  { id:"r", category:"consonants", ipa:"ʁ", bubbleText:"r", example:"rat", graphIds:["r", "rr"] }
+  { id:"l", category:"consonants", ipa:"l", bubbleText:"l", example:"lune", graphIds:["l", "ll"], rareSpellings:["ll"] },
+  { id:"r", category:"consonants", ipa:"ʁ", bubbleText:"r", example:"rat", graphIds:["r", "rr"], rareSpellings:["rr"] }
 ];
 
 function graphSpellings(graphId) {
@@ -69,6 +69,7 @@ function buildTarget(raw) {
   const includedInGraphIds = (raw.includedInGraphIds || []).filter((graphId) => PHONOLOGY_GRAPH_BY_ID.has(graphId));
   const derivedSpellings = graphIds.flatMap(graphSpellings);
   const spellings = Array.from(new Set((raw.spellings || derivedSpellings).map(normalizeSpelling).filter(Boolean)));
+  const rareSpellings = Array.from(new Set((raw.rareSpellings || []).map(normalizeSpelling).filter((spelling) => spellings.includes(spelling))));
   return Object.freeze({
     ...raw,
     kind:"phonemic",
@@ -77,7 +78,8 @@ function buildTarget(raw) {
     graphIds: Object.freeze(graphIds),
     includedInGraphIds: Object.freeze(includedInGraphIds),
     graphSequences: Object.freeze([]),
-    spellings: Object.freeze(spellings)
+    spellings: Object.freeze(spellings),
+    rareSpellings: Object.freeze(rareSpellings)
   });
 }
 
@@ -120,6 +122,7 @@ function cloneTarget(target) {
     graphIds: [...target.graphIds],
     includedInGraphIds: [...(target.includedInGraphIds || [])],
     graphSequences: [],
-    spellings: [...target.spellings]
+    spellings: [...target.spellings],
+    rareSpellings: [...(target.rareSpellings || [])]
   };
 }

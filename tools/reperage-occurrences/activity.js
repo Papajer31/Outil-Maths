@@ -92,9 +92,9 @@ export function createActivity(initialContext = {}) {
       state.container = container || state.container;
       syncRuntimeState(state, context ?? state.latestContext);
       return {
-        canToggle:canToggleAnswerDisplay(state),
-        mode:state.answerDisplayMode === "student" ? "student" : "correction",
-        transitionTargets:[state.boardEl]
+        canToggle:false,
+        mode:"correction",
+        transitionTargets:[]
       };
     },
 
@@ -276,8 +276,9 @@ function getItemClassNames(state, item) {
     return classes.join(" ");
   }
 
-  if (item.isTarget) classes.push("is-correction");
-  if (wasSelected && !item.isTarget) classes.push("is-wrong");
+  if (item.isTarget && wasSelected) classes.push("is-correct");
+  else if (item.isTarget) classes.push("is-correction");
+  else if (wasSelected) classes.push("is-wrong");
   return classes.join(" ");
 }
 
@@ -306,7 +307,8 @@ function submitCurrentAnswer(state) {
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual:false,
     showAnswerNow:true,
-    wasCorrect:state.lastEvaluation.isCorrect
+    wasCorrect:state.lastEvaluation.isCorrect,
+    skipValidationReview:true
   });
 
   if (!requested) {
@@ -331,11 +333,8 @@ function canValidate(state) {
     && state.selectedIds.size > 0;
 }
 
-function canToggleAnswerDisplay(state) {
-  return state.responseUi === "boxed"
-    && state.phaseMode === "answer"
-    && state.studentSelectionSnapshot instanceof Set
-    && state.lastEvaluation?.isCorrect === false;
+function canToggleAnswerDisplay() {
+  return false;
 }
 
 function isQuestionInteractive(state) {

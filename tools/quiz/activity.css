@@ -486,18 +486,27 @@
 .quiz-runtime-label-chip:active{ cursor:grabbing; }
 .quiz-runtime-label-chip.is-drag-origin{ visibility:hidden; }
 
-/* En correction, Catégories conserve exactement le classement soumis.
-   Seule la couleur de chaque étiquette indique si sa catégorie est juste. */
+/* Feedbacks Catégories alignés sur la convention générale des outils :
+   vert plein = déjà juste, rouge = erreur élève, vert pointillé = correction. */
 .quiz-runtime-label-chip.is-correct{
+  border-style:solid;
   border-color:var(--tool-ui-success,#57d07a);
-  background:#eaf9ee;
-  box-shadow:0 0 0 2px rgba(87,208,122,.18) inset,0 5px 14px rgba(0,0,0,.14);
+  background:linear-gradient(rgba(87,208,122,.14),rgba(87,208,122,.14)),rgba(255,255,255,.94);
+  box-shadow:0 0 0 2px rgba(87,208,122,.16) inset,0 5px 14px rgba(0,0,0,.14);
 }
 
 .quiz-runtime-label-chip.is-incorrect{
+  border-style:solid;
   border-color:var(--tool-ui-error,#ef6b73);
-  background:#fdecef;
-  box-shadow:0 0 0 2px rgba(239,107,115,.18) inset,0 5px 14px rgba(0,0,0,.14);
+  background:linear-gradient(rgba(239,107,115,.14),rgba(239,107,115,.14)),rgba(255,255,255,.94);
+  box-shadow:0 0 0 2px rgba(239,107,115,.16) inset,0 5px 14px rgba(0,0,0,.14);
+}
+
+.quiz-runtime-label-chip.is-correction{
+  border-style:dashed;
+  border-color:var(--tool-ui-success,#57d07a);
+  background:linear-gradient(rgba(87,208,122,.10),rgba(87,208,122,.10)),rgba(255,255,255,.94);
+  box-shadow:0 0 0 2px rgba(87,208,122,.16) inset,0 5px 14px rgba(0,0,0,.14);
 }
 
 .quiz-runtime-label-chip.is-floating{

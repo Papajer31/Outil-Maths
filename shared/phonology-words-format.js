@@ -194,13 +194,13 @@ function splitOptionalPrefix(rawValue){
 
 function parseWordLine(sourceLine, lineNumber){
   const columns = sourceLine.split("|");
-  if (columns.length < 2 || columns.length > 4 || columns.some((column, index) => index < 2 && !column.trim())) {
+  if (columns.length !== 5 || columns.some((column, index) => index < 5 && !column.trim())) {
     return {
       row: null,
       issues: [createIssue({
         line: lineNumber,
         code: "invalid_line",
-        message: "La ligne doit utiliser le format mot|u/n/i/t/é/s|sy/lla/ba/tion|familiarite (syllabation et familiarité restent tolérées comme absentes pour les anciennes banques).",
+        message: "La ligne doit utiliser le format mot|u/n/i/t/é/s|sy/lla/ba/tion|niveau|score_regularite.",
         source: sourceLine
       })]
     };
@@ -208,10 +208,9 @@ function parseWordLine(sourceLine, lineNumber){
 
   const displayWordSource = normalizeUnicode(columns[0].trim());
   const unitsSource = normalizeUnicode(columns[1].trim());
-  const hasSyllabationColumn = columns.length >= 3;
-  const syllablesSource = hasSyllabationColumn ? normalizeUnicode(columns[2].trim()) : "";
-  const hasFamiliarityColumn = columns.length === 4;
-  const familiaritySource = hasFamiliarityColumn ? normalizeUnicode(columns[3].trim()) : "";
+  const syllablesSource = normalizeUnicode(columns[2].trim());
+  const schoolLevelSource = normalizeUnicode(columns[3].trim()).toLocaleUpperCase("fr-FR");
+  const regularitySource = normalizeUnicode(columns[4].trim());
   const issues = [];
   const warnings = [];
   const parsedDisplay = splitOptionalPrefix(displayWordSource);
@@ -231,56 +230,63 @@ function parseWordLine(sourceLine, lineNumber){
     issues.push(createIssue({ line: lineNumber, code: "missing_word", message: "Le mot est vide.", source: sourceLine }));
   }
 
-  let familiarity = 50;
-  if (hasFamiliarityColumn) {
-    if (!/^\d{1,3}$/.test(familiaritySource)) {
+  const allowedLevels = new Set(["CP", "CE1", "CE2", "CM", "X"]);
+  const schoolLevel = allowedLevels.has(schoolLevelSource) ? schoolLevelSource : "";
+  if (!schoolLevel) {
+    issues.push(createIssue({
+      line: lineNumber,
+      code: "invalid_school_level",
+      message: "Le niveau doit être CP, CE1, CE2, CM ou X.",
+      source: sourceLine
+    }));
+  }
+
+  let regularityScore = 0;
+  if (!/^\d{1,3}$/.test(regularitySource)) {
+    issues.push(createIssue({
+      line: lineNumber,
+      code: "invalid_regularity_score",
+      message: "Le score de régularité doit être un entier compris entre 0 et 100.",
+      source: sourceLine
+    }));
+  } else {
+    regularityScore = Number(regularitySource);
+    if (!Number.isInteger(regularityScore) || regularityScore < 0 || regularityScore > 100) {
       issues.push(createIssue({
         line: lineNumber,
-        code: "invalid_familiarity",
-        message: "La familiarité doit être un entier compris entre 0 et 100.",
+        code: "invalid_regularity_score",
+        message: "Le score de régularité doit être un entier compris entre 0 et 100.",
         source: sourceLine
       }));
-    } else {
-      familiarity = Number(familiaritySource);
-      if (!Number.isInteger(familiarity) || familiarity < 0 || familiarity > 100) {
-        issues.push(createIssue({
-          line: lineNumber,
-          code: "invalid_familiarity",
-          message: "La familiarité doit être un entier compris entre 0 et 100.",
-          source: sourceLine
-        }));
-      }
     }
   }
 
   const syllables = [];
-  if (hasSyllabationColumn) {
-    if (!syllablesSource) {
+  if (!syllablesSource) {
+    issues.push(createIssue({
+      line: lineNumber,
+      code: "missing_syllabation",
+      message: "La troisième colonne de syllabation est vide.",
+      source: sourceLine
+    }));
+  } else {
+    const syllableTokens = syllablesSource.split("/").map((token) => normalizeUnicode(token.trim()));
+    if (syllableTokens.some((token) => !token)) {
       issues.push(createIssue({
         line: lineNumber,
-        code: "missing_syllabation",
-        message: "La troisième colonne de syllabation est vide.",
+        code: "empty_syllable",
+        message: "La syllabation contient une syllabe vide.",
+        source: sourceLine
+      }));
+    } else if (syllableTokens.join("") !== word) {
+      issues.push(createIssue({
+        line: lineNumber,
+        code: "syllabation_word_mismatch",
+        message: `La syllabation « ${syllablesSource} » ne reconstitue pas exactement le mot « ${word} ».`,
         source: sourceLine
       }));
     } else {
-      const syllableTokens = syllablesSource.split("/").map((token) => normalizeUnicode(token.trim()));
-      if (syllableTokens.some((token) => !token)) {
-        issues.push(createIssue({
-          line: lineNumber,
-          code: "empty_syllable",
-          message: "La syllabation contient une syllabe vide.",
-          source: sourceLine
-        }));
-      } else if (syllableTokens.join("") !== word) {
-        issues.push(createIssue({
-          line: lineNumber,
-          code: "syllabation_word_mismatch",
-          message: `La syllabation « ${syllablesSource} » ne reconstitue pas exactement le mot « ${word} ».`,
-          source: sourceLine
-        }));
-      } else {
-        syllables.push(...syllableTokens);
-      }
+      syllables.push(...syllableTokens);
     }
   }
 
@@ -416,8 +422,8 @@ function parseWordLine(sourceLine, lineNumber){
       prefix,
       units,
       syllables,
-      familiarity,
-      hasFamiliarity: hasFamiliarityColumn,
+      schoolLevel,
+      regularityScore,
       is_active: true,
       sourceLine: lineNumber
     },
@@ -425,7 +431,6 @@ function parseWordLine(sourceLine, lineNumber){
     warnings
   };
 }
-
 function buildCoverage(rows){
   const wordSetsByGraph = new Map();
   for (const row of rows) {
@@ -492,25 +497,14 @@ export function parsePhonologyWordsText(source){
       message: `Seulement ${entry.wordCount} mot${entry.wordCount > 1 ? "s" : ""} pour « ${entry.label} » (${entry.graph}).`
     }));
   const missingSyllabationCount = uniqueRows.filter((row) => !Array.isArray(row.syllables) || row.syllables.length === 0).length;
-  const syllabationWarnings = missingSyllabationCount > 0
-    ? [createIssue({
-        line: 0,
-        code: "missing_syllabation_rows",
-        severity: "warning",
-        message: `${missingSyllabationCount} mot${missingSyllabationCount > 1 ? "s n’ont" : " n’a"} pas de syllabation. Le format historique reste accepté.`
-      })]
-    : [];
-  const missingFamiliarityCount = uniqueRows.filter((row) => row.hasFamiliarity !== true).length;
-  const familiarityWarnings = missingFamiliarityCount > 0
-    ? [createIssue({
-        line: 0,
-        code: "missing_familiarity_rows",
-        severity: "warning",
-        message: `${missingFamiliarityCount} mot${missingFamiliarityCount > 1 ? "s n’ont" : " n’a"} pas de familiarité lexicale explicite. La valeur neutre 50 sera utilisée.`
-      })]
-    : [];
-  const cleanRows = uniqueRows.map(({ hasFamiliarity, ...row }) => row);
-  const warnings = [...structuralWarnings, ...coverageWarnings, ...syllabationWarnings, ...familiarityWarnings];
+  const levelCounts = Object.fromEntries(["CP", "CE1", "CE2", "CM", "X"].map((level) => [level, 0]));
+  uniqueRows.forEach((row) => {
+    if (Object.prototype.hasOwnProperty.call(levelCounts, row.schoolLevel)) levelCounts[row.schoolLevel] += 1;
+  });
+  const averageRegularityScore = uniqueRows.length
+    ? Math.round(uniqueRows.reduce((total, row) => total + Number(row.regularityScore || 0), 0) / uniqueRows.length)
+    : 0;
+  const warnings = [...structuralWarnings, ...coverageWarnings];
 
   if (!uniqueRows.length && !issues.length) {
     issues.push(createIssue({
@@ -521,14 +515,16 @@ export function parsePhonologyWordsText(source){
   }
 
   return {
-    rows: cleanRows,
+    rows: uniqueRows,
     issues,
     warnings,
     coverage,
     stats: {
       wordCount: uniqueRows.length,
       syllabifiedWordCount: uniqueRows.length - missingSyllabationCount,
-      familiarityWordCount: uniqueRows.length - missingFamiliarityCount,
+      classifiedWordCount: uniqueRows.filter((row) => row.schoolLevel !== "X").length,
+      averageRegularityScore,
+      levelCounts,
       syllableCount: uniqueRows.reduce((total, row) => total + (Array.isArray(row.syllables) ? row.syllables.length : 0), 0),
       graphCount: allGraphIds.size,
       unitCount: uniqueRows.reduce((total, row) => total + row.units.length, 0),
@@ -553,10 +549,13 @@ export function buildPhonologyWordsSeedSql(rows, {
   const values = safeRows.map((row) => {
     const units = JSON.stringify(row.units);
     const syllables = JSON.stringify(Array.isArray(row.syllables) ? row.syllables : []);
-    const familiarity = Number.isFinite(Number(row.familiarity))
-      ? Math.max(0, Math.min(100, Math.round(Number(row.familiarity))))
+    const schoolLevel = ["CP", "CE1", "CE2", "CM", "X"].includes(String(row.schoolLevel || "").toLocaleUpperCase("fr-FR"))
+      ? String(row.schoolLevel).toLocaleUpperCase("fr-FR")
+      : "X";
+    const regularityScore = Number.isFinite(Number(row.regularityScore))
+      ? Math.max(0, Math.min(100, Math.round(Number(row.regularityScore))))
       : 50;
-    return `  ('${escapeSqlText(row.slug)}', '${escapeSqlText(row.word)}', '${escapeSqlText(row.prefix || "")}', '${escapeSqlText(units)}'::jsonb, '${escapeSqlText(syllables)}'::jsonb, ${familiarity}, true, now())`;
+    return `  ('${escapeSqlText(row.slug)}', '${escapeSqlText(row.word)}', '${escapeSqlText(row.prefix || "")}', '${escapeSqlText(units)}'::jsonb, '${escapeSqlText(syllables)}'::jsonb, '${escapeSqlText(schoolLevel)}', ${regularityScore}, true, now())`;
   }).join(",\n");
 
   const slugs = safeRows.map((row) => `'${escapeSqlText(row.slug)}'`).join(", ");
@@ -567,9 +566,8 @@ export function buildPhonologyWordsSeedSql(rows, {
     ? `\n\nupdate public.phonology_words\nset is_active = false, updated_at = now()\nwhere slug not in (${slugs});`
     : "";
 
-  return `-- Seed générée automatiquement depuis la banque phonologique.\nbegin;\n\n${replaceSql}insert into public.phonology_words (slug, word, prefix, units, syllables, familiarity, is_active, updated_at)\nvalues\n${values}\non conflict (slug) do update\nset\n  word = excluded.word,\n  prefix = excluded.prefix,\n  units = excluded.units,\n  syllables = excluded.syllables,\n  familiarity = excluded.familiarity,\n  is_active = true,\n  updated_at = now();${deactivateSql}\n\ncommit;\n`;
+  return `-- Seed générée automatiquement depuis la banque phonologique.\nbegin;\n\n${replaceSql}insert into public.phonology_words (slug, word, prefix, units, syllables, school_level, regularity_score, is_active, updated_at)\nvalues\n${values}\non conflict (slug) do update\nset\n  word = excluded.word,\n  prefix = excluded.prefix,\n  units = excluded.units,\n  syllables = excluded.syllables,\n  school_level = excluded.school_level,\n  regularity_score = excluded.regularity_score,\n  is_active = true,\n  updated_at = now();${deactivateSql}\n\ncommit;\n`;
 }
-
 export function getPhonologyGraphLabel(graphId){
   return String(GRAPH_BY_ID.get(String(graphId || ""))?.label || graphId || "");
 }

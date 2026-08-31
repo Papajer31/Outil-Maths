@@ -183,6 +183,7 @@ function findNextWord(tokens, tokenIndex){
 export function renderQuizSelectionTextToHtml(value, formatting = [], {
   activeIndexes = [],
   activeKind = "selected",
+  activeKindsByIndex = null,
   interactive = false,
   disabled = false,
   ariaPrefix = "Mot à sélectionner"
@@ -196,21 +197,47 @@ export function renderQuizSelectionTextToHtml(value, formatting = [], {
     selected:"is-selected",
     student:"is-student",
     correction:"is-correction",
-    correct:"is-correct"
+    correct:"is-correct",
+    incorrect:"is-incorrect"
   };
-  const activeClass = classesByKind[activeKind] || classesByKind.selected;
+  const normalizedKindsByIndex = new Map();
+  if (activeKindsByIndex instanceof Map) {
+    activeKindsByIndex.forEach((kind, index) => {
+      const safeIndex = Math.trunc(Number(index));
+      if (safeIndex >= 0 && safeIndex < wordCount && classesByKind[kind]) normalizedKindsByIndex.set(safeIndex, kind);
+    });
+  } else if (activeKindsByIndex && typeof activeKindsByIndex === "object") {
+    Object.entries(activeKindsByIndex).forEach(([index, kind]) => {
+      const safeIndex = Math.trunc(Number(index));
+      if (safeIndex >= 0 && safeIndex < wordCount && classesByKind[kind]) normalizedKindsByIndex.set(safeIndex, kind);
+    });
+  }
+
+  const getKindAt = (wordIndex) => {
+    if (normalizedKindsByIndex.has(wordIndex)) return normalizedKindsByIndex.get(wordIndex);
+    return activeSet.has(wordIndex) ? activeKind : "";
+  };
+  const kindSets = new Map();
+  Object.keys(classesByKind).forEach((kind) => kindSets.set(kind, new Set()));
+  for (let index = 0; index < wordCount; index += 1) {
+    const kind = getKindAt(index);
+    if (kindSets.has(kind)) kindSets.get(kind).add(index);
+  }
 
   return tokens.map((token, tokenIndex) => {
     if (token.kind === "br") return '<br class="selection-text-br">';
     if (token.kind === "space") {
       const previousWord = findPreviousWord(tokens, tokenIndex);
       const nextWord = findNextWord(tokens, tokenIndex);
+      const previousKind = previousWord === null ? "" : getKindAt(previousWord);
+      const nextKind = nextWord === null ? "" : getKindAt(nextWord);
       const bridged = previousWord !== null
         && nextWord !== null
-        && activeSet.has(previousWord)
-        && activeSet.has(nextWord)
+        && previousKind
+        && previousKind === nextKind
         && nextWord === previousWord + 1;
-      const className = bridged ? `selection-text-space is-bridge ${activeClass}` : "";
+      const bridgeClass = bridged ? classesByKind[previousKind] : "";
+      const className = bridged ? `selection-text-space is-bridge ${bridgeClass}` : "";
       return bridged
         ? `<span class="${className}" aria-hidden="true">${escapeHtml(token.text)}</span>`
         : escapeHtml(token.text);
@@ -219,13 +246,16 @@ export function renderQuizSelectionTextToHtml(value, formatting = [], {
     if (token.kind !== "word") {
       return `<span class="selection-text-token selection-text-token--punct">${content}</span>`;
     }
-    const isActive = activeSet.has(token.wordIndex);
+    const tokenKind = getKindAt(token.wordIndex);
+    const tokenClass = classesByKind[tokenKind] || "";
+    const tokenKindSet = kindSets.get(tokenKind) || new Set();
+    const isActive = Boolean(tokenClass);
     const classNames = [
       "selection-text-token",
       "selection-text-token--word",
       "selection-text-token--continuous",
-      isActive ? activeClass : "",
-      computeContinuousClasses(token.wordIndex, activeSet)
+      tokenClass,
+      isActive ? computeContinuousClasses(token.wordIndex, tokenKindSet) : ""
     ].filter(Boolean).join(" ");
     const dataAttrs = interactive && !disabled
       ? ` role="button" tabindex="0" data-selection-token-index="${token.wordIndex}" aria-pressed="${isActive ? "true" : "false"}" aria-label="${escapeHtml(`${ariaPrefix} ${token.text}`)}"`

@@ -14,8 +14,7 @@ import {
   getEligibleWordCount,
   getEligibleTargetCount,
   getPhonemicSpellingUsage,
-  canGenerateQuestion,
-  getRelevanceDiagnostics
+  canGenerateQuestion
 } from "./model.js";
 import {
   WORD_SELECTION_MODES,
@@ -49,7 +48,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"rg",
           allTargetId:ALL_TARGET_ID,
-          showRelevanceLevels:true,
+          showSchoolLevels:true,
           bankStatusMarkup:`<div class="rg-config-bank-status" data-rg-bank-status aria-live="polite"></div>`,
           afterSelectionMarkup:`<div data-rg-phonemic-only>${renderRadioGroup({
             title: "Affichage des graphies possibles",
@@ -60,14 +59,7 @@ export function renderToolSettings(container, settings = {}) {
               { value:"hide", label:"Ne pas afficher" }
             ]
           })}</div>`
-        }),
-        `<details class="rg-relevance-diagnostic" hidden>
-          <summary>Diagnostic de pertinence</summary>
-          <div class="rg-relevance-diagnostic__body">
-            <input class="rg-relevance-diagnostic__search" type="search" data-rg-relevance-search placeholder="Tester un mot…" autocomplete="off">
-            <div data-rg-relevance-diagnostic-results></div>
-          </div>
-        </details>`
+        })
       )}
     </div>
   `;
@@ -83,23 +75,17 @@ export function renderToolSettings(container, settings = {}) {
     onChange:() => {
       syncModeSpecificControls(container);
       refreshBankStatus(container);
-      refreshRelevanceDiagnostic(container);
     }
   });
 
-  container.querySelector("[data-rg-relevance-search]")?.addEventListener("input", () => refreshRelevanceDiagnostic(container));
-
   syncModeSpecificControls(container);
   refreshBankStatus(container);
-  refreshRelevanceDiagnostic(container);
   ensureWordCatalogLoaded()
     .then(() => {
       refreshBankStatus(container);
-      refreshRelevanceDiagnostic(container);
     })
     .catch(() => {
       refreshBankStatus(container);
-      refreshRelevanceDiagnostic(container);
     });
 }
 
@@ -121,7 +107,7 @@ export function readToolSettings(container) {
   if (!canGenerateQuestion(settings)) {
     const availableCount = getEligibleWordCount(settings);
     if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
-      throw new Error(`La banque ne contient que ${availableCount} mot${availableCount > 1 ? "s" : ""} compatible${availableCount > 1 ? "s" : ""} avec ces entrées graphémiques et ce niveau de pertinence.`);
+      throw new Error(`La banque ne contient que ${availableCount} mot${availableCount > 1 ? "s" : ""} compatible${availableCount > 1 ? "s" : ""} avec ces entrées graphémiques et ce niveau.`);
     }
     if (settings.targetId === ALL_TARGET_ID) {
       throw new Error("Aucun phonème ne contient assez de mots pour générer cette question.");
@@ -181,7 +167,7 @@ function refreshBankStatus(container) {
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
 
-  const levelLabel = settings.relevanceLevel === "simple" ? "Simple" : settings.relevanceLevel === "complexe" ? "Complexe" : "Normal";
+  const levelLabel = settings.schoolLevel;
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
     if (!settings.graphemicEntries.length) {
       host.classList.remove("is-ready");
@@ -189,7 +175,7 @@ function refreshBankStatus(container) {
       host.textContent = "Ajoute au moins une entrée graphémique.";
       return;
     }
-    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} »${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
     return;
   }
 
@@ -198,91 +184,7 @@ function refreshBankStatus(container) {
     return;
   }
 
-  host.textContent = `${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} en mode « ${levelLabel} » dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
-}
-
-function refreshRelevanceDiagnostic(container) {
-  const host = container.querySelector("[data-rg-relevance-diagnostic-results]");
-  if (!host) return;
-
-  if (catalogStatus === "idle" || catalogStatus === "loading") {
-    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Chargement de la banque…</div>';
-    return;
-  }
-  if (catalogStatus === "error") {
-    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Diagnostic indisponible.</div>';
-    return;
-  }
-
-  const settings = readCurrentSettings(container);
-  const query = container.querySelector("[data-rg-relevance-search]")?.value || "";
-  const diagnostic = getRelevanceDiagnostics(settings, { query, perCategory:4 });
-  if (!diagnostic.target) {
-    host.innerHTML = '<div class="rg-relevance-diagnostic__empty">Sélectionne une seule cible phonémique ou graphémique pour inspecter les scores mot par mot.</div>';
-    return;
-  }
-
-  const counts = diagnostic.counts;
-  const rows = diagnostic.rows;
-  const chips = [
-    ["simple", "Simple", counts.simple],
-    ["normal", "Normal", counts.normal],
-    ["complexe", "Complexe", counts.complexe],
-    ["excluded", "Exclus", counts.excluded]
-  ].map(([id, label, count]) => `<span class="rg-relevance-chip rg-relevance-chip--${id}"><strong>${count}</strong> ${label}</span>`).join("");
-
-  const table = rows.length ? `
-    <div class="rg-relevance-table-wrap">
-      <table class="rg-relevance-table">
-        <thead><tr><th>Mot</th><th>Score</th><th>Classe</th><th>Pureté</th><th>Occ.</th><th>Structure</th><th>Parasites</th><th>Familiarité</th></tr></thead>
-        <tbody>${rows.map((row) => {
-          const c = row.components || {};
-          const title = row.severePurityIssue ? ' title="Pureté critique : semi-voyelle adjacente dans la même syllabe"' : "";
-          return `<tr${title}>
-            <td><strong>${escapeHtml(row.word)}</strong>${row.severePurityIssue ? '<span class="rg-relevance-critical">!</span>' : ""}</td>
-            <td>${formatScore(row.score)}</td>
-            <td>${escapeHtml(row.categoryLabel)}</td>
-            <td>${formatPoints(c.purity)}</td>
-            <td>${formatPoints(c.occurrences)}</td>
-            <td>${formatPoints(c.structure)}</td>
-            <td>${formatPoints(c.cleanliness)}</td>
-            <td>${formatPoints(c.familiarity)}</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-    </div>` : '<div class="rg-relevance-diagnostic__empty">Aucun mot correspondant.</div>';
-
-  const targetLabel = diagnostic.target.kind === "graphemic"
-    ? `Graphie « ${escapeHtml(diagnostic.target.grapheme)} »`
-    : `Phonème « ${escapeHtml(diagnostic.target.bubbleText)} »`;
-  host.innerHTML = `
-    <div class="rg-relevance-diagnostic__target">${targetLabel} · ${diagnostic.total} mots strictement compatibles</div>
-    <div class="rg-relevance-chips">${chips}</div>
-    ${table}
-    <div class="rg-relevance-diagnostic__note">Score = pureté 30 + occurrences 10 + structure 15 + absence de parasites 30 + familiarité 15. Seuils : Simple ≥ 90 ; Normal 80–89,9 ; Complexe 60–79,9 ; Exclu < 60. « ! » signale une occurrence perceptivement liée à une semi-voyelle : elle reste toujours sous le seuil d’exclusion.</div>
-  `;
-}
-
-function formatPoints(component) {
-  const points = Number(component?.points);
-  const weight = Number(component?.weight);
-  if (!Number.isFinite(points) || !Number.isFinite(weight)) return "–";
-  return `${formatScore(points)}/${weight}`;
-}
-
-function formatScore(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "–";
-  return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(".", ",");
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  host.textContent = `${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} » dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
 }
 
 async function ensureWordCatalogLoaded() {

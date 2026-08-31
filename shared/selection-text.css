@@ -40,6 +40,13 @@
 }
 
 .selection-text-token--word.is-correction {
+  background: rgba(87, 208, 122, .10);
+  box-shadow: none;
+  outline: 2px dashed rgba(87, 208, 122, .95);
+  outline-offset: -2px;
+}
+
+.selection-text-token--word.is-incorrect {
   background: rgba(239, 107, 115, .14);
   box-shadow: 0 0 0 2px rgba(239, 107, 115, .9);
 }
@@ -79,5 +86,9 @@
 }
 
 .selection-text-space.is-bridge.is-correction {
+  background: rgba(87, 208, 122, .10);
+}
+
+.selection-text-space.is-bridge.is-incorrect {
   background: rgba(239, 107, 115, .14);
 }

@@ -83,7 +83,7 @@ export function createActivity(initialContext = {}) {
       return {
         canToggle:canToggleAnswerDisplay(state),
         mode:state.answerDisplayMode === "student" ? "student" : "correction",
-        transitionTargets:[state.boardEl]
+        transitionTargets:getAnswerTransitionTargets(state)
       };
     },
 
@@ -252,8 +252,15 @@ function renderCell(state, cell, displayedSet, expectedSet, studentSet) {
       aria-colindex="${Number(cell.column) + 1}"
       aria-label="${escapeAttr(String(cell.text || ""))}"
       ${isQuestionInteractive(state) ? "" : "disabled"}
-    >${escapeHtml(String(cell.text || ""))}</button>
+    ><span class="mc-cell__feedback" aria-hidden="true"></span><span class="mc-cell__text">${escapeHtml(String(cell.text || ""))}</span></button>
   `;
+}
+
+function getAnswerTransitionTargets(state) {
+  if (!state.boardEl || state.phaseMode !== "answer") return [];
+  return Array.from(state.boardEl.querySelectorAll(
+    ".mc-cell.is-correct .mc-cell__feedback, .mc-cell.is-correction .mc-cell__feedback, .mc-cell.is-wrong .mc-cell__feedback"
+  ));
 }
 
 function bindGridSelection(state) {

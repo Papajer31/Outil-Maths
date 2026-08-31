@@ -321,6 +321,12 @@ function renderAnswerPhase(state, question) {
   const showStudent = state.answerDisplayMode === "student";
   const displayedValue = showStudent ? state.submittedAnswer : question.word;
   const isCorrectAnswer = evaluation.isCorrect;
+  const feedbackClass = isCorrectAnswer
+    ? "is-correct"
+    : showStudent
+      ? "is-incorrect"
+      : "is-correction";
+  const slotFeedbackMode = isCorrectAnswer ? "correct" : showStudent ? "student" : "correction";
   const isBoxes = state.settings.inputStyle === INPUT_STYLES.BOXES;
 
   state.responseHostEl.classList.toggle("is-boxes", isBoxes);
@@ -329,26 +335,26 @@ function renderAnswerPhase(state, question) {
     const existingControl = state.responseHostEl.querySelector(".dm-answer-control--boxes");
     if (existingControl instanceof HTMLElement) {
       existingControl.classList.add("dm-answer-display", "dm-answer-display--boxes");
-      existingControl.classList.toggle("is-correct", isCorrectAnswer);
-      existingControl.classList.toggle("is-incorrect", !isCorrectAnswer);
+      existingControl.classList.remove("is-correct", "is-incorrect", "is-correction");
+      existingControl.classList.add(feedbackClass);
       existingControl.tabIndex = -1;
       existingControl.setAttribute("aria-readonly", "true");
       const slots = existingControl.querySelector("[data-dm-letter-slots]");
-      if (slots) slots.innerHTML = renderLetterSlotsMarkup(displayedValue, getAnswerLength(question), evaluation);
+      if (slots) slots.innerHTML = renderLetterSlotsMarkup(displayedValue, getAnswerLength(question), evaluation, slotFeedbackMode);
       return;
     }
 
     state.responseHostEl.innerHTML = "";
     const wrapper = document.createElement("div");
-    wrapper.className = `tool-answer-box tool-answer-input tool-alphabet-answer dm-answer-control dm-answer-control--boxes dm-answer-display dm-answer-display--boxes ${isCorrectAnswer ? "is-correct" : "is-incorrect"}`;
-    wrapper.innerHTML = renderLetterSlotsMarkup(displayedValue, getAnswerLength(question), evaluation);
+    wrapper.className = `tool-answer-box tool-answer-input tool-alphabet-answer dm-answer-control dm-answer-control--boxes dm-answer-display dm-answer-display--boxes ${feedbackClass}`;
+    wrapper.innerHTML = renderLetterSlotsMarkup(displayedValue, getAnswerLength(question), evaluation, slotFeedbackMode);
     state.responseHostEl.appendChild(wrapper);
     return;
   }
 
   state.responseHostEl.innerHTML = "";
   const box = document.createElement("div");
-  box.className = `tool-answer-box tool-answer-box--medium dm-answer-display dm-answer-display--single ${isCorrectAnswer ? "is-correct" : "is-incorrect"}`;
+  box.className = `tool-answer-box tool-answer-box--medium dm-answer-display dm-answer-display--single ${feedbackClass}`;
   const text = document.createElement("span");
   text.className = "dm-answer-display__text";
   text.textContent = displayedValue || " ";
@@ -411,7 +417,7 @@ function syncLetterSlots(state, value, length) {
   host.innerHTML = renderLetterSlotsMarkup(value, length);
 }
 
-function renderLetterSlotsMarkup(value, length, evaluation = null) {
+function renderLetterSlotsMarkup(value, length, evaluation = null, feedbackMode = "student") {
   const chars = Array.from(String(value || "").normalize("NFC"));
   const expectedChars = Array.from(String(evaluation?.expected || "").normalize("NFC"));
   const actualChars = Array.from(String(evaluation?.actual || "").normalize("NFC"));
@@ -419,11 +425,14 @@ function renderLetterSlotsMarkup(value, length, evaluation = null) {
   const safeLength = Math.max(1, Number(length) || chars.length || 1);
   return Array.from({ length: safeLength }, (_, index) => {
     const char = chars[index] || "";
-    const feedbackClass = !hasFeedback
-      ? ""
-      : actualChars[index] && actualChars[index] === expectedChars[index]
+    let feedbackClass = "";
+    if (hasFeedback) {
+      if (feedbackMode === "correction") feedbackClass = " is-correction";
+      else if (feedbackMode === "correct") feedbackClass = " is-correct";
+      else feedbackClass = actualChars[index] && actualChars[index] === expectedChars[index]
         ? " is-correct"
         : " is-incorrect";
+    }
     return `<span class="dm-letter-slot${char ? " is-filled" : ""}${feedbackClass}">${escapeHtml(char || " ")}</span>`;
   }).join("");
 }

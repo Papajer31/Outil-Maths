@@ -202,12 +202,60 @@ button.rg-letter:focus-visible{
   box-shadow:3px 0 0 var(--rg-letter-outline),0 3px 0 var(--rg-letter-outline),0 -3px 0 var(--rg-letter-outline);
 }
 
-.rg-letter.is-correct,
-.rg-letter.is-correction{
+.rg-letter.is-correct{
   --rg-letter-outline:#57d07a;
   background:rgba(87,208,122,.14);
   color:inherit;
   box-shadow:0 0 0 3px var(--rg-letter-outline);
+}
+
+.rg-letter.is-correction{
+  --rg-letter-outline:#57d07a;
+  background:rgba(87,208,122,.10);
+  color:inherit;
+  box-shadow:none;
+  outline:none;
+  position:relative;
+}
+
+.rg-letter.is-correction::after{
+  content:"";
+  position:absolute;
+  inset:-3px;
+  border:4px dashed var(--rg-letter-outline);
+  border-radius:calc(.16em + 3px);
+  pointer-events:none;
+}
+
+.rg-letter.is-correction.rg-letter--continuous.is-group-start:not(.is-group-end)::after{
+  right:0;
+  border-right:0;
+  border-top-right-radius:0;
+  border-bottom-right-radius:0;
+}
+
+.rg-letter.is-correction.rg-letter--continuous.is-group-mid::after{
+  left:0;
+  right:0;
+  border-left:0;
+  border-right:0;
+  border-radius:0;
+}
+
+.rg-letter.is-correction.rg-letter--continuous.is-group-end:not(.is-group-start)::after{
+  left:0;
+  border-left:0;
+  border-top-left-radius:0;
+  border-bottom-left-radius:0;
+}
+
+/* Les graphèmes de correction utilisent leur pseudo-élément pointillé :
+   les ombres des groupes continus ne doivent pas se superposer dessus. */
+.rg-letter.is-correction.rg-letter--continuous,
+.rg-letter.is-correction.rg-letter--continuous.is-group-start:not(.is-group-end),
+.rg-letter.is-correction.rg-letter--continuous.is-group-mid,
+.rg-letter.is-correction.rg-letter--continuous.is-group-end:not(.is-group-start){
+  box-shadow:none;
 }
 
 .rg-letter.is-wrong{
@@ -218,25 +266,45 @@ button.rg-letter:focus-visible{
 }
 
 .rg-letter.is-correct.rg-letter--continuous.is-group-mid,
-.rg-letter.is-correction.rg-letter--continuous.is-group-mid,
 .rg-letter.is-wrong.rg-letter--continuous.is-group-mid{
   box-shadow:0 3px 0 var(--rg-letter-outline),0 -3px 0 var(--rg-letter-outline);
 }
 
 .rg-letter.is-correct.rg-letter--continuous.is-group-start:not(.is-group-end),
-.rg-letter.is-correction.rg-letter--continuous.is-group-start:not(.is-group-end),
 .rg-letter.is-wrong.rg-letter--continuous.is-group-start:not(.is-group-end){
   box-shadow:-3px 0 0 var(--rg-letter-outline),0 3px 0 var(--rg-letter-outline),0 -3px 0 var(--rg-letter-outline);
 }
 
 .rg-letter.is-correct.rg-letter--continuous.is-group-end:not(.is-group-start),
-.rg-letter.is-correction.rg-letter--continuous.is-group-end:not(.is-group-start),
 .rg-letter.is-wrong.rg-letter--continuous.is-group-end:not(.is-group-start){
   box-shadow:3px 0 0 var(--rg-letter-outline),0 3px 0 var(--rg-letter-outline),0 -3px 0 var(--rg-letter-outline);
 }
 
 .rg-root[data-response-ui="free"] .rg-word-card{
   border-color:rgba(100, 116, 139, .18);
+}
+
+
+/* Le contenu reste parfaitement fixe : seule la décoration de feedback se révèle. */
+.rg-letter.is-correct,
+.rg-letter.is-wrong{
+  animation:rg-feedback-fill-in 420ms ease both;
+}
+
+.rg-letter.is-correction::after{
+  animation:rg-feedback-outline-in 420ms ease both;
+}
+
+@keyframes rg-feedback-fill-in{
+  from{
+    background:transparent;
+    box-shadow:0 0 0 0 transparent;
+  }
+}
+
+@keyframes rg-feedback-outline-in{
+  from{ opacity:0; }
+  to{ opacity:1; }
 }
 
 @media (max-width:1100px), (max-height:760px){

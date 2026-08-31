@@ -148,23 +148,7 @@ function renderSpellingSelectorMarkup(settings = {}, { idPrefix, allTargetId }) 
     if (!target) return "";
     const explicit = settings?.enabledSpellingsByTarget?.[target.id];
     const enabled = new Set(Array.isArray(explicit) ? explicit : target.spellings);
-    const options = target.spellings.map((spelling, index) => `
-      <label
-        class="pts-spelling-option"
-        data-pts-spelling-option
-        data-pts-spelling="${escapeAttr(spelling)}"
-        data-pts-spelling-order="${index}"
-      >
-        <input
-          type="checkbox"
-          name="${escapeAttr(idPrefix)}_enabledSpelling"
-          data-pts-spelling-target-id="${escapeAttr(target.id)}"
-          value="${escapeAttr(spelling)}"
-          ${enabled.has(spelling) ? "checked" : ""}
-        >
-        <span>${escapeHtml(spelling)}</span>
-      </label>
-    `).join("");
+    const options = renderFixedSpellingOptions(target, enabled, idPrefix);
 
     return `
       <div class="pts-spelling-selector" data-pts-spelling-selector-target-id="${escapeAttr(target.id)}">
@@ -179,89 +163,50 @@ function renderSpellingSelectorMarkup(settings = {}, { idPrefix, allTargetId }) 
   }).join("");
 }
 
-export function updatePhonologySpellingUsage(container, {
-  idPrefix = "phonology",
-  usageByTarget = {}
-} = {}) {
-  const root = findRoot(container, idPrefix);
-  if (!root) return;
+function renderFixedSpellingOptions(target, enabled, idPrefix) {
+  const rareSet = new Set(Array.isArray(target?.rareSpellings) ? target.rareSpellings : []);
+  const frequent = target.spellings.filter((spelling) => !rareSet.has(spelling));
+  const rare = target.spellings.filter((spelling) => rareSet.has(spelling));
+  const renderOption = (spelling) => {
+    const originalOrder = target.spellings.indexOf(spelling);
+    return `
+      <label
+        class="pts-spelling-option"
+        data-pts-spelling-option
+        data-pts-spelling="${escapeAttr(spelling)}"
+        data-pts-spelling-order="${originalOrder}"
+      >
+        <input
+          type="checkbox"
+          name="${escapeAttr(idPrefix)}_enabledSpelling"
+          data-pts-spelling-target-id="${escapeAttr(target.id)}"
+          value="${escapeAttr(spelling)}"
+          ${enabled.has(spelling) ? "checked" : ""}
+        >
+        <span>${escapeHtml(spelling)}</span>
+      </label>
+    `;
+  };
 
-  root.querySelectorAll("[data-pts-spelling-selector-target-id]").forEach((selector) => {
-    if (!(selector instanceof HTMLElement)) return;
-    const targetId = String(selector.dataset.ptsSpellingSelectorTargetId || "");
-    const optionsHost = selector.querySelector("[data-pts-spelling-options]");
-    if (!(optionsHost instanceof HTMLElement)) return;
+  // La classification fréquente/rare appartient au référentiel phonémique.
+  // Elle est volontairement indépendante de la banque filtrée, du niveau,
+  // des autres réglages et surtout des cases déjà cochées.
+  if (!rare.length || !frequent.length) {
+    return target.spellings.map(renderOption).join("");
+  }
 
-    const optionNodes = [...optionsHost.querySelectorAll("[data-pts-spelling-option]")]
-      .filter((node) => node instanceof HTMLElement);
-    if (!optionNodes.length) return;
-
-    const usage = usageByTarget && typeof usageByTarget === "object"
-      ? usageByTarget[targetId]
-      : null;
-    const counts = usage?.counts && typeof usage.counts === "object"
-      ? usage.counts
-      : {};
-
-    const ranked = optionNodes.map((node, index) => {
-      const spelling = normalizeDisplaySpelling(node.dataset.ptsSpelling);
-      const originalOrder = Number.isFinite(Number(node.dataset.ptsSpellingOrder))
-        ? Number(node.dataset.ptsSpellingOrder)
-        : index;
-      const count = Math.max(0, Number(counts?.[spelling]) || 0);
-      return { node, spelling, originalOrder, count };
-    }).sort((left, right) => right.count - left.count || left.originalOrder - right.originalOrder);
-
-    const totalPresence = ranked.reduce((sum, item) => sum + item.count, 0);
-    if (!(totalPresence > 0)) {
-      restorePlainSpellingLayout(optionsHost, ranked);
-      return;
-    }
-
-    let cumulative = 0;
-    let splitIndex = ranked.length;
-    for (let index = 0; index < ranked.length; index += 1) {
-      cumulative += ranked[index].count;
-      if ((cumulative / totalPresence) >= 0.90) {
-        splitIndex = index + 1;
-        break;
-      }
-    }
-
-    const frequent = ranked.slice(0, splitIndex);
-    const rare = ranked.slice(splitIndex);
-
-    // On ne fabrique pas artificiellement une catégorie « rare » quand il
-    // n'y a pas de vraie queue de distribution à distinguer.
-    if (ranked.length <= 2 || !rare.length) {
-      restorePlainSpellingLayout(optionsHost, ranked);
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-    fragment.append(makeUsageLabel("fréquentes →", "frequent"));
-    frequent.forEach(({ node }) => fragment.append(node));
-    fragment.append(makeUsageLabel("rares →", "rare"));
-    rare.forEach(({ node }) => fragment.append(node));
-    optionsHost.replaceChildren(fragment);
-  });
+  return `
+    <span class="pts-spelling-frequency-label pts-spelling-frequency-label--frequent">fréquentes →</span>
+    ${frequent.map(renderOption).join("")}
+    <span class="pts-spelling-frequency-label pts-spelling-frequency-label--rare">rares →</span>
+    ${rare.map(renderOption).join("")}
+  `;
 }
 
-function restorePlainSpellingLayout(host, ranked) {
-  const fragment = document.createDocumentFragment();
-  ranked.forEach(({ node }) => fragment.append(node));
-  host.replaceChildren(fragment);
-}
-
-function makeUsageLabel(text, kind) {
-  const label = document.createElement("span");
-  label.className = `pts-spelling-frequency-label pts-spelling-frequency-label--${kind}`;
-  label.textContent = text;
-  return label;
-}
-
-function normalizeDisplaySpelling(value) {
-  return String(value || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+export function updatePhonologySpellingUsage() {
+  // Compatibilité avec les outils existants : ils peuvent encore appeler cette
+  // fonction après avoir recalculé leur pool de mots. La fréquence visuelle
+  // n'est plus recalculée ici : elle est fixe dans phonology-targets.js.
 }
 
 function renderRelevanceLevelSelector(settings = {}, idPrefix = "phonology") {

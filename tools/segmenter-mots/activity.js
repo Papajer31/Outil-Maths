@@ -301,9 +301,7 @@ function renderLetter(state, letter, index, displayCuts, expectedCuts, studentCu
     if (state.answerDisplayMode === "student") {
       classes.push(expectedCuts.has(boundaryBefore) ? "is-correct-cut" : "is-wrong-cut");
     } else if (expectedCuts.has(boundaryBefore)) {
-      classes.push("is-correction-cut");
-    } else if (studentCuts.has(boundaryBefore)) {
-      classes.push("is-wrong-cut");
+      classes.push(studentCuts.has(boundaryBefore) ? "is-correct-cut" : "is-correction-cut");
     }
   }
 
@@ -469,9 +467,7 @@ function getDisplayedCuts(state) {
   if (state.phaseMode !== "answer") return new Set(state.cuts);
   const student = getStudentCuts(state);
   if (state.answerDisplayMode === "student") return new Set(student);
-  const union = new Set(state.currentQuestion?.expectedCutPositions || []);
-  for (const position of student) union.add(position);
-  return union;
+  return new Set(state.currentQuestion?.expectedCutPositions || []);
 }
 
 function getStudentCuts(state) {

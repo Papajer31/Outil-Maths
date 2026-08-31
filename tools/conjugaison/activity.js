@@ -363,12 +363,16 @@ function renderDisplayedResponse(state) {
   if (!state.responseSlotEl || !state.currentQuestion) return;
   const evaluation = getStoredEvaluation(state);
   const showStudentAnswer = canToggleStudentAnswerDisplay(state) && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
+  const showCorrectionFeedback = !evaluation.isCorrect && !showStudentAnswer;
 
   state.responseSlotEl.classList.toggle("qr-response-slot--correct", evaluation.isCorrect);
-  state.responseSlotEl.classList.toggle("qr-response-slot--incorrect", !evaluation.isCorrect);
+  state.responseSlotEl.classList.toggle("qr-response-slot--incorrect", !evaluation.isCorrect && showStudentAnswer);
   state.responseSlotEl.innerHTML = showStudentAnswer
     ? renderDisplayBox(state.submittedAnswer, { student: true, correct: evaluation.isCorrect })
-    : renderDisplayBox(state.currentQuestion.expectedAnswer, { correct: evaluation.isCorrect });
+    : renderDisplayBox(state.currentQuestion.expectedAnswer, {
+        correct: evaluation.isCorrect,
+        correction: showCorrectionFeedback
+      });
   state.responseInputEl = null;
   renderCorrectionExplanation(state);
 }
@@ -416,13 +420,16 @@ function renderInputMarkup() {
   `;
 }
 
-function renderDisplayBox(value, { correct = false, student = false, free = false } = {}) {
+function renderDisplayBox(value, { correct = false, correction = false, student = false, free = false } = {}) {
+  const feedbackClass = correct
+    ? "is-correct"
+    : (correction ? "is-correction" : "is-incorrect");
   const classNames = [
     "tool-answer-box",
     "tool-answer-box--display",
     "qr-answer-box",
     "qr-answer-box--display",
-    correct ? "is-correct" : "is-incorrect",
+    feedbackClass,
     student ? "is-student-answer" : "",
     free ? "is-free-answer" : ""
   ].filter(Boolean).join(" ");

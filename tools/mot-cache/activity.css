@@ -60,6 +60,24 @@
   cursor:pointer;
   touch-action:none;
   transition:transform 90ms ease,background-color 120ms ease,border-color 120ms ease,box-shadow 120ms ease,color 120ms ease;
+  position:relative;
+  isolation:isolate;
+}
+
+.mc-cell__text{
+  position:relative;
+  z-index:2;
+}
+
+.mc-cell__feedback{
+  position:absolute;
+  inset:-2px;
+  z-index:1;
+  border:2px solid transparent;
+  border-radius:inherit;
+  background:transparent;
+  box-shadow:none;
+  pointer-events:none;
 }
 
 .mc-cell:not(:disabled):hover,
@@ -76,18 +94,36 @@
   transform:scale(.97);
 }
 
+/* En vue réponse/correction, seul le calque de feedback change de couleur.
+   La sélection jaune reste propre à la phase de question, afin qu'elle ne
+   réapparaisse pas entre le rouge de l'élève et le vert de la correction. */
+.mc-board.is-answer .mc-cell.is-selected{
+  border-color:rgba(255,255,255,.12);
+  background:#fff;
+  color:#111827;
+  box-shadow:none;
+  transform:none;
+}
+
 .mc-cell.is-correct,
 .mc-cell.is-correction{
+  color:#14532d;
+}
+
+.mc-cell.is-correct .mc-cell__feedback,
+.mc-cell.is-correction .mc-cell__feedback{
   border-color:#57d07a;
   background:#dff7e6;
-  color:#14532d;
   box-shadow:0 0 0 3px rgba(87,208,122,.20);
 }
 
 .mc-cell.is-wrong{
+  color:#7f1d1d;
+}
+
+.mc-cell.is-wrong .mc-cell__feedback{
   border-color:#ef6b73;
   background:#fde5e7;
-  color:#7f1d1d;
   box-shadow:0 0 0 3px rgba(239,107,115,.18);
 }
 

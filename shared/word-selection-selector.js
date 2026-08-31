@@ -13,6 +13,10 @@ import {
   WORD_SELECTION_MODES,
   normalizeWordSelectionMode
 } from "./graphemic-targets.js";
+import {
+  PHONOLOGY_SCHOOL_LEVELS,
+  normalizePhonologySchoolLevel
+} from "./phonology-word-level.js";
 
 let stylesInjected = false;
 
@@ -21,7 +25,7 @@ export { WORD_SELECTION_MODES };
 export function renderWordSelectionSelector(settings = {}, {
   idPrefix = "wordSelection",
   allTargetId = "all",
-  showRelevanceLevels = false,
+  showSchoolLevels = false,
   bankStatusMarkup = "",
   afterSelectionMarkup = ""
 } = {}) {
@@ -38,7 +42,7 @@ export function renderWordSelectionSelector(settings = {}, {
             ${renderModeOption(idPrefix, WORD_SELECTION_MODES.GRAPHEMIC, "Entrée graphémique", mode)}
           </div>
         </section>
-        ${showRelevanceLevels ? renderRelevanceSelector(settings, idPrefix) : ""}
+        ${showSchoolLevels ? renderSchoolLevelSelector(settings, idPrefix) : ""}
       </div>
       ${bankStatusMarkup ? `<div class="wss-bank-status">${bankStatusMarkup}</div>` : ""}
       ${afterSelectionMarkup}
@@ -91,7 +95,7 @@ export function bindWordSelectionSelector(container, {
       emitChange();
       return;
     }
-    if (event.target.dataset.wssRelevanceLevel !== undefined) emitChange();
+    if (event.target.dataset.wssSchoolLevel !== undefined) emitChange();
   });
 }
 
@@ -117,7 +121,7 @@ export function readWordSelectionSelector(container, {
       enabledSpellingsByTarget:{},
       graphemicEntries:[],
       excludedGraphemicEntries:[],
-      relevanceLevel:"normal"
+      schoolLevel:"CP"
     };
   }
 
@@ -130,10 +134,8 @@ export function readWordSelectionSelector(container, {
   const graphemic = readGraphemicTargetSelector(container, {
     idPrefix:`${idPrefix}_graphemic`
   });
-  const relevanceInput = root.querySelector("input[data-wss-relevance-level]:checked");
-  const relevanceLevel = relevanceInput instanceof HTMLInputElement
-    ? String(relevanceInput.value || "normal")
-    : String(phonemic.relevanceLevel || "normal");
+  const levelInput = root.querySelector("input[data-wss-school-level]:checked");
+  const schoolLevel = normalizePhonologySchoolLevel(levelInput instanceof HTMLInputElement ? levelInput.value : "CP");
 
   return {
     wordSelectionMode,
@@ -141,7 +143,7 @@ export function readWordSelectionSelector(container, {
     enabledSpellingsByTarget:phonemic.enabledSpellingsByTarget,
     graphemicEntries:graphemic.graphemicEntries,
     excludedGraphemicEntries:graphemic.excludedGraphemicEntries,
-    relevanceLevel
+    schoolLevel
   };
 }
 
@@ -160,32 +162,26 @@ function renderModeOption(idPrefix, value, label, current) {
   `;
 }
 
-function renderRelevanceSelector(settings, idPrefix) {
-  const requested = String(settings?.relevanceLevel || "normal");
-  const value = ["simple", "normal", "complexe"].includes(requested) ? requested : "normal";
-  const options = [
-    ["simple", "Simple", "Excellents exemples pédagogiques"],
-    ["normal", "Normal", "Bons exemples pédagogiques"],
-    ["complexe", "Complexe", "Exemples exploitables demandant davantage de traitement"]
-  ];
+function renderSchoolLevelSelector(settings, idPrefix) {
+  const value = normalizePhonologySchoolLevel(settings?.schoolLevel);
   return `
     <section class="tv-group wss-relevance-group">
-      <div class="pts-relevance-selector wss-relevance-selector" role="group" aria-label="Pertinence pédagogique">
-      <span class="pts-relevance-selector__title">Pertinence pédagogique</span>
-      <div class="pts-relevance-options">
-        ${options.map(([id, label, title]) => `
-          <label class="pts-relevance-option" title="${escapeAttr(title)}">
-            <input
-              type="radio"
-              name="${escapeAttr(idPrefix)}_relevanceLevel"
-              data-wss-relevance-level="${escapeAttr(id)}"
-              value="${escapeAttr(id)}"
-              ${value === id ? "checked" : ""}
-            >
-            <span>${escapeHtml(label)}</span>
-          </label>
-        `).join("")}
-      </div>
+      <div class="pts-relevance-selector wss-relevance-selector" role="group" aria-label="Niveau des mots">
+        <span class="pts-relevance-selector__title">Niveau des mots</span>
+        <div class="pts-relevance-options">
+          ${PHONOLOGY_SCHOOL_LEVELS.map((level) => `
+            <label class="pts-relevance-option" title="${escapeAttr(level.id === "CP" ? "Mots CP" : `Mots ${level.id} et niveaux précédents`)}">
+              <input
+                type="radio"
+                name="${escapeAttr(idPrefix)}_schoolLevel"
+                data-wss-school-level="${escapeAttr(level.id)}"
+                value="${escapeAttr(level.id)}"
+                ${value === level.id ? "checked" : ""}
+              >
+              <span>${escapeHtml(level.label)}</span>
+            </label>
+          `).join("")}
+        </div>
       </div>
     </section>
   `;

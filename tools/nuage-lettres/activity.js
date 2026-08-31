@@ -90,7 +90,7 @@ export function createActivity(initialContext = {}) {
       return {
         canToggle: canToggleAnswerDisplay(state),
         mode: state.answerDisplayMode === "student" ? "student" : "correction",
-        transitionTargets: [state.boardEl]
+        transitionTargets: [state.answerZoneEl]
       };
     },
 
@@ -117,6 +117,7 @@ function createRuntimeState(initialContext = {}) {
     instructionEl: null,
     boardEl: null,
     cloudZoneEl: null,
+    answerZoneEl: null,
     settings: normalizeSettings(initialContext?.settings),
     settingsKey: "",
     responseUi: getResponseUi(initialContext),
@@ -259,7 +260,13 @@ function renderQuestion(state) {
     : [];
   const letterById = getLetterById(question);
   const resultClass = state.phaseMode === "answer"
-    ? (state.lastEvaluation?.isCorrect ? " is-correct" : " is-incorrect")
+    ? (
+      state.lastEvaluation?.isCorrect
+        ? " is-correct"
+        : state.answerDisplayMode === "student"
+          ? " is-incorrect"
+          : " is-correction"
+    )
     : "";
   const modeClass = `nl-board--${state.settings.cloudMode}`;
   const sizeClass = getSizeClass(question.characterCount);
@@ -288,6 +295,7 @@ function renderQuestion(state) {
   `;
 
   state.cloudZoneEl = state.boardEl.querySelector("#nl_cloud_zone");
+  state.answerZoneEl = state.boardEl.querySelector(".nl-answer-zone");
   bindCloudDragBehaviors(state);
   scheduleCloudLayout(state);
   observeCloudResize(state);
@@ -322,9 +330,6 @@ function renderAnswerLetter(state, letter, id) {
   if (!letter) return "";
   const interactive = isQuestionInteractive(state);
   const classNames = ["nl-letter", "nl-answer-letter"];
-  if (state.phaseMode === "answer") {
-    classNames.push(state.lastEvaluation?.isCorrect ? "is-correct" : state.answerDisplayMode === "student" ? "is-wrong" : "is-correction");
-  }
 
   if (!interactive) {
     return `<span class="${classNames.join(" ")}"><span class="nl-letter-glyph">${escapeHtml(letter.text)}</span></span>`;

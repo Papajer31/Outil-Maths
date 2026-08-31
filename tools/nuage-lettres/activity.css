@@ -109,16 +109,18 @@ button.nl-letter{ cursor:pointer; }
   border:2px dashed rgba(255,255,255,.26);
   border-radius:22px;
   background:rgba(255,255,255,.06);
-  transition:border-color .22s ease, box-shadow .22s ease, background-color .22s ease;
+  transition:
+    border-color .22s ease,
+    box-shadow .22s ease,
+    background-color .22s ease,
+    opacity var(--session-answer-transition-duration, 500ms) ease;
 }
 
 .nl-answer-zone.is-correct{ border-style:solid; border-color:#57d07a; box-shadow:0 0 0 2px rgba(87,208,122,.16) inset; }
 .nl-answer-zone.is-incorrect{ border-style:solid; border-color:#ef6b73; box-shadow:0 0 0 2px rgba(239,107,115,.16) inset; }
+.nl-answer-zone.is-correction{ border-style:dashed; border-color:#57d07a; box-shadow:0 0 0 2px rgba(87,208,122,.16) inset; }
 
 .nl-answer-letter{ flex:0 0 auto; }
-.nl-answer-letter.is-correct,
-.nl-answer-letter.is-correction{ outline:3px solid #57d07a; outline-offset:2px; }
-.nl-answer-letter.is-wrong{ outline:3px solid #ef6b73; outline-offset:2px; }
 
 .nl-clear-button{
   display:grid;

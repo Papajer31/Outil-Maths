@@ -17,6 +17,7 @@ import {
   resolveQuestionInstructionText,
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
+import { bindNumericKeypadEvents, renderNumericKeypad } from "../../shared/tool-ui/numeric-keypad.js";
 
 let stylesInjected = false;
 
@@ -94,7 +95,9 @@ function createRuntimeState(initialContext = {}) {
     laneEl: null,
     connectorEl: null,
     responseBoxEl: null,
+    keypadSlotEl: null,
     inputEl: null,
+    keypadAbortController: null,
     currentQuestion: null,
     lastQuestionKey: "",
     answerRevealed: false,
@@ -134,6 +137,7 @@ function renderShell(state) {
           <div class="rn-connector" id="rn_connector" aria-hidden="true"></div>
           <div class="rn-response-box" id="rn_response_box"></div>
         </div>
+        <div class="tool-runtime rn-keypad-slot" id="rn_keypad_slot"></div>
       </div>
     </div>
   `;
@@ -145,6 +149,7 @@ function renderShell(state) {
   state.laneEl = container.querySelector("#rn_response_lane");
   state.connectorEl = container.querySelector("#rn_connector");
   state.responseBoxEl = container.querySelector("#rn_response_box");
+  state.keypadSlotEl = container.querySelector("#rn_keypad_slot");
   setupResponseAlignmentHandling(state);
 }
 
@@ -177,6 +182,17 @@ function updateInstructionDisplay(state) {
 function renderQuestion(state) {
   if (!state.currentQuestion || !state.linePanelEl || !state.responseBoxEl || !state.connectorEl) return;
 
+  syncQuestionRootClasses(state);
+  state.linePanelEl.innerHTML = renderLineSvg(state);
+  state.lineSvgEl = state.linePanelEl.querySelector("svg");
+
+  renderResponseBox(state);
+  renderResponseKeypad(state);
+  renderConnector(state);
+}
+
+function syncQuestionRootClasses(state) {
+  if (!state.currentQuestion) return;
   state.root?.classList.toggle("rn-root--answer", state.answerRevealed);
   state.root?.classList.toggle("rn-root--number-to-graduation", state.currentQuestion.questionType === QUESTION_TYPES.NUMBER_TO_GRADUATION);
   state.root?.classList.toggle("rn-root--graduation-to-number", state.currentQuestion.questionType === QUESTION_TYPES.GRADUATION_TO_NUMBER);
@@ -184,12 +200,6 @@ function renderQuestion(state) {
   state.root?.classList.toggle("rn-root--picbille", state.currentQuestion.lineType === LINE_TYPES.PICBILLE);
   state.root?.classList.toggle("rn-root--simple", state.currentQuestion.lineType === LINE_TYPES.SIMPLE);
   state.root?.classList.toggle("rn-root--complete", state.currentQuestion.lineType === LINE_TYPES.COMPLETE);
-
-  state.linePanelEl.innerHTML = renderLineSvg(state);
-  state.lineSvgEl = state.linePanelEl.querySelector("svg");
-
-  renderResponseBox(state);
-  renderConnector(state);
 }
 
 function renderLineSvg(state) {
@@ -218,13 +228,22 @@ function renderGraduatedLineSvg(state) {
     const markerOrder = question.markerIndices.indexOf(tick.index);
     const isMarker = markerOrder >= 0;
     const isTarget = tick.index === targetIndex;
-    const { y1, y2, width } = getGraduatedTickShape(question.lineType, tick.role, isMarker, isTarget);
+    const { y1, y2, width } = getGraduatedTickShape(question.lineType, tick.role, isMarker, false);
+    const targetShape = getGraduatedTickShape(question.lineType, tick.role, isMarker, true);
     return `
       <line
         x1="${formatNumber(tick.x)}" y1="${y1}"
         x2="${formatNumber(tick.x)}" y2="${y2}"
-        class="rn-svg-tick rn-svg-tick--${tick.role}${isMarker ? ` rn-svg-tick--marker rn-svg-tick--marker-${markerOrder + 1}` : ""}${isTarget ? " rn-svg-tick--target" : ""}"
+        class="rn-svg-tick rn-svg-tick--${tick.role}${isMarker ? ` rn-svg-tick--marker rn-svg-tick--marker-${markerOrder + 1}` : ""}"
+        data-rn-tick-index="${tick.index}"
         stroke-width="${width}"
+      />
+      <line
+        x1="${formatNumber(tick.x)}" y1="${targetShape.y1}"
+        x2="${formatNumber(tick.x)}" y2="${targetShape.y2}"
+        class="rn-svg-tick-highlight${isTarget ? " is-active" : ""}"
+        data-rn-tick-highlight-index="${tick.index}"
+        stroke-width="${targetShape.width}"
       />
     `;
   }).join("");
@@ -269,12 +288,10 @@ function renderPicbilleSvg(state) {
   const question = state.currentQuestion;
   const width = question.svgWidth;
   const highlightedIndex = getHighlightedTargetIndex(state);
-  const highlightedValue = highlightedIndex == null ? null : highlightedIndex + 1;
-  const highlightAnimation = getPicbilleHighlightAnimation(state, highlightedIndex);
 
   let boxesSvg = "";
   for (let boxIndex = 0; boxIndex < question.picbilleBoxCount; boxIndex++) {
-    boxesSvg += renderPicbilleBox(boxIndex, highlightedValue, highlightAnimation);
+    boxesSvg += renderPicbilleBox(boxIndex, highlightedIndex, question.picbilleStartValue ?? 1);
   }
 
   return `
@@ -291,45 +308,27 @@ function renderPicbilleSvg(state) {
   `;
 }
 
-function renderPicbilleBox(boxIndex, highlightedValue, highlightAnimation = null) {
+function renderPicbilleBox(boxIndex, highlightedIndex, firstLabelValue = 1) {
   const x0 = getPicbilleBoxX(boxIndex);
   const y0 = PICBILLE_DRAW.stripTopY;
   const boxWidth = PICBILLE_DRAW.cellsPerBox * PICBILLE_DRAW.cellWidth;
   const cellW = PICBILLE_DRAW.cellWidth;
   const cellH = PICBILLE_DRAW.cellHeight;
 
-  let highlight = "";
-  if (highlightedValue != null) {
-    const valueBoxIndex = Math.floor((highlightedValue - 1) / PICBILLE_DRAW.cellsPerBox);
-    const cellIndexInBox = (highlightedValue - 1) % PICBILLE_DRAW.cellsPerBox;
-    if (valueBoxIndex === boxIndex) {
-      const cx = x0 + (cellIndexInBox * cellW) + (cellW / 2);
-      const cy = y0 + (cellH / 2);
-      const circle = `
-        <circle
-          cx="${formatNumber(cx)}"
-          cy="${formatNumber(cy)}"
-          r="14"
-          class="rn-picbille-highlight"
-        />
-      `;
-      highlight = highlightAnimation
-        ? `
-          <g class="rn-picbille-highlight-motion" transform="translate(${formatNumber(highlightAnimation.dx)} 0)">
-            <animateTransform
-              attributeName="transform"
-              type="translate"
-              from="${formatNumber(highlightAnimation.dx)} 0"
-              to="0 0"
-              dur="0.42s"
-              fill="freeze"
-            />
-            ${circle}
-          </g>
-        `
-        : circle;
-    }
-  }
+  const highlights = Array.from({ length: PICBILLE_DRAW.cellsPerBox }, (_, cellIndex) => {
+    const index = (boxIndex * PICBILLE_DRAW.cellsPerBox) + cellIndex;
+    const cx = x0 + (cellIndex * cellW) + (cellW / 2);
+    const cy = y0 + (cellH / 2);
+    return `
+      <circle
+        cx="${formatNumber(cx)}"
+        cy="${formatNumber(cy)}"
+        r="14"
+        class="rn-picbille-highlight${index === highlightedIndex ? " is-active" : ""}"
+        data-rn-picbille-highlight-index="${index}"
+      />
+    `;
+  }).join("");
 
   let verticals = "";
   for (let i = 1; i < PICBILLE_DRAW.cellsPerBox; i++) {
@@ -380,7 +379,7 @@ function renderPicbilleBox(boxIndex, highlightedValue, highlightAnimation = null
         font-size="28"
         font-weight="1000"
         fill="${PICBILLE_DRAW.textColor}"
-      >1</text>
+      >${escapeHtml(firstLabelValue)}</text>
     `
     : "";
 
@@ -395,7 +394,7 @@ function renderPicbilleBox(boxIndex, highlightedValue, highlightAnimation = null
         stroke="${PICBILLE_DRAW.stripStroke}"
         stroke-width="2"
       />
-      ${highlight}
+      ${highlights}
       ${verticals}
       ${crosses}
       ${firstCellLabel}
@@ -557,6 +556,64 @@ function renderGraduationToNumberResponse(state, displayMode) {
   `;
 }
 
+function renderResponseKeypad(state) {
+  const slot = state.keypadSlotEl;
+  const question = state.currentQuestion;
+  if (!slot || !question) return;
+
+  state.keypadAbortController?.abort?.();
+  state.keypadAbortController = null;
+
+  const isAvailable = question.questionType === QUESTION_TYPES.GRADUATION_TO_NUMBER
+    && !shouldUsePassiveFreeMode(state);
+  slot.classList.toggle("rn-keypad-slot--active", isAvailable);
+  if (!isAvailable) {
+    slot.innerHTML = "";
+    return;
+  }
+
+  const hidden = state.answerRevealed;
+  slot.classList.toggle("rn-keypad-slot--hidden", hidden);
+  slot.innerHTML = renderNumericKeypad({
+    hidden,
+    rootClassName: "rn-keypad",
+    buttonClassName: "rn-keypad-button",
+    clearButtonClassName: "rn-keypad-button--clear",
+    dataAttribute: "data-rn-key"
+  });
+  if (hidden || !state.inputEl) return;
+
+  state.keypadAbortController = new AbortController();
+  bindNumericKeypadEvents({
+    root: slot,
+    control: createResponseKeypadControl(state),
+    signal: state.keypadAbortController.signal,
+    dataAttribute: "data-rn-key"
+  });
+}
+
+function createResponseKeypadControl(state) {
+  return {
+    appendDigit(digit) {
+      const input = state.inputEl;
+      if (!input || state.answerRevealed) return;
+      const current = String(input.value || "").replace(/\D/g, "");
+      if (current.length >= 3) return;
+      input.value = `${current}${digit}`;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    clear() {
+      const input = state.inputEl;
+      if (!input || state.answerRevealed) return;
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    focus() {
+      state.inputEl?.focus?.();
+    }
+  };
+}
+
 function renderConnector(state) {
   if (!state.connectorEl || !state.currentQuestion) return;
 
@@ -617,11 +674,12 @@ function syncResponseAlignment(state, tickIndex) {
 
   const boxHeight = state.responseBoxEl.offsetHeight || 112;
   const boxWidth = state.responseBoxEl.offsetWidth || 190;
+  const boxBorderTopWidth = getResponseBoxBorderTopWidth(state.responseBoxEl);
   const laneWidth = state.laneEl?.offsetWidth || state.laneEl?.getBoundingClientRect?.().width || boxWidth;
   const boxX = clampNumber(boxPoint.x, boxWidth / 2, Math.max(boxWidth / 2, laneWidth - (boxWidth / 2)));
   const boxTopGap = 120;
   const responseY = boxPoint.y + boxTopGap;
-  const connectorHeight = Math.max(0, responseY + boxHeight - 10 - connectorPoint.y);
+  const connectorHeight = Math.max(0, responseY + boxBorderTopWidth - connectorPoint.y);
   const connectorMotion = getPassiveFreeConnectorMotion(state, tickIndex, {
     boxHeight,
     boxTopGap,
@@ -645,6 +703,12 @@ function syncResponseAlignment(state, tickIndex) {
     state.connectorEl.style.removeProperty("--rn-connector-start-y");
     state.connectorEl.style.removeProperty("--rn-connector-start-scale-y");
   }
+}
+
+function getResponseBoxBorderTopWidth(box) {
+  if (!box || typeof window === "undefined") return 4;
+  const width = Number.parseFloat(window.getComputedStyle(box).borderTopWidth);
+  return Number.isFinite(width) ? width : 4;
 }
 
 function getPassiveFreeConnectorMotion(state, targetTickIndex, {
@@ -803,38 +867,6 @@ function resolveDisplayedTickIndex(state, displayMode = state.answerDisplayMode)
   return question.targetIndex;
 }
 
-function getPicbilleHighlightAnimation(state, highlightedIndex) {
-  const question = state.currentQuestion;
-  if (
-    !question
-    || question.lineType !== LINE_TYPES.PICBILLE
-    || question.questionType !== QUESTION_TYPES.NUMBER_TO_GRADUATION
-    || !state.answerRevealed
-    || !shouldUsePassiveFreeMode(state)
-    || !Number.isInteger(highlightedIndex)
-  ) {
-    return null;
-  }
-
-  const fromIndex = Number.isInteger(state.submittedTickIndex)
-    ? state.submittedTickIndex
-    : state.placedTickIndex;
-  if (!Number.isInteger(fromIndex) || fromIndex === highlightedIndex) {
-    return null;
-  }
-
-  return {
-    dx: getPicbilleCellCenterX(fromIndex) - getPicbilleCellCenterX(highlightedIndex)
-  };
-}
-
-function getPicbilleCellCenterX(tickIndex) {
-  const safeIndex = Math.max(0, Math.floor(Number(tickIndex) || 0));
-  const boxIndex = Math.floor(safeIndex / PICBILLE_DRAW.cellsPerBox);
-  const cellIndexInBox = safeIndex % PICBILLE_DRAW.cellsPerBox;
-  return getPicbilleBoxX(boxIndex) + (cellIndexInBox * PICBILLE_DRAW.cellWidth) + (PICBILLE_DRAW.cellWidth / 2);
-}
-
 function attachDragHandlers(state) {
   if (!state.responseBoxEl || state.responseBoxEl.dataset.rnDragReady === "true") return;
   state.responseBoxEl.dataset.rnDragReady = "true";
@@ -890,7 +922,9 @@ function updatePlacedTickFromPointer(state, clientX) {
   if (tickIndex == null) return;
   state.placedTickIndex = tickIndex;
   state.hasDragged = true;
-  renderQuestion(state);
+  syncLineHighlight(state);
+  renderResponseBox(state);
+  renderConnector(state);
   syncValidateState(state);
 }
 
@@ -914,8 +948,8 @@ function revealAnswer(state) {
   }
 
   state.answerRevealed = true;
-  state.answerDisplayMode = "correction";
-  renderQuestion(state);
+  state.answerDisplayMode = canToggleStudentAnswerDisplay(state) ? "student" : "correction";
+  renderAnswerPresentation(state);
   syncValidateState(state);
 }
 
@@ -978,7 +1012,7 @@ function getShellAnswerDisplayState(state) {
     mode: canToggleStudentAnswerDisplay(state)
       ? normalizeAnswerDisplayMode(state.answerDisplayMode)
       : "correction",
-    transitionTargets: [state.linePanelEl, state.responseBoxEl]
+    transitionTargets: getAnswerTransitionTargets(state)
   };
 }
 
@@ -986,13 +1020,66 @@ function applyShellAnswerDisplayMode(state, mode) {
   if (!state.answerRevealed || !state.currentQuestion) return false;
   if (!canToggleStudentAnswerDisplay(state)) {
     state.answerDisplayMode = "correction";
-    renderQuestion(state);
+    renderAnswerPresentation(state);
     return false;
   }
 
-  state.answerDisplayMode = normalizeAnswerDisplayMode(mode);
-  renderQuestion(state);
+  const nextMode = normalizeAnswerDisplayMode(mode);
+  if (nextMode === state.answerDisplayMode) return true;
+  state.answerDisplayMode = nextMode;
+  renderAnswerPresentation(state);
   return true;
+}
+
+function renderAnswerPresentation(state) {
+  syncQuestionRootClasses(state);
+  syncLineHighlight(state);
+  renderResponseBox(state);
+  renderResponseKeypad(state);
+  renderConnector(state);
+}
+
+function getAnswerTransitionTargets(state) {
+  const targets = [state.responseBoxEl];
+  if (state.currentQuestion?.questionType === QUESTION_TYPES.NUMBER_TO_GRADUATION) {
+    targets.push(state.connectorEl, ...getLineHighlightElements(state));
+  }
+  return targets.filter(Boolean);
+}
+
+function getLineHighlightElements(state) {
+  if (!state.lineSvgEl || !state.currentQuestion) return [];
+  if (state.currentQuestion.lineType === LINE_TYPES.PICBILLE) {
+    return Array.from(state.lineSvgEl.querySelectorAll(".rn-picbille-highlight.is-active"));
+  }
+  return Array.from(state.lineSvgEl.querySelectorAll(".rn-svg-tick-highlight.is-active"));
+}
+
+function syncLineHighlight(state) {
+  const question = state.currentQuestion;
+  const svg = state.lineSvgEl;
+  if (!question || !svg) return;
+
+  const highlightedIndex = getHighlightedTargetIndex(state);
+  if (question.lineType === LINE_TYPES.PICBILLE) {
+    svg.querySelectorAll("[data-rn-picbille-highlight-index]").forEach((highlight) => {
+      const index = Number(highlight.dataset.rnPicbilleHighlightIndex);
+      highlight.classList.toggle("is-active", index === highlightedIndex);
+    });
+    return;
+  }
+
+  svg.querySelectorAll("[data-rn-tick-highlight-index]").forEach((highlightEl) => {
+    const tickIndex = Number(highlightEl.dataset.rnTickHighlightIndex);
+    const tick = question.ticks.find((item) => item.index === tickIndex);
+    if (!tick) return;
+    const isMarker = question.markerIndices.includes(tick.index);
+    const shape = getGraduatedTickShape(question.lineType, tick.role, isMarker, true);
+    highlightEl.setAttribute("y1", shape.y1);
+    highlightEl.setAttribute("y2", shape.y2);
+    highlightEl.setAttribute("stroke-width", shape.width);
+    highlightEl.classList.toggle("is-active", tickIndex === highlightedIndex);
+  });
 }
 
 function shouldUseShellValidation(context = {}) {
@@ -1043,6 +1130,8 @@ function teardownState(state, container) {
     window.removeEventListener("resize", state.onWindowResize);
     state.onWindowResize = null;
   }
+  state.keypadAbortController?.abort?.();
+  state.keypadAbortController = null;
   if (container) container.innerHTML = "";
   state.container = null;
   state.root = null;
@@ -1053,6 +1142,7 @@ function teardownState(state, container) {
   state.laneEl = null;
   state.connectorEl = null;
   state.responseBoxEl = null;
+  state.keypadSlotEl = null;
   state.inputEl = null;
 }
 

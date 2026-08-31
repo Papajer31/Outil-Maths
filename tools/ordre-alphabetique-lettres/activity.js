@@ -22,6 +22,10 @@ const wordListCache = new Map();
 
 const DRAG_THRESHOLD_PX = 8;
 const CORRECTION_STAGGER_MS = 500;
+const CORRECTION_MOVE_MS = 2000;
+const CORRECT_CORRECTION_STAGGER_MS = 70;
+const CORRECT_CORRECTION_MOVE_MS = 360;
+const CORRECTION_CONTROLS_BUFFER_MS = 90;
 const GROUP_MARGIN = 18;
 const GROUP_ANSWER_GAP = 18;
 const GROUP_ANSWER_MIN_GAP = 8;
@@ -116,7 +120,6 @@ function createRuntimeState(initialContext = {}) {
     answerTrack: null,
     correctionLane: null,
     validateBtn: null,
-    insertMarker: null,
     freeWorkspace: null,
     root: null,
     chipsByValue: new Map(),
@@ -138,7 +141,8 @@ function createRuntimeState(initialContext = {}) {
     currentCorrectionScale: 1,
     showAnswerBox: shouldShowAnswerBox(initialContext),
     phaseMonitorId: null,
-    lastObservedPhaseKind: null
+    lastObservedPhaseKind: null,
+    fastCorrection: false
   };
 }
 
@@ -200,6 +204,8 @@ function resetQuestionRuntimeState(state) {
   resetVisualState(state);
   state.answerRevealed = false;
   state.locked = false;
+  state.fastCorrection = false;
+  state.root?.classList.remove("oa-root--fast-correction");
   state.chipsByValue.clear();
   state.bankOrder = [];
   state.bankPositions.clear();
@@ -224,7 +230,6 @@ function renderShell(state) {
               <div class="oa-bank" id="oa_bank"></div>
               <div class="oa-answer-zone" id="oa_answer_zone">
                 <div class="oa-answer-track" id="oa_answer_track"></div>
-                <div class="oa-answer-insert-marker hidden" id="oa_insert_marker"></div>
               </div>
               <div class="oa-answer-correction-lane" id="oa_correction_lane"></div>
             </div>
@@ -251,7 +256,6 @@ function renderShell(state) {
   state.answerZone = container.querySelector("#oa_answer_zone");
   state.answerTrack = container.querySelector("#oa_answer_track");
   state.correctionLane = container.querySelector("#oa_correction_lane");
-  state.insertMarker = container.querySelector("#oa_insert_marker");
   state.freeWorkspace = container.querySelector("#oa_free_workspace");
   state.correctionOverlay = null;
   state.currentAnswerScale = 1;
@@ -306,7 +310,7 @@ async function loadNextQuestion(state, context = {}) {
 
   if (state.showAnswerBox) {
     state.bankOrder = [...nextQuestion.items];
-    state.answerOrder = [];
+    state.answerOrder = Array.from({ length: nextQuestion.items.length }, () => null);
     renderInteractiveQuestion(state);
     scheduleBankChipsLayoutRefresh(state);
     return;
@@ -320,8 +324,9 @@ function revealAnswer(state) {
 
   state.answerRevealed = true;
   state.locked = true;
+  state.root?.classList.toggle("oa-root--fast-correction", state.fastCorrection === true);
   syncValidateState(state);
-  hideInsertMarker(state);
+  clearAnswerDropTarget(state);
 
   if (state.showAnswerBox) {
     revealBoxAnswer(state);
@@ -342,6 +347,8 @@ function revealBoxAnswer(state) {
 
   const isCorrect = isAnswerCorrect(currentAnswer, currentQuestion.answerItems);
   applyAnswerFeedback(state, isCorrect);
+
+  if (isCorrect) return;
 
   renderCorrectionLane(state, currentQuestion.answerItems);
   const laneMap = buildCorrectionLaneMap(state);
@@ -368,13 +375,14 @@ function revealFreeAnswer(state) {
 function renderInteractiveQuestion(state) {
   if (!state.bank || !state.answerTrack || !state.answerZone) return;
 
+  const previousLargestChipSize = getLargestAnswerChipSize(state);
   state.bank.innerHTML = "";
   state.answerTrack.innerHTML = "";
   state.correctionLane.innerHTML = "";
   state.correctionLane.classList.remove("oa-answer-correction-lane--visible");
   clearAnswerFeedback(state);
 
-  const allValues = [...state.bankOrder, ...state.answerOrder];
+  const allValues = [...state.bankOrder, ...state.answerOrder.filter(Boolean)];
   const chipMap = state.chipsByValue;
 
   allValues.forEach((value) => {
@@ -389,13 +397,16 @@ function renderInteractiveQuestion(state) {
     state.bank.appendChild(chip);
   });
 
-  state.answerOrder.forEach((value) => {
+  const answerSlots = renderAnswerSlots(state, previousLargestChipSize);
+
+  state.answerOrder.forEach((value, index) => {
+    if (!value) return;
     const chip = chipMap.get(value);
     if (!chip) return;
     chip.classList.remove("oa-chip--floating");
     chip.style.left = "";
     chip.style.top = "";
-    state.answerTrack.appendChild(chip);
+    answerSlots[index]?.appendChild(chip);
   });
 
   layoutBankChips(state);
@@ -408,6 +419,43 @@ function renderInteractiveQuestion(state) {
   });
 
   syncValidateState(state);
+}
+
+function renderAnswerSlots(state, fallbackSize = {}) {
+  if (!state.answerTrack) return [];
+
+  const count = Math.max(0, state.currentQuestion?.items?.length || 0);
+  const largestChipSize = getLargestAnswerChipSize(state, fallbackSize);
+  const slotWidth = Math.max(96, Math.ceil(largestChipSize.width + 12));
+  const slotHeight = Math.max(78, Math.ceil(largestChipSize.height + 8));
+
+  state.answerTrack.style.setProperty("--oa-answer-slot-count", String(count));
+  state.answerTrack.style.setProperty("--oa-answer-slot-width", `${slotWidth}px`);
+  state.answerTrack.style.setProperty("--oa-answer-slot-height", `${slotHeight}px`);
+
+  return Array.from({ length: count }, (_, index) => {
+    const slot = document.createElement("div");
+    slot.className = "oa-answer-slot";
+    slot.dataset.oaAnswerSlotIndex = String(index);
+    state.answerTrack.appendChild(slot);
+    return slot;
+  });
+}
+
+function getLargestAnswerChipSize(state, fallbackSize = {}) {
+  const fallbackWidth = Math.max(0, Number(fallbackSize.width) || 0);
+  const fallbackHeight = Math.max(0, Number(fallbackSize.height) || 0);
+  const chips = state.currentQuestion?.items
+    ?.map((value) => state.chipsByValue.get(value))
+    .filter(Boolean) || [];
+
+  return chips.reduce((largest, chip) => {
+    const rect = chip.getBoundingClientRect?.();
+    return {
+      width: Math.max(largest.width, Math.ceil(chip.offsetWidth || rect?.width || 0)),
+      height: Math.max(largest.height, Math.ceil(chip.offsetHeight || rect?.height || 0))
+    };
+  }, { width: fallbackWidth, height: fallbackHeight });
 }
 
 function layoutBankChips(state) {
@@ -675,8 +723,7 @@ function startDrag(state, chip, ev) {
     dragSurface,
     pointerOffsetX: pointerLocalPoint.x - chipLocalPoint.x,
     pointerOffsetY: pointerLocalPoint.y - chipLocalPoint.y,
-    insertionIndex: getAnswerInsertionIndex(state, ev.clientX),
-    overAnswerZone: isPointerInsideAnswerZone(state, ev.clientX, ev.clientY)
+    targetSlotIndex: getAnswerDropSlotIndex(state, ev.clientX, ev.clientY)
   };
 
   updateDrag(state, ev);
@@ -700,14 +747,8 @@ function updateDrag(state, ev) {
 
   if (!state.showAnswerBox) return;
 
-  drag.overAnswerZone = isPointerInsideAnswerZone(state, ev.clientX, ev.clientY);
-  drag.insertionIndex = getAnswerInsertionIndex(state, ev.clientX);
-
-  if (drag.overAnswerZone) {
-    showInsertMarker(state, drag.insertionIndex, drag.value);
-  } else {
-    hideInsertMarker(state);
-  }
+  drag.targetSlotIndex = getAnswerDropSlotIndex(state, ev.clientX, ev.clientY);
+  syncAnswerDropTarget(state, drag.targetSlotIndex);
 }
 
 function finishDrag(state, ev) {
@@ -729,10 +770,10 @@ function finishDrag(state, ev) {
 
   drag.proxy.remove();
 
-  const overAnswer = drag.overAnswerZone && isPointerInsideAnswerZone(state, ev.clientX, ev.clientY);
+  const targetSlotIndex = getAnswerDropSlotIndex(state, ev.clientX, ev.clientY);
 
-  if (overAnswer) {
-    moveValueIntoAnswer(state, drag.value, drag.insertionIndex);
+  if (targetSlotIndex != null) {
+    moveValueIntoAnswer(state, drag.value, targetSlotIndex);
   } else if (drag.source === "answer") {
     moveAnswerValueBackToBank(state, drag.value, {
       workspaceLeft: proxyLeft,
@@ -742,14 +783,20 @@ function finishDrag(state, ev) {
     placeBankValueFromWorkspaceDrop(state, drag.value, proxyLeft, proxyTop);
   }
 
-  hideInsertMarker(state);
+  clearAnswerDropTarget(state);
   state.drag = null;
 }
 
-function moveValueIntoAnswer(state, value, insertionIndex) {
-  const nextAnswer = state.answerOrder.filter((item) => item !== value);
-  const clampedIndex = clampInt(insertionIndex, 0, nextAnswer.length);
-  nextAnswer.splice(clampedIndex, 0, value);
+function moveValueIntoAnswer(state, value, slotIndex) {
+  const nextAnswer = [...state.answerOrder];
+  const sourceSlotIndex = nextAnswer.indexOf(value);
+  const targetSlotIndex = clampInt(slotIndex, 0, Math.max(0, nextAnswer.length - 1));
+  const replacedValue = nextAnswer[targetSlotIndex];
+
+  if (sourceSlotIndex >= 0 && sourceSlotIndex !== targetSlotIndex) {
+    nextAnswer[sourceSlotIndex] = replacedValue || null;
+  }
+  nextAnswer[targetSlotIndex] = value;
   state.answerOrder = nextAnswer;
   state.bankPositions.delete(value);
   state.bankOrder = state.currentQuestion.items.filter((item) => !state.answerOrder.includes(item));
@@ -757,7 +804,7 @@ function moveValueIntoAnswer(state, value, insertionIndex) {
 }
 
 function moveAnswerValueBackToBank(state, value, dropPosition = null) {
-  state.answerOrder = state.answerOrder.filter((item) => item !== value);
+  state.answerOrder = state.answerOrder.map((item) => item === value ? null : item);
   state.bankOrder = state.currentQuestion.items.filter((item) => !state.answerOrder.includes(item));
 
   if (!dropPosition) {
@@ -776,66 +823,27 @@ function moveAnswerValueBackToBank(state, value, dropPosition = null) {
   }
 }
 
-function getAnswerInsertionIndex(state, pointerClientX) {
-  if (!state.answerTrack || !state.answerZone) return state.answerOrder.length;
-
-  const answerValues = state.answerOrder.filter((item) => item !== state.drag?.value);
-  if (!answerValues.length) return 0;
-
-  const chips = answerValues
-    .map((value) => state.chipsByValue.get(value))
-    .filter(Boolean);
-
-  if (!chips.length) return 0;
-
-  for (let index = 0; index < chips.length; index += 1) {
-    const rect = chips[index].getBoundingClientRect();
-    if (pointerClientX < rect.left + (rect.width / 2)) {
-      return index;
-    }
-  }
-
-  return chips.length;
+function getAnswerDropSlotIndex(state, clientX, clientY) {
+  if (!state.answerTrack) return null;
+  const slot = Array.from(state.answerTrack.querySelectorAll(".oa-answer-slot")).find((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  });
+  return slot ? Number(slot.dataset.oaAnswerSlotIndex) : null;
 }
 
-function showInsertMarker(state, insertionIndex, draggedValue) {
-  if (!state.insertMarker || !state.answerTrack || !state.answerZone) return;
-
-  const values = state.answerOrder.filter((item) => item !== draggedValue);
-  const chips = values
-    .map((value) => state.chipsByValue.get(value))
-    .filter(Boolean);
-
-  const answerZoneRect = state.answerZone.getBoundingClientRect();
-  let x = answerZoneRect.left + (answerZoneRect.width / 2);
-
-  if (chips.length > 0) {
-    if (insertionIndex <= 0) {
-      x = chips[0].getBoundingClientRect().left;
-    } else if (insertionIndex >= chips.length) {
-      const lastRect = chips[chips.length - 1].getBoundingClientRect();
-      x = lastRect.right;
-    } else {
-      const prevRect = chips[insertionIndex - 1].getBoundingClientRect();
-      const nextRect = chips[insertionIndex].getBoundingClientRect();
-      x = Math.round((prevRect.right + nextRect.left) / 2);
-    }
-  }
-
-  const localPoint = clientPointToLocalPoint(state.answerZone, x, answerZoneRect.top + (answerZoneRect.height / 2));
-  const markerLeft = clamp(Math.round(localPoint.x), 0, state.answerZone.clientWidth || 0);
-  state.insertMarker.style.left = `${markerLeft}px`;
-  state.insertMarker.classList.remove("hidden");
+function syncAnswerDropTarget(state, slotIndex) {
+  clearAnswerDropTarget(state);
+  if (!Number.isInteger(slotIndex)) return;
+  state.answerTrack
+    ?.querySelector(`[data-oa-answer-slot-index="${slotIndex}"]`)
+    ?.classList.add("oa-answer-slot--drop-target");
 }
 
-function hideInsertMarker(state) {
-  state.insertMarker?.classList.add("hidden");
-}
-
-function isPointerInsideAnswerZone(state, clientX, clientY) {
-  if (!state.answerZone) return false;
-  const rect = state.answerZone.getBoundingClientRect();
-  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+function clearAnswerDropTarget(state) {
+  state.answerTrack
+    ?.querySelectorAll(".oa-answer-slot--drop-target")
+    .forEach((slot) => slot.classList.remove("oa-answer-slot--drop-target"));
 }
 
 function syncValidateState(state) {
@@ -849,15 +857,31 @@ function canSubmitAnswer(state) {
     && !state.answerRevealed
     && questionSize > 0
     && state.answerOrder.length === questionSize
+    && state.answerOrder.every(Boolean)
     && phaseKind === "QUESTION";
 }
 
 function requestReveal(state) {
+  const isCorrect = isAnswerCorrect([...state.answerOrder], state.currentQuestion?.answerItems || []);
+  state.fastCorrection = isCorrect;
   state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isAnswerCorrect([...state.answerOrder], state.currentQuestion?.answerItems || [])
+    wasCorrect: isCorrect,
+    skipValidationReview: true,
+    answerControlsDelayMs: getCorrectionAnimationDurationMs(state, isCorrect)
   });
+}
+
+function getCorrectionAnimationDurationMs(state, isCorrect) {
+  const itemCount = Math.max(1, state.currentQuestion?.answerItems?.length || 1);
+  const staggerMs = isCorrect ? CORRECT_CORRECTION_STAGGER_MS : CORRECTION_STAGGER_MS;
+  const moveMs = isCorrect ? CORRECT_CORRECTION_MOVE_MS : CORRECTION_MOVE_MS;
+  return Math.max(0, (itemCount - 1) * staggerMs + moveMs + CORRECTION_CONTROLS_BUFFER_MS);
+}
+
+function getCorrectionStaggerMs(state) {
+  return state.fastCorrection ? CORRECT_CORRECTION_STAGGER_MS : CORRECTION_STAGGER_MS;
 }
 
 function startPhaseMonitor(state) {
@@ -976,7 +1000,7 @@ function createCorrectionOverlay(state, originals, laneMap, workspace, { positio
       const targetTop = positionsAreLocal ? target.y : targetBox.top;
 
       startCorrectionMove(clone, targetLeft, targetTop);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });
@@ -1027,7 +1051,7 @@ function animateBankOriginalsToLane(state, bankOriginalsByValue, laneMap, worksp
     const timerId = window.setTimeout(() => {
       const targetBox = clientRectToLocalBox(workspace, target);
       startCorrectionMove(chip, targetBox.left, targetBox.top);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });
@@ -1045,7 +1069,7 @@ function animateFreeOriginalsToAnswerLayout(state, positions) {
 
     const timerId = window.setTimeout(() => {
       startCorrectionMove(chip, target.x, target.y);
-    }, index * CORRECTION_STAGGER_MS);
+    }, index * getCorrectionStaggerMs(state));
 
     state.correctionTimers.push(timerId);
   });
@@ -1070,7 +1094,7 @@ function clearCorrectionTimers(state) {
 
 function resetVisualState(state) {
   clearAnswerFeedback(state);
-  hideInsertMarker(state);
+  clearAnswerDropTarget(state);
 }
 
 function buildItemMetaByValue(question) {
