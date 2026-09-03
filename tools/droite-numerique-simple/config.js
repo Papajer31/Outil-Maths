@@ -15,10 +15,13 @@ import {
   getDefaultSettings,
   normalizeSettings,
   QUESTION_TYPES,
-  MARKER_POSITIONS
+  MARKER_POSITIONS,
+  getPlayableMarkerGaps
 } from "./model.js";
 
 let stylesInjected = false;
+
+const ALLOWED_MARKER_GAPS = Object.freeze([1, 10, 100]);
 
 const QUESTION_TYPE_MODES = Object.freeze({
   NUMBER_TO_GRADUATION: QUESTION_TYPES.NUMBER_TO_GRADUATION,
@@ -37,16 +40,7 @@ export function renderToolSettings(container, settings) {
     <div class="rn-config-root rns-config-root">
       ${renderToolSettingsStack(
         renderQuestionTypes(questionTypes),
-        renderRadioGroup({
-          title: "Écart entre les repères",
-          id: "rns_markerGap",
-          value: String(cfg.markerGap),
-          options: [
-            { value: "1", label: "1" },
-            { value: "10", label: "10" },
-            { value: "100", label: "100" }
-          ]
-        }),
+        renderMarkerGaps(new Set(cfg.markerGaps)),
         renderSection("Réglages avancés", `
           <div class="tv-group tv-group-inline rn-marker-positions">
             <div class="tv-minmax-inline">
@@ -79,7 +73,7 @@ export function renderToolSettings(container, settings) {
             minValue: cfg.markerMin,
             maxValue: cfg.markerMax,
             inputMin: 0,
-            inputMax: 999,
+            inputMax: 9999,
             step: 1,
             mode: cfg.markerValueMode,
             startValue: cfg.markerValueStart,
@@ -91,11 +85,29 @@ export function renderToolSettings(container, settings) {
     </div>
   `;
 
-  bindRadio(container, "rns_markerGap");
   bindRadio(container, "rns_questionTypeMode");
-  bindMinMax(container, "rns_numbers", { inputMin: 0, inputMax: 999 });
+  bindMinMax(container, "rns_numbers", { inputMin: 0, inputMax: 9999 });
   bindCollapsibleSection(container, "rns_advanced");
+  bindMarkerGapSelectionGuard(container);
   bindMarkerPositionSelectionGuard(container);
+}
+
+function renderMarkerGaps(markerGaps) {
+  const allowedGaps = ALLOWED_MARKER_GAPS;
+  return `
+    <div class="tv-group tv-group-inline rn-marker-gaps">
+      <div class="tv-minmax-inline">
+        <div class="tv-group-title tv-minmax-title">Écart entre les repères</div>
+        <div class="tv-radio-options rn-checkbox-options">
+          ${allowedGaps.map((gap) => renderCheckbox({
+            id: "rns_gap_" + gap,
+            label: String(gap),
+            checked: markerGaps.has(gap)
+          })).join("")}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderQuestionTypes(questionTypes) {
@@ -127,13 +139,16 @@ export function readToolSettings(container, settings = {}) {
 
   const numbers = readMinMax(container, "rns_numbers", {
     inputMin: 0,
-    inputMax: 999,
+    inputMax: 9999,
     errorLabel: "La plage des nombres"
   });
 
-  const markerGap = clampInt(readRadio(container, "rns_markerGap", "10"), 1, 100);
+  const markerGaps = ALLOWED_MARKER_GAPS.filter((gap) => readCheckbox(container, `rns_gap_${gap}`));
+  if (!markerGaps.length) {
+    throw new Error("Active au moins un écart entre les repères.");
+  }
 
-  return normalizeSettings({
+  const normalized = normalizeSettings({
     ...getDefaultSettings(),
     ...(settings ?? {}),
     questionTypes,
@@ -144,8 +159,17 @@ export function readToolSettings(container, settings = {}) {
     markerValueStart: numbers.start,
     markerValueStep: numbers.step,
     markerValueList: numbers.values,
-    markerGap
+    markerGaps,
+    markerGap: markerGaps[0]
   });
+
+  const playableGaps = new Set(getPlayableMarkerGaps(normalized));
+  const unavailableGaps = markerGaps.filter((gap) => !playableGaps.has(gap));
+  if (unavailableGaps.length) {
+    throw new Error(`La plage des nombres est incompatible avec ${unavailableGaps.length > 1 ? "les écarts" : "l’écart"} ${unavailableGaps.join(", ")}. Élargis la plage des nombres dans les réglages avancés.`);
+  }
+
+  return normalized;
 }
 
 export { getDefaultSettings };
@@ -174,6 +198,16 @@ function getQuestionTypesFromMode(mode) {
   ];
 }
 
+function bindMarkerGapSelectionGuard(container) {
+  const inputs = Array.from(container.querySelectorAll('[id^="rns_gap_"]'));
+  inputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (inputs.some((item) => item.checked)) return;
+      input.checked = true;
+    });
+  });
+}
+
 function bindMarkerPositionSelectionGuard(container) {
   const inputs = Array.from(container.querySelectorAll("#rns_pos_start, #rns_pos_middle, #rns_pos_end"));
   inputs.forEach((input) => {
@@ -198,8 +232,3 @@ function injectStyles() {
   document.head.appendChild(link);
 }
 
-function clampInt(v, min, max) {
-  const n = Math.floor(Number(v));
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}

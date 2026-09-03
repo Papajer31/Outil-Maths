@@ -41,6 +41,7 @@ export function setToolInstructionText(element, text = "") {
     element.classList.remove("is-empty");
     element.classList.add("is-reserved-space");
     element.setAttribute("aria-hidden", "true");
+    dispatchToolInstructionChanged(reservedText);
     return "";
   }
 
@@ -50,6 +51,7 @@ export function setToolInstructionText(element, text = "") {
   element.textContent = normalizedText;
   element.hidden = !normalizedText;
   element.classList.toggle("is-empty", !normalizedText);
+  dispatchToolInstructionChanged(normalizedText);
   return normalizedText;
 }
 
@@ -126,6 +128,15 @@ function getCommonSettings(settings) {
   }
 
   return settings;
+}
+
+function dispatchToolInstructionChanged(text = "") {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  try {
+    window.dispatchEvent(new CustomEvent("tool:instruction-changed", {
+      detail: { text: String(text || "").trim() }
+    }));
+  } catch {}
 }
 
 function toKebabCase(value) {

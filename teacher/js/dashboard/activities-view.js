@@ -1,5 +1,7 @@
 import {
   CATALOG_ROOT_LABEL,
+  PEDAGOGICAL_GRADE_LEVELS,
+  getPedagogicalNodeGradeLevel,
   getPedagogicalNodes
 } from "../../../shared/catalogue.js";
 import {
@@ -39,6 +41,9 @@ export function createActivitiesViewController({
   let cachedAdminCatalogFolders = null;
   const collapsedFolderIds = new Set();
   const knownFolderIds = new Set();
+  const EXPLORATION_GRADE_STORAGE_KEY = "dashboard:exploration:grade";
+  const EXPLORATION_ALL_GRADES = "all";
+  let selectedExplorationGrade = readStoredExplorationGrade();
 
   const catalogAdminViewController = createCatalogAdminViewController({
     header: configHeader,
@@ -113,6 +118,95 @@ export function createActivitiesViewController({
     ));
   }
 
+  function getGradeFilteredFolderIds(activities = [], grade = selectedExplorationGrade){
+    const requestedGrade = String(grade || "").trim();
+    if (requestedGrade === EXPLORATION_ALL_GRADES) {
+      return new Set(folders.map((folder) => String(folder.id)));
+    }
+
+    const selectedGrade = PEDAGOGICAL_GRADE_LEVELS.includes(requestedGrade)
+      ? requestedGrade
+      : PEDAGOGICAL_GRADE_LEVELS[0];
+    const folderById = new Map(folders.map((folder) => [String(folder.id), folder]));
+    const childrenByParent = new Map();
+    folders.forEach((folder) => {
+      const parentId = String(folder.parent_id || "");
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId).push(folder);
+    });
+
+    const directActivityFolderIds = new Set(
+      (Array.isArray(activities) ? activities : [])
+        .map(getActivityFolderId)
+        .filter(Boolean)
+    );
+    const visibleIds = new Set();
+    const memo = new Map();
+
+    const branchIsVisible = (folder) => {
+      if (!folder) return false;
+      const folderId = String(folder.id || "");
+      if (!folderId) return false;
+      if (memo.has(folderId)) return memo.get(folderId);
+
+      const gradeLevel = getPedagogicalNodeGradeLevel(folder);
+      if (gradeLevel) {
+        const visible = gradeLevel === selectedGrade;
+        memo.set(folderId, visible);
+        if (visible) visibleIds.add(folderId);
+        return visible;
+      }
+
+      const children = childrenByParent.get(folderId) || [];
+      const childVisibility = children.map((child) => branchIsVisible(child));
+      const hasDirectActivity = directActivityFolderIds.has(folderId);
+      // Un chemin encore inachevé/neutre reste visible : le filtre ne doit
+      // masquer que les branches qui aboutissent exclusivement à un autre niveau.
+      const visible = hasDirectActivity
+        || children.length === 0
+        || childVisibility.some(Boolean);
+      memo.set(folderId, visible);
+      if (visible) visibleIds.add(folderId);
+      return visible;
+    };
+
+    (childrenByParent.get("") || []).forEach(branchIsVisible);
+
+    // Sécurité pour une arborescence partielle ou orpheline : un nœud neutre
+    // non rattaché reste disponible, tandis qu'un dossier de niveau est filtré.
+    folders.forEach((folder) => {
+      const folderId = String(folder.id || "");
+      if (!folderId || memo.has(folderId)) return;
+      const parentId = String(folder.parent_id || "");
+      if (parentId && folderById.has(parentId)) return;
+      branchIsVisible(folder);
+    });
+
+    return visibleIds;
+  }
+
+  function syncCurrentOpenFolderWithGradeFilter(visibleFolderIds){
+    if (!currentOpenFolderId) return;
+    let cursor = getFolderById(currentOpenFolderId);
+    while (cursor && !visibleFolderIds.has(String(cursor.id))) {
+      cursor = getFolderById(cursor.parent_id);
+    }
+    currentOpenFolderId = cursor ? String(cursor.id) : null;
+  }
+
+  function selectExplorationGrade(grade){
+    const rawGrade = String(grade || "").trim();
+    const normalizedGrade = rawGrade === EXPLORATION_ALL_GRADES
+      ? EXPLORATION_ALL_GRADES
+      : (PEDAGOGICAL_GRADE_LEVELS.includes(rawGrade) ? rawGrade : "");
+    if (!normalizedGrade || normalizedGrade === selectedExplorationGrade) return;
+    selectedExplorationGrade = normalizedGrade;
+    try {
+      localStorage.setItem(EXPLORATION_GRADE_STORAGE_KEY, selectedExplorationGrade);
+    } catch {}
+    void renderActivitiesForSpace();
+  }
+
   function syncKnownFolders(){
     const folderIds = new Set(folders.map((folder) => String(folder.id || "")).filter(Boolean));
     for (const id of Array.from(collapsedFolderIds)) {
@@ -176,9 +270,24 @@ export function createActivitiesViewController({
           ])
         ].join(" ");
 
+    const gradeButtons = [
+      { value: EXPLORATION_ALL_GRADES, label: "Tous" },
+      ...PEDAGOGICAL_GRADE_LEVELS.map((grade) => ({ value: grade, label: grade }))
+    ].map(({ value, label }) => `
+      <button
+        class="dashboard-view-toggle-btn${value === selectedExplorationGrade ? " is-active" : ""}"
+        type="button"
+        data-exploration-grade="${escapeAttr(value)}"
+        aria-pressed="${value === selectedExplorationGrade ? "true" : "false"}"
+      >${escapeHtml(label)}</button>
+    `).join("");
+
     configHeader.innerHTML = `
       <div class="dashboard-config-header-main">
         <div class="dashboard-section-title">Exploration</div>
+        <div class="dashboard-view-toggle dashboard-exploration-grade-tabs" role="group" aria-label="Filtrer Exploration par niveau">
+          ${gradeButtons}
+        </div>
       </div>
       <div class="dashboard-config-header-center">
         <nav class="dashboard-breadcrumb" aria-label="Fil d’Ariane d’Exploration">
@@ -202,6 +311,10 @@ export function createActivitiesViewController({
         openFolder(btn.dataset.folderId);
         void renderActivitiesForSpace();
       });
+    });
+
+    configHeader.querySelectorAll("[data-exploration-grade]").forEach((btn) => {
+      btn.addEventListener("click", () => selectExplorationGrade(btn.dataset.explorationGrade));
     });
 
     if (isSuperAdmin) {
@@ -396,9 +509,7 @@ export function createActivitiesViewController({
 
   function renderShell(activities, { isSuperAdmin = false } = {}){
     const usefulFolderIds = getFolderIdsLeadingToActivities(activities);
-    const visibleFolderIds = isSuperAdmin
-      ? getFolderIdsLeadingToActivities(activities, { includeAllFolders: true })
-      : usefulFolderIds;
+    const visibleFolderIds = getGradeFilteredFolderIds(activities);
     const selectedFolder = getFolderById(currentOpenFolderId);
     const parentId = selectedFolder ? String(selectedFolder.id) : null;
     const childFolders = getVisibleChildFolders(parentId, visibleFolderIds).sort(compareByOrderAndName);
@@ -634,7 +745,8 @@ export function createActivitiesViewController({
       : (cachedTeacherCatalogActivities || []);
 
     cachedRenderedCatalogActivities = activities;
-    syncCurrentOpenFolderWithActivities(activities, { includeAllFolders: isSuperAdmin });
+    const visibleFolderIds = getGradeFilteredFolderIds(activities);
+    syncCurrentOpenFolderWithGradeFilter(visibleFolderIds);
     catalogAdminViewController.setCatalogueState({
       activities: cachedAdminCatalogActivities || [],
       folders,
@@ -689,6 +801,14 @@ export function createActivitiesViewController({
     syncCollapsedActivityFolders: () => {},
     toggleFolderExpanded: () => {}
   };
+}
+
+function readStoredExplorationGrade(){
+  try {
+    const stored = String(localStorage.getItem("dashboard:exploration:grade") || "");
+    if (stored === "all" || PEDAGOGICAL_GRADE_LEVELS.includes(stored)) return stored;
+  } catch {}
+  return "all";
 }
 
 function mergeAdminAndTeacherActivities(adminActivities = [], teacherActivities = []){

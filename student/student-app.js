@@ -17,6 +17,7 @@ import {
 import { startMaterialIconHydration } from "../shared/material-icons-svg.js";
 import { isDevViewportMode } from "../shared/dom-helpers.js";
 import { installResponsiveRuntime } from "../shared/responsive-runtime.js";
+import { initializeStudentAudioEngine } from "./student-audio.js";
 
 boot();
 
@@ -39,6 +40,7 @@ function boot(){
   mountStudentOrientationGuard();
   installStudentInteractionGuards();
   startMaterialIconHydration();
+  initializeStudentAudioEngine();
 
   const appRoot = document.getElementById("studentApp");
   if (!appRoot) return;

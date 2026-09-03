@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="./css/phonology-import.css">
   <link rel="stylesheet" href="./css/system-images-import.css">
   <link rel="stylesheet" href="./css/audio-recorder.css">
+  <link rel="stylesheet" href="./css/audio-admin.css">
   <link rel="stylesheet" href="./css/teacher-tools.css">
 </head>
 
@@ -96,6 +97,11 @@
 
                 <button id="btnNavTeacherTools" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Tableau</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavAdmin" class="dashboard-nav-main dashboard-nav-main--header hidden" type="button">
+                  <span class="dashboard-nav-label">Admin</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
               </div>
@@ -710,6 +716,8 @@
                 <div class="dashboard-activity-empty-state">Chargement…</div>
               </div>
             </div>
+
+            <div id="adminView" class="dashboard-content-view hidden"></div>
 
             <div id="teacherToolsView" class="dashboard-content-view dashboard-teacher-tools-view hidden">
               <div id="teacherToolsHost" class="dashboard-teacher-tools-host">

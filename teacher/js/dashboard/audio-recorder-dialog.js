@@ -23,6 +23,9 @@ export function openAudioRecorderDialog({
   listResourcesForSpace,
   uploadResourceForSpace,
   defaultTitle = "",
+  promptText = "",
+  lockTitle = false,
+  onSaveRecording = null,
   showToast = null
 } = {}) {
   return new Promise((resolve) => {
@@ -61,10 +64,11 @@ export function openAudioRecorderDialog({
         </header>
 
         <div class="dashboard-audio-recorder-body">
+          ${String(promptText || "").trim() ? `<div class="dashboard-audio-recorder-prompt">« ${escapeHtml(String(promptText || "").trim())} »</div>` : ""}
           <div class="dashboard-audio-recorder-name">
             <label for="dashboardAudioRecorderName">Nom :</label>
             <input id="dashboardAudioRecorderName" type="text" maxlength="160" data-audio-recorder-name value="${escapeAttr(defaultTitle || createDefaultAudioRecordingTitle())}" disabled>
-            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-audio-recorder-edit-name aria-label="Modifier le nom" title="Modifier le nom">
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-audio-recorder-edit-name aria-label="Modifier le nom" title="Modifier le nom" ${lockTitle ? "hidden" : ""}>
               <span class="dashboard-material-icon" aria-hidden="true">edit</span>
             </button>
           </div>
@@ -379,14 +383,30 @@ export function openAudioRecorderDialog({
         setMessage("Cet enregistrement dépasse la limite de 25 Mo.", true);
         return;
       }
-      if (typeof listResourcesForSpace !== "function" || typeof uploadResourceForSpace !== "function") {
+      const usesCustomSave = typeof onSaveRecording === "function";
+      if (!usesCustomSave && (typeof listResourcesForSpace !== "function" || typeof uploadResourceForSpace !== "function")) {
         setMessage("La gestion des ressources personnelles n’est pas disponible.", true);
         return;
       }
 
       setBusy(true);
-      setMessage("Enregistrement dans les ressources…");
+      setMessage(usesCustomSave ? "Enregistrement de l’audio…" : "Enregistrement dans les ressources…");
       try {
+        if (usesCustomSave) {
+          const resource = await onSaveRecording({
+            blob: recordedBlob,
+            duration: recordedDuration,
+            mimeType: recordedBlob.type || "audio/webm",
+            title
+          });
+          if (!resource) throw new Error("L’audio n’a pas été enregistré.");
+          isSaving = false;
+          closed = true;
+          cleanup();
+          resolve(resource);
+          return;
+        }
+
         const resources = await listResourcesForSpace(teacherSpaceId);
         const usedBytes = (Array.isArray(resources) ? resources : [])
           .filter((resource) => resource?.is_system !== true)
@@ -449,7 +469,7 @@ export function openAudioRecorderDialog({
       }
       if (event.target.closest("[data-audio-recorder-reset]")) resetRecording();
       if (event.target.closest("[data-audio-recorder-save]")) void saveRecording();
-      if (event.target.closest("[data-audio-recorder-edit-name]")) {
+      if (event.target.closest("[data-audio-recorder-edit-name]") && !lockTitle) {
         isNameEditingEnabled = true;
         nameInput.disabled = false;
         editNameButton.hidden = true;

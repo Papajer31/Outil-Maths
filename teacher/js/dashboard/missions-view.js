@@ -1,7 +1,9 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { isIntrinsicCatalogActivity } from "../../../shared/catalogue.js";
 
 export function createMissionsViewController({
+  missionsView,
   missionsHeader,
   missionsList,
   getCurrentTeacherSpace,
@@ -12,8 +14,11 @@ export function createMissionsViewController({
   listMissionSteps,
   listMissionAssignments,
   saveMissionForSpace,
-  deleteMission,
-  listCatalogActivitiesForTeacherSpace
+  setMissionInactive,
+  reactivateMission,
+  deleteMissionPermanently,
+  listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher
 } = {}){
   let currentFolderId = null;
   let folders = [];
@@ -22,6 +27,12 @@ export function createMissionsViewController({
   let editingSteps = [];
   let editingAssignments = [];
   let catalogActivities = [];
+  let catalogNodes = [];
+  let catalogPickerFolderId = null;
+  let catalogSearchQuery = "";
+  let missionEditorMotion = null;
+  let missionEditorCloseTimer = null;
+  let missionEditorHost = null;
 
   async function renderMissionsView({ forceRefresh = false } = {}){
     const space = getCurrentTeacherSpace?.();
@@ -41,14 +52,16 @@ export function createMissionsViewController({
   async function refreshData(){
     const space = getCurrentTeacherSpace?.();
     if (!space?.id) return;
-    const [nextFolders, nextMissions, nextCatalogActivities] = await Promise.all([
+    const [nextFolders, nextMissions, nextCatalogActivities, nextCatalogNodes] = await Promise.all([
       listMissionFoldersForSpace?.(space.id),
       listMissionsForSpace?.(space.id),
-      listCatalogActivitiesForTeacherSpace?.(space.id)
+      listCatalogActivitiesForTeacherSpace?.(space.id),
+      listPedagogicalNodesForTeacher?.()
     ]);
     folders = Array.isArray(nextFolders) ? nextFolders : [];
     missions = Array.isArray(nextMissions) ? nextMissions : [];
     catalogActivities = Array.isArray(nextCatalogActivities) ? nextCatalogActivities : [];
+    catalogNodes = Array.isArray(nextCatalogNodes) ? nextCatalogNodes : [];
   }
 
   function renderHeader(){
@@ -70,19 +83,22 @@ export function createMissionsViewController({
       </div>
       <div class="dashboard-config-header-actions">
         <button class="dashboard-icon-btn dashboard-material-icon-btn" id="btnCreateMissionFolder" type="button" title="Créer un dossier" aria-label="Créer un dossier"><span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span></button>
-        <button class="btn primary" id="btnCreateMission" type="button" disabled aria-disabled="true" title="Création de missions temporairement désactivée"><span class="dashboard-material-icon" aria-hidden="true">add</span><span>Créer une mission</span></button>
+        <button class="btn primary" id="btnCreateMission" type="button"><span class="dashboard-material-icon" aria-hidden="true">add</span><span>Créer une mission</span></button>
       </div>
     `;
     missionsHeader.querySelectorAll("[data-action='open-root']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = null; renderExplorer(); renderHeader(); }));
     missionsHeader.querySelectorAll("[data-action='open-folder']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = btn.dataset.folderId || null; renderExplorer(); renderHeader(); }));
     missionsHeader.querySelector("#btnCreateMissionFolder")?.addEventListener("click", () => createFolder());
-    // Création temporairement désactivée : l’éditeur existe encore pour les missions déjà présentes,
-    // mais on empêche de créer de nouvelles missions tant que le Catalogue n’est pas assez fourni.
-    missionsHeader.querySelector("#btnCreateMission")?.addEventListener("click", (event) => event.preventDefault());
+    missionsHeader.querySelector("#btnCreateMission")?.addEventListener("click", () => openEditor(""));
   }
 
   function renderExplorer(){
     if (!missionsList) return;
+    clearTimeout(missionEditorCloseTimer);
+    missionEditorCloseTimer = null;
+    cancelMissionEditorMotion();
+    missionEditorHost?.remove();
+    missionEditorHost = null;
     missionsList.classList.add("dashboard-explorer-host");
     const selectedFolder = getFolder(currentFolderId);
     const childFolders = folders.filter((folder) => String(folder.parent_id || "") === String(selectedFolder?.id || "")).sort(compareByOrderAndName);
@@ -133,17 +149,25 @@ export function createMissionsViewController({
   }
 
   function renderMissionTile(mission){
-    const active = mission.status === "active";
+    const status = String(mission.status || "draft").trim();
+    const active = status === "active";
+    const inactive = status === "inactive";
+    const statusLabel = active ? "Active" : inactive ? "Inactive" : "Brouillon";
+    const lifecycleAction = active
+      ? `<button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="deactivate-mission" data-mission-id="${escapeAttr(mission.id)}" title="Désactiver" aria-label="Désactiver la mission"><span class="dashboard-material-icon" aria-hidden="true">pause_circle</span></button>`
+      : inactive
+        ? `<button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="reactivate-mission" data-mission-id="${escapeAttr(mission.id)}" title="Réactiver" aria-label="Réactiver la mission"><span class="dashboard-material-icon" aria-hidden="true">restart_alt</span></button>`
+        : "";
     return `
       <article class="dashboard-activity-tile dashboard-activity-tile--activity ${active ? "is-highlighted" : ""}">
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" type="button" data-action="edit-mission" data-mission-id="${escapeAttr(mission.id)}">
-          <span class="dashboard-activity-tile-topline"><span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">flag</span><span class="dashboard-activity-tile-subtitle dashboard-mini-pill">${active ? "Active" : "Brouillon"}</span></span>
+          <span class="dashboard-activity-tile-topline"><span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">flag</span><span class="dashboard-activity-tile-subtitle dashboard-mini-pill">${statusLabel}</span></span>
           <span class="dashboard-activity-tile-title">${escapeHtml(mission.title)}</span>
-          <span class="dashboard-activity-tile-subtitle">${escapeHtml(mission.intent_mode === "evaluation" ? "Évaluation" : "Entrainement")} · ${escapeHtml(mission.answer_mode === "manual_validation" ? "sans saisie" : "réponse saisie")}</span>
         </button>
         <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-mission" data-mission-id="${escapeAttr(mission.id)}" title="Modifier"><span class="dashboard-material-icon" aria-hidden="true">edit</span></button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-mission" data-mission-id="${escapeAttr(mission.id)}" title="Archiver"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
+          ${lifecycleAction}
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-mission" data-mission-id="${escapeAttr(mission.id)}" title="Supprimer définitivement" aria-label="Supprimer définitivement la mission"><span class="dashboard-material-icon" aria-hidden="true">delete_forever</span></button>
         </div>
       </article>
     `;
@@ -153,16 +177,43 @@ export function createMissionsViewController({
     missionsList.querySelectorAll("[data-action='open-root']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = null; renderHeader(); renderExplorer(); }));
     missionsList.querySelectorAll("[data-action='open-folder']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = btn.dataset.folderId || null; renderHeader(); renderExplorer(); }));
     missionsList.querySelectorAll("[data-action='edit-mission']").forEach((btn) => btn.addEventListener("click", () => openEditor(btn.dataset.missionId || "")));
+
+    missionsList.querySelectorAll("[data-action='deactivate-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const confirmed = await openDashboardConfirmDialog({
+        title:"Désactiver la mission",
+        message:"Les élèves ne verront plus cette mission. Leur progression actuelle est conservée. Si tu la réactives plus tard, une nouvelle session repartira à zéro pour tous les élèves attribués.",
+        confirmLabel:"Désactiver"
+      });
+      if (!confirmed) return;
+      await setMissionInactive?.(btn.dataset.missionId || "");
+      await refreshData();
+      renderExplorer();
+    }));
+
+    missionsList.querySelectorAll("[data-action='reactivate-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const confirmed = await openDashboardConfirmDialog({
+        title:"Réactiver la mission",
+        message:"Une nouvelle session va démarrer. La progression de cette mission repartira à zéro pour tous les élèves attribués. Les anciennes tentatives resteront dans leur historique.",
+        confirmLabel:"Réactiver"
+      });
+      if (!confirmed) return;
+      await reactivateMission?.(btn.dataset.missionId || "");
+      await refreshData();
+      renderExplorer();
+    }));
+
     missionsList.querySelectorAll("[data-action='delete-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
       event.stopPropagation();
       const confirmed = await openDashboardConfirmDialog({
-        title:"Archiver la mission",
-        message:"Archiver cette mission ?",
-        confirmLabel:"Archiver",
+        title:"Supprimer définitivement la mission",
+        message:"La mission, ses étapes, ses attributions et sa progression actuelle seront supprimées. Les tentatives déjà enregistrées dans l’historique des élèves seront conservées. Cette action est définitive.",
+        confirmLabel:"Supprimer définitivement",
         danger:true
       });
       if (!confirmed) return;
-      await deleteMission?.(btn.dataset.missionId || "");
+      await deleteMissionPermanently?.(btn.dataset.missionId || "");
       await refreshData();
       renderExplorer();
     }));
@@ -186,6 +237,8 @@ export function createMissionsViewController({
     editingMission = mission ? { ...mission } : defaultMission(space.id);
     editingSteps = mission ? await listMissionSteps?.(mission.id) || [] : [];
     editingAssignments = mission ? await listMissionAssignments?.(mission.id) || [] : [];
+    catalogPickerFolderId = null;
+    catalogSearchQuery = "";
     renderEditor();
   }
 
@@ -193,17 +246,26 @@ export function createMissionsViewController({
     return {
       teacher_space_id: teacherSpaceId,
       folder_id: currentFolderId,
-      title: "Nouvelle mission",
+      title: "",
       status: "draft",
-      answer_mode: "student_input",
-      intent_mode: "practice",
-      question_count: 5,
-      question_time_seconds: null,
-      answer_display_seconds: null,
-      transition_seconds: 0,
-      mission_time_seconds: null,
-      instructions: ""
+      question_count: 5
     };
+  }
+
+  function renderMissionEditorStatusControl(mission){
+    const status = String(mission?.status || "draft").trim();
+    if (status === "active") {
+      return `<span class="dashboard-mini-pill">Active</span>`;
+    }
+    if (status === "inactive") {
+      return `<span class="dashboard-mini-pill">Inactive</span>`;
+    }
+    return `
+      <div class="dashboard-view-toggle" role="group" aria-label="Statut de publication">
+        <button class="dashboard-view-toggle-btn is-active" type="button" data-action="set-mission-status" data-status="draft" aria-pressed="true">Brouillon</button>
+        <button class="dashboard-view-toggle-btn" type="button" data-action="set-mission-status" data-status="active" aria-pressed="false">Publier</button>
+      </div>
+    `;
   }
 
   function renderEditor(){
@@ -211,80 +273,412 @@ export function createMissionsViewController({
     const classIds = [...new Set(students.map((student) => Number(student.teacher_class_id)).filter(Boolean))];
     const assignedClassIds = new Set(editingAssignments.filter((a) => a.target_type === "class").map((a) => String(a.teacher_class_id)));
     const assignedStudentIds = new Set(editingAssignments.filter((a) => a.target_type === "student").map((a) => String(a.student_id)));
-    missionsList.innerHTML = `
-      <div class="dashboard-mission-editor-host" style="display:block; padding:1rem;">
-        <section class="panel" style="padding:1rem; display:grid; gap:1rem;">
-          <div style="display:flex; justify-content:space-between; gap:1rem; align-items:center;">
-            <div class="dashboard-section-title">${editingMission.id ? "Modifier la mission" : "Créer une mission"}</div>
-            <button class="btn" type="button" data-action="back-missions">Retour</button>
+    if (!missionsView) return;
+    const shouldAnimateOpening = !missionEditorHost;
+    clearTimeout(missionEditorCloseTimer);
+    missionEditorCloseTimer = null;
+    cancelMissionEditorMotion();
+    missionEditorHost?.remove();
+    missionEditorHost = document.createElement("aside");
+    missionEditorHost.className = "dashboard-mission-editor-host";
+    missionEditorHost.setAttribute("role", "dialog");
+    missionEditorHost.setAttribute("aria-modal", "true");
+    missionEditorHost.setAttribute("aria-label", "Éditeur de mission");
+    missionEditorHost.innerHTML = `
+        <section class="panel dashboard-mission-editor">
+          <div class="dashboard-mission-editor-head">
+            <div>
+              <div class="dashboard-section-title">${editingMission.id ? "Modifier la mission" : "Créer une mission"}</div>
+              <div class="dashboard-mission-editor-hint">Compose une suite d’activités, choisis ses destinataires, puis active-la quand elle est prête.</div>
+            </div>
+            <div class="dashboard-mission-editor-head-actions">
+              <div id="missionEditorMessage" class="modal-message"></div>
+              ${renderMissionEditorStatusControl(editingMission)}
+              <button class="btn primary" type="button" data-action="save-mission">Enregistrer</button>
+              <button class="btn" type="button" data-action="back-missions">Retour</button>
+            </div>
           </div>
-          <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.75rem;">
-            <label>Nom interne / titre<br><input class="modal-text-input" data-field="title" value="${escapeAttr(editingMission.title)}"></label>
-            <label>Statut<br><select class="student-select" data-field="status"><option value="draft" ${editingMission.status !== "active" ? "selected" : ""}>Brouillon</option><option value="active" ${editingMission.status === "active" ? "selected" : ""}>Active</option></select></label>
-            <label>Réponse<br><select class="student-select" data-field="answer_mode"><option value="student_input" ${editingMission.answer_mode !== "manual_validation" ? "selected" : ""}>Réponse saisie</option><option value="manual_validation" ${editingMission.answer_mode === "manual_validation" ? "selected" : ""}>Sans saisie / validation</option></select></label>
-            <label>Situation<br><select class="student-select" data-field="intent_mode"><option value="practice" ${editingMission.intent_mode !== "evaluation" ? "selected" : ""}>Entrainement</option><option value="evaluation" ${editingMission.intent_mode === "evaluation" ? "selected" : ""}>Évaluation</option></select></label>
-            <label>Questions par activité<br><input class="modal-text-input" type="number" min="1" data-field="question_count" value="${escapeAttr(editingMission.question_count ?? 5)}"></label>
-            <label>Temps par question (vide = infini)<br><input class="modal-text-input" type="number" min="0" data-field="question_time_seconds" value="${escapeAttr(editingMission.question_time_seconds ?? "")}"></label>
-            <label>Affichage réponse (vide = infini)<br><input class="modal-text-input" type="number" min="0" data-field="answer_display_seconds" value="${escapeAttr(editingMission.answer_display_seconds ?? "")}"></label>
-            <label>Temps entre questions<br><input class="modal-text-input" type="number" min="0" data-field="transition_seconds" value="${escapeAttr(editingMission.transition_seconds ?? 0)}"></label>
-            <label>Durée maximale mission (vide = infini)<br><input class="modal-text-input" type="number" min="0" data-field="mission_time_seconds" value="${escapeAttr(editingMission.mission_time_seconds ?? "")}"></label>
-            <label>Dossier<br><select class="student-select" data-field="folder_id"><option value="">Racine</option>${folders.map((f) => `<option value="${escapeAttr(f.id)}" ${String(editingMission.folder_id || "") === String(f.id) ? "selected" : ""}>${escapeHtml(f.name)}</option>`).join("")}</select></label>
-          </div>
-          <label>Consigne spécifique de mission<br><textarea class="modal-text-input" rows="2" data-field="instructions">${escapeHtml(editingMission.instructions || "")}</textarea></label>
 
-          <div style="display:grid; grid-template-columns:minmax(260px, 1fr) 1.2fr; gap:1rem; align-items:start;">
-            <section class="panel" style="padding:1rem;">
-              <h3 style="margin-top:0;">Ajouter une activité du Catalogue</h3>
-              <div style="display:grid; gap:.4rem; max-height:310px; overflow:auto;">
-                ${catalogActivities.map((activity) => `<button class="btn" type="button" data-action="add-step" data-catalog-activity-id="${escapeAttr(activity.id)}">${escapeHtml(activity.config_name)}</button>`).join("")}
-              </div>
+          <div class="dashboard-mission-title-field">
+            <input
+              class="dashboard-mission-title-input"
+              type="text"
+              data-field="title"
+              value="${escapeAttr(editingMission.title)}"
+              placeholder="Donnez un titre à cette mission"
+              aria-label="Titre de la mission"
+              autocomplete="off"
+              required
+            >
+          </div>
+
+          <section class="panel dashboard-mission-assignment-panel">
+            <div class="dashboard-mission-panel-title">Attribution</div>
+            <div class="dashboard-mission-assignment-options">
+              <label class="dashboard-mission-assignment-option">
+                <input type="checkbox" data-assignment-class="${escapeAttr(classIds[0] || "")}" ${assignedClassIds.has(String(classIds[0] || "")) ? "checked" : ""} ${classIds[0] ? "" : "disabled"}>
+                <span>Toute la classe</span>
+              </label>
+              ${students.map((student) => `<label class="dashboard-mission-assignment-option"><input type="checkbox" data-assignment-student="${escapeAttr(student.id)}" ${assignedStudentIds.has(String(student.id)) ? "checked" : ""}><span>${escapeHtml(student.first_name || "")}</span></label>`).join("") || `<span class="dashboard-activity-empty-state">Aucun élève.</span>`}
+            </div>
+          </section>
+
+          <div class="dashboard-mission-compose-grid">
+            <section class="panel dashboard-mission-catalog-panel">
+              <div class="dashboard-mission-panel-title">Ajouter une activité</div>
+              <div id="missionCatalogPicker">${renderCatalogPicker()}</div>
             </section>
-            <section class="panel" style="padding:1rem;">
-              <h3 style="margin-top:0;">Suite de la mission</h3>
-              <div style="display:grid; gap:.4rem;">
+
+            <section class="panel dashboard-mission-sequence-panel">
+              <div class="dashboard-mission-panel-title">Suite de la mission <span class="dashboard-mini-pill">${editingSteps.length}</span></div>
+              <div class="dashboard-mission-step-list">
                 ${editingSteps.length ? editingSteps.map((step, index) => renderStepRow(step, index)).join("") : `<div class="dashboard-activity-empty-state">Ajoute au moins une activité.</div>`}
               </div>
             </section>
           </div>
 
-          <section class="panel" style="padding:1rem;">
-            <h3 style="margin-top:0;">Attribution</h3>
-            <label style="display:block; margin-bottom:.5rem;"><input type="checkbox" data-assignment-class="${escapeAttr(classIds[0] || "")}" ${assignedClassIds.has(String(classIds[0] || "")) ? "checked" : ""} ${classIds[0] ? "" : "disabled"}> Toute la classe</label>
-            <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
-              ${students.map((student) => `<label class="dashboard-mini-pill"><input type="checkbox" data-assignment-student="${escapeAttr(student.id)}" ${assignedStudentIds.has(String(student.id)) ? "checked" : ""}> ${escapeHtml(student.first_name || "")}</label>`).join("")}
-            </div>
-          </section>
-
-          <div style="display:flex; justify-content:flex-end; gap:.75rem; align-items:center;">
-            <div id="missionEditorMessage" class="modal-message"></div>
-            <button class="btn primary" type="button" data-action="save-mission">Enregistrer</button>
-          </div>
         </section>
+    `;
+    missionsView.append(missionEditorHost);
+    const editorHost = missionEditorHost;
+    if (shouldAnimateOpening) {
+      editorHost?.classList.remove("is-open", "is-closing");
+      const openMotion = runMissionEditorMotion(editorHost, true);
+      if (!openMotion) requestAnimationFrame(() => editorHost?.classList.add("is-open"));
+    } else {
+      editorHost?.classList.add("is-open");
+    }
+    bindEditorEvents();
+  }
+
+  function renderCatalogPicker(){
+    const eligibleActivities = catalogActivities.filter((activity) => activity?.is_visible !== false && String(activity?.status || "published") === "published");
+    const query = normalizeMissionSearch(catalogSearchQuery);
+    const searchResults = query
+      ? eligibleActivities
+        .filter((activity) => normalizeMissionSearch(`${activity.config_name} ${getCatalogActivityPath(activity)}`).includes(query))
+        .sort(compareCatalogActivities)
+      : [];
+
+    if (query) {
+      return `
+        <div class="dashboard-mission-catalog-search">
+          <span class="dashboard-material-icon" aria-hidden="true">search</span>
+          <input class="modal-text-input" id="missionCatalogSearch" value="${escapeAttr(catalogSearchQuery)}" placeholder="Rechercher une activité">
+        </div>
+        <div class="dashboard-mission-catalog-results">
+          ${searchResults.length
+            ? searchResults.map((activity) => renderCatalogActivityChoice(activity, { showPath: true })).join("")
+            : `<div class="dashboard-activity-empty-state">Aucune activité trouvée.</div>`}
+        </div>
+      `;
+    }
+
+    const currentNode = getCatalogNode(catalogPickerFolderId);
+    const childNodes = catalogNodes
+      .filter((node) => String(node.parent_id || "") === String(currentNode?.id || ""))
+      .sort(compareByOrderAndName);
+    const directActivities = eligibleActivities
+      .filter((activity) => String(activity.pedagogical_node_id || activity.folder_id || "") === String(currentNode?.id || ""))
+      .sort(compareCatalogActivities);
+    const breadcrumb = getCatalogBreadcrumb(catalogPickerFolderId);
+
+    return `
+      <div class="dashboard-mission-catalog-search">
+        <span class="dashboard-material-icon" aria-hidden="true">search</span>
+        <input class="modal-text-input" id="missionCatalogSearch" value="" placeholder="Rechercher une activité">
+      </div>
+      <nav class="dashboard-mission-catalog-breadcrumb" aria-label="Arborescence du Catalogue">
+        <button type="button" data-action="catalog-root" class="${currentNode ? "" : "is-current"}">Catalogue</button>
+        ${breadcrumb.map((node, index) => `<span aria-hidden="true">/</span><button type="button" data-action="open-catalog-node" data-node-id="${escapeAttr(node.id)}" class="${index === breadcrumb.length - 1 ? "is-current" : ""}">${escapeHtml(getCatalogNodeLabel(node))}</button>`).join("")}
+      </nav>
+      <div class="dashboard-mission-catalog-results">
+        ${currentNode ? `<button class="dashboard-mission-catalog-folder dashboard-mission-catalog-folder--parent" type="button" data-action="${currentNode.parent_id ? "open-catalog-node" : "catalog-root"}" ${currentNode.parent_id ? `data-node-id="${escapeAttr(currentNode.parent_id)}"` : ""}><span class="dashboard-material-icon" aria-hidden="true">arrow_upward</span><span>Dossier parent</span></button>` : ""}
+        ${childNodes.map(renderCatalogFolderChoice).join("")}
+        ${directActivities.map((activity) => renderCatalogActivityChoice(activity)).join("")}
+        ${!childNodes.length && !directActivities.length ? `<div class="dashboard-activity-empty-state">Aucune activité dans ce dossier.</div>` : ""}
       </div>
     `;
-    bindEditorEvents();
+  }
+
+  function renderCatalogFolderChoice(node){
+    return `<button class="dashboard-mission-catalog-folder" type="button" data-action="open-catalog-node" data-node-id="${escapeAttr(node.id)}"><span class="dashboard-material-icon" aria-hidden="true">folder</span><span>${escapeHtml(getCatalogNodeLabel(node))}</span><span class="dashboard-material-icon dashboard-mission-catalog-chevron" aria-hidden="true">chevron_right</span></button>`;
+  }
+
+  function renderCatalogActivityChoice(activity, { showPath = false } = {}){
+    return `
+      <button class="dashboard-mission-catalog-activity" type="button" data-action="add-step" data-catalog-activity-id="${escapeAttr(activity.id)}">
+        <span class="dashboard-material-icon" aria-hidden="true">add_circle</span>
+        <span class="dashboard-mission-catalog-activity-copy">
+          <strong>${escapeHtml(activity.config_name)}</strong>
+          ${showPath ? `<small>${escapeHtml(getCatalogActivityPath(activity))}</small>` : ""}
+        </span>
+      </button>
+    `;
+  }
+
+  function renderCatalogPickerIntoHost({ refocusSearch = false } = {}){
+    const host = missionEditorHost?.querySelector("#missionCatalogPicker");
+    if (!host) return;
+    host.innerHTML = renderCatalogPicker();
+    bindCatalogPickerEvents();
+    if (refocusSearch) {
+      const search = host.querySelector("#missionCatalogSearch");
+      search?.focus();
+      if (search && typeof search.setSelectionRange === "function") {
+        const end = String(search.value || "").length;
+        search.setSelectionRange(end, end);
+      }
+    }
+  }
+
+  function bindCatalogPickerEvents(){
+    const host = missionEditorHost?.querySelector("#missionCatalogPicker");
+    if (!host) return;
+    host.querySelector("#missionCatalogSearch")?.addEventListener("input", (event) => {
+      catalogSearchQuery = event.target.value || "";
+      renderCatalogPickerIntoHost({ refocusSearch: true });
+    });
+    host.querySelectorAll("[data-action='catalog-root']").forEach((btn) => btn.addEventListener("click", () => {
+      catalogPickerFolderId = null;
+      catalogSearchQuery = "";
+      renderCatalogPickerIntoHost();
+    }));
+    host.querySelectorAll("[data-action='open-catalog-node']").forEach((btn) => btn.addEventListener("click", () => {
+      catalogPickerFolderId = btn.dataset.nodeId || null;
+      catalogSearchQuery = "";
+      renderCatalogPickerIntoHost();
+    }));
+    host.querySelectorAll("[data-action='add-step']").forEach((btn) => btn.addEventListener("click", () => {
+      syncEditorStateFromDom();
+      editingSteps.push({
+        catalog_activity_id: btn.dataset.catalogActivityId,
+        difficulty_mode: "adaptive",
+        difficulty_level: 3,
+        step_options_json: { execution_limit: { mode: "questions", value: 5 } }
+      });
+      renderEditor();
+    }));
+  }
+
+  function getCatalogNode(id){
+    const safeId = String(id || "");
+    return catalogNodes.find((node) => String(node.id) === safeId) || null;
+  }
+
+  function getCatalogNodeLabel(node){
+    return String(node?.name || node?.student_label || node?.id || "").trim();
+  }
+
+  function getCatalogBreadcrumb(nodeId){
+    const result = [];
+    let cursor = getCatalogNode(nodeId);
+    const seen = new Set();
+    while (cursor && !seen.has(String(cursor.id))) {
+      seen.add(String(cursor.id));
+      result.unshift(cursor);
+      cursor = getCatalogNode(cursor.parent_id);
+    }
+    return result;
+  }
+
+  function getCatalogActivityPath(activity){
+    return getCatalogBreadcrumb(activity?.pedagogical_node_id || activity?.folder_id)
+      .map(getCatalogNodeLabel)
+      .filter(Boolean)
+      .join(" › ");
   }
 
   function renderStepRow(step, index){
     const activity = catalogActivities.find((item) => item.id === step.catalog_activity_id);
-    return `<div class="dashboard-class-card" style="align-items:center;"><div class="dashboard-class-card-main" style="cursor:default;"><div class="dashboard-class-card-heading"><span class="dashboard-class-card-title">${index + 1}. ${escapeHtml(activity?.config_name || step.catalog_activity_id)}</span></div></div><div class="dashboard-class-card-actions"><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-up" data-step-index="${index}" ${index <= 0 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_upward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-down" data-step-index="${index}" ${index >= editingSteps.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_downward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="remove-step" data-step-index="${index}"><span class="dashboard-material-icon">delete</span></button></div></div>`;
+    const intrinsic = isIntrinsicCatalogActivity(activity);
+    const limit = getMissionStepExecutionLimit(step);
+    const difficulty = getMissionStepDifficulty(step);
+    const difficultyHtml = `<div class="dashboard-mission-step-difficulty">
+      <span class="dashboard-mission-step-setting-label">Difficulté</span>
+      <select class="student-select dashboard-mission-step-difficulty-select" data-step-difficulty="${index}" aria-label="Difficulté de l’activité">
+        <option value="adaptive" ${difficulty.mode === "adaptive" ? "selected" : ""}>Adaptative</option>
+        ${[1, 2, 3, 4, 5].map((level) => `<option value="${level}" ${difficulty.mode === "fixed" && difficulty.level === level ? "selected" : ""}>N${level}</option>`).join("")}
+      </select>
+    </div>`;
+    const limitHtml = intrinsic
+      ? `<div class="dashboard-mission-step-limit is-intrinsic"><span class="dashboard-material-icon" aria-hidden="true">lock</span><span>Toutes les questions · contenu de l’activité</span></div>`
+      : `<div class="dashboard-mission-step-limit">
+          <select class="student-select dashboard-mission-step-limit-mode" data-step-limit-mode="${index}" aria-label="Règle d’arrêt">
+            <option value="questions" ${limit.mode === "questions" ? "selected" : ""}>Questions</option>
+            <option value="time" ${limit.mode === "time" ? "selected" : ""}>Temps</option>
+          </select>
+          <input class="modal-text-input dashboard-mission-step-limit-value" type="number" min="1" max="${limit.mode === "time" ? 120 : 200}" step="1" data-step-limit-value="${index}" value="${escapeAttr(limit.mode === "time" ? Math.max(1, Math.round(limit.value / 60)) : limit.value)}">
+          <span class="dashboard-mission-step-limit-unit">${limit.mode === "time" ? "min" : "questions"}</span>
+        </div>`;
+    return `<div class="dashboard-class-card dashboard-mission-step-card"><div class="dashboard-class-card-main dashboard-mission-step-main" style="cursor:default;"><div class="dashboard-class-card-heading"><span class="dashboard-class-card-title">${index + 1}. ${escapeHtml(activity?.config_name || step.catalog_activity_id)}</span></div><div class="dashboard-mission-step-settings">${difficultyHtml}${limitHtml}</div></div><div class="dashboard-class-card-actions"><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-up" data-step-index="${index}" ${index <= 0 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_upward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-down" data-step-index="${index}" ${index >= editingSteps.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_downward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="remove-step" data-step-index="${index}"><span class="dashboard-material-icon">delete</span></button></div></div>`;
+  }
+
+  function getMissionStepDifficulty(step){
+    const rawMode = String(step?.difficulty_mode || "normal").trim().toLowerCase();
+    const level = Math.max(1, Math.min(5, Math.trunc(Number(step?.difficulty_level) || 3)));
+    return rawMode === "adaptive"
+      ? { mode: "adaptive", level }
+      : { mode: "fixed", level };
+  }
+
+  function readMissionStepDifficulties(){
+    editingSteps.forEach((step, index) => {
+      const select = missionEditorHost?.querySelector(`[data-step-difficulty="${index}"]`);
+      if (!select) return;
+      const value = String(select.value || "adaptive").trim().toLowerCase();
+      if (value === "adaptive") {
+        step.difficulty_mode = "adaptive";
+        step.difficulty_level = Math.max(1, Math.min(5, Math.trunc(Number(step.difficulty_level) || 3)));
+        return;
+      }
+      const level = Math.max(1, Math.min(5, Math.trunc(Number(value) || 3)));
+      step.difficulty_mode = "fixed";
+      step.difficulty_level = level;
+    });
+  }
+
+  function getMissionStepExecutionLimit(step){
+    const raw = step?.step_options_json?.execution_limit ?? step?.step_options_json?.executionLimit ?? {};
+    const mode = String(raw?.mode || "questions").trim() === "time" ? "time" : "questions";
+    const fallback = mode === "time" ? 180 : 5;
+    const value = Math.max(1, Math.trunc(Number(raw?.value) || fallback));
+    return { mode, value };
+  }
+
+  function readMissionStepExecutionLimits(){
+    editingSteps.forEach((step, index) => {
+      const activity = catalogActivities.find((item) => item.id === step.catalog_activity_id);
+      if (isIntrinsicCatalogActivity(activity)) return;
+      const modeEl = missionEditorHost?.querySelector(`[data-step-limit-mode="${index}"]`);
+      const valueEl = missionEditorHost?.querySelector(`[data-step-limit-value="${index}"]`);
+      if (!modeEl || !valueEl) return;
+      const mode = String(modeEl.value || "questions") === "time" ? "time" : "questions";
+      const rawValue = Math.max(1, Math.trunc(Number(valueEl.value) || (mode === "time" ? 3 : 5)));
+      const executionLimit = { mode, value: mode === "time" ? rawValue * 60 : rawValue };
+      step.step_options_json = {
+        ...(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {}),
+        execution_limit: executionLimit
+      };
+    });
   }
 
   function bindEditorEvents(){
-    missionsList.querySelector("[data-action='back-missions']")?.addEventListener("click", () => { editingMission = null; renderHeader(); renderExplorer(); });
-    missionsList.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("input", () => readMissionFields()));
-    missionsList.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", () => readMissionFields()));
-    missionsList.querySelectorAll("[data-action='add-step']").forEach((btn) => btn.addEventListener("click", () => { editingSteps.push({ catalog_activity_id: btn.dataset.catalogActivityId, difficulty_mode: "normal", difficulty_level: 3, step_options_json: {} }); renderEditor(); }));
-    missionsList.querySelectorAll("[data-action='remove-step']").forEach((btn) => btn.addEventListener("click", () => { editingSteps.splice(Number(btn.dataset.stepIndex), 1); renderEditor(); }));
-    missionsList.querySelectorAll("[data-action='move-step-up']").forEach((btn) => btn.addEventListener("click", () => moveStep(Number(btn.dataset.stepIndex), -1)));
-    missionsList.querySelectorAll("[data-action='move-step-down']").forEach((btn) => btn.addEventListener("click", () => moveStep(Number(btn.dataset.stepIndex), 1)));
-    missionsList.querySelector("[data-action='save-mission']")?.addEventListener("click", () => saveCurrentMission());
+    missionEditorHost?.querySelector("[data-action='back-missions']")?.addEventListener("click", () => {
+      editingMission = null;
+      closeEditorToExplorer();
+    });
+    missionEditorHost?.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("input", () => readMissionFields()));
+    missionEditorHost?.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", () => readMissionFields()));
+    missionEditorHost?.querySelectorAll("[data-action='remove-step']").forEach((btn) => btn.addEventListener("click", () => {
+      syncEditorStateFromDom();
+      editingSteps.splice(Number(btn.dataset.stepIndex), 1);
+      renderEditor();
+    }));
+    missionEditorHost?.querySelectorAll("[data-action='move-step-up']").forEach((btn) => btn.addEventListener("click", () => {
+      syncEditorStateFromDom();
+      moveStep(Number(btn.dataset.stepIndex), -1);
+    }));
+    missionEditorHost?.querySelectorAll("[data-action='move-step-down']").forEach((btn) => btn.addEventListener("click", () => {
+      syncEditorStateFromDom();
+      moveStep(Number(btn.dataset.stepIndex), 1);
+    }));
+    missionEditorHost?.querySelectorAll("[data-action='set-mission-status']").forEach((button) => button.addEventListener("click", () => {
+      const status = button.dataset.status === "active" ? "active" : "draft";
+      editingMission.status = status;
+      missionEditorHost?.querySelectorAll("[data-action='set-mission-status']").forEach((control) => {
+        const active = control.dataset.status === status;
+        control.classList.toggle("is-active", active);
+        control.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }));
+    missionEditorHost?.querySelectorAll("[data-step-difficulty]").forEach((select) => select.addEventListener("change", () => {
+      readMissionStepDifficulties();
+    }));
+    missionEditorHost?.querySelectorAll("[data-step-limit-mode]").forEach((select) => select.addEventListener("change", () => {
+      const index = Number(select.dataset.stepLimitMode);
+      // On mémorise d’abord les autres étapes, sans réinterpréter la valeur de celle qui change d’unité.
+      editingSteps.forEach((step, stepIndex) => {
+        if (stepIndex === index) return;
+        const activity = catalogActivities.find((item) => item.id === step.catalog_activity_id);
+        if (isIntrinsicCatalogActivity(activity)) return;
+        const modeEl = missionEditorHost?.querySelector(`[data-step-limit-mode="${stepIndex}"]`);
+        const valueEl = missionEditorHost?.querySelector(`[data-step-limit-value="${stepIndex}"]`);
+        if (!modeEl || !valueEl) return;
+        const mode = String(modeEl.value || "questions") === "time" ? "time" : "questions";
+        const rawValue = Math.max(1, Math.trunc(Number(valueEl.value) || (mode === "time" ? 3 : 5)));
+        step.step_options_json = {
+          ...(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {}),
+          execution_limit: { mode, value: mode === "time" ? rawValue * 60 : rawValue }
+        };
+      });
+      const step = editingSteps[index];
+      if (step) {
+        step.step_options_json = {
+          ...(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {}),
+          execution_limit: select.value === "time"
+            ? { mode: "time", value: 180 }
+            : { mode: "questions", value: 5 }
+        };
+      }
+      const limitHost = select.closest(".dashboard-mission-step-limit");
+      const valueInput = limitHost?.querySelector("[data-step-limit-value]");
+      const unit = limitHost?.querySelector(".dashboard-mission-step-limit-unit");
+      const isTimeLimit = select.value === "time";
+      if (valueInput) {
+        valueInput.max = isTimeLimit ? "120" : "200";
+        valueInput.value = isTimeLimit ? "3" : "5";
+      }
+      if (unit) unit.textContent = isTimeLimit ? "min" : "questions";
+    }));
+    missionEditorHost?.querySelector("[data-action='save-mission']")?.addEventListener("click", () => saveCurrentMission());
+
+    const classAssignment = missionEditorHost?.querySelector("[data-assignment-class]");
+    classAssignment?.addEventListener("change", () => {
+      missionEditorHost?.querySelectorAll("[data-assignment-student]").forEach((input) => {
+        input.checked = classAssignment.checked;
+      });
+    });
+    missionEditorHost?.querySelectorAll("[data-assignment-student]").forEach((input) => input.addEventListener("change", () => {
+      if (input.checked && classAssignment) classAssignment.checked = false;
+    }));
+
+    bindCatalogPickerEvents();
   }
 
   function readMissionFields(){
-    missionsList.querySelectorAll("[data-field]").forEach((field) => {
+    missionEditorHost?.querySelectorAll("[data-field]").forEach((field) => {
       editingMission[field.dataset.field] = field.value;
     });
+  }
+
+  function readMissionAssignmentsFromDom(){
+    const assignments = [];
+    const classAssignment = missionEditorHost?.querySelector("[data-assignment-class]");
+    if (classAssignment?.checked && classAssignment.dataset.assignmentClass) {
+      assignments.push({ target_type: "class", teacher_class_id: classAssignment.dataset.assignmentClass });
+      editingAssignments = assignments;
+      return assignments;
+    }
+    missionEditorHost?.querySelectorAll("[data-assignment-class]").forEach((input) => {
+      if (input.checked && input.dataset.assignmentClass) {
+        assignments.push({ target_type: "class", teacher_class_id: input.dataset.assignmentClass });
+      }
+    });
+    missionEditorHost?.querySelectorAll("[data-assignment-student]").forEach((input) => {
+      if (input.checked && input.dataset.assignmentStudent) {
+        assignments.push({ target_type: "student", student_id: input.dataset.assignmentStudent });
+      }
+    });
+    editingAssignments = assignments;
+    return assignments;
+  }
+
+  function syncEditorStateFromDom(){
+    readMissionFields();
+    readMissionAssignmentsFromDom();
+    readMissionStepDifficulties();
+    readMissionStepExecutionLimits();
   }
 
   function moveStep(index, delta){
@@ -296,17 +690,15 @@ export function createMissionsViewController({
   }
 
   async function saveCurrentMission(){
-    readMissionFields();
-    const message = missionsList.querySelector("#missionEditorMessage");
-    const assignments = [];
-    missionsList.querySelectorAll("[data-assignment-class]").forEach((input) => {
-      if (input.checked && input.dataset.assignmentClass) assignments.push({ target_type: "class", teacher_class_id: input.dataset.assignmentClass });
-    });
-    missionsList.querySelectorAll("[data-assignment-student]").forEach((input) => {
-      if (input.checked && input.dataset.assignmentStudent) assignments.push({ target_type: "student", student_id: input.dataset.assignmentStudent });
-    });
+    syncEditorStateFromDom();
+    const message = missionEditorHost?.querySelector("#missionEditorMessage");
+    const assignments = editingAssignments;
     if (!editingSteps.length) {
       if (message) message.textContent = "Ajoute au moins une activité.";
+      return;
+    }
+    if (String(editingMission.status || "draft") === "active" && !assignments.length) {
+      if (message) message.textContent = "Choisis au moins un destinataire avant d’activer la mission.";
       return;
     }
     try {
@@ -315,11 +707,79 @@ export function createMissionsViewController({
       editingSteps = [];
       editingAssignments = [];
       await refreshData();
-      renderHeader();
-      renderExplorer();
+      closeEditorToExplorer();
     } catch (err) {
       if (message) message.textContent = err?.message || "Enregistrement impossible.";
     }
+  }
+
+  function closeEditorToExplorer(){
+    const editorHost = missionEditorHost;
+    const finish = () => {
+      clearTimeout(missionEditorCloseTimer);
+      missionEditorCloseTimer = null;
+      editorHost?.remove();
+      if (missionEditorHost === editorHost) missionEditorHost = null;
+      renderHeader();
+      renderExplorer();
+    };
+    if (!editorHost) {
+      finish();
+      return;
+    }
+    clearTimeout(missionEditorCloseTimer);
+    editorHost.classList.add("is-closing");
+    const closeMotion = runMissionEditorMotion(editorHost, false);
+    if (closeMotion) {
+      closeMotion.finished.then(finish).catch(() => {});
+      return;
+    }
+    editorHost.classList.remove("is-open");
+    missionEditorCloseTimer = window.setTimeout(finish, 460);
+  }
+
+  function cancelMissionEditorMotion(){
+    if (!missionEditorMotion) return;
+    const motion = missionEditorMotion;
+    missionEditorMotion = null;
+    try { motion.cancel(); } catch {}
+  }
+
+  function runMissionEditorMotion(editorHost, open){
+    if (!editorHost?.animate) return null;
+
+    cancelMissionEditorMotion();
+    editorHost.classList.remove("is-animating", "is-opening");
+    editorHost.classList.add("is-animating");
+    if (open) editorHost.classList.add("is-opening");
+
+    const motion = editorHost.animate(
+      open
+        ? [
+            { transform:"translate3d(0,112%,0)" },
+            { transform:"translate3d(0,0,0)" }
+          ]
+        : [
+            { transform:"translate3d(0,0,0)" },
+            { transform:"translate3d(0,100%,0)" }
+          ],
+      {
+        duration:open ? 450 : 400,
+        easing:open ? "cubic-bezier(.22,1,.36,1)" : "cubic-bezier(.55,0,1,.45)",
+        fill:"both"
+      }
+    );
+
+    missionEditorMotion = motion;
+    motion.finished.then(() => {
+      if (missionEditorMotion !== motion) return;
+      if (open) editorHost.classList.add("is-open");
+      else editorHost.classList.remove("is-open");
+      missionEditorMotion = null;
+      editorHost.classList.remove("is-animating", "is-opening");
+      try { motion.cancel(); } catch {}
+    }).catch(() => {});
+    return motion;
   }
 
   function getFolder(id){ return folders.find((folder) => String(folder.id) === String(id || "")) || null; }
@@ -339,4 +799,20 @@ function compareByOrderAndTitle(a, b){
   const orderB = Number(b?.display_order) || 0;
   if (orderA !== orderB) return orderA - orderB;
   return String(a?.title || "").localeCompare(String(b?.title || ""), "fr", { sensitivity: "base" });
+}
+
+function compareCatalogActivities(a, b){
+  const orderA = Number(a?.display_order) || 0;
+  const orderB = Number(b?.display_order) || 0;
+  if (orderA !== orderB) return orderA - orderB;
+  return String(a?.config_name || a?.title || "").localeCompare(String(b?.config_name || b?.title || ""), "fr", { sensitivity: "base" });
+}
+
+function normalizeMissionSearch(value){
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }

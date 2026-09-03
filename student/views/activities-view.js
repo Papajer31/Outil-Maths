@@ -375,6 +375,14 @@ function renderMissionTile(mission){
 
 function formatMissionSubtitle(mission){
   const intent = String(mission?.intent_mode || "practice") === "evaluation" ? "Évaluation" : "Entrainement";
+  const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
+  const totalSteps = Math.max(0, Math.trunc(Number(mission?.total_steps) || 0));
+  const completedSteps = Math.max(0, Math.min(totalSteps, Math.trunc(Number(mission?.completed_steps) || 0)));
+
+  if (currentMode === "individual" && totalSteps > 0) {
+    return `${completedSteps}/${totalSteps} activités · ${intent}`;
+  }
+
   const answer = String(mission?.answer_mode || "student_input") === "manual_validation" ? "sans saisie" : "réponse saisie";
   return `${intent} · ${answer}`;
 }

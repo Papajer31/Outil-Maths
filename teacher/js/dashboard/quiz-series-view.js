@@ -326,6 +326,7 @@ function getSeriesModelPreviewMarkup(model, analysis){
     const classes = [
       "quiz-series-model-preview-block",
       widget.type === "answer" ? "is-answer" : "",
+      widget.type === "numeric-keypad" ? "is-keypad" : "",
       widget.type === "qcm-text" ? "is-qcm" : "",
       widget.type === "selection-words" ? "is-selection" : "",
       index === instructionIndex ? "is-instruction" : "",
@@ -348,7 +349,7 @@ export function openQuizSeriesCreationOverlay({ onConfirm } = {}){
       <header class="quiz-series-creation-header">
         <div>
           <h2 id="quizSeriesCreationTitle">Créer une série de questions</h2>
-          <p>Choisissez un modèle textuel, puis renseignez la consigne commune à toutes les questions.</p>
+          <p>Choisissez un modèle, puis renseignez la consigne commune à toutes les questions.</p>
         </div>
         <button class="quiz-series-creation-close dashboard-material-icon-btn" type="button" data-action="cancel" aria-label="Fermer" title="Fermer">
           <span class="dashboard-material-icon" aria-hidden="true">close</span>
@@ -361,20 +362,30 @@ export function openQuizSeriesCreationOverlay({ onConfirm } = {}){
         </label>
         <section class="quiz-series-models-section" aria-labelledby="quizSeriesModelsTitle">
           <h3 id="quizSeriesModelsTitle">Modèle de question</h3>
-          <div class="quiz-series-model-grid">
-            ${models.map(({ model, analysis }) => `
-              <button class="quiz-series-model-card" type="button" data-series-model-id="${escapeAttr(model.id)}" aria-pressed="false">
-                ${getSeriesModelPreviewMarkup(model, analysis)}
-                <span class="quiz-series-model-card-copy">
-                  <strong>${escapeHtml(model.title)}</strong>
-                  <span>${escapeHtml(model.description)}</span>
-                </span>
-                <span class="quiz-series-model-indicators">
-                  ${analysis.indicators.map((indicator) => `<span>${escapeHtml(indicator)}</span>`).join("")}
-                </span>
-                <span class="quiz-series-model-check dashboard-material-icon" aria-hidden="true">check_circle</span>
-              </button>
-            `).join("")}
+          <div class="quiz-series-model-carousel" data-series-model-carousel>
+            <button class="quiz-series-model-carousel-arrow is-previous dashboard-material-icon-btn" type="button" data-series-model-previous aria-label="Modèle précédent" title="Modèle précédent" disabled>
+              <span class="dashboard-material-icon" aria-hidden="true">chevron_left</span>
+            </button>
+            <div class="quiz-series-model-viewport" data-series-model-viewport>
+              <div class="quiz-series-model-track">
+                ${models.map(({ model, analysis }) => `
+                  <button class="quiz-series-model-card" type="button" data-series-model-id="${escapeAttr(model.id)}" aria-pressed="false">
+                    ${getSeriesModelPreviewMarkup(model, analysis)}
+                    <span class="quiz-series-model-card-copy">
+                      <strong>${escapeHtml(model.title)}</strong>
+                      <span>${escapeHtml(model.description)}</span>
+                    </span>
+                    <span class="quiz-series-model-indicators">
+                      ${analysis.indicators.map((indicator) => `<span>${escapeHtml(indicator)}</span>`).join("")}
+                    </span>
+                    <span class="quiz-series-model-check dashboard-material-icon" aria-hidden="true">check_circle</span>
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+            <button class="quiz-series-model-carousel-arrow is-next dashboard-material-icon-btn" type="button" data-series-model-next aria-label="Modèle suivant" title="Modèle suivant">
+              <span class="dashboard-material-icon" aria-hidden="true">chevron_right</span>
+            </button>
           </div>
         </section>
         <label class="quiz-series-creation-instruction">
@@ -398,8 +409,32 @@ export function openQuizSeriesCreationOverlay({ onConfirm } = {}){
   const instructionInput = overlay.querySelector("[data-series-instruction]");
   const confirmButtons = Array.from(overlay.querySelectorAll('[data-action^="confirm-"]'));
   const message = overlay.querySelector(".quiz-series-creation-message");
+  const modelViewport = overlay.querySelector("[data-series-model-viewport]");
+  const previousModelButton = overlay.querySelector("[data-series-model-previous]");
+  const nextModelButton = overlay.querySelector("[data-series-model-next]");
+  let modelCarouselIndex = 0;
 
-  const close = () => overlay.remove();
+  const getVisibleModelCount = () => Math.min(3, models.length);
+  const getModelCarouselMaxIndex = () => Math.max(0, models.length - getVisibleModelCount());
+  const updateModelCarousel = ({ smooth = true } = {}) => {
+    if (!modelViewport) return;
+    const cards = Array.from(modelViewport.querySelectorAll("[data-series-model-id]"));
+    const firstCard = cards[0];
+    const track = modelViewport.querySelector(".quiz-series-model-track");
+    if (!firstCard || !track) return;
+    modelCarouselIndex = Math.max(0, Math.min(getModelCarouselMaxIndex(), modelCarouselIndex));
+    const trackStyle = getComputedStyle(track);
+    const gap = Number.parseFloat(trackStyle.columnGap || trackStyle.gap || "0") || 0;
+    const offset = modelCarouselIndex * (firstCard.getBoundingClientRect().width + gap);
+    modelViewport.scrollTo({ left:offset, behavior:smooth ? "smooth" : "auto" });
+    if (previousModelButton) previousModelButton.disabled = modelCarouselIndex <= 0;
+    if (nextModelButton) nextModelButton.disabled = modelCarouselIndex >= getModelCarouselMaxIndex();
+  };
+
+  const close = () => {
+    window.removeEventListener("resize", handleCarouselResize);
+    overlay.remove();
+  };
   const updateState = () => {
     const valid = Boolean(
       selectedModelId
@@ -416,6 +451,16 @@ export function openQuizSeriesCreationOverlay({ onConfirm } = {}){
   overlay.addEventListener("click", async (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
+    if (target.closest("[data-series-model-previous]")) {
+      modelCarouselIndex -= 1;
+      updateModelCarousel();
+      return;
+    }
+    if (target.closest("[data-series-model-next]")) {
+      modelCarouselIndex += 1;
+      updateModelCarousel();
+      return;
+    }
     const modelButton = target.closest("[data-series-model-id]");
     if (modelButton) {
       selectedModelId = String(modelButton.dataset.seriesModelId || "");
@@ -453,6 +498,9 @@ export function openQuizSeriesCreationOverlay({ onConfirm } = {}){
   });
   titleInput?.addEventListener("input", updateState);
   instructionInput?.addEventListener("input", updateState);
+  const handleCarouselResize = () => updateModelCarousel({ smooth:false });
+  window.addEventListener("resize", handleCarouselResize);
+  updateModelCarousel({ smooth:false });
   overlay.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -550,7 +598,10 @@ function getSeriesImportFormat(analysis){
 
 function getSeriesImportExample(analysis){
   const fields = Array.isArray(analysis?.fields) ? analysis.fields : [];
+  const isOperationsModel = String(analysis?.model?.id || "") === "operations";
   return fields.map((field) => {
+    if (isOperationsModel && field.kind === "answer") return "21";
+    if (isOperationsModel && field.kind === "text" && field.label === "Opération") return "10 + 10 + 1";
     if (field.kind === "answer") return "8";
     if (field.kind === "qcm") return "Paris; Lyon; Marseille; Toulouse";
     if (field.kind === "selection") return "Le [chat] dort sur le [tapis].";

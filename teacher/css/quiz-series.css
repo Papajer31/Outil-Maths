@@ -440,13 +440,53 @@
   color:var(--text);
   font-size:.94rem;
 }
-.quiz-series-model-grid{
+.quiz-series-model-carousel{
+  position:relative;
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:38px minmax(0,1fr) 38px;
+  align-items:stretch;
+  gap:10px;
+}
+.quiz-series-model-viewport{
+  min-width:0;
+  overflow:hidden;
+  scroll-behavior:smooth;
+  scrollbar-width:none;
+}
+.quiz-series-model-viewport::-webkit-scrollbar{display:none;}
+.quiz-series-model-track{
+  display:flex;
   gap:14px;
+  min-width:0;
+}
+.quiz-series-model-carousel-arrow{
+  align-self:center;
+  width:38px;
+  height:64px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;
+  background:rgba(255,255,255,.045);
+  color:#d5dcef;
+  cursor:pointer;
+  transition:border-color .15s ease,background .15s ease,color .15s ease,opacity .15s ease;
+}
+.quiz-series-model-carousel-arrow:hover:not(:disabled),
+.quiz-series-model-carousel-arrow:focus-visible:not(:disabled){
+  border-color:rgba(124,152,255,.58);
+  background:rgba(124,152,255,.15);
+  color:#fff;
+  outline:none;
+}
+.quiz-series-model-carousel-arrow:disabled{
+  opacity:.22;
+  cursor:default;
 }
 .quiz-series-model-card{
   position:relative;
+  flex:0 0 calc((100% - 28px)/3);
   min-width:0;
   display:grid;
   grid-template-columns:150px minmax(0,1fr);
@@ -496,6 +536,10 @@
 }
 .quiz-series-model-preview-block.is-instruction{border-color:#7c98ff;background:rgba(84,117,255,.18);}
 .quiz-series-model-preview-block.is-answer{border-style:dashed;background:rgba(255,255,255,.035);}
+.quiz-series-model-preview-block.is-keypad{
+  border-color:rgba(124,152,255,.45);
+  background:repeating-linear-gradient(90deg,rgba(124,152,255,.18) 0 8px,rgba(255,255,255,.04) 8px 12px);
+}
 .quiz-series-model-preview-block.is-qcm{background:repeating-linear-gradient(135deg,rgba(124,152,255,.18) 0 5px,rgba(255,255,255,.05) 5px 10px);}
 .quiz-series-model-preview-block.is-selection{border-style:dashed;background:rgba(255,255,255,.04);}
 .quiz-series-model-preview-block.is-correction{border-color:#57d07a;background:rgba(87,208,122,.12);}
@@ -831,7 +875,6 @@
 }
 
 @media (max-width:1400px){
-  .quiz-series-model-grid{grid-template-columns:1fr 1fr;}
   .quiz-series-header{grid-template-columns:minmax(260px,1fr) auto;}
 }
 

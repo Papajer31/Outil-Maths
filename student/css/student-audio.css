@@ -1,0 +1,244 @@
+.student-audio-help-btn{
+  position:fixed;
+  top:max(14px, env(safe-area-inset-top));
+  right:max(14px, env(safe-area-inset-right));
+  z-index:1200;
+  width:64px;
+  height:64px;
+  display:grid;
+  place-items:center;
+  border:2px solid rgba(255,255,255,.72);
+  border-radius:50%;
+  background:rgba(18,25,48,.86);
+  color:#fff;
+  box-shadow:0 8px 24px rgba(0,0,0,.26);
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  backdrop-filter:blur(7px);
+  transition:background-color .14s ease, border-color .14s ease, color .14s ease;
+}
+
+@media (hover:hover) and (pointer:fine){
+  .student-audio-help-btn:hover:not(:disabled){
+    background:rgba(31,43,76,.94);
+    border-color:rgba(255,255,255,.9);
+  }
+}
+
+.student-audio-help-btn:active:not(:disabled){
+  background:rgba(48,66,108,.96);
+  border-color:#fff;
+}
+
+.student-audio-help-btn:focus-visible{ outline:3px solid #fff; outline-offset:3px; }
+.student-audio-help-btn[hidden]{ display:none !important; }
+
+.student-audio-help-icon{
+  display:block;
+  overflow:visible;
+}
+
+.student-audio-wave{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2;
+  stroke-linecap:round;
+  transform-box:view-box;
+  transform-origin:13px 12px;
+}
+
+.student-audio-help-btn.is-playing .student-audio-wave-one{
+  animation:student-audio-wave-ripple 1s ease-out infinite;
+}
+
+.student-audio-help-btn.is-playing .student-audio-wave-two{
+  animation:student-audio-wave-ripple 1s .22s ease-out infinite;
+}
+
+@keyframes student-audio-wave-ripple{
+  0%{ opacity:.2; transform:scale(.82); }
+  34%{ opacity:1; }
+  100%{ opacity:.08; transform:scale(1.16); }
+}
+
+/*
+  Premier geste élève : cet écran masque volontairement tout le reste.
+  Le clic sur la fusée déverrouille l'audio du navigateur avant l'entrée dans le site.
+*/
+.student-audio-welcome-overlay{
+  position:fixed;
+  inset:0;
+  z-index:4000;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  overflow:hidden;
+  background:var(--bg, #10151e);
+  color:#fff;
+}
+
+.student-audio-welcome-start{
+  position:relative;
+  width:100%;
+  height:100%;
+  margin:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+  appearance:none;
+  -webkit-tap-highlight-color:transparent;
+}
+
+.student-audio-welcome-start:focus-visible{
+  outline:none;
+}
+
+.student-audio-welcome-play{
+  position:absolute;
+  left:50%;
+  top:22%;
+  z-index:2;
+  width:96px;
+  height:96px;
+  display:grid;
+  place-items:center;
+  border:3px solid rgba(255,255,255,.92);
+  border-radius:50%;
+  background:rgba(18,25,48,.72);
+  color:#fff;
+  box-shadow:0 10px 30px rgba(0,0,0,.24);
+  transform:translateX(-50%);
+  transition:background-color .14s ease, border-color .14s ease, opacity .16s ease;
+  backdrop-filter:blur(5px);
+}
+
+@media (hover:hover) and (pointer:fine){
+  .student-audio-welcome-start:hover .student-audio-welcome-play{
+    background:rgba(31,43,76,.9);
+    border-color:#fff;
+  }
+}
+
+.student-audio-welcome-start:active .student-audio-welcome-play{
+  background:rgba(48,66,108,.96);
+}
+
+.student-audio-welcome-rocket-stage{
+  position:absolute;
+  left:50%;
+  bottom:0;
+  width:min(440px, 88vw);
+  height:min(430px, 62vh);
+  transform:translateX(-50%);
+  will-change:transform;
+}
+
+.student-audio-welcome-rocket-visual{
+  position:absolute;
+  left:50%;
+  bottom:42px;
+  width:min(360px, 74vw);
+  aspect-ratio:229.45718 / 115.59426;
+  transform:translateX(-50%) rotate(-90deg);
+  transform-origin:center;
+}
+
+.student-audio-welcome-rocket{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:contain;
+  user-select:none;
+  -webkit-user-drag:none;
+  pointer-events:none;
+  filter:drop-shadow(0 24px 30px rgba(0,0,0,.28));
+  transition:opacity .12s ease;
+}
+
+.student-audio-welcome-rocket-on{
+  opacity:0;
+}
+
+.student-audio-welcome-overlay.is-launching{
+  pointer-events:none;
+  animation:student-audio-welcome-fade 1.08s ease-in forwards;
+}
+
+.student-audio-welcome-overlay.is-launching .student-audio-welcome-play{
+  opacity:0;
+}
+
+.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-off{
+  opacity:0;
+}
+
+.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-on{
+  opacity:1;
+}
+
+.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-stage{
+  animation:student-audio-welcome-launch 1.02s cubic-bezier(.22,.68,.2,1) forwards;
+}
+
+@keyframes student-audio-welcome-launch{
+  0%{ transform:translate3d(-50%, 0, 0); }
+  16%{ transform:translate3d(-50%, 8px, 0); }
+  48%{ transform:translate3d(-50%, -34vh, 0); }
+  100%{ transform:translate3d(-50%, -145vh, 0); }
+}
+
+@keyframes student-audio-welcome-fade{
+  0%,58%{ background:var(--bg, #10151e); }
+  100%{ background:rgba(16,21,30,0); }
+}
+
+@media (max-width:700px){
+  .student-audio-help-btn{
+    width:58px;
+    height:58px;
+    top:max(10px, env(safe-area-inset-top));
+    right:max(10px, env(safe-area-inset-right));
+  }
+
+  .student-audio-welcome-play{
+    top:18%;
+    width:84px;
+    height:84px;
+  }
+
+  .student-audio-welcome-play svg{
+    width:54px;
+    height:54px;
+  }
+
+  .student-audio-welcome-rocket-stage{
+    height:min(390px, 58vh);
+  }
+
+  .student-audio-welcome-rocket-visual{
+    bottom:30px;
+    width:min(330px, 78vw);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .student-audio-help-btn.is-playing .student-audio-wave{
+    animation:none;
+  }
+
+  .student-audio-welcome-overlay.is-launching{
+    animation:student-audio-welcome-fade .28s linear forwards;
+  }
+
+  .student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-stage{
+    animation:student-audio-welcome-launch-reduced .28s ease-out forwards;
+  }
+
+  @keyframes student-audio-welcome-launch-reduced{
+    to{ transform:translate3d(-50%, -110vh, 0); }
+  }
+}

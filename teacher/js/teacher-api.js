@@ -439,9 +439,14 @@ export async function listStudentActivityHistory(studentId, { limit = 250 } = {}
       "started_at",
       "ended_at",
       "metadata_json",
+      "mission_id",
+      "mission_step_id",
+      "progress_voided_at",
+      "history_hidden_at",
       "created_at"
     ].join(", "))
     .eq("student_id", id)
+    .is("history_hidden_at", null)
     .order("started_at", { ascending: false })
     .limit(safeLimit);
 
@@ -531,30 +536,57 @@ export async function listStudentActivityHistory(studentId, { limit = 250 } = {}
   });
 }
 
-/**
- * Supprime une tentative de l’historique enseignant.
- * La suppression concerne uniquement la session et ses instantanés de questions.
- * Les progressions déjà calculées ne sont pas recalculées.
- */
-export async function deleteStudentActivityHistoryAttempt(attemptId, studentId) {
+function normalizeStudentAttemptActionArgs(attemptId, studentId) {
   const id = String(attemptId || "").trim();
   const sid = Number(studentId);
   if (!id) throw new Error("Tentative invalide.");
   if (!Number.isFinite(sid) || sid <= 0) throw new Error("Élève invalide.");
+  return { id, sid };
+}
 
-  const { data, error } = await supabase
-    .from("student_activity_sessions")
-    .delete()
-    .eq("id", id)
-    .eq("student_id", sid)
-    .select("id");
-
+/**
+ * Retire seulement la trace de l’historique visible.
+ * La ligne technique est conservée afin que la progression reste reconstructible.
+ */
+export async function deleteStudentActivityHistoryAttempt(attemptId, studentId) {
+  const { id, sid } = normalizeStudentAttemptActionArgs(attemptId, studentId);
+  const { data, error } = await supabase.rpc("hide_student_activity_attempt_as_teacher", {
+    p_attempt_id: id,
+    p_student_id: sid
+  });
   if (error) throw error;
-  if (!Array.isArray(data) || !data.length) {
-    throw new Error("Cette tentative n’a pas pu être supprimée.");
-  }
-
+  if (data !== true) throw new Error("Cette tentative n’a pas pu être retirée de l’historique.");
   return true;
+}
+
+/**
+ * Annule les effets pédagogiques d’une tentative sans supprimer sa trace.
+ * Exploration : recalcule les statistiques et le niveau de l’activité.
+ * Mission : remet l’étape ciblée et toutes les suivantes à faire.
+ */
+export async function resetStudentActivityAttemptEffects(attemptId, studentId) {
+  const { id, sid } = normalizeStudentAttemptActionArgs(attemptId, studentId);
+  const { data, error } = await supabase.rpc("reset_student_activity_attempt_as_teacher", {
+    p_attempt_id: id,
+    p_student_id: sid,
+    p_delete_history: false
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data[0] || null) : data;
+}
+
+/**
+ * Annule les effets pédagogiques puis efface physiquement la tentative ciblée.
+ */
+export async function deleteStudentActivityAttemptTotally(attemptId, studentId) {
+  const { id, sid } = normalizeStudentAttemptActionArgs(attemptId, studentId);
+  const { data, error } = await supabase.rpc("reset_student_activity_attempt_as_teacher", {
+    p_attempt_id: id,
+    p_student_id: sid,
+    p_delete_history: true
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data[0] || null) : data;
 }
 
 export async function createStudent(teacherClassId, student = {}) {
@@ -935,9 +967,8 @@ export async function deleteMissionFolder(folderId) {
 export async function listMissionsForSpace(teacherSpaceId) {
   const { data, error } = await supabase
     .from("missions")
-    .select("id, teacher_space_id, folder_id, title, title_normalized, description, status, answer_mode, intent_mode, question_count, question_time_seconds, answer_display_seconds, transition_seconds, mission_time_seconds, instructions, display_order, created_at, updated_at")
+    .select("id, teacher_space_id, folder_id, title, title_normalized, description, status, inactive_reason, current_run, answer_mode, intent_mode, question_count, question_time_seconds, answer_display_seconds, transition_seconds, mission_time_seconds, instructions, display_order, created_at, updated_at")
     .eq("teacher_space_id", teacherSpaceId)
-    .neq("status", "archived")
     .order("display_order", { ascending: true })
     .order("title", { ascending: true });
   if (error) throw error;
@@ -966,13 +997,17 @@ export async function listMissionAssignments(missionId) {
 export async function saveMissionForSpace(teacherSpaceId, mission = {}, steps = [], assignments = []) {
   const title = cleanDisplayName(mission.title);
   if (!title) throw new Error("Titre de mission vide.");
+  const missionStatus = ["active", "inactive"].includes(String(mission.status || "draft").trim())
+    ? String(mission.status || "draft").trim()
+    : "draft";
   const payload = {
     teacher_space_id: teacherSpaceId,
     folder_id: String(mission.folder_id || "").trim() || null,
     title,
     title_normalized: normalizeConfigName(title),
     description: String(mission.description || "").trim(),
-    status: String(mission.status || "draft").trim() === "active" ? "active" : "draft",
+    status: missionStatus,
+    inactive_reason: missionStatus === "inactive" ? "manual" : null,
     answer_mode: String(mission.answer_mode || "student_input").trim() === "manual_validation" ? "manual_validation" : "student_input",
     intent_mode: String(mission.intent_mode || "practice").trim() === "evaluation" ? "evaluation" : "practice",
     question_count: Math.max(1, Math.trunc(Number(mission.question_count) || 5)),
@@ -1033,8 +1068,28 @@ export async function saveMissionForSpace(teacherSpaceId, mission = {}, steps = 
   return savedMission;
 }
 
-export async function deleteMission(missionId) {
-  const { error } = await supabase.from("missions").update({ status: "archived" }).eq("id", missionId);
+export async function setMissionInactive(missionId) {
+  const { data, error } = await supabase
+    .from("missions")
+    .update({ status: "inactive", inactive_reason: "manual" })
+    .eq("id", missionId)
+    .eq("status", "active")
+    .select("id, status, current_run")
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+export async function reactivateMission(missionId) {
+  const { data, error } = await supabase.rpc("reactivate_mission_as_teacher", {
+    p_mission_id: String(missionId || "").trim()
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
+}
+
+export async function deleteMissionPermanently(missionId) {
+  const { error } = await supabase.from("missions").delete().eq("id", missionId);
   if (error) throw error;
 }
 
@@ -1066,7 +1121,7 @@ export async function listAdventureDefaultMenuSlots(gradeLevel) {
   const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
   const { data, error } = await supabase
     .from("adventure_default_menu_slots")
-    .select("grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .select("grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, execution_limit, created_at, updated_at")
     .eq("grade_level", safeGrade)
     .order("menu_number", { ascending: true })
     .order("day_number", { ascending: true })
@@ -1087,7 +1142,8 @@ export async function saveAdventureDefaultMenuSlots(gradeLevel, items = []) {
       slot_number: item.slot_number,
       item_type: item.item_type,
       grade_folder_id: item.item_type === "objective" ? item.grade_folder_id : null,
-      catalog_activity_id: item.item_type === "activity" ? item.catalog_activity_id : null
+      catalog_activity_id: item.item_type === "activity" ? item.catalog_activity_id : null,
+      execution_limit: item.execution_limit
     }));
 
   const { error } = await supabase.rpc("replace_adventure_default_menu", {
@@ -1103,7 +1159,7 @@ export async function listTeacherAdventureMenuSlots(teacherSpaceId, gradeLevel) 
   const safeGrade = normalizeAdventureGradeLevel(gradeLevel);
   const { data, error } = await supabase
     .from("teacher_adventure_menu_slots")
-    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, execution_limit, created_at, updated_at")
     .eq("teacher_space_id", safeTeacherSpaceId)
     .eq("grade_level", safeGrade)
     .order("menu_number", { ascending: true })
@@ -1129,6 +1185,7 @@ export async function saveTeacherAdventureMenuSlot(teacherSpaceId, item = {}) {
     item_type: normalized.item_type,
     grade_folder_id: normalized.item_type === "objective" ? normalized.grade_folder_id : null,
     catalog_activity_id: normalized.item_type === "activity" ? normalized.catalog_activity_id : null,
+    execution_limit: normalized.execution_limit,
     updated_at: new Date().toISOString()
   };
 
@@ -1137,7 +1194,7 @@ export async function saveTeacherAdventureMenuSlot(teacherSpaceId, item = {}) {
     .upsert(payload, {
       onConflict: "teacher_space_id,grade_level,menu_number,day_number,slot_number"
     })
-    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, created_at, updated_at")
+    .select("teacher_space_id, grade_level, menu_number, day_number, slot_number, item_type, grade_folder_id, catalog_activity_id, execution_limit, created_at, updated_at")
     .single();
 
   if (error) throw error;
@@ -1236,8 +1293,17 @@ function normalizeAdventureMenuSlot(item = {}) {
     slot_number: normalizeAdventureSlotNumber(item?.slot_number),
     item_type: itemType,
     grade_folder_id: itemType === "objective" ? String(item?.grade_folder_id || "").trim() || null : null,
-    catalog_activity_id: itemType === "activity" ? String(item?.catalog_activity_id || "").trim() || null : null
+    catalog_activity_id: itemType === "activity" ? String(item?.catalog_activity_id || "").trim() || null : null,
+    execution_limit: normalizeAdventureExecutionLimit(item?.execution_limit ?? item?.executionLimit)
   };
+}
+
+function normalizeAdventureExecutionLimit(value) {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const mode = String(raw.mode || "questions").trim() === "time" ? "time" : "questions";
+  const fallback = mode === "time" ? 180 : 5;
+  const amount = Math.max(1, Math.trunc(Number(raw.value) || fallback));
+  return { mode, value: mode === "time" ? Math.min(7200, amount) : Math.min(200, amount) };
 }
 
 function normalizeAdventureGradeLevel(value) {
@@ -2254,3 +2320,126 @@ export async function importSystemImageAssetAsAdmin(file, asset = {}) {
   return normalizeImageAssetRecord(data);
 }
 
+
+
+// ---------------------------------------------------------
+// Centre audio système (super-admin)
+// ---------------------------------------------------------
+
+const INTERFACE_AUDIO_BUCKET = "interface-audio";
+const INTERFACE_AUDIO_FIELDS = "owner_key, audio_key, teacher_space_id, title, source_text, storage_bucket, storage_path, mime_type, size_bytes, duration_seconds, metadata, created_at, updated_at";
+
+export async function listInterfaceAudioAssetsAsAdmin() {
+  const { data, error } = await supabase
+    .from("interface_audio_assets")
+    .select(INTERFACE_AUDIO_FIELDS)
+    .eq("owner_key", "system")
+    .order("audio_key", { ascending:true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function uploadSystemInterfaceAudioAsAdmin(audioKey, blob, meta = {}) {
+  const key = String(audioKey || "").trim();
+  if (!key) throw new Error("Clé audio invalide.");
+  if (!(blob instanceof Blob)) throw new Error("Enregistrement audio invalide.");
+  if (!String(blob.type || meta.mimeType || "").toLowerCase().startsWith("audio/")) {
+    throw new Error("Le fichier enregistré n’est pas un audio.");
+  }
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+
+  const existingRows = await listInterfaceAudioAssetsAsAdmin();
+  const existing = existingRows.find((row) => String(row.audio_key || "") === key) || null;
+  const extension = getInterfaceAudioExtension(blob.type || meta.mimeType);
+  const objectId = globalThis.crypto?.randomUUID?.();
+  if (!objectId) throw new Error("Impossible de générer l’identifiant du fichier audio.");
+  const safeKey = sanitizeStorageFileName(key.replaceAll(".", "-"), "audio");
+  const storagePath = `system/${safeKey}/${objectId}.${extension}`;
+  const mimeType = String(blob.type || meta.mimeType || "audio/webm").trim() || "audio/webm";
+
+  const { error: uploadError } = await supabase.storage
+    .from(INTERFACE_AUDIO_BUCKET)
+    .upload(storagePath, blob, {
+      contentType:mimeType,
+      cacheControl:"3600",
+      upsert:false
+    });
+  if (uploadError) throw uploadError;
+
+  const payload = {
+    owner_key:"system",
+    audio_key:key,
+    teacher_space_id:null,
+    title:cleanDisplayName(meta.title || key) || key,
+    source_text:String(meta.text || "").trim(),
+    storage_bucket:INTERFACE_AUDIO_BUCKET,
+    storage_path:storagePath,
+    mime_type:mimeType,
+    size_bytes:Math.max(0, Number(blob.size) || 0),
+    duration_seconds:Math.max(0, Number(meta.duration) || 0),
+    metadata:{ origin:"interface-audio-admin", recorded_at:new Date().toISOString() }
+  };
+
+  const { data, error } = await supabase
+    .from("interface_audio_assets")
+    .upsert(payload, { onConflict:"owner_key,audio_key" })
+    .select(INTERFACE_AUDIO_FIELDS)
+    .single();
+  if (error) {
+    await supabase.storage.from(INTERFACE_AUDIO_BUCKET).remove([storagePath]).catch(() => {});
+    throw error;
+  }
+
+  const oldPath = String(existing?.storage_path || "").trim();
+  if (oldPath && oldPath !== storagePath) {
+    const { error: removeError } = await supabase.storage.from(INTERFACE_AUDIO_BUCKET).remove([oldPath]);
+    if (removeError) console.warn("Ancien fichier audio système non supprimé.", removeError);
+  }
+  return data || null;
+}
+
+export async function deleteSystemInterfaceAudioAsAdmin(audioKey) {
+  const key = String(audioKey || "").trim();
+  if (!key) throw new Error("Clé audio invalide.");
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+
+  const { data:rows, error:readError } = await supabase
+    .from("interface_audio_assets")
+    .select(INTERFACE_AUDIO_FIELDS)
+    .eq("owner_key", "system")
+    .eq("audio_key", key)
+    .limit(1);
+  if (readError) throw readError;
+  const existing = Array.isArray(rows) ? rows[0] : null;
+
+  const { error } = await supabase
+    .from("interface_audio_assets")
+    .delete()
+    .eq("owner_key", "system")
+    .eq("audio_key", key);
+  if (error) throw error;
+
+  const path = String(existing?.storage_path || "").trim();
+  if (path) {
+    const { error:storageError } = await supabase.storage.from(INTERFACE_AUDIO_BUCKET).remove([path]);
+    if (storageError) console.warn("Ligne audio supprimée mais fichier Storage conservé.", storageError);
+  }
+  return true;
+}
+
+export function getInterfaceAudioAssetPublicUrl(asset = {}) {
+  const bucket = String(asset?.storage_bucket || INTERFACE_AUDIO_BUCKET).trim() || INTERFACE_AUDIO_BUCKET;
+  const path = String(asset?.storage_path || "").trim();
+  if (!path) return "";
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return String(data?.publicUrl || "").trim();
+}
+
+function getInterfaceAudioExtension(mimeType) {
+  const value = String(mimeType || "").toLowerCase();
+  if (value.includes("ogg")) return "ogg";
+  if (value.includes("mp4") || value.includes("m4a")) return "m4a";
+  if (value.includes("wav")) return "wav";
+  if (value.includes("mpeg") || value.includes("mp3")) return "mp3";
+  return "webm";
+}

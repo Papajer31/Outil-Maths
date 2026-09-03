@@ -18,7 +18,7 @@
 
 .ro-config-row{
   display:grid;
-  grid-template-columns:minmax(190px,.75fr) minmax(360px,1.8fr) 38px 38px;
+  grid-template-columns:minmax(190px,.8fr) minmax(220px,1fr) minmax(360px,1.8fr) 38px 38px;
   gap:10px;
   align-items:center;
 }
@@ -126,19 +126,20 @@
   }
 
   .ro-config-inline-target,
+  .ro-config-inline-alternatives,
   .ro-config-inline-distractors{
     grid-column:1;
   }
 
   .ro-config-add{
     grid-column:2;
-    grid-row:1 / span 2;
+    grid-row:1 / span 3;
     align-self:center;
   }
 
   .ro-config-remove{
     grid-column:3;
-    grid-row:1 / span 2;
+    grid-row:1 / span 3;
     align-self:center;
   }
 }

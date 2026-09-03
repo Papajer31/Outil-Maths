@@ -1,6 +1,6 @@
 import * as config from "./config.js";
 import { createActivity as createQuizActivity } from "./activity.js";
-import { normalizeSettings } from "./model.js";
+import { filterQuizSnapshotBySelection, normalizeSettings, normalizeQuizSnapshot } from "./model.js";
 import { defineTool } from "../../shared/tool-contract.js";
 
 function getDefaultInstruction(settings = {}){
@@ -22,6 +22,20 @@ export default defineTool("quiz", "Quiz", {
 
   buildRuntimeConfig(settings = {}){
     return normalizeSettings(settings);
+  },
+
+  getIntrinsicQuestionCount(context = {}){
+    const settings = normalizeSettings(context?.settings || {});
+    const snapshot = normalizeQuizSnapshot(settings.quizSnapshot || {});
+
+    // Une « série de questions » est un pool génératif : ses variantes restent
+    // sélectionnables individuellement dans l’éditeur d’activité, mais leur
+    // nombre ne constitue pas la longueur intrinsèque de la séance. Celle-ci
+    // est fournie par le contexte (Exploration / Mission / Aventure).
+    if (snapshot.editorMode === "series" || snapshot.seriesModelId) return null;
+
+    // Un quiz classique reste fini : on joue le contenu sélectionné.
+    return Math.max(1, filterQuizSnapshotBySelection(snapshot, settings.questionSelection).length);
   },
 
   getActivityModeProfile(){

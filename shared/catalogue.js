@@ -1,5 +1,5 @@
 import { DEFAULT_ACTIVITY_MODE } from "./activity-modes.js";
-import { DEFAULT_QUESTION_FLOW_MODE } from "./activity-config.js";
+import { DEFAULT_QUESTION_FLOW_MODE, normalizeExecutionLimit } from "./activity-config.js";
 
 export const CATALOG_ROOT_LABEL = "Exploration";
 
@@ -785,6 +785,58 @@ export function normalizeCatalogRuntimeContext(value, fallback = "exploration") 
   return normalize(value) || normalize(fallback) || "exploration";
 }
 
+function isQuizSeriesSettings(settings = null) {
+  const safe = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const snapshot = safe.quizSnapshot ?? safe.quiz_snapshot ?? null;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return false;
+  const editorMode = String(snapshot.editorMode ?? snapshot.editor_mode ?? "").trim();
+  const seriesModelId = String(snapshot.seriesModelId ?? snapshot.series_model_id ?? "").trim();
+  return editorMode === "series" || Boolean(seriesModelId);
+}
+
+function getCatalogActivitySettingsCandidates(activity = {}) {
+  const candidates = [];
+  const push = (value) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) candidates.push(value);
+  };
+
+  push(activity?.settings);
+
+  const levels = activity?.difficulty_levels_json
+    ?? activity?.difficulty_levels
+    ?? activity?.levels_json
+    ?? activity?.levels
+    ?? null;
+  if (levels && typeof levels === "object" && !Array.isArray(levels)) {
+    Object.values(levels).forEach((level) => {
+      if (level && typeof level === "object" && !Array.isArray(level)) push(level.settings);
+    });
+  }
+
+  return candidates;
+}
+
+export function isIntrinsicCatalogActivity(activity = {}, settingsOverride = null) {
+  if (String(activity?.tool_id ?? activity?.toolId ?? "").trim() !== "quiz") return false;
+
+  // Au runtime, le réglage du palier/niveau courant est la source de vérité.
+  if (settingsOverride && typeof settingsOverride === "object" && !Array.isArray(settingsOverride)) {
+    return !isQuizSeriesSettings(settingsOverride);
+  }
+
+  // Dans les éditeurs Mission/Aventure, aucun niveau élève n’est encore connu.
+  // Si l’activité contient une série à l’un de ses niveaux, on laisse donc
+  // l’enseignant définir Questions/Temps plutôt que de la verrouiller à tort.
+  const candidates = getCatalogActivitySettingsCandidates(activity);
+  return !candidates.some(isQuizSeriesSettings);
+}
+
+export function getDefaultExecutionLimitForContext(context = "exploration") {
+  const safe = normalizeCatalogRuntimeContext(context);
+  if (safe === "exploration") return { mode: "questions", value: EXPLORATION_DEFAULTS.questionCount };
+  return { mode: "questions", value: 5 };
+}
+
 export function buildCatalogActivityConfig(activityOrId, options = {}) {
   const catalogActivities = Array.isArray(options.catalogActivities) ? options.catalogActivities : null;
   const activity = typeof activityOrId === "object" && activityOrId
@@ -806,12 +858,28 @@ export function buildCatalogActivityConfig(activityOrId, options = {}) {
   const difficultyLevels = normalizeDifficultyLevels(activity.difficulty_levels);
   const levelSettings = levelConfig.settings;
   const settings = pickCatalogConfigValue(options, runtimeOverrides, "settings", levelSettings ?? activity.settings ?? null);
-  const questionCount = clampQuestionCount(pickCatalogConfigValue(
+  const legacyQuestionCount = pickCatalogConfigValue(
     options,
     runtimeOverrides,
     "questionCount",
-    activity.default_question_count ?? defaults.questionCount
-  ));
+    null
+  );
+  const requestedExecutionLimit = options.executionLimit
+    ?? options.execution_limit
+    ?? runtimeOverrides.executionLimit
+    ?? runtimeOverrides.execution_limit
+    ?? (legacyQuestionCount == null ? null : { mode: "questions", value: legacyQuestionCount })
+    ?? getDefaultExecutionLimitForContext(catalogContext);
+  const externalExecutionLimit = normalizeExecutionLimit(
+    requestedExecutionLimit,
+    getDefaultExecutionLimitForContext(catalogContext)
+  );
+  const executionLimit = isIntrinsicCatalogActivity(activity, settings)
+    ? { mode: "intrinsic", value: null }
+    : externalExecutionLimit;
+  const questionCount = executionLimit.mode === "questions"
+    ? clampQuestionCount(executionLimit.value)
+    : clampQuestionCount(defaults.questionCount);
   const timePerQ = clampPositiveInt(pickCatalogConfigValue(
     options,
     runtimeOverrides,
@@ -899,6 +967,7 @@ export function buildCatalogActivityConfig(activityOrId, options = {}) {
       draft: {
         enabled: true,
         ...defaults,
+        executionLimit,
         questionCount,
         timePerQ,
         infiniteTimePerQ,
@@ -927,14 +996,21 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
   const questionTime = mission?.question_time_seconds == null ? null : Math.max(0, Math.trunc(Number(mission.question_time_seconds) || 0));
   const answerDisplay = mission?.answer_display_seconds == null ? null : Math.max(0, Math.trunc(Number(mission.answer_display_seconds) || 0));
   const transition = Math.max(0, Math.trunc(Number(mission?.transition_seconds) || 0));
-  const missionTime = mission?.mission_time_seconds == null ? null : Math.max(0, Math.trunc(Number(mission.mission_time_seconds) || 0));
 
   const sequence = (Array.isArray(steps) ? steps : [])
     .map((step, index) => {
       const activity = getCatalogActivityById(step?.catalog_activity_id, catalogActivities);
       if (!activity) return null;
-      const difficultyLevel = clampDifficultyLevel(step?.difficulty_level ?? 3);
+      const difficultyMode = String(step?.difficulty_mode || "normal").trim().toLowerCase();
+      const difficultyLevel = clampDifficultyLevel(step?.resolved_difficulty_level ?? step?.resolvedDifficultyLevel ?? step?.difficulty_level ?? 3);
       const levelSettings = getCatalogLevelSettings(activity, difficultyLevel);
+      const stepLimit = normalizeExecutionLimit(
+        step?.step_options_json?.execution_limit ?? step?.step_options_json?.executionLimit ?? { mode: "questions", value: 5 },
+        { mode: "questions", value: 5 }
+      );
+      const executionLimit = isIntrinsicCatalogActivity(activity, levelSettings)
+        ? { mode: "intrinsic", value: null }
+        : stepLimit;
       return {
         instanceId: `${activity.tool_id}_${String(step?.id || index).replace(/[^a-zA-Z0-9_-]+/g, "-")}`,
         toolId: activity.tool_id,
@@ -945,12 +1021,13 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
         catalog_levels: activity.difficulty_levels && typeof activity.difficulty_levels === "object" && !Array.isArray(activity.difficulty_levels)
           ? activity.difficulty_levels
           : null,
-        catalog_adaptive: false,
+        catalog_adaptive: difficultyMode === "adaptive",
         mission_id: String(mission?.id || ""),
         mission_step_id: String(step?.id || ""),
         draft: {
           enabled: true,
-          questionCount: Math.max(1, Math.trunc(Number(mission?.question_count) || 5)),
+          executionLimit,
+          questionCount: executionLimit.mode === "questions" ? executionLimit.value : 5,
           timePerQ: questionTime == null || questionTime <= 0 ? 40 : questionTime,
           infiniteTimePerQ: questionTime == null,
           answerTime: answerDisplay == null ? 5 : answerDisplay,
@@ -976,8 +1053,11 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
     response_ui: responseUi,
     progress_mode: progressMode,
     globals: {
-      activityTotalTimeEnabled: missionTime != null && missionTime > 0,
-      activityTotalTimeSec: missionTime != null && missionTime > 0 ? missionTime : 900
+      // La durée appartient désormais à chaque étape générative de la mission.
+      // Les anciens champs globaux mission_time_seconds restent en base pour compatibilité,
+      // mais ne pilotent plus l’exécution.
+      activityTotalTimeEnabled: false,
+      activityTotalTimeSec: 900
     },
     sequence
   };

@@ -18,6 +18,26 @@ const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
 
+const RESOURCE_ALPHABETIC_COLLATOR = new Intl.Collator("fr", {
+  sensitivity: "base",
+  numeric: true,
+  ignorePunctuation: true
+});
+
+function compareResourceAlphabetically(a, b, labelSelector){
+  const selectLabel = typeof labelSelector === "function" ? labelSelector : (item) => String(item?.name || item?.title || "");
+  const labelA = String(selectLabel(a) || "").trim();
+  const labelB = String(selectLabel(b) || "").trim();
+  const byLabel = RESOURCE_ALPHABETIC_COLLATOR.compare(labelA, labelB);
+  if (byLabel !== 0) return byLabel;
+
+  // Départage stable si deux libellés sont équivalents pour le tri français
+  // (casse/accents ignorés par le collator principal).
+  const byExactLabel = labelA.localeCompare(labelB, "fr", { sensitivity:"variant", numeric:true });
+  if (byExactLabel !== 0) return byExactLabel;
+  return String(a?.id || "").localeCompare(String(b?.id || ""), "fr", { numeric:true });
+}
+
 function formatBytes(value){
   const bytes = Math.max(0, Number(value) || 0);
   if (!bytes) return "";
@@ -92,6 +112,7 @@ export function createResourcesViewController({
   let personalLoadError = "";
   let currentOpenFolderId = null;
   let isImporting = false;
+  let isBulkDeleting = false;
   let isRecordingResource = false;
   let isMoving = false;
   let draggedNode = null;
@@ -421,8 +442,10 @@ export function createResourcesViewController({
     const parentId = selectedFolder ? String(selectedFolder.id) : null;
     return {
       selectedFolder,
-      childFolders: treeState.folderChildren.get(parentId) || [],
-      childResources: treeState.activityChildren.get(parentId) || []
+      childFolders: [...(treeState.folderChildren.get(parentId) || [])]
+        .sort((a, b) => compareResourceAlphabetically(a, b, (folder) => folder?.name)),
+      childResources: [...(treeState.activityChildren.get(parentId) || [])]
+        .sort((a, b) => compareResourceAlphabetically(a, b, (resource) => resource?.title || resource?.config_name))
     };
   }
 
@@ -570,6 +593,24 @@ export function createResourcesViewController({
     return `<div class="dashboard-activity-empty-state">Aucune ressource${escapeHtml(name)}.</div>`;
   }
 
+  function renderFolderActions(selectedFolder, childResources){
+    if (!selectedFolder || selectedFolder.is_virtual_root === true) return "";
+    const manageableResources = (Array.isArray(childResources) ? childResources : []).filter(canManageResource);
+    if (!manageableResources.length) return "";
+    const label = manageableResources.every((resource) => resource?.type !== "audio")
+      ? `${manageableResources.length} image${manageableResources.length > 1 ? "s" : ""}`
+      : `${manageableResources.length} ressource${manageableResources.length > 1 ? "s" : ""}`;
+    return `
+      <div class="dashboard-resource-folder-actions" role="toolbar" aria-label="Actions du dossier">
+        <span class="dashboard-resource-folder-actions-count">${escapeHtml(label)}</span>
+        <button class="btn danger dashboard-btn-with-icon" type="button" data-action="empty-folder" ${isBulkDeleting ? "disabled" : ""}>
+          <span class="dashboard-material-icon" aria-hidden="true">delete_sweep</span>
+          <span>${isBulkDeleting ? "Suppression…" : "Vider le dossier"}</span>
+        </button>
+      </div>
+    `;
+  }
+
   function renderShell(treeState, visibleNodes){
     const { selectedFolder, childFolders, childResources } = getCurrentFolderContents(treeState);
     const treeHtml = visibleNodes
@@ -599,6 +640,7 @@ export function createResourcesViewController({
         <div class="dashboard-activity-splitter" role="separator" aria-orientation="vertical" aria-label="Séparateur entre les panneaux"></div>
 
         <section class="dashboard-activity-tiles-pane panel">
+          ${renderFolderActions(selectedFolder, childResources)}
           <div class="dashboard-activity-tiles-grid-wrap">
             <div class="dashboard-resource-tiles-grid">
               ${tilesHtml || renderEmptyState(selectedFolder)}
@@ -939,6 +981,11 @@ export function createResourcesViewController({
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         void deletePersonalResource(button.dataset.resourceId);
+      });
+    });
+    list?.querySelectorAll('[data-action="empty-folder"]').forEach((button) => {
+      button.addEventListener("click", () => {
+        void emptyCurrentFolder();
       });
     });
     list?.querySelectorAll('[data-action="open-resource"]').forEach((button) => {
@@ -1374,6 +1421,69 @@ export function createResourcesViewController({
         showToast?.("Ressource renommée.");
       }
     });
+  }
+
+  async function emptyCurrentFolder(){
+    if (isBulkDeleting || typeof deleteResource !== "function") return;
+    const treeState = buildTreeState();
+    const { selectedFolder, childResources } = getCurrentFolderContents(treeState);
+    if (!selectedFolder || selectedFolder.is_virtual_root === true) return;
+
+    const resources = (Array.isArray(childResources) ? childResources : []).filter(canManageResource);
+    if (!resources.length) return;
+
+    const imageOnly = resources.every((resource) => resource?.type !== "audio");
+    const itemLabel = imageOnly
+      ? `${resources.length} image${resources.length > 1 ? "s" : ""}`
+      : `${resources.length} ressource${resources.length > 1 ? "s" : ""}`;
+    const confirmed = await openDashboardConfirmDialog({
+      title:"Vider le dossier",
+      message:`Supprimer définitivement ${itemLabel} directement contenue${resources.length > 1 ? "s" : ""} dans « ${selectedFolder.name || "ce dossier"} » ? Les fichiers seront également supprimés du stockage. Les éventuels sous-dossiers ne seront pas modifiés.`,
+      confirmLabel:"Vider le dossier",
+      danger:true
+    });
+    if (!confirmed) return;
+
+    isBulkDeleting = true;
+    render();
+
+    const deletedIds = new Set();
+    const failures = [];
+    const batchSize = 6;
+    try {
+      for (let start = 0; start < resources.length; start += batchSize) {
+        const batch = resources.slice(start, start + batchSize);
+        const results = await Promise.allSettled(batch.map((resource) =>
+          deleteResource(resource.id, { is_system:resource.is_system === true })
+        ));
+        results.forEach((result, index) => {
+          const resource = batch[index];
+          if (result.status === "fulfilled") deletedIds.add(String(resource.id));
+          else failures.push({ resource, error:result.reason });
+        });
+      }
+
+      if (deletedIds.size) {
+        personalResources = personalResources.filter((resource) => !deletedIds.has(String(resource.id)));
+        databaseSystemResources = databaseSystemResources.filter((resource) => !deletedIds.has(String(resource.id)));
+      }
+
+      try {
+        await reloadRemoteState();
+      } catch (error) {
+        console.warn("Impossible de rafraîchir les ressources après la suppression en masse.", error);
+      }
+
+      if (!failures.length) {
+        showToast?.(`${deletedIds.size} ressource${deletedIds.size > 1 ? "s" : ""} supprimée${deletedIds.size > 1 ? "s" : ""}.`);
+      } else {
+        console.warn("Certaines ressources n’ont pas pu être supprimées.", failures);
+        showToast?.(`${deletedIds.size} supprimée${deletedIds.size > 1 ? "s" : ""}, ${failures.length} en échec.`, { isError:true });
+      }
+    } finally {
+      isBulkDeleting = false;
+      render();
+    }
   }
 
   async function deletePersonalResource(resourceId){

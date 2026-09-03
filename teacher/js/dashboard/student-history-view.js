@@ -236,6 +236,43 @@ function renderAttemptDetails(attempt) {
   `;
 }
 
+function canResetAttempt(attempt) {
+  const context = String(attempt?.context || "exploration").trim().toLowerCase();
+  return context === "exploration" || context === "mission";
+}
+
+function renderAttemptActions(attempt) {
+  const id = String(attempt?.id || "");
+  const resettable = canResetAttempt(attempt);
+  const effectsReset = Boolean(attempt?.progress_voided_at);
+
+  return `
+    <details class="dashboard-history-attempt-actions">
+      <summary class="dashboard-history-attempt-actions-toggle" aria-label="Actions sur cette tentative" title="Actions">
+        <span class="dashboard-material-icon" aria-hidden="true">more_vert</span>
+      </summary>
+      <div class="dashboard-history-attempt-actions-menu" role="menu">
+        <button type="button" role="menuitem" data-history-attempt-action="hide" data-history-attempt-action-id="${escapeAttr(id)}">
+          <span class="dashboard-material-icon" aria-hidden="true">visibility_off</span>
+          <span>Supprimer de l’historique</span>
+        </button>
+        ${resettable ? `
+          <button type="button" role="menuitem" data-history-attempt-action="reset" data-history-attempt-action-id="${escapeAttr(id)}" ${effectsReset ? "disabled" : ""}>
+            <span class="dashboard-material-icon" aria-hidden="true">restart_alt</span>
+            <span>${effectsReset ? "Effets déjà réinitialisés" : "Réinitialiser les effets"}</span>
+          </button>
+          <button class="is-danger" type="button" role="menuitem" data-history-attempt-action="delete-total" data-history-attempt-action-id="${escapeAttr(id)}">
+            <span class="dashboard-material-icon" aria-hidden="true">delete_forever</span>
+            <span>Supprimer totalement</span>
+          </button>
+        ` : `
+          <div class="dashboard-history-attempt-actions-note">La réinitialisation fine d’Aventure sera ajoutée plus tard.</div>
+        `}
+      </div>
+    </details>
+  `;
+}
+
 function renderAttempt(attempt, expandedAttemptIds) {
   const id = String(attempt?.id || "");
   const questions = Array.isArray(attempt?.questions) ? attempt.questions : [];
@@ -249,9 +286,10 @@ function renderAttempt(attempt, expandedAttemptIds) {
   const discipline = String(attempt?.discipline_name || "").trim();
   const domain = String(attempt?.domain_name || "").trim();
   const breadcrumb = [discipline, domain].filter(Boolean).join(" · ");
+  const effectsReset = Boolean(attempt?.progress_voided_at);
 
   return `
-    <article class="dashboard-history-attempt ${expanded ? "is-expanded" : ""}" data-history-attempt-id="${escapeAttr(id)}">
+    <article class="dashboard-history-attempt ${expanded ? "is-expanded" : ""} ${effectsReset ? "has-reset-effects" : ""}" data-history-attempt-id="${escapeAttr(id)}">
       <div class="dashboard-history-attempt-row">
         <button class="dashboard-history-attempt-main" type="button" data-history-toggle-attempt="${escapeAttr(id)}" aria-expanded="${expanded ? "true" : "false"}">
           <div class="dashboard-history-attempt-copy">
@@ -259,6 +297,7 @@ function renderAttempt(attempt, expandedAttemptIds) {
               <span class="dashboard-history-attempt-date">${escapeHtml(formatAttemptDate(attempt))}</span>
               <span class="dashboard-history-mode dashboard-history-mode--${escapeAttr(String(attempt?.context || "exploration").toLowerCase())}">${escapeHtml(getContextLabel(attempt?.context))}</span>
               ${String(attempt?.status || "completed") !== "completed" ? `<span class="dashboard-history-status">${escapeHtml(getAttemptStatusLabel(attempt?.status))}</span>` : ""}
+              ${effectsReset ? `<span class="dashboard-history-reset-status">Effets réinitialisés</span>` : ""}
             </div>
             <div class="dashboard-history-attempt-title">${escapeHtml(attempt?.activity_title || "Activité")}</div>
             ${breadcrumb ? `<div class="dashboard-history-attempt-path">${escapeHtml(breadcrumb)}</div>` : ""}
@@ -269,9 +308,7 @@ function renderAttempt(attempt, expandedAttemptIds) {
             <span class="dashboard-material-icon dashboard-history-chevron" aria-hidden="true">expand_more</span>
           </div>
         </button>
-        <button class="dashboard-history-attempt-delete" type="button" data-history-delete-attempt="${escapeAttr(id)}" aria-label="Supprimer cette tentative" title="Supprimer cette tentative">
-          <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-        </button>
+        ${renderAttemptActions(attempt)}
       </div>
       ${expanded ? renderAttemptDetails(attempt) : ""}
     </article>
@@ -307,7 +344,7 @@ function getFilteredAttempts(history, filters) {
   });
 }
 
-function renderHistoryList(host, history, filters, expandedAttemptIds, onDeleteAttempt) {
+function renderHistoryList(host, history, filters, expandedAttemptIds, onAttemptAction) {
   const list = host.querySelector("[data-history-list]");
   const count = host.querySelector("[data-history-count]");
   if (!list || !count) return;
@@ -332,17 +369,19 @@ function renderHistoryList(host, history, filters, expandedAttemptIds, onDeleteA
       const id = String(button.dataset.historyToggleAttempt || "");
       if (expandedAttemptIds.has(id)) expandedAttemptIds.delete(id);
       else expandedAttemptIds.add(id);
-      renderHistoryList(host, history, filters, expandedAttemptIds, onDeleteAttempt);
+      renderHistoryList(host, history, filters, expandedAttemptIds, onAttemptAction);
     });
   });
 
-  list.querySelectorAll("[data-history-delete-attempt]").forEach((button) => {
+  list.querySelectorAll("[data-history-attempt-action]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const id = String(button.dataset.historyDeleteAttempt || "");
-      if (!id || button.disabled) return;
+      const action = String(button.dataset.historyAttemptAction || "");
+      const id = String(button.dataset.historyAttemptActionId || "");
+      if (!action || !id || button.disabled) return;
+      button.closest("details")?.removeAttribute("open");
       button.disabled = true;
       try {
-        await onDeleteAttempt?.(id);
+        await onAttemptAction?.(action, id);
       } finally {
         if (button.isConnected) button.disabled = false;
       }
@@ -360,6 +399,8 @@ export async function mountStudentHistoryView({
   subtitle = "",
   loadHistory,
   deleteHistoryAttempt,
+  resetAttemptEffects,
+  deleteAttemptTotally,
   showToast,
   onBack
 } = {}) {
@@ -445,32 +486,96 @@ export async function mountStudentHistoryView({
   const filters = { period: "30d", mode: "all", discipline: "all", activity: "" };
   const expandedAttemptIds = new Set();
 
-  const removeAttempt = async (attemptId) => {
+  const reloadHistory = async () => {
+    const loaded = await loadHistory?.(student.id);
+    history = Array.isArray(loaded) ? loaded : [];
+  };
+
+  const handleAttemptAction = async (action, attemptId) => {
     const attempt = history.find((item) => String(item?.id || "") === String(attemptId || ""));
     if (!attempt) return;
 
-    const confirmed = await openDashboardConfirmDialog({
-      title: "Supprimer cette tentative ?",
-      message: `La tentative « ${String(attempt.activity_title || "Activité")} » et le détail de ses questions seront supprimés de l’historique. Les progressions déjà calculées ne seront pas modifiées.`,
-      confirmLabel: "Supprimer",
-      cancelLabel: "Annuler",
-      danger: true
-    });
-    if (!confirmed) return;
+    const activityTitle = String(attempt.activity_title || "Activité");
+    const context = String(attempt.context || "exploration").trim().toLowerCase();
+    const isMission = context === "mission";
 
-    try {
-      await deleteHistoryAttempt?.(attemptId, student.id);
-      history = history.filter((item) => String(item?.id || "") !== String(attemptId || ""));
-      expandedAttemptIds.delete(String(attemptId || ""));
-      rerender();
-      showToast?.("Tentative supprimée de l’historique.");
-    } catch (error) {
-      console.error("Suppression de la tentative impossible.", error);
-      showToast?.(error?.message || "Impossible de supprimer cette tentative.", { isError: true });
+    if (action === "hide") {
+      const confirmed = await openDashboardConfirmDialog({
+        title: "Supprimer de l’historique ?",
+        message: `La tentative « ${activityTitle} » ne sera plus affichée dans l’historique. Sa progression sera conservée à l’identique.`,
+        confirmLabel: "Supprimer de l’historique",
+        cancelLabel: "Annuler",
+        danger: true
+      });
+      if (!confirmed) return;
+
+      try {
+        await deleteHistoryAttempt?.(attemptId, student.id);
+        history = history.filter((item) => String(item?.id || "") !== String(attemptId || ""));
+        expandedAttemptIds.delete(String(attemptId || ""));
+        rerender();
+        showToast?.("Tentative retirée de l’historique. La progression est conservée.");
+      } catch (error) {
+        console.error("Suppression de la trace impossible.", error);
+        showToast?.(error?.message || "Impossible de supprimer cette trace.", { isError: true });
+      }
+      return;
+    }
+
+    if (action === "reset") {
+      const message = isMission
+        ? `La progression de « ${activityTitle} » sera annulée à partir de cette étape : cette étape et toutes les suivantes redeviendront à faire pour l’élève. Les tentatives resteront visibles dans l’historique avec la mention « Effets réinitialisés ». `
+        : `Les effets de « ${activityTitle} » sur Exploration seront annulés. Les statistiques et le niveau adaptatif de cette activité seront recalculés à partir des autres tentatives. La trace restera visible dans l’historique.`;
+      const confirmed = await openDashboardConfirmDialog({
+        title: "Réinitialiser les effets ?",
+        message,
+        confirmLabel: "Réinitialiser",
+        cancelLabel: "Annuler",
+        danger: true
+      });
+      if (!confirmed) return;
+
+      try {
+        await resetAttemptEffects?.(attemptId, student.id);
+        await reloadHistory();
+        rerender();
+        showToast?.(isMission
+          ? "Progression Mission réinitialisée à partir de cette étape."
+          : "Effets de la tentative réinitialisés et progression recalculée.");
+      } catch (error) {
+        console.error("Réinitialisation des effets impossible.", error);
+        showToast?.(error?.message || "Impossible de réinitialiser cette tentative.", { isError: true });
+      }
+      return;
+    }
+
+    if (action === "delete-total") {
+      const message = isMission
+        ? `La tentative « ${activityTitle} » sera supprimée définitivement. Cette étape et toutes les suivantes redeviendront à faire, et leurs effets adaptatifs seront annulés. Cette action est irréversible.`
+        : `La tentative « ${activityTitle} » sera supprimée définitivement et tous ses effets sur Exploration seront annulés. La progression de cette activité sera recalculée à partir des autres tentatives. Cette action est irréversible.`;
+      const confirmed = await openDashboardConfirmDialog({
+        title: "Supprimer totalement cette tentative ?",
+        message,
+        confirmLabel: "Supprimer totalement",
+        cancelLabel: "Annuler",
+        danger: true
+      });
+      if (!confirmed) return;
+
+      try {
+        await deleteAttemptTotally?.(attemptId, student.id);
+        expandedAttemptIds.delete(String(attemptId || ""));
+        await reloadHistory();
+        rerender();
+        showToast?.("Tentative supprimée totalement et effets réinitialisés.");
+      } catch (error) {
+        console.error("Suppression totale impossible.", error);
+        showToast?.(error?.message || "Impossible de supprimer totalement cette tentative.", { isError: true });
+      }
     }
   };
 
-  const rerender = () => renderHistoryList(host, history, filters, expandedAttemptIds, removeAttempt);
+  const rerender = () => renderHistoryList(host, history, filters, expandedAttemptIds, handleAttemptAction);
 
   host.querySelectorAll("[data-history-filter]").forEach((control) => {
     const key = String(control.dataset.historyFilter || "");

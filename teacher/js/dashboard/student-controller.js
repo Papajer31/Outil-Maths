@@ -51,6 +51,8 @@ export function createStudentDashboardController({
   saveStudentOrderForTeacherSpace,
   listStudentActivityHistory,
   deleteStudentActivityHistoryAttempt,
+  resetStudentActivityAttemptEffects,
+  deleteStudentActivityAttemptTotally,
   showToast
 } = {}){
   let primaryModalMode = "create-space";
@@ -772,6 +774,8 @@ export function createStudentDashboardController({
           subtitle,
           loadHistory: listStudentActivityHistory,
           deleteHistoryAttempt: deleteStudentActivityHistoryAttempt,
+          resetAttemptEffects: resetStudentActivityAttemptEffects,
+          deleteAttemptTotally: deleteStudentActivityAttemptTotally,
           showToast,
           onBack: async () => {
             setCurrentStudent?.(null);

@@ -127,3 +127,19 @@ Ce socle ne comprend pas encore :
 - la matrice exacte de points et le vieillissement ;
 - l’attribution détaillée en séance de groupe ;
 - les hooks sémantiques particuliers des outils qui en auront besoin.
+
+## Contrôle fin des tentatives (patch 37)
+
+L’historique et la progression sont désormais deux dimensions séparées pour `exploration` et `mission`.
+
+Chaque tentative peut recevoir trois actions côté enseignant :
+
+- **Supprimer de l’historique** : masque la trace sans modifier aucun état pédagogique. La ligne technique reste en base afin de permettre un recalcul exact ultérieur.
+- **Réinitialiser les effets** : conserve la trace mais annule son effet pédagogique. En Exploration, `student_activity_progress` est reconstruit à partir des autres tentatives. En Mission, l’étape ciblée et toutes les suivantes redeviennent à faire et leurs effets adaptatifs sont annulés.
+- **Supprimer totalement** : applique la réinitialisation précédente puis supprime physiquement la tentative ciblée et ses instantanés de questions.
+
+Les tentatives encore visibles dont les effets ont été annulés portent le marqueur `progress_voided_at` et sont signalées dans l’interface par **Effets réinitialisés**.
+
+`student_activity_progress_baseline` conserve uniquement la part d’anciens agrégats qui n’est plus explicable par les sessions encore présentes. Cette compatibilité est nécessaire parce que le patch 33 pouvait supprimer physiquement une trace sans modifier sa progression. Les recalculs futurs peuvent ainsi rester stables même si des suppressions ont eu lieu avant le patch 37.
+
+La réinitialisation fine d’Aventure n’est volontairement pas traitée ici : elle nécessitera la reconstruction cohérente des jauges et passages Aventure.

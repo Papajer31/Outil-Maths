@@ -25,15 +25,6 @@ export function renderToolSettings(container, settings = {}) {
         renderPossibilities(cfg),
         renderCounts(cfg),
         renderRadioGroup({
-          title:"Équivalence des diacritiques",
-          id:"ro_acceptDiacritics",
-          value:cfg.acceptDiacritics ? "accept" : "refuse",
-          options:[
-            { value:"accept", label:"Accepter" },
-            { value:"refuse", label:"Refuser" }
-          ]
-        }),
-        renderRadioGroup({
           title:"Écriture",
           id:"ro_writingMode",
           value:cfg.writingMode,
@@ -64,7 +55,7 @@ export function readToolSettings(container) {
 export { getDefaultSettings };
 
 function renderPossibilities(cfg) {
-  const rows = cfg.rows.length ? cfg.rows : [{ target:"", distractorsRaw:"" }];
+  const rows = cfg.rows.length ? cfg.rows : [{ target:"", alternativesRaw:"", distractorsRaw:"" }];
   return `
     <div class="tv-group ro-config-possibilities">
       <div class="tv-group-title">Possibilités</div>
@@ -79,7 +70,7 @@ function renderPossibilityRow(row = {}) {
   return `
     <div class="ro-config-row" data-ro-row>
       <label class="ro-config-inline-field ro-config-inline-target">
-        <span>Il faut trouver :</span>
+        <span>Trouver :</span>
         <input
           class="tv-input ro-config-target"
           data-ro-target
@@ -89,6 +80,18 @@ function renderPossibilityRow(row = {}) {
           spellcheck="false"
           value="${escapeAttr(row.target || "")}"
           placeholder="a"
+        >
+      </label>
+      <label class="ro-config-inline-field ro-config-inline-alternatives">
+        <span>ou</span>
+        <input
+          class="tv-input ro-config-alternatives"
+          data-ro-alternatives
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          value="${escapeAttr(row.alternativesRaw || "")}"
+          placeholder="A;à;â"
         >
       </label>
       <label class="ro-config-inline-field ro-config-inline-distractors">
@@ -144,7 +147,7 @@ function bindPossibilityRows(container) {
     const row = target?.closest("[data-ro-row]");
 
     if (addButton && row) {
-      row.insertAdjacentHTML("afterend", renderPossibilityRow({ target:"", distractorsRaw:"" }));
+      row.insertAdjacentHTML("afterend", renderPossibilityRow({ target:"", alternativesRaw:"", distractorsRaw:"" }));
       row.nextElementSibling?.querySelector("[data-ro-target]")?.focus();
       refreshRemoveButtons(container);
       return;
@@ -160,6 +163,7 @@ function bindPossibilityRows(container) {
 function readCurrentSettings(container) {
   const rows = [...container.querySelectorAll("[data-ro-row]")].map((row) => ({
     target:row.querySelector("[data-ro-target]")?.value || "",
+    alternativesRaw:row.querySelector("[data-ro-alternatives]")?.value || "",
     distractorsRaw:row.querySelector("[data-ro-distractors]")?.value || ""
   }));
 
@@ -167,7 +171,6 @@ function readCurrentSettings(container) {
     rows,
     totalCount:readStepper(container, "ro_totalCount", { inputMin:2, inputMax:60 }),
     targetCount:readStepper(container, "ro_targetCount", { inputMin:1, inputMax:30 }),
-    acceptDiacritics:readRadio(container, "ro_acceptDiacritics", "accept") === "accept",
     writingMode:readRadio(container, "ro_writingMode", WRITING_MODES.SCRIPT)
   };
 }

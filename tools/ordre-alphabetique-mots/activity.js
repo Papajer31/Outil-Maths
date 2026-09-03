@@ -6,10 +6,7 @@ import {
   isAnswerCorrect,
   getDiscriminatingLetterRanges
 } from "./model.js";
-import {
-  listPublicDefaultVocabularyWords,
-  listPublicVocabularyWordsForSpace
-} from "../../shared/public-api.js";
+import { listPublicPhonologyWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -19,8 +16,7 @@ import {
 
 let stylesInjected = false;
 let activityStyleReadyPromise = null;
-const wordListCache = new Map();
-const DEFAULT_WORD_LIST_CACHE_KEY = "__default_vocabulary__";
+let publicWordCatalogPromise = null;
 
 const DRAG_THRESHOLD_PX = 8;
 const CORRECTION_STAGGER_MS = 500;
@@ -266,7 +262,7 @@ async function loadNextQuestion(state, context = {}) {
 
   let wordEntries = [];
   if (settings.listType === LIST_TYPES.WORDS) {
-    wordEntries = await loadWordEntriesForAccessCode(context?.accessCode);
+    wordEntries = await loadPublicWordCatalog();
   }
 
   const nextQuestion = pickQuestion(settings, {
@@ -1171,37 +1167,19 @@ function teardownState(state, container) {
   }
 }
 
-async function loadWordEntriesForAccessCode(accessCode) {
-  const code = String(accessCode || "").trim();
-  let teacherError = null;
-
-  if (code) {
-    if (!wordListCache.has(code)) {
-      wordListCache.set(code, listPublicVocabularyWordsForSpace(code));
-    }
-
-    try {
-      const entries = await Promise.resolve(wordListCache.get(code));
-      if (Array.isArray(entries) && entries.length > 0) {
-        return entries;
-      }
-    } catch (err) {
-      teacherError = err;
-      wordListCache.delete(code);
-    }
+async function loadPublicWordCatalog() {
+  if (!publicWordCatalogPromise) {
+    publicWordCatalogPromise = listPublicPhonologyWords()
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        publicWordCatalogPromise = null;
+        throw error;
+      });
   }
 
-  if (!wordListCache.has(DEFAULT_WORD_LIST_CACHE_KEY)) {
-    wordListCache.set(DEFAULT_WORD_LIST_CACHE_KEY, listPublicDefaultVocabularyWords());
-  }
-
-  const fallbackEntries = await Promise.resolve(wordListCache.get(DEFAULT_WORD_LIST_CACHE_KEY));
-  if (Array.isArray(fallbackEntries) && fallbackEntries.length > 0) {
-    return fallbackEntries;
-  }
-
-  if (teacherError) throw teacherError;
-  throw new Error("La banque de mots de cet enseignant est vide et la liste système est indisponible.");
+  const entries = await publicWordCatalogPromise;
+  if (entries.length > 0) return entries;
+  throw new Error("La banque de mots est vide ou indisponible.");
 }
 
 function scheduleBankChipsLayoutRefresh(state) {

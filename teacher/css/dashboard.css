@@ -1835,6 +1835,7 @@ body .dashboard-share-popup.cfg-share-popup{
 }
 
 #missionsView{
+  position:relative;
   padding:0;
   min-height:0;
   display:flex;
@@ -6447,5 +6448,595 @@ body.dashboard-catalog-test-fullscreen-lock{
 
   .dashboard-history-duration{
     display:none;
+  }
+}
+
+/* ========================================
+   MISSIONS — ÉDITEUR MVP
+======================================== */
+.dashboard-mission-editor-host{
+  position:absolute;
+  inset:0;
+  z-index:30;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  padding:0;
+  border-top:1px solid rgba(255,255,255,.14);
+  border-radius:24px 24px 0 0;
+  background:#181c24;
+  box-shadow:0 -32px 78px rgba(0,0,0,.5);
+  color:#eef2f8;
+  pointer-events:none;
+  transform:translate3d(0,112%,0);
+  transform-origin:50% 100%;
+  will-change:transform;
+}
+
+.dashboard-mission-editor-host.is-open{
+  pointer-events:auto;
+  transform:translate3d(0,0,0);
+}
+
+.dashboard-mission-editor-host.is-opening{
+  pointer-events:auto;
+}
+
+/* La translation est animée exclusivement par l’API Web Animations : le
+   volet étant créé à la demande, une transition CSS se superposerait au
+   mouvement explicite lors de son insertion. */
+.dashboard-mission-editor-host.is-animating{
+  transition:none;
+}
+
+.dashboard-mission-editor{
+  min-height:0;
+  flex:1 1 auto;
+  overflow-y:auto;
+  scrollbar-gutter:stable;
+  padding:30px;
+  border:0;
+  border-radius:0;
+  background:#181c24;
+  display:grid;
+  gap:1rem;
+}
+
+.dashboard-mission-editor-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1rem;
+}
+
+.dashboard-mission-editor-head{
+  position:sticky;
+  top:-30px;
+  z-index:1;
+  margin:-30px -30px 0;
+  padding:8px 30px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background:#181c24;
+}
+
+.dashboard-mission-editor-head-actions{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:.75rem;
+}
+
+.dashboard-mission-editor-head-actions .modal-message{
+  min-width:0;
+}
+
+.dashboard-mission-editor .dashboard-section-title,
+.dashboard-mission-panel-title,
+.dashboard-mission-editor label{
+  color:#edf1f8;
+}
+
+.dashboard-mission-editor-hint{
+  margin-top:.1rem;
+  color:#9da8bc;
+  font-size:.84rem;
+}
+
+.dashboard-mission-advanced-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:.75rem;
+}
+
+.dashboard-mission-advanced-grid label,
+.dashboard-mission-editor > label{
+  display:grid;
+  gap:.35rem;
+}
+
+.dashboard-mission-title-field{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.dashboard-mission-title-input{
+  width:min(760px, 100%);
+  min-width:0;
+  flex:1 1 auto;
+  min-height:42px;
+  box-sizing:border-box;
+  padding:4px 10px 5px;
+  border:1px solid rgba(157,168,188,.52);
+  border-radius:10px;
+  outline:none;
+  background:transparent;
+  color:#ffb020;
+  font:inherit;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:600;
+  transition:border-color .14s ease, background .14s ease, box-shadow .14s ease;
+}
+
+.dashboard-mission-title-input::placeholder{
+  color:#788399;
+  font-style:italic;
+  font-weight:600;
+}
+
+.dashboard-mission-title-input:placeholder-shown{
+  border-color:rgba(223,164,75,.82);
+  background:rgba(223,164,75,.09);
+  box-shadow:0 0 0 3px rgba(223,164,75,.12);
+}
+
+.dashboard-mission-title-input:hover{
+  background:rgba(255,255,255,.04);
+}
+
+.dashboard-mission-title-input:focus{
+  border-color:rgba(106,137,255,.72);
+  background:rgba(255,255,255,.06);
+  box-shadow:0 0 0 3px rgba(67,109,240,.18);
+}
+
+.dashboard-mission-title-input:placeholder-shown:focus{
+  border-color:rgba(223,164,75,.95);
+  background:rgba(223,164,75,.12);
+  box-shadow:0 0 0 3px rgba(223,164,75,.18);
+}
+
+.dashboard-mission-advanced{
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:12px;
+  padding:.7rem .85rem;
+  background:#141820;
+}
+
+.dashboard-mission-advanced summary{
+  cursor:pointer;
+  font-weight:700;
+}
+
+.dashboard-mission-advanced-grid{
+  margin-top:.85rem;
+}
+
+.dashboard-mission-compose-grid{
+  display:grid;
+  grid-template-columns:minmax(300px, .95fr) minmax(360px, 1.05fr);
+  gap:1rem;
+  align-items:start;
+}
+
+.dashboard-mission-catalog-panel,
+.dashboard-mission-sequence-panel{
+  padding:1rem;
+  border-color:rgba(255,255,255,.10);
+  background:#141820;
+}
+
+.dashboard-mission-assignment-panel{
+  margin:0 -30px;
+  padding:1rem 30px;
+  border-right:0;
+  border-left:0;
+  border-radius:0;
+  border-color:rgba(255,255,255,.10);
+  background:#141820;
+}
+
+.dashboard-mission-panel-title{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  margin-bottom:.75rem;
+  font-weight:800;
+}
+
+.dashboard-mission-catalog-search{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  align-items:center;
+  gap:.45rem;
+  margin-bottom:.6rem;
+}
+
+.dashboard-mission-catalog-breadcrumb{
+  display:flex;
+  align-items:center;
+  gap:.3rem;
+  flex-wrap:wrap;
+  margin-bottom:.6rem;
+  font-size:.86rem;
+}
+
+.dashboard-mission-catalog-breadcrumb button{
+  border:0;
+  background:transparent;
+  padding:.15rem .25rem;
+  color:inherit;
+  cursor:pointer;
+  border-radius:6px;
+}
+
+.dashboard-mission-catalog-breadcrumb button:hover,
+.dashboard-mission-catalog-breadcrumb button.is-current{
+  background:rgba(127,127,127,.12);
+}
+
+.dashboard-mission-catalog-results,
+.dashboard-mission-step-list{
+  display:grid;
+  gap:.4rem;
+  max-height:360px;
+  overflow:auto;
+  padding-right:.15rem;
+}
+
+.dashboard-mission-catalog-folder,
+.dashboard-mission-catalog-activity{
+  width:100%;
+  display:grid;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:center;
+  gap:.55rem;
+  min-height:42px;
+  padding:.55rem .65rem;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:10px;
+  background:#1d222c;
+  color:#eef2f8;
+  text-align:left;
+  cursor:pointer;
+}
+
+.dashboard-mission-catalog-activity{
+  grid-template-columns:auto minmax(0, 1fr);
+}
+
+.dashboard-mission-catalog-folder:hover,
+.dashboard-mission-catalog-activity:hover{
+  border-color:rgba(140,166,255,.42);
+  background:#222834;
+}
+
+.dashboard-mission-catalog-folder--parent{
+  opacity:.82;
+}
+
+.dashboard-mission-catalog-chevron{
+  justify-self:end;
+}
+
+.dashboard-mission-catalog-activity-copy{
+  min-width:0;
+  display:grid;
+  gap:.1rem;
+}
+
+.dashboard-mission-catalog-activity-copy strong,
+.dashboard-mission-catalog-activity-copy small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.dashboard-mission-catalog-activity-copy small{
+  color:#9da8bc;
+  white-space:normal;
+}
+
+.dashboard-mission-assignment-options{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.dashboard-mission-assignment-option{
+  position:relative;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+  min-width:42px;
+  min-height:38px;
+  padding:0 14px;
+  border:0;
+  border-radius:999px;
+  background:rgba(255,255,255,.055);
+  color:var(--text, #f5f7fb);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
+  cursor:pointer;
+  font-size:18px;
+  font-weight:600;
+  line-height:1;
+  text-align:center;
+  white-space:nowrap;
+  transition:background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+
+.dashboard-mission-assignment-option:hover{
+  background:rgba(255,255,255,.1);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.dashboard-mission-assignment-option:has(input:checked){
+  background:rgba(255,216,94,.16);
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.72);
+}
+
+.dashboard-mission-assignment-option:has(input:focus-visible){
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.82), 0 0 0 3px rgba(255,216,94,.12);
+}
+
+.dashboard-mission-assignment-option input{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:pointer;
+}
+
+.dashboard-mission-assignment-option span{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+}
+
+.dashboard-mission-assignment-option:has(input:disabled){
+  opacity:.42;
+  cursor:not-allowed;
+}
+
+.dashboard-mission-assignment-option input:disabled{
+  cursor:not-allowed;
+}
+
+@media (max-width: 980px){
+  .dashboard-mission-compose-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width: 720px){
+  .dashboard-mission-advanced-grid{
+    grid-template-columns:1fr;
+  }
+
+  .dashboard-mission-editor-head{
+    align-items:stretch;
+    flex-direction:column;
+  }
+
+  .dashboard-mission-editor-head-actions{
+    flex-wrap:wrap;
+  }
+}
+
+/* Durée d'exécution externe — Missions / Aventure */
+.dashboard-mission-step-card{align-items:center;gap:12px;}
+.dashboard-mission-step-main{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0;}
+.dashboard-mission-step-limit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem;color:var(--text-muted,#6b7280);}
+.dashboard-mission-step-limit .dashboard-mission-step-limit-mode{width:auto;min-width:112px;}
+.dashboard-mission-step-limit .dashboard-mission-step-limit-value{width:76px;min-width:76px;}
+.dashboard-mission-step-limit.is-intrinsic .dashboard-material-icon{font-size:17px;}
+.dashboard-mission-step-limit-unit{white-space:nowrap;}
+.adventure-slot-limit-summary{display:inline-flex;align-items:center;gap:4px;width:max-content;margin-top:3px;font-size:.76rem;font-weight:700;opacity:.78;}
+.adventure-slot-limit-summary .dashboard-material-icon{font-size:15px;}
+.adventure-slot-limit-editor{display:flex;align-items:center;gap:5px;margin-top:5px;flex-wrap:wrap;}
+.adventure-slot-limit-editor .student-select{width:auto;min-width:98px;height:30px;padding-top:2px;padding-bottom:2px;font-size:.76rem;}
+.adventure-slot-limit-editor .modal-text-input{width:58px;min-width:58px;height:30px;padding:3px 6px;font-size:.76rem;}
+.adventure-slot-limit-editor>span{font-size:.74rem;opacity:.8;}
+
+/* Correctif Aventure : l'édition d'une case ne masque plus Questions / Temps. */
+.adventure-slot-content.is-editing{
+  align-content:stretch;
+  grid-template-rows:auto auto minmax(0,1fr);
+  gap:2px;
+  padding-top:4px;
+  padding-bottom:4px;
+}
+
+.adventure-slot-edit-controls{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+
+.adventure-slot-edit-targets{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+
+.adventure-slot-content.is-editing .adventure-slot-choice-btn{
+  width:auto;
+  min-width:68px;
+  height:28px;
+  padding:2px 7px;
+  border-radius:7px;
+  font-size:10.5px;
+}
+
+.adventure-slot-content.is-editing .adventure-slot-choice-separator{
+  font-size:12px;
+}
+
+.adventure-slot-content.is-editing .adventure-slot-limit-editor{
+  flex-wrap:nowrap;
+  margin-top:0;
+}
+
+.adventure-slot-content.is-editing .adventure-slot-limit-editor .student-select{
+  min-width:86px;
+  height:28px;
+}
+
+.adventure-slot-content.is-editing .adventure-slot-limit-editor .modal-text-input{
+  width:52px;
+  min-width:52px;
+  height:28px;
+}
+
+/* Missions — difficulté propre à chaque étape. */
+.dashboard-mission-step-settings{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px;}
+.dashboard-mission-step-difficulty{display:flex;align-items:center;gap:8px;font-size:.84rem;color:var(--text-muted,#6b7280);}
+.dashboard-mission-step-setting-label{white-space:nowrap;font-weight:600;}
+.dashboard-mission-step-difficulty-select{width:auto;min-width:128px;}
+
+/* ========================================
+   HISTORIQUE — CONTRÔLE FIN DES TENTATIVES
+======================================== */
+.dashboard-history-attempt{
+  overflow:visible;
+}
+
+.dashboard-history-reset-status{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:2px 8px;
+  border-radius:999px;
+  background:rgba(148,163,184,.12);
+  color:#cbd5e1;
+  font-size:11px;
+  font-weight:800;
+}
+
+.dashboard-history-attempt.has-reset-effects{
+  border-color:rgba(148,163,184,.24);
+}
+
+.dashboard-history-attempt-actions{
+  position:relative;
+  min-width:46px;
+  border-left:1px solid rgba(148,163,184,.2);
+}
+
+.dashboard-history-attempt-actions-toggle{
+  width:46px;
+  min-width:46px;
+  height:100%;
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  list-style:none;
+  color:var(--muted);
+  cursor:pointer;
+  user-select:none;
+  transition:background .15s ease, color .15s ease;
+}
+
+.dashboard-history-attempt-actions-toggle::-webkit-details-marker{
+  display:none;
+}
+
+.dashboard-history-attempt-actions-toggle:hover,
+.dashboard-history-attempt-actions[open] > .dashboard-history-attempt-actions-toggle{
+  background:rgba(124,152,255,.07);
+  color:var(--text);
+}
+
+.dashboard-history-attempt-actions-toggle:focus-visible{
+  outline:2px solid rgba(124,152,255,.55);
+  outline-offset:-3px;
+}
+
+.dashboard-history-attempt-actions-menu{
+  position:absolute;
+  z-index:50;
+  top:calc(100% - 5px);
+  right:5px;
+  width:260px;
+  padding:6px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:12px;
+  background:#171c25;
+  box-shadow:0 14px 34px rgba(0,0,0,.42);
+}
+
+.dashboard-history-attempt-actions-menu button{
+  width:100%;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:8px 10px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.dashboard-history-attempt-actions-menu button:hover:not(:disabled){
+  background:rgba(124,152,255,.09);
+}
+
+.dashboard-history-attempt-actions-menu button.is-danger{
+  color:#ff9aa6;
+}
+
+.dashboard-history-attempt-actions-menu button.is-danger:hover:not(:disabled){
+  background:rgba(239,68,68,.1);
+  color:#ffb0b9;
+}
+
+.dashboard-history-attempt-actions-menu button:disabled{
+  opacity:.42;
+  cursor:not-allowed;
+}
+
+.dashboard-history-attempt-actions-menu .dashboard-material-icon{
+  flex:0 0 auto;
+  font-size:18px;
+}
+
+.dashboard-history-attempt-actions-note{
+  padding:8px 10px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.35;
+}
+
+@media (max-width:720px){
+  .dashboard-history-attempt-actions-menu{
+    width:min(260px, calc(100vw - 38px));
   }
 }

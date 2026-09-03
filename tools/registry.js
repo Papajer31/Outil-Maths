@@ -199,6 +199,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["français", "étude-du-code", "encodage", "dictée", "orthographe", "image", "clavier", "projection"]
   },
   {
+    id: "presence-son",
+    label: "Présence du son",
+    entry: "../tools/presence-son/tool.js",
+    description: "Repérer un son dans le mot représenté par une image, par existence ou par place dans les syllabes.",
+    tags: ["français", "lecture", "étude-du-code", "phonologie", "sons", "syllabes", "imagier", "oui-non", "projection"]
+  },
+  {
     id: "nuage-lettres",
     label: "Nuage de lettres",
     entry: "../tools/nuage-lettres/tool.js",

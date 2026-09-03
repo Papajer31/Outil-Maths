@@ -256,6 +256,7 @@ export async function startNextAdventurePassage(){
     difficultyLevel: startedLevel,
     context: "adventure",
     adaptive: true,
+    executionLimit: passage?.execution_limit ?? { mode: "questions", value: 5 },
     catalogActivities: studentState.activities
   });
 
@@ -531,14 +532,65 @@ export async function refreshMissionsForCurrentSelection(){
 export async function selectMission(missionId){
   const mission = (studentState.missions || []).find((item) => String(item.id) === String(missionId));
   if (!mission) return;
-  const steps = await loadPublicMissionSteps(studentState.accessCode, mission.id);
+
   const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
+  const participant = currentMode === "individual"
+    ? (getSelectedParticipantsForCurrentMode()[0] || null)
+    : null;
+  const studentId = Number(participant?.id);
+  const steps = await loadPublicMissionSteps(
+    studentState.accessCode,
+    mission.id,
+    currentMode === "individual" && Number.isFinite(studentId) && studentId > 0 ? studentId : null
+  );
+
+  // En individuel, les étapes déjà terminées sont persistantes : on ne rejoue
+  // que celles qui restent à faire. Une tentative interrompue n'est pas marquée
+  // terminée et revient donc naturellement en tête de la reprise.
+  const remainingSteps = currentMode === "individual"
+    ? steps.filter((step) => step?.is_completed !== true)
+    : steps;
+
+  if (!remainingSteps.length) {
+    await refreshMissionsForCurrentSelection();
+    return;
+  }
+
   const catalogActivities = await listPublicCatalogActivities();
-  const configJson = buildMissionRuntimeConfig(mission, steps, {
+
+  // Une étape adaptative reprend le dernier niveau mémorisé pour cette activité.
+  // Ce niveau est partagé avec l'Exploration ; les Missions fixes n'y touchent pas.
+  const resolvedRemainingSteps = await Promise.all(remainingSteps.map(async (step) => {
+    const mode = String(step?.difficulty_mode || "normal").trim().toLowerCase();
+    if (mode !== "adaptive" || currentMode !== "individual" || !participant?.id || !studentState.studentCode) {
+      return { ...step };
+    }
+
+    try {
+      const progress = await getPublicStudentActivityProgress(
+        studentState.accessCode,
+        participant.id,
+        studentState.studentCode,
+        step.catalog_activity_id
+      );
+      return {
+        ...step,
+        resolved_difficulty_level: normalizeCatalogDifficultyLevel(progress?.current_level ?? step?.difficulty_level ?? 3)
+      };
+    } catch (err) {
+      console.warn("Niveau adaptatif de Mission indisponible, démarrage au niveau standard.", err);
+      return {
+        ...step,
+        resolved_difficulty_level: normalizeCatalogDifficultyLevel(step?.difficulty_level ?? 3)
+      };
+    }
+  }));
+
+  const configJson = buildMissionRuntimeConfig(mission, resolvedRemainingSteps, {
     activityMode: currentMode,
     catalogActivities
   });
-  studentState.selectedMission = { ...mission, steps };
+  studentState.selectedMission = { ...mission, steps, remainingSteps: resolvedRemainingSteps };
   studentState.selectedConfig = {
     id: mission.id,
     mission_id: mission.id,
@@ -554,18 +606,30 @@ export async function selectMission(missionId){
 
 
 export function goBackToActivities(){
-  const returningFromAdventure = String(
+  const returningContext = String(
     studentState.selectedConfig?.progression_context?.context
       || studentState.selectedConfig?.catalog_context
       || ""
-  ).trim().toLowerCase() === "adventure";
+  ).trim().toLowerCase();
 
-  if (returningFromAdventure) {
+  if (returningContext === "adventure") {
     studentState.activityEntry = "adventure";
     studentState.selectedConfig = null;
     clearSelectedActivityMeta();
     window.location.hash = buildStudentHash("activities");
     void refreshAdventureDay();
+    return;
+  }
+
+  if (returningContext === "mission") {
+    studentState.activityEntry = "missions";
+    studentState.selectedConfig = null;
+    studentState.selectedMission = null;
+    clearSelectedActivityMeta();
+    window.location.hash = buildStudentHash("activities");
+    // La dernière tentative est finalisée avant ce retour normal. Le rechargement
+    // reflète donc immédiatement x/y, ou retire la Mission si elle est terminée.
+    void refreshMissionsForCurrentSelection();
     return;
   }
 

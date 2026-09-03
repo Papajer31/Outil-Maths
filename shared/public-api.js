@@ -655,14 +655,16 @@ export async function listPublicMissionsForSpace(accessCode, studentIds = [], is
   return Array.isArray(data) ? data : [];
 }
 
-export async function loadPublicMissionSteps(accessCode, missionId) {
+export async function loadPublicMissionSteps(accessCode, missionId, studentId = null) {
   const code = normalizeAccessCode(accessCode);
   const id = String(missionId || "").trim();
   if (!code || !id) return [];
 
+  const numericStudentId = Number(studentId);
   const { data, error } = await supabase.rpc("get_space_mission_steps", {
     p_access_code: code,
-    p_mission_id: id
+    p_mission_id: id,
+    p_student_id: Number.isFinite(numericStudentId) && numericStudentId > 0 ? numericStudentId : null
   });
 
   if (error) throw error;
@@ -737,4 +739,38 @@ async function getPublicConjugationPersonalList(accessCode, listId, cache) {
     : null;
   cache.set(safeId, list);
   return list;
+}
+
+
+// ---------------------------------------------------------
+// Audios d'interface élève
+// ---------------------------------------------------------
+
+export async function listPublicInterfaceAudioAssets(accessCode = "") {
+  const code = normalizeAccessCode(accessCode);
+  const { data, error } = await supabase.rpc("get_interface_audio_assets", {
+    p_access_code: code || null
+  });
+  if (error) throw error;
+  return (Array.isArray(data) ? data : [])
+    .map((row) => ({
+      audio_key: String(row?.audio_key || "").trim(),
+      owner_key: String(row?.owner_key || "system").trim() || "system",
+      storage_bucket: String(row?.storage_bucket || "interface-audio").trim() || "interface-audio",
+      storage_path: String(row?.storage_path || "").trim(),
+      mime_type: String(row?.mime_type || "audio/webm").trim(),
+      size_bytes: Math.max(0, Number(row?.size_bytes) || 0),
+      duration_seconds: Math.max(0, Number(row?.duration_seconds) || 0),
+      source_text: String(row?.source_text || "").trim(),
+      title: String(row?.title || "").trim()
+    }))
+    .filter((row) => row.audio_key && row.storage_path);
+}
+
+export function getPublicInterfaceAudioAssetUrl(asset = {}) {
+  const bucket = String(asset?.storage_bucket || "interface-audio").trim() || "interface-audio";
+  const path = String(asset?.storage_path || "").trim();
+  if (!path) return "";
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return String(data?.publicUrl || "").trim();
 }

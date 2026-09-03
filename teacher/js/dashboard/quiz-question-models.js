@@ -1,5 +1,6 @@
 const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words", "categories"]);
-const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "qcm-text", "selection-words"]);
+const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "numeric-keypad", "qcm-text", "selection-words"]);
+const SERIES_STATIC_WIDGET_TYPES = new Set(["numeric-keypad"]);
 
 export const QUESTION_MODELS = Object.freeze([
   {
@@ -148,6 +149,66 @@ export const QUESTION_MODELS = Object.freeze([
     ]
   },
   {
+    id: "operations",
+    icon: "calculate",
+    title: "Opérations",
+    description: "Consigne, opération centrée, réponse numérique et clavier numérique.",
+    widgets: [
+      {
+        type: "text",
+        label: "Consigne",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Consigne de la question",
+        correctionPlaceholder: "Consigne de la question",
+        column: 1,
+        row: 1,
+        columnSpan: 12,
+        rowSpan: 1,
+        visibility: "both"
+      },
+      {
+        type: "text",
+        label: "Opération",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Ex. : 10 + 10 + 1",
+        correctionPlaceholder: "Ex. : 10 + 10 + 1",
+        column: 1,
+        row: 3,
+        columnSpan: 12,
+        rowSpan: 2,
+        visibility: "both",
+        textAlign: "center",
+        verticalAlign: "middle"
+      },
+      {
+        type: "answer",
+        label: "Réponse de l’élève",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Réponse de l’élève",
+        correctionPlaceholder: "Saisissez la réponse attendue",
+        column: 6,
+        row: 6,
+        columnSpan: 2,
+        rowSpan: 1,
+        visibility: "both",
+        textAlign: "center",
+        verticalAlign: "middle"
+      },
+      {
+        type: "numeric-keypad",
+        label: "Clavier numérique",
+        column: 4,
+        row: 7,
+        columnSpan: 6,
+        rowSpan: 1,
+        visibility: "question"
+      }
+    ]
+  },
+  {
     id: "selection-words",
     icon: "touch_app",
     title: "Sélection de mots dans une phrase",
@@ -223,6 +284,7 @@ function isVisibleInCorrection(widget = {}){
 
 function getIndicatorForWidget(widget = {}){
   if (widget.type === "answer") return "RÉPONSE";
+  if (widget.type === "numeric-keypad") return "CLAVIER";
   if (widget.type === "qcm-text") return "QCM";
   if (widget.type === "selection-words") return "SÉLECTION";
   if (widget.type === "categories") return "CATÉGORIES";
@@ -252,10 +314,11 @@ export function analyzeSeriesQuestionModel(model = {}){
 
   if (!instructionEntry) reasons.push("Le modèle ne possède pas de consigne textuelle sur la première ligne.");
   if (responseEntries.length !== 1) reasons.push("Le modèle doit contenir exactement un widget de réponse.");
-  if (unsupportedEntries.length) reasons.push("Le modèle contient un widget non textuel.");
+  if (unsupportedEntries.length) reasons.push("Le modèle contient un widget non compatible avec les séries.");
 
   const variableEntries = indexed.filter((entry) => entry !== instructionEntry);
-  const fields = variableEntries.map(({ widget, index }) => {
+  const fieldEntries = variableEntries.filter(({ widget }) => !SERIES_STATIC_WIDGET_TYPES.has(String(widget.type || "")));
+  const fields = fieldEntries.map(({ widget, index }) => {
     if (widget.type === "answer") {
       return { kind: "answer", widgetIndex: index, label: "Réponse", required: true };
     }
@@ -303,7 +366,12 @@ export function analyzeSeriesQuestionModel(model = {}){
 }
 
 export function getSeriesCompatibleQuestionModels(){
-  return QUESTION_MODELS
+  const compatible = QUESTION_MODELS
     .map((model) => ({ model, analysis: analyzeSeriesQuestionModel(model) }))
     .filter(({ analysis }) => analysis.compatible);
+  return compatible.sort((first, second) => {
+    if (first.model.id === "operations") return 1;
+    if (second.model.id === "operations") return -1;
+    return 0;
+  });
 }

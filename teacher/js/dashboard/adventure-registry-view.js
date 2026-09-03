@@ -1,5 +1,6 @@
 import {
   getPedagogicalNodeGradeLevel,
+  isIntrinsicCatalogActivity,
   PEDAGOGICAL_GRADE_LEVELS
 } from "../../../shared/catalogue.js";
 import { renderMaterialIcon } from "../../../shared/material-icons-svg.js";
@@ -387,23 +388,51 @@ export function createAdventureRegistryViewController({
     return `
       <article class="adventure-menu-slot${info.missing ? " is-missing" : ""}" ${slotAttrs}>
         <span class="adventure-slot-number">${slotNumber}</span>
-        <div class="adventure-slot-content">
+        <div class="adventure-slot-content${isEditing ? " is-editing" : ""}">
           <span class="adventure-slot-kind adventure-slot-kind--${escapeAttr(item.item_type)}">${item.item_type === "activity" ? "Activité" : "Objectif"}</span>
           <strong title="${escapeAttr(info.title)}">${escapeHtml(info.title)}</strong>
-          <span title="${escapeAttr(info.meta)}">${escapeHtml(info.meta)}</span>
+          ${isEditing ? `
+            <div class="adventure-slot-edit-controls">
+              <div class="adventure-slot-edit-targets">
+                <button class="btn adventure-slot-choice-btn" type="button" data-action="choose-objective" ${slotAttrs}>Objectif…</button>
+                <span class="adventure-slot-choice-separator" aria-hidden="true">ou</span>
+                <button class="btn adventure-slot-choice-btn" type="button" data-action="choose-activity" ${slotAttrs}>Activité…</button>
+              </div>
+              ${renderAdventureSlotExecutionLimit(item, dayNumber, slotNumber, true)}
+            </div>
+          ` : `
+            <span title="${escapeAttr(info.meta)}">${escapeHtml(info.meta)}</span>
+            ${renderAdventureSlotExecutionLimit(item, dayNumber, slotNumber, false)}
+          `}
         </div>
         <button class="adventure-slot-clear-btn" type="button" data-action="clear-slot" ${slotAttrs} title="Vider cet emplacement" aria-label="Vider cet emplacement">
           ${renderMaterialIcon("close", { className: "dashboard-material-icon" })}
         </button>
-        ${isEditing ? `
-          <div class="adventure-slot-edit-overlay">
-            <button class="btn adventure-slot-choice-btn" type="button" data-action="choose-objective" ${slotAttrs}>Objectif…</button>
-            <span class="adventure-slot-choice-separator" aria-hidden="true">ou</span>
-            <button class="btn adventure-slot-choice-btn" type="button" data-action="choose-activity" ${slotAttrs}>Activité…</button>
-          </div>
-        ` : ""}
       </article>
     `;
+  }
+
+  function renderAdventureSlotExecutionLimit(item, dayNumber, slotNumber, isEditing){
+    const activity = item?.item_type === "activity" ? activityById.get(String(item.catalog_activity_id || "")) : null;
+    if (activity && isIntrinsicCatalogActivity(activity)) {
+      return `<span class="adventure-slot-limit-summary is-intrinsic">${renderMaterialIcon("lock", { className: "dashboard-material-icon" })}Toutes les questions</span>`;
+    }
+
+    const limit = normalizeLocalExecutionLimit(item?.execution_limit);
+    if (!isEditing) {
+      const label = limit.mode === "time" ? `${Math.max(1, Math.round(limit.value / 60))} min` : `${limit.value} question${limit.value === 1 ? "" : "s"}`;
+      return `<span class="adventure-slot-limit-summary">${escapeHtml(label)}</span>`;
+    }
+
+    const attrs = `data-day-number="${dayNumber}" data-slot-number="${slotNumber}"`;
+    return `<div class="adventure-slot-limit-editor">
+      <select class="student-select" data-adventure-limit-mode ${attrs} aria-label="Règle d’arrêt">
+        <option value="questions" ${limit.mode === "questions" ? "selected" : ""}>Questions</option>
+        <option value="time" ${limit.mode === "time" ? "selected" : ""}>Temps</option>
+      </select>
+      <input class="modal-text-input" type="number" min="1" max="${limit.mode === "time" ? 120 : 200}" value="${escapeAttr(limit.mode === "time" ? Math.max(1, Math.round(limit.value / 60)) : limit.value)}" data-adventure-limit-value ${attrs} aria-label="${limit.mode === "time" ? "Minutes" : "Nombre de questions"}">
+      <span>${limit.mode === "time" ? "min" : "questions"}</span>
+    </div>`;
   }
 
   function describeMenuItem(item){
@@ -462,9 +491,36 @@ export function createAdventureRegistryViewController({
   }
 
   function handleMenuChange(event){
-    const select = event.target.closest("[data-adventure-class-select]");
-    if (!select || !adventureList?.contains(select)) return;
-    selectClass(select.value);
+    const classSelect = event.target.closest("[data-adventure-class-select]");
+    if (classSelect && adventureList?.contains(classSelect)) {
+      selectClass(classSelect.value);
+      return;
+    }
+
+    const modeSelect = event.target.closest("[data-adventure-limit-mode]");
+    const valueInput = event.target.closest("[data-adventure-limit-value]");
+    const control = modeSelect || valueInput;
+    if (!control || !adventureList?.contains(control)) return;
+
+    const dayNumber = normalizeDayNumber(control.dataset.dayNumber);
+    const slotNumber = normalizeSlotNumber(control.dataset.slotNumber);
+    const item = getEffectiveSlot(selectedMenu, dayNumber, slotNumber);
+    if (!item) return;
+    const slot = control.closest(".adventure-menu-slot");
+    const modeEl = slot?.querySelector("[data-adventure-limit-mode]");
+    const valueEl = slot?.querySelector("[data-adventure-limit-value]");
+    if (!modeEl || !valueEl) return;
+    const mode = String(modeEl.value || "questions") === "time" ? "time" : "questions";
+    const previousLimit = normalizeLocalExecutionLimit(item.execution_limit);
+    let nextLimit;
+    if (modeSelect && mode !== previousLimit.mode) {
+      // Changer d’unité repart sur un défaut lisible au lieu de transformer 5 questions en 5 minutes.
+      nextLimit = mode === "time" ? { mode: "time", value: 180 } : { mode: "questions", value: 5 };
+    } else {
+      const amount = Math.max(1, Math.trunc(Number(valueEl.value) || (mode === "time" ? 3 : 5)));
+      nextLimit = { mode, value: mode === "time" ? amount * 60 : amount };
+    }
+    void setSlot(dayNumber, slotNumber, { ...item, execution_limit: nextLimit });
   }
 
   function renderDayColumn(dayNumber){
@@ -785,7 +841,8 @@ export function createAdventureRegistryViewController({
             slot_number: slotNumber,
             item_type: item.item_type,
             grade_folder_id: item.item_type === "objective" ? item.grade_folder_id : null,
-            catalog_activity_id: item.item_type === "activity" ? item.catalog_activity_id : null
+            catalog_activity_id: item.item_type === "activity" ? item.catalog_activity_id : null,
+            execution_limit: normalizeLocalExecutionLimit(item.execution_limit)
           });
         }
       }
@@ -847,13 +904,29 @@ function normalizeLocalSlot(menuNumber, dayNumber, slotNumber, item = {}){
     slot_number: normalizeSlotNumber(slotNumber),
     item_type: itemType,
     grade_folder_id: itemType === "objective" ? String(item?.grade_folder_id || "") : null,
-    catalog_activity_id: itemType === "activity" ? String(item?.catalog_activity_id || "") : null
+    catalog_activity_id: itemType === "activity" ? String(item?.catalog_activity_id || "") : null,
+    execution_limit: normalizeLocalExecutionLimit(item?.execution_limit ?? item?.executionLimit)
   };
+}
+
+function normalizeLocalExecutionLimit(value){
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const mode = String(raw.mode || "questions").trim() === "time" ? "time" : "questions";
+  const fallback = mode === "time" ? 180 : 5;
+  const amount = Math.max(1, Math.trunc(Number(raw.value) || fallback));
+  return { mode, value: mode === "time" ? Math.min(7200, amount) : Math.min(200, amount) };
+}
+
+function sameExecutionLimit(a, b){
+  const left = normalizeLocalExecutionLimit(a);
+  const right = normalizeLocalExecutionLimit(b);
+  return left.mode === right.mode && left.value === right.value;
 }
 
 function sameMenuItem(a, b){
   if (!a && !b) return true;
   if (!a || !b || a.item_type !== b.item_type) return false;
+  if (!sameExecutionLimit(a.execution_limit, b.execution_limit)) return false;
   if (a.item_type === "objective") return String(a.grade_folder_id || "") === String(b.grade_folder_id || "");
   if (a.item_type === "activity") return String(a.catalog_activity_id || "") === String(b.catalog_activity_id || "");
   return true;

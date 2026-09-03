@@ -7,7 +7,8 @@ export const WRITING_MODES = Object.freeze({
 const DEFAULT_ROWS = Object.freeze([
   Object.freeze({
     target:"a",
-    distractors:Object.freeze(["o", "i", "r", "l", "u", "e", "s", "m", "à", "â", "A"])
+    alternatives:Object.freeze(["A", "à", "â"]),
+    distractors:Object.freeze(["o", "i", "r", "l", "u", "e", "s", "m"])
   })
 ]);
 const DEFAULT_TOTAL_COUNT = 20;
@@ -19,6 +20,8 @@ const MAX_TARGET_COUNT = 30;
 export function getDefaultSettings() {
   const rows = DEFAULT_ROWS.map((row) => ({
     target:row.target,
+    alternatives:[...row.alternatives],
+    alternativesRaw:row.alternatives.join(";"),
     distractors:[...row.distractors],
     distractorsRaw:row.distractors.join(";")
   }));
@@ -26,69 +29,65 @@ export function getDefaultSettings() {
     rows,
     // Alias conservés pour relire sans rupture les réglages de la V1.
     target:rows[0].target,
+    alternatives:[...rows[0].alternatives],
+    alternativesRaw:rows[0].alternativesRaw,
     distractors:[...rows[0].distractors],
     distractorsRaw:rows[0].distractorsRaw,
     totalCount:DEFAULT_TOTAL_COUNT,
     targetCount:DEFAULT_TARGET_COUNT,
-    acceptDiacritics:true,
     writingMode:WRITING_MODES.SCRIPT
   };
 }
 
 export function normalizeSettings(settings = {}) {
   const fallback = getDefaultSettings();
-  const rows = normalizeRows(resolveRowsSource(settings));
+  const rows = normalizeRows(resolveRowsSource(settings), {
+    legacyAcceptDiacritics:settings?.acceptDiacritics === true
+  });
   const totalCount = clampInt(settings?.totalCount, MIN_TOTAL_COUNT, MAX_TOTAL_COUNT, fallback.totalCount);
   const targetCount = clampInt(settings?.targetCount, 1, Math.min(MAX_TARGET_COUNT, totalCount), fallback.targetCount);
-  const acceptDiacritics = settings?.acceptDiacritics !== false;
   const writingMode = normalizeWritingMode(settings?.writingMode);
-  const firstRow = rows[0] || { target:"", distractors:[], distractorsRaw:"" };
+  const firstRow = rows[0] || { target:"", alternatives:[], alternativesRaw:"", distractors:[], distractorsRaw:"" };
 
   return {
     rows,
     // Alias de compatibilité : les anciens consommateurs éventuels voient la première ligne.
     target:firstRow.target,
+    alternatives:[...firstRow.alternatives],
+    alternativesRaw:firstRow.alternativesRaw,
     distractors:[...firstRow.distractors],
     distractorsRaw:firstRow.distractorsRaw,
     totalCount,
     targetCount,
-    acceptDiacritics,
     writingMode
   };
 }
 
+export function normalizeAlternatives(value) {
+  return normalizeSeparatedValues(value);
+}
+
 export function normalizeDistractors(value) {
-  const source = Array.isArray(value)
-    ? value
-    : String(value ?? "").split(/[;\r\n]+/);
-  const seen = new Set();
-  const result = [];
-
-  for (const item of source) {
-    const text = normalizeDisplayText(item);
-    if (!text) continue;
-    const key = text.normalize("NFC");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(text);
-  }
-  return result;
+  return normalizeSeparatedValues(value);
 }
 
-export function compareText(value, target, { acceptDiacritics = true } = {}) {
-  return makeComparisonKey(value, acceptDiacritics) === makeComparisonKey(target, acceptDiacritics);
+// Comparaison volontairement stricte : les équivalences sont désormais
+// déclarées explicitement dans le champ « ou » de chaque ligne.
+export function compareText(value, target) {
+  return normalizeDisplayText(value) === normalizeDisplayText(target);
 }
 
-export function getCandidatePools(row = {}, settings = {}) {
+export function getCandidatePools(row = {}) {
   const target = normalizeDisplayText(row?.target);
+  const alternatives = normalizeAlternatives(
+    row?.alternativesRaw != null ? row.alternativesRaw : row?.alternatives
+  ).filter((value) => !compareText(value, target));
+  const targetVariants = uniqueDisplayTexts([target, ...alternatives]);
+  const targetKeys = new Set(targetVariants.map(normalizeDisplayText));
   const distractors = normalizeDistractors(
     row?.distractorsRaw != null ? row.distractorsRaw : row?.distractors
   );
-  const targetVariants = uniqueDisplayTexts([
-    target,
-    ...distractors.filter((value) => compareText(value, target, settings))
-  ]);
-  const distractorPool = distractors.filter((value) => !compareText(value, target, settings));
+  const distractorPool = distractors.filter((value) => !targetKeys.has(normalizeDisplayText(value)));
   return { targetVariants, distractorPool };
 }
 
@@ -110,9 +109,9 @@ export function validateSettings(settings = {}) {
       errors.push(`${line} : ajoute au moins un distracteur.`);
       return;
     }
-    const { distractorPool } = getCandidatePools(row, cfg);
+    const { distractorPool } = getCandidatePools(row);
     if (!distractorPool.length) {
-      errors.push(`${line} : ajoute au moins un distracteur différent de la cible.`);
+      errors.push(`${line} : ajoute au moins un distracteur différent des réponses acceptées.`);
     }
   });
 
@@ -127,13 +126,13 @@ export function pickQuestion(settings = {}, { avoidKey = "", avoidRowKey = "" } 
   const validation = validateSettings(settings);
   if (!validation.valid) return null;
   const cfg = validation.settings;
-  const candidates = cfg.rows.map((row, index) => ({ row, index, rowKey:buildRowKey(row, cfg) }));
+  const candidates = cfg.rows.map((row, index) => ({ row, index, rowKey:buildRowKey(row) }));
   const filtered = candidates.length > 1
     ? candidates.filter((candidate) => candidate.rowKey !== avoidRowKey)
     : candidates;
   const rowCandidates = filtered.length ? filtered : candidates;
   const selected = rowCandidates[Math.floor(Math.random() * rowCandidates.length)];
-  const { targetVariants, distractorPool } = getCandidatePools(selected.row, cfg);
+  const { targetVariants, distractorPool } = getCandidatePools(selected.row);
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const targetTexts = drawDistributed(targetVariants, cfg.targetCount);
@@ -147,12 +146,12 @@ export function pickQuestion(settings = {}, { avoidKey = "", avoidRowKey = "" } 
       target:selected.row.target,
       rowIndex:selected.index,
       rowKey:selected.rowKey,
+      // La consigne n'affiche volontairement que le champ « Trouver ».
       prompt:`Clique sur toutes les occurrences de « ${selected.row.target} ».` ,
       items,
       expectedIds:items.filter((item) => item.isTarget).map((item) => item.id),
       totalCount:cfg.totalCount,
       targetCount:cfg.targetCount,
-      acceptDiacritics:cfg.acceptDiacritics,
       writingMode:cfg.writingMode,
       maxItemLength:items.reduce((max, item) => Math.max(max, [...item.text].length), 0)
     };
@@ -186,14 +185,23 @@ export function evaluateSelection(question, selectedIds = []) {
 }
 
 function resolveRowsSource(settings = {}) {
-  if (Array.isArray(settings?.rows)) return settings.rows;
+  if (Array.isArray(settings?.rows)) {
+    // Compatibilité V1 : l'ancien réglage acceptDiacritics pouvait rendre
+    // automatiquement équivalents a/A/à/â. On ne reproduit pas cette logique
+    // implicite : seules les nouvelles alternatives explicites sont retenues.
+    return settings.rows;
+  }
 
   const hasLegacyValues = settings?.target != null
+    || settings?.alternatives != null
+    || settings?.alternativesRaw != null
     || settings?.distractors != null
     || settings?.distractorsRaw != null;
   if (hasLegacyValues) {
     return [{
       target:settings?.target,
+      alternatives:settings?.alternatives,
+      alternativesRaw:settings?.alternativesRaw,
       distractors:settings?.distractors,
       distractorsRaw:settings?.distractorsRaw
     }];
@@ -202,18 +210,62 @@ function resolveRowsSource(settings = {}) {
   return getDefaultSettings().rows;
 }
 
-function normalizeRows(rows) {
+function normalizeRows(rows, { legacyAcceptDiacritics = false } = {}) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
     const target = normalizeDisplayText(row?.target);
-    const distractors = normalizeDistractors(
+    const hasExplicitAlternatives = row?.alternativesRaw != null || row?.alternatives != null;
+    let alternatives = normalizeAlternatives(
+      row?.alternativesRaw != null ? row.alternativesRaw : row?.alternatives
+    ).filter((value) => !compareText(value, target));
+    let distractors = normalizeDistractors(
       row?.distractorsRaw != null ? row.distractorsRaw : row?.distractors
     );
+
+    // Migration transparente des anciennes activités : si elles utilisaient
+    // l'équivalence globale des diacritiques et n'ont pas encore de champ
+    // « ou », les anciennes formes équivalentes passent dans « ou ».
+    if (legacyAcceptDiacritics && !hasExplicitAlternatives && target) {
+      const legacyAlternatives = distractors.filter((value) => legacyEquivalentText(value, target));
+      alternatives = uniqueDisplayTexts([...alternatives, ...legacyAlternatives]);
+      const alternativeKeys = new Set(legacyAlternatives.map(normalizeDisplayText));
+      distractors = distractors.filter((value) => !alternativeKeys.has(normalizeDisplayText(value)));
+    }
+
     return {
       target,
+      alternatives,
+      alternativesRaw:alternatives.join(";"),
       distractors,
       distractorsRaw:distractors.join(";")
     };
   });
+}
+
+function legacyEquivalentText(value, target) {
+  const fold = (text) => normalizeDisplayText(text)
+    .toLocaleLowerCase("fr-FR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFC");
+  return fold(value) === fold(target);
+}
+
+function normalizeSeparatedValues(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value ?? "").split(/[;\r\n]+/);
+  const seen = new Set();
+  const result = [];
+
+  for (const item of source) {
+    const text = normalizeDisplayText(item);
+    if (!text) continue;
+    const key = text.normalize("NFC");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+  }
+  return result;
 }
 
 function makeItem(text, isTarget, writingMode) {
@@ -224,14 +276,6 @@ function makeItem(text, isTarget, writingMode) {
       ? (Math.random() < 0.5 ? WRITING_MODES.SCRIPT : WRITING_MODES.CURSIVE)
       : writingMode
   };
-}
-
-function makeComparisonKey(value, acceptDiacritics) {
-  let text = normalizeDisplayText(value).toLocaleLowerCase("fr-FR");
-  if (acceptDiacritics) {
-    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  }
-  return text.normalize("NFC");
 }
 
 function normalizeDisplayText(value) {
@@ -276,10 +320,11 @@ function uniqueStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || "")).filter(Boolean))];
 }
 
-function buildRowKey(row = {}, settings = {}) {
-  const normalizedTarget = makeComparisonKey(row?.target, settings?.acceptDiacritics === true);
+function buildRowKey(row = {}) {
+  const target = normalizeDisplayText(row?.target);
+  const alternatives = normalizeAlternatives(row?.alternativesRaw != null ? row.alternativesRaw : row?.alternatives);
   const distractors = normalizeDistractors(row?.distractorsRaw != null ? row.distractorsRaw : row?.distractors);
-  return `${normalizedTarget}\u0001${distractors.join("\u0002")}`;
+  return `${target}\u0001${alternatives.join("\u0002")}\u0004${distractors.join("\u0002")}`;
 }
 
 function buildQuestionKey(question = {}) {

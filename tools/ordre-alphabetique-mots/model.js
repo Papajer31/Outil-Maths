@@ -1,3 +1,5 @@
+import { isPhonologyWordAllowedAtLevel, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
+
 export const LIST_TYPES = Object.freeze({
   LETTERS: "letters",
   WORDS: "words"
@@ -34,7 +36,8 @@ export function getDefaultSettings() {
     prefixMatchMode: PREFIX_MATCH_MODES.EXACT,
     commonPrefixLength: 1,
     visualHint: false,
-    showAlphabet: false
+    showAlphabet: false,
+    schoolLevel: "CP"
   };
 }
 
@@ -51,6 +54,7 @@ export function normalizeSettings(settings) {
   base.itemCount = clampInt(base.itemCount, 2, 6);
   base.visualHint = normalizeBoolean(base.visualHint);
   base.showAlphabet = normalizeBoolean(base.showAlphabet);
+  base.schoolLevel = normalizePhonologySchoolLevel(base.schoolLevel);
 
   const prefixConfig = normalizePrefixConstraint(
     base.prefixConstraint,
@@ -193,7 +197,8 @@ export function normalizeWordEntries(entries) {
     out.push({
       word,
       word_normalized: key,
-      dictionary_page: dictionaryPage
+      dictionary_page: dictionaryPage,
+      schoolLevel: normalizePhonologySchoolLevel(entry?.schoolLevel ?? entry?.school_level, { allowX: true, fallback: "X" })
     });
   }
 
@@ -320,7 +325,8 @@ function pickLettersQuestion(settings, { avoidKey = null, attempts = 100 } = {})
 
 function pickWordsQuestion(settings, wordEntries, { avoidKey = null, attempts = 400 } = {}) {
   const cfg = normalizeSettings(settings);
-  const entries = normalizeWordEntries(wordEntries);
+  const entries = normalizeWordEntries(wordEntries)
+    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, cfg.schoolLevel));
 
   if (entries.length < cfg.itemCount) {
     return null;

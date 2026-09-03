@@ -7,6 +7,7 @@ import { renderSessionStartView } from "./views/sessionstart-view.js";
 import { renderSessionChoiceView } from "./views/sessionchoice-view.js";
 import { renderSessionView } from "./views/session-view.js";
 import { syncPersistentStudentStarfield } from "./student-stars.js";
+import { syncStudentAudioForRoute } from "./student-audio.js";
 
 const ROUTES = {
   home: renderHomeView,
@@ -97,6 +98,7 @@ function renderCurrentRoute(){
   }
 
   const cleanup = render(appRoot);
+  syncStudentAudioForRoute(routeName);
   if (typeof cleanup === "function"){
     currentCleanup = cleanup;
   }

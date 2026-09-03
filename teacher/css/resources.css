@@ -471,3 +471,27 @@ button.dashboard-resource-detail-tag:focus-visible{
     width:120px;
   }
 }
+
+/* Barre d’actions du dossier courant dans l’explorateur Ressources. */
+.dashboard-resource-folder-actions{
+  flex:0 0 auto;
+  min-height:54px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  padding:9px 16px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.018);
+}
+
+.dashboard-resource-folder-actions-count{
+  margin-right:auto;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:650;
+}
+
+.dashboard-resource-folder-actions .dashboard-btn-with-icon{
+  min-height:36px;
+}

@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-08-30.
+Dernière mise à jour : 2026-09-02.
 
 ## Règle absolue
 
@@ -30,7 +30,11 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `30` | projection élève d’Exploration : libellé court et nœuds transparents | migration active |
 | `31` | runtime MVP Aventure pour les 6 passages obligatoires de type Activité | migration active |
 | `32` | niveau lexical CP/CE1/CE2/CM/X + score de régularité G-P de `phonology_words` | **migration à appliquer avant d’importer la nouvelle banque** |
-| `33` | suppression contrôlée d’une tentative dans l’historique élève | **migration à appliquer avant d’utiliser le bouton Supprimer de l’historique** |
+| `33` | première suppression contrôlée d’une tentative dans l’historique élève | historique ; comportement remplacé par `37` |
+| `34` | progression individuelle des Missions : reprise, compteur et fin persistante | **migration à appliquer avant d’utiliser la reprise des Missions** |
+| `35` | limites d’exécution externes : Questions / Temps / contenu intrinsèque | **migration à appliquer avant les réglages de longueur Aventure/Missions** |
+| `36` | difficulté par étape de Mission : Adaptative ou N1 à N5, avec mémoire du niveau adaptatif | **migration à appliquer avant d’utiliser la difficulté adaptative des Missions** |
+| `37` | séparation trace/progression et réinitialisation fine des tentatives Exploration/Missions | **migration à appliquer avant les nouvelles actions de l’historique** |
 
 ## Script spécial d’arborescence
 

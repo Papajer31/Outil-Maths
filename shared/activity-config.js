@@ -12,15 +12,18 @@ export const TOOL_LIMITS = Object.freeze({
 export const RESPONSE_UI_VALUES = Object.freeze(["boxed", "free"]);
 export const PROGRESS_MODE_VALUES = Object.freeze(["evaluated", "practice"]);
 export const QUESTION_FLOW_MODE_VALUES = Object.freeze(["fixed", "unlimited", "successGoal"]);
+export const EXECUTION_LIMIT_MODES = Object.freeze(["questions", "time", "intrinsic"]);
 
 export const DEFAULT_RESPONSE_UI = "boxed";
 export const DEFAULT_PROGRESS_MODE = "evaluated";
 export const DEFAULT_QUESTION_FLOW_MODE = "fixed";
+export const DEFAULT_EXECUTION_LIMIT = Object.freeze({ mode: "questions", value: 5 });
 
 export const DEFAULT_TOOL_ROW = Object.freeze({
   enabled: false,
   timePerQ: 40,
-  questionCount: 10,
+  questionCount: 10, // compatibilité interne/legacy ; la longueur vient de executionLimit
+  executionLimit: DEFAULT_EXECUTION_LIMIT,
   answerTime: 5,
   questionTransitionSec: 5,
   questionTransitionInfinite: false,
@@ -77,6 +80,28 @@ export function normalizeProgressMode(value, fallback = DEFAULT_PROGRESS_MODE) {
 
   const safeFallback = String(fallback || "").trim().toLowerCase();
   return PROGRESS_MODE_VALUES.includes(safeFallback) ? safeFallback : DEFAULT_PROGRESS_MODE;
+}
+
+export function normalizeExecutionLimit(value, fallback = DEFAULT_EXECUTION_LIMIT) {
+  const safeFallback = fallback && typeof fallback === "object" && !Array.isArray(fallback)
+    ? fallback
+    : DEFAULT_EXECUTION_LIMIT;
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const modeCandidate = String(raw.mode ?? raw.type ?? "").trim().toLowerCase();
+  const fallbackMode = EXECUTION_LIMIT_MODES.includes(String(safeFallback.mode || "").trim().toLowerCase())
+    ? String(safeFallback.mode).trim().toLowerCase()
+    : DEFAULT_EXECUTION_LIMIT.mode;
+  const mode = EXECUTION_LIMIT_MODES.includes(modeCandidate) ? modeCandidate : fallbackMode;
+
+  if (mode === "intrinsic") {
+    return { mode: "intrinsic", value: null };
+  }
+
+  const fallbackValue = Math.max(1, Math.trunc(Number(safeFallback.value) || DEFAULT_EXECUTION_LIMIT.value));
+  const maxValue = mode === "time" ? 120 * 60 : TOOL_LIMITS.questionCount.max;
+  const rawValue = Math.trunc(Number(raw.value ?? raw.seconds ?? raw.questionCount ?? raw.question_count));
+  const normalizedValue = Number.isFinite(rawValue) ? rawValue : fallbackValue;
+  return { mode, value: Math.max(1, Math.min(maxValue, normalizedValue)) };
 }
 
 export function normalizeQuestionFlowMode(value, fallback = DEFAULT_QUESTION_FLOW_MODE) {
@@ -161,6 +186,7 @@ export function normalizeToolDraft(draft, { fallbackGlobals = null } = {}) {
       TOOL_LIMITS.questionCount.min,
       TOOL_LIMITS.questionCount.max
     ),
+    executionLimit: normalizeExecutionLimit(draft?.executionLimit ?? draft?.execution_limit, DEFAULT_EXECUTION_LIMIT),
     answerTime: clampInt(
       draft?.answerTime,
       TOOL_LIMITS.answerTime.min,
@@ -336,6 +362,11 @@ function preserveSequenceMetadata(source, target) {
 
   if (source.catalog_adaptive != null || source.catalogAdaptive != null) {
     target.catalog_adaptive = (source.catalog_adaptive ?? source.catalogAdaptive) === true;
+  }
+
+  const missionId = String(source.mission_id ?? source.missionId ?? "").trim();
+  if (missionId) {
+    target.mission_id = missionId;
   }
 
   const missionStepId = String(source.mission_step_id ?? source.missionStepId ?? "").trim();

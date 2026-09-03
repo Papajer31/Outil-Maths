@@ -48,6 +48,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
     label: "Lecture",
     toolIds: [
       "reperage-graphemes",
+      "presence-son",
       "nuage-lettres",
       "segmenter-mots",
       "recomposer-mots-syllabes",
@@ -357,9 +358,7 @@ export function createCatalogAdminViewController({
       config_name: title,
       status: "draft",
       display_order: getDuplicateDisplayOrder(normalized),
-      levels_json: normalizeLevelsForSave(normalized.difficulty_levels, {
-        questionCount: getActivityQuestionCount(normalized)
-      })
+      levels_json: normalizeLevelsForSave(normalized.difficulty_levels)
     };
 
     try {
@@ -487,7 +486,6 @@ export function createCatalogAdminViewController({
             <div class="cfg-tools-list super-admin-sidebar-list">
               ${renderToolChoiceTile()}
               ${renderCategoryTile()}
-              ${renderQuestionCountTile()}
               ${renderDescriptionTile()}
 
               <div class="super-admin-sidebar-separator" aria-hidden="true"></div>
@@ -635,28 +633,6 @@ export function createCatalogAdminViewController({
     `;
   }
 
-  function renderQuestionCountTile() {
-    const count = getActivityQuestionCount(editingActivity);
-    return `
-      <div class="cfg-duration-card super-admin-info-card super-admin-question-count-card">
-        <div class="cfg-duration-summary super-admin-question-count-summary">
-          <span class="cfg-duration-icon cfg-material-icon super-admin-info-card-icon" aria-hidden="true">quiz</span>
-          <span class="cfg-duration-summary-main">Questions :</span>
-          <div class="super-admin-question-count-control">
-            ${renderStepperField({
-              id: "adminActivityQuestionCount",
-              label: "Nombre de questions",
-              value: count,
-              inputMin: TOOL_LIMITS.questionCount.min,
-              inputMax: TOOL_LIMITS.questionCount.max,
-              step: TOOL_LIMITS.questionCount.step,
-              fieldClassName: "super-admin-compact-stepper-field"
-            })}
-          </div>
-        </div>
-      </div>
-    `;
-  }
 
   function renderDescriptionTile() {
     return `
@@ -802,12 +778,6 @@ export function createCatalogAdminViewController({
       readEditorFields();
       const display = list.querySelector("#adminCategoryDisplay");
       if (display) display.textContent = getCategoryPathLabel(editingActivity?.pedagogical_node_id);
-    });
-
-    bindStepperField(list, "adminActivityQuestionCount", {
-      inputMin: TOOL_LIMITS.questionCount.min,
-      inputMax: TOOL_LIMITS.questionCount.max,
-      onChange: readEditorFields
     });
 
     list?.querySelector("[data-action='open-admin-description']")?.addEventListener("click", () => {
@@ -1010,10 +980,6 @@ export function createCatalogAdminViewController({
       } else {
         editingActivity[key] = field.value;
       }
-    });
-    editingActivity.default_question_count = readStepper(list, "adminActivityQuestionCount", {
-      inputMin: TOOL_LIMITS.questionCount.min,
-      inputMax: TOOL_LIMITS.questionCount.max
     });
   }
 
@@ -1416,8 +1382,7 @@ export function createCatalogAdminViewController({
     const message = list.querySelector("#superAdminMessage");
     try {
       persistActiveLevelSettings();
-      const activityQuestionCount = getActivityQuestionCount(editingActivity);
-      const levels = normalizeLevelsForSave(levelDrafts, { questionCount: activityQuestionCount });
+      const levels = normalizeLevelsForSave(levelDrafts);
       const existingActivity = activities
         .map(normalizeCatalogActivity)
         .find((activity) => String(activity.id) === String(editingActivity.id || "")) || null;
@@ -1429,7 +1394,6 @@ export function createCatalogAdminViewController({
         : normalizeAdventureTier(editingActivity.adventure_tier);
       const activityToSave = {
         ...editingActivity,
-        default_question_count: activityQuestionCount,
         id: getStableIdForSave(editingActivity),
         adventure_tier: activityTier,
         display_order: categoryChanged
@@ -1488,8 +1452,7 @@ export function createCatalogAdminViewController({
       throw new Error("Sélectionne un outil avant de tester l’activité.");
     }
 
-    const questionCount = getActivityQuestionCount(editingActivity);
-    const levels = normalizeLevelsForSave(levelDrafts, { questionCount });
+    const levels = normalizeLevelsForSave(levelDrafts);
     const title = String(editingActivity?.config_name || editingActivity?.title || "").trim()
       || `Test ${getToolLabel(toolId)}`;
     const activeLevelDraft = normalizeLevelDraft(levelDrafts[String(activeLevel)]);
@@ -1503,8 +1466,6 @@ export function createCatalogAdminViewController({
       folder_id: editingActivity?.pedagogical_node_id || getDefaultAdminActivityFolderId(),
       tool_id: toolId,
       description: String(editingActivity?.description || "").trim(),
-      default_question_count: questionCount,
-      question_count: questionCount,
       difficulty_levels: levels,
       levels_json: levels,
       settings: activeLevelDraft.settings || {},
@@ -1551,13 +1512,6 @@ export function createCatalogAdminViewController({
     return getDefaultToolSettings(tool || activeToolModule?.default || null);
   }
 
-  function getActivityQuestionCount(activity = editingActivity) {
-    return clampInt(
-      activity?.default_question_count ?? activity?.question_count ?? EXPLORATION_DEFAULTS.questionCount,
-      TOOL_LIMITS.questionCount.min,
-      TOOL_LIMITS.questionCount.max
-    );
-  }
 
   function getDefaultToolSettings(tool = null) {
     if (tool && typeof tool.getDefaultSettings === "function") {
@@ -2076,16 +2030,12 @@ function makeDefaultLevelDraft() {
   };
 }
 
-function normalizeLevelsForSave(levels, { questionCount = EXPLORATION_DEFAULTS.questionCount } = {}) {
-  const normalizedLevels = CATALOG_LEVELS.reduce((acc, level) => {
+function normalizeLevelsForSave(levels) {
+  return CATALOG_LEVELS.reduce((acc, level) => {
     const key = String(level.level);
     acc[key] = normalizeLevelDraft(levels?.[key]);
     return acc;
   }, {});
-  normalizedLevels.__activity = {
-    questionCount: clampInt(questionCount, TOOL_LIMITS.questionCount.min, TOOL_LIMITS.questionCount.max)
-  };
-  return normalizedLevels;
 }
 
 function getLevelLabel(levelKey) {

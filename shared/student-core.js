@@ -7,6 +7,7 @@ import {
   normalizeActivityGlobals,
   normalizeProgressMode,
   normalizeResponseUi,
+  normalizeExecutionLimit,
   normalizeToolDraft,
   normalizeActivitySequence
 } from "./activity-config.js";
@@ -648,24 +649,25 @@ export function createSessionEngine({
     item.questionFlowMode = item.draftQuestionFlowMode || "fixed";
     item.infiniteTimePerQ = item.draftInfiniteTimePerQ === true;
     item.infiniteAnswerTime = item.draftInfiniteAnswerTime === true;
+    item.executionLimit = normalizeExecutionLimit(item.draftExecutionLimit, { mode: "questions", value: item.draftQuestionCount || 5 });
     item.defaultInstruction = instructionMeta.defaultInstruction;
     item.supportsCustomInstruction = instructionMeta.supportsCustomInstruction;
 
     const ctx = getToolContext(item);
 
-    if (item.questionFlowMode === "fixed" && typeof tool.getQuestionCount === "function") {
-      const nextQuestionCount = tool.getQuestionCount(ctx);
+    const intrinsicQuestionCount = typeof tool.getIntrinsicQuestionCount === "function"
+      ? tool.getIntrinsicQuestionCount(ctx)
+      : null;
 
-      if (nextQuestionCount === Number.POSITIVE_INFINITY) {
-        item.questionFlowMode = "unlimited";
-      } else {
-        item.questionCount = clampInt(
-          nextQuestionCount,
-          1,
-          999,
-          item.questionCount
-        );
-      }
+    if (Number.isFinite(Number(intrinsicQuestionCount)) && Number(intrinsicQuestionCount) > 0) {
+      item.executionLimit = { mode: "intrinsic", value: null };
+      item.questionFlowMode = "fixed";
+      item.questionCount = clampInt(intrinsicQuestionCount, 1, 999, item.questionCount);
+    } else if (item.executionLimit.mode === "time") {
+      item.questionFlowMode = "unlimited";
+    } else {
+      item.questionFlowMode = "fixed";
+      item.questionCount = clampInt(item.executionLimit.value, 1, 999, item.questionCount);
     }
 
     if (!item.infiniteTimePerQ && typeof tool.getQuestionTime === "function") {
@@ -748,7 +750,9 @@ export function createSessionEngine({
       currentQuestionNumber: currentQuestionIndex >= 0 ? currentQuestionIndex + 1 : 0,
       questionCount: item?.questionCount ?? 0,
       questionFlowMode: item?.questionFlowMode || "fixed",
-      totalQuestionCountLabel: item ? (item.questionFlowMode === "fixed" ? String(item.questionCount || 0) : "∞") : "—",
+      totalQuestionCountLabel: item
+        ? (item.executionLimit?.mode === "time" ? "⏱" : (item.questionFlowMode === "fixed" ? String(item.questionCount || 0) : "∞"))
+        : "—",
       finalChallenge: getFinalChallengeUiState(item),
       toolTime: getToolTimeUiState(item),
       evaluationGauge: getEvaluationGaugeUiState(item),
@@ -1121,6 +1125,15 @@ export function createSessionEngine({
     activeTool = mod.default ?? {};
     const ctx = getToolContext(item);
 
+    try {
+      window.dispatchEvent(new CustomEvent("student:active-tool-changed", {
+        detail: {
+          toolId: String(item.id || "").trim(),
+          defaultInstruction: String(ctx.defaultInstruction || "").trim()
+        }
+      }));
+    } catch {}
+
     refreshComputedSessionValuesWithTool(item, activeTool);
     startToolClock();
     if (item.historyFinalized === true) {
@@ -1173,6 +1186,13 @@ export function createSessionEngine({
       }
 
       if (isToolMaxTimeReached(item)) {
+        hideTimer();
+        hideManualAction();
+        await nextTool(false);
+        return;
+      }
+
+      if (isExecutionTimeReached(item)) {
         hideTimer();
         hideManualAction();
         await nextTool(false);
@@ -1689,6 +1709,7 @@ export function createSessionEngine({
         title: buildSessionItemTitle(item.toolId, item.instanceId, nextSession.length),
         draftTimePerQ: normalizedDraft.timePerQ,
         draftQuestionCount: normalizedDraft.questionCount,
+        draftExecutionLimit: cloneData(normalizedDraft.executionLimit),
         draftAnswerTime: normalizedDraft.answerTime,
         draftQuestionTransitionSec: normalizedDraft.questionTransitionSec,
         draftQuestionTransitionInfinite: normalizedDraft.questionTransitionInfinite === true,
@@ -1699,6 +1720,7 @@ export function createSessionEngine({
         draftInfiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
         timePerQ: normalizedDraft.timePerQ,
         questionCount: normalizedDraft.questionCount,
+        executionLimit: cloneData(normalizedDraft.executionLimit),
         answerTime: normalizedDraft.answerTime,
         questionTransitionSec: normalizedDraft.questionTransitionSec,
         questionTransitionInfinite: normalizedDraft.questionTransitionInfinite === true,
@@ -1891,6 +1913,19 @@ export function createSessionEngine({
     return Math.max(0, toolClockElapsedBeforePauseMs + livePart);
   }
 
+  function getExecutionTimeLimitMs(item) {
+    const limit = normalizeExecutionLimit(item?.executionLimit, { mode: "questions", value: 5 });
+    if (limit.mode !== "time") return Number.POSITIVE_INFINITY;
+    const seconds = Math.max(1, Math.floor(Number(limit.value) || 0));
+    return seconds * 1000;
+  }
+
+  function isExecutionTimeReached(item) {
+    const maxMs = getExecutionTimeLimitMs(item);
+    if (!Number.isFinite(maxMs)) return false;
+    return getToolElapsedMs() >= maxMs;
+  }
+
   function getToolMaxTimeMs(item) {
     if (!item || item.toolMaxTimeInfinite === true) return Number.POSITIVE_INFINITY;
 
@@ -1947,7 +1982,8 @@ export function createSessionEngine({
   function startToolMaxTimeTicker() {
     stopToolMaxTimeTicker();
     const item = session[currentToolIndex];
-    if (!item || !Number.isFinite(getToolMaxTimeMs(item)) || paused || !isSessionRunning) return;
+    const hasLiveTimeUi = item && (Number.isFinite(getToolMaxTimeMs(item)) || Number.isFinite(getExecutionTimeLimitMs(item)));
+    if (!hasLiveTimeUi || paused || !isSessionRunning) return;
 
     toolMaxTimeTicker = window.setInterval(() => {
       const currentItem = session[currentToolIndex];
@@ -1991,7 +2027,9 @@ export function createSessionEngine({
       return hiddenState;
     }
 
-    const maxMs = getToolMaxTimeMs(item);
+    const executionMs = getExecutionTimeLimitMs(item);
+    const toolMaxMs = getToolMaxTimeMs(item);
+    const maxMs = Number.isFinite(executionMs) ? executionMs : toolMaxMs;
     if (!Number.isFinite(maxMs)) {
       return hiddenState;
     }
@@ -2151,6 +2189,7 @@ export function createSessionEngine({
       toolInstanceId: item.instanceId,
       questionFlowMode: item.questionFlowMode,
       questionCount: item.questionCount,
+      executionLimit: cloneData(item.executionLimit),
       timePerQ: item.timePerQ,
       infiniteTimePerQ: item.infiniteTimePerQ === true,
       answerTime: item.answerTime,
@@ -2168,7 +2207,12 @@ export function createSessionEngine({
       progressMode: sessionProgressMode,
       runMode,
       moduleKey,
-      configName
+      configName,
+      // Fige la nature adaptative au moment exact de la tentative.
+      // Cela permet de reconstruire ensuite la progression même si la
+      // Mission est modifiée par l’enseignant après coup.
+      catalogAdaptive: item.catalogAdaptive === true,
+      catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3)
     };
 
     item.historyAttemptPromise = Promise.resolve(onActivityAttemptStarted({

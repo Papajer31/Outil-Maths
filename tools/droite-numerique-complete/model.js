@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   markerValueStart: 0,
   markerValueStep: 10,
   markerValueList: [],
+  markerGaps: [10],
   markerGap: 10,
   picbilleBoxCount: 5
 });
@@ -65,15 +66,20 @@ export function getDefaultSettings() {
 }
 
 export function normalizeSettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
   const raw = {
     ...getDefaultSettings(),
-    ...(settings && typeof settings === "object" ? settings : {})
+    ...source
   };
 
   const lineType = LINE_TYPES.COMPLETE;
   const questionTypes = normalizeQuestionTypes(raw.questionTypes);
   const markerPositions = normalizeMarkerPositions(raw.markerPositions);
-  const markerGap = normalizeMarkerGap(raw.markerGap, lineType);
+  const markerGapSource = Object.prototype.hasOwnProperty.call(source, "markerGaps")
+    ? source.markerGaps
+    : source.markerGap;
+  const markerGaps = normalizeMarkerGaps(markerGapSource ?? DEFAULT_SETTINGS.markerGaps, lineType);
+  const markerGap = markerGaps[0];
 
   const markerConstraint = normalizeNumericConstraint({
     min: raw.markerMin,
@@ -84,7 +90,7 @@ export function normalizeSettings(settings = {}) {
     values: raw.markerValueList
   }, {
     inputMin: 0,
-    inputMax: 999,
+    inputMax: 9999,
     defaultMin: 0,
     defaultMax: 124,
     defaultStart: 0,
@@ -103,6 +109,7 @@ export function normalizeSettings(settings = {}) {
     markerValueStep: markerConstraint.step,
     markerValueList: markerConstraint.values,
     markerAllowedValues: markerConstraint.allowedValues,
+    markerGaps,
     markerGap,
     picbilleBoxCount: 5
   };
@@ -125,6 +132,7 @@ export function pickQuestion(settings = {}, previousKey = "") {
       markerMin: 0,
       markerMax: cfg.lineType === LINE_TYPES.COMPLETE ? 124 : 140,
       markerAllowedValues: [cfg.lineType === LINE_TYPES.COMPLETE ? 60 : 70],
+      markerGaps: [10],
       markerGap: 10
     }, QUESTION_TYPES.NUMBER_TO_GRADUATION);
     if (fallback) return fallback;
@@ -138,6 +146,17 @@ export function pickQuestion(settings = {}, previousKey = "") {
   return picked;
 }
 
+export function getPlayableMarkerGaps(settings = {}) {
+  const cfg = normalizeSettings(settings);
+  return cfg.markerGaps.filter((markerGap) => cfg.questionTypes.some((questionType) => {
+    return Boolean(createGraduatedLineQuestion({
+      ...cfg,
+      markerGaps: [markerGap],
+      markerGap
+    }, questionType));
+  }));
+}
+
 export function questionKey(question) {
   if (!question) return "";
   return [
@@ -148,6 +167,7 @@ export function questionKey(question) {
     question.referenceA,
     question.referenceB,
     question.referencePosition,
+    question.markerGap,
     question.picbilleBoxCount
   ].join(":");
 }
@@ -239,48 +259,55 @@ function createPicbilleQuestion(cfg, questionType) {
 
 function createGraduatedLineQuestion(cfg, questionType) {
   const lineType = normalizeLineType(cfg.lineType);
-  const markerGap = normalizeMarkerGap(cfg.markerGap, lineType);
-  const unitStep = lineType === LINE_TYPES.COMPLETE ? markerGap / 10 : markerGap;
-  const candidates = [];
+  const markerGaps = normalizeMarkerGaps(cfg.markerGaps ?? cfg.markerGap, lineType);
+  const questionsByGap = [];
 
-  for (const referencePosition of cfg.markerPositions) {
-    const structure = getLineStructure(lineType, referencePosition);
-    const referenceA = pickReferenceA(cfg, {
-      lineType,
-      markerAIndex: structure.markerAIndex,
-      tickCount: structure.tickCount,
-      unitStep,
-      markerGap
-    });
-    if (referenceA == null) continue;
+  for (const markerGap of markerGaps) {
+    const unitStep = lineType === LINE_TYPES.COMPLETE ? markerGap / 10 : markerGap;
+    const candidates = [];
 
-    const referenceB = referenceA + markerGap;
-    const lineStartValue = referenceA - (structure.markerAIndex * unitStep);
-    const ticks = buildGraduatedTicks(lineType, structure.tickCount, lineStartValue, unitStep);
-    const markerIndices = [structure.markerAIndex, structure.markerBIndex];
-    const targetTick = pickRandom(getTargetCandidates(ticks, markerIndices));
-    if (!targetTick) continue;
+    for (const referencePosition of cfg.markerPositions) {
+      const structure = getLineStructure(lineType, referencePosition);
+      const referenceA = pickReferenceA(cfg, {
+        lineType,
+        markerAIndex: structure.markerAIndex,
+        tickCount: structure.tickCount,
+        unitStep,
+        markerGap
+      });
+      if (referenceA == null) continue;
 
-    candidates.push({
-      lineType,
-      questionType,
-      targetIndex: targetTick.index,
-      targetValue: targetTick.value,
-      referenceA,
-      referenceB,
-      referencePosition,
-      markerGap,
-      unitStep,
-      tickCount: structure.tickCount,
-      ticks,
-      markerIndices,
-      picbilleBoxCount: null,
-      svgWidth: LINE_DRAW.svgWidth,
-      svgHeight: LINE_DRAW.svgHeight
-    });
+      const referenceB = referenceA + markerGap;
+      const lineStartValue = referenceA - (structure.markerAIndex * unitStep);
+      const ticks = buildGraduatedTicks(lineType, structure.tickCount, lineStartValue, unitStep);
+      const markerIndices = [structure.markerAIndex, structure.markerBIndex];
+      const targetTick = pickRandom(getTargetCandidates(ticks, markerIndices));
+      if (!targetTick) continue;
+
+      candidates.push({
+        lineType,
+        questionType,
+        targetIndex: targetTick.index,
+        targetValue: targetTick.value,
+        referenceA,
+        referenceB,
+        referencePosition,
+        markerGap,
+        unitStep,
+        tickCount: structure.tickCount,
+        ticks,
+        markerIndices,
+        picbilleBoxCount: null,
+        svgWidth: LINE_DRAW.svgWidth,
+        svgHeight: LINE_DRAW.svgHeight
+      });
+    }
+
+    const questionForGap = pickRandom(candidates);
+    if (questionForGap) questionsByGap.push(questionForGap);
   }
 
-  return pickRandom(candidates);
+  return pickRandom(questionsByGap);
 }
 
 function getLineStructure(lineType, position) {
@@ -444,11 +471,14 @@ function normalizeMarkerPositions(value) {
   return clean.length ? unique(clean) : [...DEFAULT_SETTINGS.markerPositions];
 }
 
-function normalizeMarkerGap(value, lineType) {
-  const n = clampInt(value, 1, 100);
-  const clean = MARKER_GAPS.includes(n) ? n : 10;
-  if (lineType === LINE_TYPES.COMPLETE && clean === 1) return 10;
-  return clean;
+function normalizeMarkerGaps(value, lineType) {
+  const rawValues = Array.isArray(value) ? value : [value];
+  const clean = unique(rawValues
+    .map((item) => clampInt(item, 1, 100))
+    .filter((item) => MARKER_GAPS.includes(item))
+    .filter((item) => lineType !== LINE_TYPES.COMPLETE || item !== 1));
+  if (clean.length) return clean;
+  return [10];
 }
 
 function unique(values) {
