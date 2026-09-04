@@ -248,7 +248,7 @@ export async function startNextAdventurePassage(){
   }
 
   const participant = getSelectedParticipantsForCurrentMode()[0] || null;
-  const startedLevel = normalizeCatalogDifficultyLevel(passage?.started_level ?? 2);
+  const startedLevel = normalizeCatalogDifficultyLevel(passage?.started_level ?? 1);
   const configJson = buildCatalogActivityConfig(activity, {
     activityMode: "individual",
     responseUi: "boxed",
@@ -330,7 +330,9 @@ async function prepareSelectedExplorationActivity(activity, forcedDifficultyLeve
     && String(studentState.activityEntry || "").trim().toLowerCase() === "exploration";
   const participant = isIndividualExploration ? getSelectedParticipantsForCurrentMode()[0] || null : null;
 
-  let startingDifficultyLevel = normalizeCatalogDifficultyLevel(forcedDifficultyLevel ?? 3);
+  let startingDifficultyLevel = normalizeCatalogDifficultyLevel(
+    forcedDifficultyLevel ?? (isIndividualExploration ? 1 : 3)
+  );
 
   if (forcedDifficultyLevel == null && isIndividualExploration && participant?.id && studentState.studentCode) {
     try {
@@ -340,9 +342,9 @@ async function prepareSelectedExplorationActivity(activity, forcedDifficultyLeve
         studentState.studentCode,
         activity.id
       );
-      startingDifficultyLevel = normalizeCatalogDifficultyLevel(progress?.current_level ?? 3);
+      startingDifficultyLevel = normalizeCatalogDifficultyLevel(progress?.current_level ?? 1);
     } catch (err) {
-      console.warn("Progression élève indisponible, démarrage au niveau standard.", err);
+      console.warn("Progression élève indisponible, démarrage au niveau 1.", err);
     }
   }
 
@@ -575,13 +577,13 @@ export async function selectMission(missionId){
       );
       return {
         ...step,
-        resolved_difficulty_level: normalizeCatalogDifficultyLevel(progress?.current_level ?? step?.difficulty_level ?? 3)
+        resolved_difficulty_level: normalizeCatalogDifficultyLevel(progress?.current_level ?? 1)
       };
     } catch (err) {
-      console.warn("Niveau adaptatif de Mission indisponible, démarrage au niveau standard.", err);
+      console.warn("Niveau adaptatif de Mission indisponible, démarrage au niveau 1.", err);
       return {
         ...step,
-        resolved_difficulty_level: normalizeCatalogDifficultyLevel(step?.difficulty_level ?? 3)
+        resolved_difficulty_level: normalizeCatalogDifficultyLevel(1)
       };
     }
   }));

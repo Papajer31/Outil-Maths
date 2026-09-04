@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Portail d’outils pédagogiques</title>
 
+  <style>body.student-welcome-pending .page-shell{visibility:hidden}</style>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/ui.css">
   <link rel="stylesheet" href="./shared/responsive.css">
@@ -12,7 +13,23 @@
   <link rel="stylesheet" href="./student/css/student-core.css">
   <link rel="stylesheet" href="./student/css/student-audio.css">
 </head>
-<body>
+<body class="student-welcome-pending">
+  <div id="studentWelcomeScreen" class="student-audio-welcome-screen" role="dialog" aria-modal="true" aria-label="Démarrer">
+    <button class="student-audio-welcome-start" type="button" aria-label="Démarrer et écouter la consigne">
+      <span class="student-audio-welcome-play" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="64" height="64">
+          <path fill="currentColor" d="M24 17.5v29l24-14.5-24-14.5Z"/>
+        </svg>
+      </span>
+      <span class="student-audio-welcome-rocket-stage" aria-hidden="true">
+        <span class="student-audio-welcome-rocket-visual">
+          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-off" src="./shared/ui-assets/rocket-off.svg" alt="" draggable="false">
+          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-on" src="./shared/ui-assets/rocket-on.svg" alt="" draggable="false">
+        </span>
+      </span>
+    </button>
+  </div>
+
   <div class="page-shell">
     <main class="page-main">
       <div id="studentApp" class="student-app">

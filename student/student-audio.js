@@ -23,6 +23,7 @@ let activeToolId = "";
 let awaitingFirstToolInstruction = false;
 
 export function initializeStudentAudioEngine() {
+  bindWelcomeScreen();
   ensureAudioButton();
   installUnlockListeners();
   installToolListeners();
@@ -31,7 +32,7 @@ export function initializeStudentAudioEngine() {
 
 export function syncStudentAudioForRoute(routeName) {
   currentRouteName = String(routeName || "home").trim() || "home";
-  syncWelcomeOverlayForRoute(currentRouteName);
+  syncButtonState();
   activeToolId = currentRouteName === "session" ? activeToolId : "";
   awaitingFirstToolInstruction = currentRouteName === "session" ? awaitingFirstToolInstruction : false;
   void ensureAssetsForAccessCode(studentState.accessCode || "");
@@ -216,46 +217,23 @@ function getMatchingRecordedAsset(context) {
     : null;
 }
 
-function syncWelcomeOverlayForRoute(routeName) {
-  if (welcomeDismissed || routeName !== "home") {
-    if (routeName !== "home") removeWelcomeOverlay();
-    syncButtonState();
-    return;
-  }
-  ensureWelcomeOverlay();
-  syncButtonState();
-}
-
-function ensureWelcomeOverlay() {
+function bindWelcomeScreen() {
   if (welcomeDismissed) return null;
-  if (welcomeOverlay?.isConnected) return welcomeOverlay;
+  const screen = document.getElementById("studentWelcomeScreen");
+  if (!(screen instanceof HTMLElement)) {
+    welcomeDismissed = true;
+    document.body?.classList.remove("student-welcome-pending");
+    return null;
+  }
 
-  const overlay = document.createElement("div");
-  overlay.className = "student-audio-welcome-overlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", "Démarrer");
-  overlay.innerHTML = `
-    <button class="student-audio-welcome-start" type="button" aria-label="Démarrer et écouter la consigne">
-      <span class="student-audio-welcome-play" aria-hidden="true">
-        <svg viewBox="0 0 64 64" width="64" height="64">
-          <path fill="currentColor" d="M24 17.5v29l24-14.5-24-14.5Z"/>
-        </svg>
-      </span>
-      <span class="student-audio-welcome-rocket-stage" aria-hidden="true">
-        <span class="student-audio-welcome-rocket-visual">
-          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-off" src="./shared/ui-assets/rocket-off.svg" alt="" draggable="false">
-          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-on" src="./shared/ui-assets/rocket-on.svg" alt="" draggable="false">
-        </span>
-      </span>
-    </button>`;
-
-  const start = overlay.querySelector(".student-audio-welcome-start");
-  start?.addEventListener("click", handleWelcomeStart, { once:true });
-  document.body.appendChild(overlay);
-  welcomeOverlay = overlay;
-  window.requestAnimationFrame(() => start?.focus?.({ preventScroll:true }));
-  return overlay;
+  welcomeOverlay = screen;
+  const start = screen.querySelector(".student-audio-welcome-start");
+  if (start instanceof HTMLButtonElement && start.dataset.welcomeBound !== "1") {
+    start.dataset.welcomeBound = "1";
+    start.addEventListener("click", handleWelcomeStart, { once:true });
+    window.requestAnimationFrame(() => start.focus?.({ preventScroll:true }));
+  }
+  return screen;
 }
 
 function handleWelcomeStart(event) {
@@ -276,15 +254,26 @@ function handleWelcomeStart(event) {
     void playResolvedContext(firstContext);
   }
 
+  const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  const revealDelayMs = reducedMotion ? 150 : 620;
+  const finishDelayMs = reducedMotion ? 280 : 1080;
+
+  // L'application existe derrière l'écran de départ, mais reste invisible
+  // jusqu'au lancement. On ne peut donc plus apercevoir la connexion avant la fusée.
+  window.setTimeout(() => {
+    document.body?.classList.remove("student-welcome-pending");
+  }, revealDelayMs);
+
   window.setTimeout(() => {
     welcomeDismissed = true;
     welcomeLaunching = false;
     removeWelcomeOverlay();
     syncButtonState();
-  }, 1080);
+  }, finishDelayMs);
 }
 
 function removeWelcomeOverlay() {
+  document.body?.classList.remove("student-welcome-pending");
   if (!welcomeOverlay) return;
   try {
     welcomeOverlay.remove();

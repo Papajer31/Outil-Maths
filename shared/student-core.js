@@ -92,6 +92,7 @@ export function createSessionEngine({
   let finalChallengeTicker = null;
   let toolMaxTimeTicker = null;
   let toolMaxTimeAdvancePending = false;
+  let toolEndAfterAnswerPending = false;
   let sessionFinishedNotified = false;
 
   const GAUGE_EPSILON = 1e-6;
@@ -278,6 +279,9 @@ export function createSessionEngine({
 
   function startAnswerPhaseControls(item, remainingMs) {
     setValidationReviewPending(false);
+    if (toolEndAfterAnswerPending && session[currentToolIndex] === item) {
+      remainingMs = getTimedOutFinalAnswerDurationMs(item);
+    }
     phase = createPhase("ANSWER", Number.isFinite(remainingMs) ? remainingMs : Number.POSITIVE_INFINITY);
 
     if (!Number.isFinite(remainingMs)) {
@@ -496,9 +500,21 @@ export function createSessionEngine({
       return false;
     }
 
-    if (!shouldUseShellValidation(item)) {
+    return validateCurrentResponse(item);
+  }
+
+  function validateCurrentResponse(item) {
+    if (!item || phase.kind !== "QUESTION" || !shouldUseShellValidation(item)) {
       return false;
     }
+
+    let canValidate = false;
+    try {
+      canValidate = activeRuntime?.canValidate?.(els.workArea, getToolContext(item)) === true;
+    } catch {
+      canValidate = false;
+    }
+    if (!canValidate) return false;
 
     try {
       return activeRuntime?.validate?.(els.workArea, getToolContext(item)) === true;
@@ -1120,6 +1136,7 @@ export function createSessionEngine({
     stopAllTimers();
     stopToolMaxTimeTicker();
     toolMaxTimeAdvancePending = false;
+    toolEndAfterAnswerPending = false;
 
     const mod = await loadToolModule(item.id);
     activeTool = mod.default ?? {};
@@ -1413,10 +1430,19 @@ export function createSessionEngine({
     questionTimer = window.setTimeout(() => {
       questionTimer = null;
 
+      // À l'expiration du chrono d'une question, on traite d'abord la réponse
+      // déjà saisie exactement comme si l'élève avait cliqué sur « Valider ».
+      if (isToolMaxTimeExpiredOrAdvancing(item)) {
+        void enforceCurrentToolMaxTime();
+        return;
+      }
+
       if (item.hasAnswerPhase === false) {
         void advanceToNextQuestion(item);
         return;
       }
+
+      if (validateCurrentResponse(item)) return;
 
       beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
     }, remainingMs);
@@ -1702,6 +1728,7 @@ export function createSessionEngine({
           && catalogContext === "exploration"
           && runMode !== "projected-teacher"
         );
+      const catalogDifficultyFallback = catalogAdaptive ? 1 : 3;
 
       const sessionItem = {
         id: item.toolId,
@@ -1743,8 +1770,8 @@ export function createSessionEngine({
         missionStepId: String(item.mission_step_id || item.missionStepId || "").trim(),
         catalogLevels: item.catalog_levels && typeof item.catalog_levels === "object" && !Array.isArray(item.catalog_levels) ? cloneData(item.catalog_levels) : null,
         catalogAdaptive,
-        catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? 3),
-        catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? 3),
+        catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? catalogDifficultyFallback),
+        catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? catalogDifficultyFallback),
         catalogDefaults: item.catalog_defaults && typeof item.catalog_defaults === "object" && !Array.isArray(item.catalog_defaults) ? cloneData(item.catalog_defaults) : {},
         progressSessionStats: { questions: 0, correct: 0 },
         currentQuestionResolvedCorrectly: false,
@@ -1937,8 +1964,15 @@ export function createSessionEngine({
     return limitMin * 60 * 1000;
   }
 
+  function getEffectiveToolTimeLimitMs(item) {
+    const executionMs = getExecutionTimeLimitMs(item);
+    const toolMaxMs = getToolMaxTimeMs(item);
+    const finiteLimits = [executionMs, toolMaxMs].filter(Number.isFinite);
+    return finiteLimits.length ? Math.min(...finiteLimits) : Number.POSITIVE_INFINITY;
+  }
+
   function isToolMaxTimeReached(item) {
-    const maxMs = getToolMaxTimeMs(item);
+    const maxMs = getEffectiveToolTimeLimitMs(item);
     if (!Number.isFinite(maxMs)) return false;
     return getToolElapsedMs() >= maxMs;
   }
@@ -1949,11 +1983,41 @@ export function createSessionEngine({
 
   function shouldEnforceToolMaxTime(item) {
     if (!isSessionRunning || paused || !item || session[currentToolIndex] !== item) return false;
-    if (!Number.isFinite(getToolMaxTimeMs(item))) return false;
+    if (!Number.isFinite(getEffectiveToolTimeLimitMs(item))) return false;
     if (!isToolMaxTimeReached(item)) return false;
     if (phase.kind === "BETWEEN_TOOLS" || phase.kind === "DONE") return false;
     if (phase.kind === "IDLE" && engineState !== "LOADING_QUESTION") return false;
     return true;
+  }
+
+  function getTimedOutFinalAnswerDurationMs(item) {
+    return Math.max(0, Math.floor(Number(item?.answerTime) || 0) * 1000);
+  }
+
+  async function finishCurrentToolAfterTimeLimit(item) {
+    if (!item || session[currentToolIndex] !== item) return false;
+
+    stopAllTimers();
+    stopToolMaxTimeTicker();
+    hideTimer();
+    hideManualAction();
+    toolEndAfterAnswerPending = false;
+
+    // nextTool() finalise la tentative, mais le résultat de la question courante
+    // doit d'abord être appliqué une seule fois à la jauge et à la progression.
+    commitCurrentQuestionOutcomeOnce(item);
+
+    try {
+      await nextTool(false);
+      toolMaxTimeAdvancePending = false;
+      emitStateChange();
+      return true;
+    } catch (err) {
+      toolMaxTimeAdvancePending = false;
+      onFatalError?.(err?.message || "Erreur pendant le changement d’outil.");
+      emitStateChange();
+      return false;
+    }
   }
 
   async function enforceCurrentToolMaxTime() {
@@ -1964,19 +2028,23 @@ export function createSessionEngine({
 
     toolMaxTimeAdvancePending = true;
     stopAllTimers();
+    stopToolMaxTimeTicker();
     hideTimer();
     hideManualAction();
     emitStateChange();
 
-    try {
-      await nextTool(false);
+    // Si le temps expire pendant une question, on soumet la réponse en cours
+    // avant de terminer l'activité. Une réponse vide/incomplète révèle simplement
+    // la correction, mais ne peut jamais prolonger indéfiniment l'activité.
+    if (phase.kind === "QUESTION" && item.hasAnswerPhase !== false) {
+      toolEndAfterAnswerPending = true;
+      if (validateCurrentResponse(item)) return true;
+
+      beginAnswerPhase(item, getTimedOutFinalAnswerDurationMs(item), { showAnswerNow: true });
       return true;
-    } catch (err) {
-      onFatalError?.(err?.message || "Erreur pendant le changement d’outil.");
-      return false;
-    } finally {
-      toolMaxTimeAdvancePending = false;
     }
+
+    return await finishCurrentToolAfterTimeLimit(item);
   }
 
   function startToolMaxTimeTicker() {
@@ -2027,9 +2095,7 @@ export function createSessionEngine({
       return hiddenState;
     }
 
-    const executionMs = getExecutionTimeLimitMs(item);
-    const toolMaxMs = getToolMaxTimeMs(item);
-    const maxMs = Number.isFinite(executionMs) ? executionMs : toolMaxMs;
+    const maxMs = getEffectiveToolTimeLimitMs(item);
     if (!Number.isFinite(maxMs)) {
       return hiddenState;
     }
@@ -2989,6 +3055,11 @@ export function createSessionEngine({
   }
 
   function completeAnswerPhase(item) {
+    if (toolEndAfterAnswerPending && session[currentToolIndex] === item) {
+      void finishCurrentToolAfterTimeLimit(item);
+      return;
+    }
+
     if (shouldUseGroupAnswerAttribution(item)) {
       openGroupAnswerAttributionOverlay(item);
       return;

@@ -11,7 +11,11 @@ import {
 } from "../../shared/graphemic-targets.js";
 import {
   isPhonologyWordAllowedAtLevel,
+  isPhonologyWordAllowedByCgpComplexity,
+  isPhonologyWordAllowedBySilentLetters,
+  normalizePhonologyCgpComplexityLevel,
   normalizePhonologyRegularityScore,
+  normalizePhonologySilentLettersMode,
   normalizePhonologySchoolLevel,
   pickPhonologyWordByRegularity
 } from "../../shared/phonology-word-level.js";
@@ -46,6 +50,8 @@ export function getDefaultSettings() {
     graphemicEntries:[],
     excludedGraphemicEntries:[],
     schoolLevel:"CP",
+    silentLettersMode:"allow",
+    cgpComplexityLevel:5,
     minLetters: DEFAULT_MIN_LETTERS,
     maxLetters: DEFAULT_MAX_LETTERS,
     showFirstLetter: false,
@@ -101,6 +107,8 @@ export function normalizeSettings(settings = {}) {
     enabledSpellings,
     enabledSpellingsByTarget,
     schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
+    silentLettersMode:normalizePhonologySilentLettersMode(settings?.silentLettersMode),
+    cgpComplexityLevel:normalizePhonologyCgpComplexityLevel(settings?.cgpComplexityLevel),
     minLetters,
     maxLetters,
     showFirstLetter:settings?.showFirstLetter === true,
@@ -135,12 +143,16 @@ function getEligibleWordsForTarget(cfg, target) {
     cfg.minLetters,
     cfg.maxLetters,
     cfg.schoolLevel,
+    `silent:${cfg.silentLettersMode}`,
+    `cgp:${cfg.cgpComplexityLevel}`,
     target.kind === "graphemic" ? `exclude:${cfg.excludedGraphemicEntries.join("|")}` : ""
   ].join("::");
   if (ELIGIBLE_CACHE.has(cacheKey)) return cloneData(ELIGIBLE_CACHE.get(cacheKey));
 
   const words = WORD_CATALOG
     .filter((entry) => isPhonologyWordAllowedAtLevel(entry, cfg.schoolLevel))
+    .filter((entry) => isPhonologyWordAllowedBySilentLetters(entry, cfg.silentLettersMode))
+    .filter((entry) => isPhonologyWordAllowedByCgpComplexity(entry, cfg.cgpComplexityLevel))
     .filter((entry) => isLettersOnly(entry.word))
     .filter((entry) => target.kind !== "graphemic"
       || !wordContainsAnyGraphemicEntry(entry.word, cfg.excludedGraphemicEntries))

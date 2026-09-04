@@ -14,8 +14,12 @@ import {
   normalizeWordSelectionMode
 } from "./graphemic-targets.js";
 import {
+  PHONOLOGY_CGP_COMPLEXITY_LEVELS,
   PHONOLOGY_SCHOOL_LEVELS,
-  normalizePhonologySchoolLevel
+  PHONOLOGY_SILENT_LETTERS_MODES,
+  normalizePhonologyCgpComplexityLevel,
+  normalizePhonologySchoolLevel,
+  normalizePhonologySilentLettersMode
 } from "./phonology-word-level.js";
 
 let stylesInjected = false;
@@ -42,9 +46,15 @@ export function renderWordSelectionSelector(settings = {}, {
             ${renderModeOption(idPrefix, WORD_SELECTION_MODES.GRAPHEMIC, "Entrée graphémique", mode)}
           </div>
         </section>
-        ${showSchoolLevels ? renderSchoolLevelSelector(settings, idPrefix) : ""}
+        ${bankStatusMarkup ? `<div class="wss-bank-status">${bankStatusMarkup}</div>` : ""}
       </div>
-      ${bankStatusMarkup ? `<div class="wss-bank-status">${bankStatusMarkup}</div>` : ""}
+      ${showSchoolLevels ? `
+        <div class="wss-options-row">
+          ${renderSchoolLevelSelector(settings, idPrefix)}
+          ${renderCgpComplexitySelector(settings, idPrefix)}
+          ${renderSilentLettersSelector(settings, idPrefix)}
+        </div>
+      ` : ""}
       ${afterSelectionMarkup}
       <div class="wss-panel" data-wss-panel="phonemic" ${mode === WORD_SELECTION_MODES.PHONEMIC ? "" : "hidden"}>
         ${renderPhonologyTargetSelector(settings, {
@@ -95,7 +105,9 @@ export function bindWordSelectionSelector(container, {
       emitChange();
       return;
     }
-    if (event.target.dataset.wssSchoolLevel !== undefined) emitChange();
+    if (event.target.dataset.wssSchoolLevel !== undefined
+      || event.target.dataset.wssSilentLetters !== undefined
+      || event.target.dataset.wssCgpComplexity !== undefined) emitChange();
   });
 }
 
@@ -121,7 +133,9 @@ export function readWordSelectionSelector(container, {
       enabledSpellingsByTarget:{},
       graphemicEntries:[],
       excludedGraphemicEntries:[],
-      schoolLevel:"CP"
+      schoolLevel:"CP",
+      silentLettersMode:PHONOLOGY_SILENT_LETTERS_MODES.ALLOW,
+      cgpComplexityLevel:5
     };
   }
 
@@ -136,6 +150,14 @@ export function readWordSelectionSelector(container, {
   });
   const levelInput = root.querySelector("input[data-wss-school-level]:checked");
   const schoolLevel = normalizePhonologySchoolLevel(levelInput instanceof HTMLInputElement ? levelInput.value : "CP");
+  const silentLettersInput = root.querySelector("input[data-wss-silent-letters]:checked");
+  const silentLettersMode = normalizePhonologySilentLettersMode(
+    silentLettersInput instanceof HTMLInputElement ? silentLettersInput.value : PHONOLOGY_SILENT_LETTERS_MODES.ALLOW
+  );
+  const cgpComplexityInput = root.querySelector("input[data-wss-cgp-complexity]:checked");
+  const cgpComplexityLevel = normalizePhonologyCgpComplexityLevel(
+    cgpComplexityInput instanceof HTMLInputElement ? cgpComplexityInput.value : 5
+  );
 
   return {
     wordSelectionMode,
@@ -143,7 +165,9 @@ export function readWordSelectionSelector(container, {
     enabledSpellingsByTarget:phonemic.enabledSpellingsByTarget,
     graphemicEntries:graphemic.graphemicEntries,
     excludedGraphemicEntries:graphemic.excludedGraphemicEntries,
-    schoolLevel
+    schoolLevel,
+    silentLettersMode,
+    cgpComplexityLevel
   };
 }
 
@@ -179,6 +203,59 @@ function renderSchoolLevelSelector(settings, idPrefix) {
                 ${value === level.id ? "checked" : ""}
               >
               <span>${escapeHtml(level.label)}</span>
+            </label>
+          `).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSilentLettersSelector(settings, idPrefix) {
+  const value = normalizePhonologySilentLettersMode(settings?.silentLettersMode);
+  return `
+    <section class="tv-group wss-silent-group">
+      <div class="pts-relevance-selector wss-silent-selector" role="group" aria-label="Lettres muettes">
+        <span class="pts-relevance-selector__title">Lettres muettes</span>
+        <div class="pts-relevance-options">
+          ${[
+            [PHONOLOGY_SILENT_LETTERS_MODES.ALLOW, "Autoriser"],
+            [PHONOLOGY_SILENT_LETTERS_MODES.FORBID, "Interdire"]
+          ].map(([mode, label]) => `
+            <label class="pts-relevance-option">
+              <input
+                type="radio"
+                name="${escapeAttr(idPrefix)}_silentLetters"
+                data-wss-silent-letters
+                value="${escapeAttr(mode)}"
+                ${value === mode ? "checked" : ""}
+              >
+              <span>${escapeHtml(label)}</span>
+            </label>
+          `).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCgpComplexitySelector(settings, idPrefix) {
+  const value = normalizePhonologyCgpComplexityLevel(settings?.cgpComplexityLevel);
+  return `
+    <section class="tv-group wss-complexity-group">
+      <div class="pts-relevance-selector wss-complexity-selector" role="group" aria-label="Complexité des CGP">
+        <span class="pts-relevance-selector__title">Complexité des CGP</span>
+        <div class="pts-relevance-options">
+          ${PHONOLOGY_CGP_COMPLEXITY_LEVELS.map((level) => `
+            <label class="pts-relevance-option" title="Autoriser les mots de complexité CGP 1 à ${level}">
+              <input
+                type="radio"
+                name="${escapeAttr(idPrefix)}_cgpComplexity"
+                data-wss-cgp-complexity
+                value="${level}"
+                ${value === level ? "checked" : ""}
+              >
+              <span>${level}</span>
             </label>
           `).join("")}
         </div>

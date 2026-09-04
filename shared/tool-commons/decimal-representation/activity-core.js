@@ -477,6 +477,23 @@ function renderRandomRepresentationPanel(state, settings) {
   );
 }
 
+function animateOrderedRepresentationCorrection(state) {
+  const question = state.currentQuestion;
+  if (!question || !state.builderWorkspaceEl || !state.builderItemsLayerEl) return false;
+  if (question.direction !== REPRESENTATION_DIRECTIONS.REPRESENTATION_TO_NUMBER) return false;
+
+  const settings = normalizeSettings(state.latestContext?.settings);
+  if (settings.displayMode !== DISPLAY_MODES.RANDOM) return false;
+
+  // La correction conserve les assets déjà visibles et réutilise exactement
+  // la chorégraphie habituelle du bouton « Organiser » : les pièces glissent
+  // depuis leur position aléatoire vers leur rangement, au lieu d'être
+  // remplacées brutalement par un nouveau SVG déjà ordonné.
+  cancelRandomRepresentationPlacement(state);
+  organizeBuildPieces(state, settings, { items: state.buildItems });
+  return true;
+}
+
 function scheduleRandomRepresentationPlacement(state, settings, decomposition, expectedQuestionKey, attempt = 0) {
   const frame = scheduleFrame(() => {
     state.randomPlacementFrameId = null;
@@ -1746,10 +1763,14 @@ function computeOrganizedAssignments(state, sourceItems = state.buildItems, sett
   if (!workspace || !themeId) return [];
 
   const counts = countBuildPieces(sourceItems);
+  const sizeForKind = (kind) => {
+    const representativeItem = sourceItems.find((item) => item.kind === kind);
+    return getWorkspacePieceSize(themeId, kind, representativeItem?.sizeMode);
+  };
   const sizes = {
-    ones: getWorkspacePieceSize(themeId, "ones"),
-    tens: getWorkspacePieceSize(themeId, "tens"),
-    hundreds: getWorkspacePieceSize(themeId, "hundreds")
+    ones: sizeForKind("ones"),
+    tens: sizeForKind("tens"),
+    hundreds: sizeForKind("hundreds")
   };
 
   let slots = [];
@@ -2497,6 +2518,13 @@ function revealNumericFeedback(state) {
     state.inputEl?.setAttribute("aria-invalid", isCorrect ? "false" : "true");
   }
 
+  // En mode aléatoire, la représentation reste désorganisée pendant les
+  // 3 secondes de revue de la réponse élève. Elle ne se range qu'au moment où
+  // la correction est réellement affichée. Une réponse juste est déjà sa
+  // propre correction, donc le rangement peut être immédiat dans ce seul cas.
+  if (!canToggleStudentNumericAnswerDisplay(state)) {
+    animateOrderedRepresentationCorrection(state);
+  }
 }
 
 function revealBuildFeedback(state, { validationReview = false } = {}) {
@@ -3038,11 +3066,15 @@ function applyShellAnswerDisplayMode(state, mode) {
 
   if (!canToggleStudentNumericAnswerDisplay(state)) {
     state.answerDisplayMode = "correction";
+    animateOrderedRepresentationCorrection(state);
     renderDisplayedNumericResponse(state);
     return false;
   }
 
   state.answerDisplayMode = normalizedMode;
+  if (normalizedMode === "correction") {
+    animateOrderedRepresentationCorrection(state);
+  }
   renderDisplayedNumericResponse(state);
   return true;
 }

@@ -1002,7 +1002,10 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
       const activity = getCatalogActivityById(step?.catalog_activity_id, catalogActivities);
       if (!activity) return null;
       const difficultyMode = String(step?.difficulty_mode || "normal").trim().toLowerCase();
-      const difficultyLevel = clampDifficultyLevel(step?.resolved_difficulty_level ?? step?.resolvedDifficultyLevel ?? step?.difficulty_level ?? 3);
+      const difficultyFallback = difficultyMode === "adaptive" ? 1 : (step?.difficulty_level ?? 3);
+      const difficultyLevel = clampDifficultyLevel(
+        step?.resolved_difficulty_level ?? step?.resolvedDifficultyLevel ?? difficultyFallback
+      );
       const levelSettings = getCatalogLevelSettings(activity, difficultyLevel);
       const stepLimit = normalizeExecutionLimit(
         step?.step_options_json?.execution_limit ?? step?.step_options_json?.executionLimit ?? { mode: "questions", value: 5 },

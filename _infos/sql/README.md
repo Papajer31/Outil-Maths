@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-09-02.
+Dernière mise à jour : 2026-09-03.
 
 ## Règle absolue
 
@@ -35,6 +35,9 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `35` | limites d’exécution externes : Questions / Temps / contenu intrinsèque | **migration à appliquer avant les réglages de longueur Aventure/Missions** |
 | `36` | difficulté par étape de Mission : Adaptative ou N1 à N5, avec mémoire du niveau adaptatif | **migration à appliquer avant d’utiliser la difficulté adaptative des Missions** |
 | `37` | séparation trace/progression et réinitialisation fine des tentatives Exploration/Missions | **migration à appliquer avant les nouvelles actions de l’historique** |
+| `38` | audios système de l’interface élève | **migration à appliquer avant l’enregistrement des consignes audio** |
+| `39` | cycle de vie des Missions et sessions de réactivation | **migration à appliquer avant la désactivation/réactivation automatique des Missions** |
+| `40` | niveau initial des activités adaptatives à N1, sans modifier les progressions existantes | **migration à appliquer avec le patch de rentrée du 03/09/2026** |
 
 ## Script spécial d’arborescence
 

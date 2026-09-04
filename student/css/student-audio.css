@@ -62,10 +62,10 @@
 }
 
 /*
-  Premier geste élève : cet écran masque volontairement tout le reste.
-  Le clic sur la fusée déverrouille l'audio du navigateur avant l'entrée dans le site.
+  Premier écran élève : il existe dans le HTML initial, avant l'application.
+  Le clic sur la fusée déverrouille l'audio puis révèle seulement ensuite le site.
 */
-.student-audio-welcome-overlay{
+.student-audio-welcome-screen{
   position:fixed;
   inset:0;
   z-index:4000;
@@ -163,24 +163,24 @@
   opacity:0;
 }
 
-.student-audio-welcome-overlay.is-launching{
+.student-audio-welcome-screen.is-launching{
   pointer-events:none;
   animation:student-audio-welcome-fade 1.08s ease-in forwards;
 }
 
-.student-audio-welcome-overlay.is-launching .student-audio-welcome-play{
+.student-audio-welcome-screen.is-launching .student-audio-welcome-play{
   opacity:0;
 }
 
-.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-off{
+.student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-off{
   opacity:0;
 }
 
-.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-on{
+.student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-on{
   opacity:1;
 }
 
-.student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-stage{
+.student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-stage{
   animation:student-audio-welcome-launch 1.02s cubic-bezier(.22,.68,.2,1) forwards;
 }
 
@@ -230,11 +230,11 @@
     animation:none;
   }
 
-  .student-audio-welcome-overlay.is-launching{
+  .student-audio-welcome-screen.is-launching{
     animation:student-audio-welcome-fade .28s linear forwards;
   }
 
-  .student-audio-welcome-overlay.is-launching .student-audio-welcome-rocket-stage{
+  .student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-stage{
     animation:student-audio-welcome-launch-reduced .28s ease-out forwards;
   }
 

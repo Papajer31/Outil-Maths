@@ -1,25 +1,50 @@
 import {
-  normalizeSettings,
-  setWordCatalog as setSegmenterWordCatalog,
+  WORD_COUNT_OPTIONS,
+  ALL_TARGET_ID,
+  getDefaultSettings as getSegmenterDefaultSettings,
+  normalizeSettings as normalizeSegmenterSettings,
+  setWordCatalog,
+  getEligibleWordCount,
+  getEligibleTargetCount,
+  getPhonemicSpellingUsage,
+  canGenerateQuestion,
   pickQuestion as pickSegmenterQuestion
 } from "../segmenter-mots/model.js";
 
-export { normalizeSettings };
+export {
+  WORD_COUNT_OPTIONS,
+  ALL_TARGET_ID,
+  setWordCatalog,
+  getEligibleWordCount,
+  getEligibleTargetCount,
+  getPhonemicSpellingUsage,
+  canGenerateQuestion
+};
 
-// Pour cet outil, un mot monosyllabique n'offre aucune recomposition :
-// on le retire du catalogue avant tout tirage.
-export function setWordCatalog(words = []) {
-  const polysyllabicWords = (Array.isArray(words) ? words : []).filter((word) => {
-    const syllables = (Array.isArray(word?.syllables) ? word.syllables : [])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean);
-    return syllables.length >= 2;
+const DEFAULT_MIN_SYLLABLES = 2;
+const DEFAULT_MAX_SYLLABLES = 6;
+
+export function getDefaultSettings() {
+  return normalizeSettings({
+    ...getSegmenterDefaultSettings(),
+    minSyllables:DEFAULT_MIN_SYLLABLES,
+    maxSyllables:DEFAULT_MAX_SYLLABLES
   });
-  setSegmenterWordCatalog(polysyllabicWords);
+}
+
+export function normalizeSettings(settings = {}) {
+  const source = { ...(settings || {}) };
+  if (!Object.prototype.hasOwnProperty.call(source, "minSyllables")) {
+    source.minSyllables = DEFAULT_MIN_SYLLABLES;
+  }
+  if (!Object.prototype.hasOwnProperty.call(source, "maxSyllables")) {
+    source.maxSyllables = DEFAULT_MAX_SYLLABLES;
+  }
+  return normalizeSegmenterSettings(source);
 }
 
 export function pickQuestion(settings = {}, options = {}) {
-  const base = pickSegmenterQuestion(settings, options);
+  const base = pickSegmenterQuestion(normalizeSettings(settings), options);
   if (!base) return null;
 
   const words = (Array.isArray(base.words) ? base.words : []).map((word, wordIndex) => {

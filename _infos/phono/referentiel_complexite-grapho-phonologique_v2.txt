@@ -1,0 +1,261 @@
+# ============================================================
+# RÉFÉRENTIEL DE COMPLEXITÉ GRAPHO-PHONOLOGIQUE — BANQUE ULTIME
+# ============================================================
+#
+# Principe :
+# ce fichier attribue un niveau de complexité de 1 à 5 aux codes
+# du référentiel grapho-phonologique de la banque.
+#
+# Le niveau porte sur la réalisation graphique réellement rencontrée
+# dans le mot, et non sur le phonème abstrait.
+#
+# Exemple :
+#   j    = niveau 1
+#   g_j  = niveau 3
+#   ge   = niveau 4
+#
+# alors que ces trois codes réalisent le même phonème /ʒ/.
+#
+# RÈGLE DE CALCUL POUR UN MOT :
+# complexité_du_mot = niveau maximal parmi tous les codes du mot.
+#
+# Exemple :
+# un mot contenant uniquement des codes de niveaux 1 et 2 est niveau 2.
+# un mot contenant un seul code de niveau 5 est niveau 5.
+#
+# Les niveaux sont conçus pour servir de filtre pédagogique dans
+# les exercices adaptatifs :
+#
+#   1 = très simple
+#   2 = simple et fréquent
+#   3 = intermédiaire
+#   4 = complexe
+#   5 = très complexe, rare ou exceptionnel
+#
+# Les variantes explicites de type code=graphie sont également listées
+# lorsqu'elles peuvent apparaître telles quelles dans la banque.
+# Elles héritent du niveau de leur code parent.
+#
+# 149 entrées au total : 143 codes de référence + 6 variantes explicites.
+#
+# syntaxe : code|niveau
+# ============================================================
+
+
+# ------------------------------------------------------------
+# NIVEAU 1 — TRÈS SIMPLE
+# Correspondances très fréquentes, transparentes et stables.
+# ------------------------------------------------------------
+
+a|1
+a=à|1
+a=â|1
+i|1
+i=ï|1
+u|1
+u=û|1
+ou|1
+e_aigu|1
+e_grave|1
+o|1
+o=ô|1
+
+p|1
+b|1
+t|1
+d|1
+f|1
+v|1
+s_s|1
+z|1
+ch|1
+j|1
+m|1
+n|1
+l|1
+r|1
+
+
+# ------------------------------------------------------------
+# NIVEAU 2 — SIMPLE ET FRÉQUENT
+# Graphèmes complexes fréquents, principales voyelles nasales
+# et alternatives régulières de faible difficulté.
+# ------------------------------------------------------------
+
+y_i|2
+e_schwa|2
+er|2
+ez|2
+eu|2
+au|2
+eau|2
+
+an|2
+en_an|2
+on|2
+in|2
+un|2
+
+c_k|2
+k|2
+q|2
+qu|2
+g_g|2
+ss|2
+gn|2
+
+oi|2
+
+
+# ------------------------------------------------------------
+# NIVEAU 3 — INTERMÉDIAIRE
+# Difficultés ordinaires du français :
+# graphies alternatives, règles contextuelles, semi-voyelles,
+# consonnes doubles et compositions courantes.
+# ------------------------------------------------------------
+
+e_ferme|3
+es_ferme|3
+et_ferme|3
+ai_ferme|3
+
+e_circonflexe|3
+e_ouvert|3
+ai_ouvert|3
+ei|3
+et_ouvert|3
+
+oeu|3
+oeu=œu|3
+
+am|3
+em|3
+om|3
+im|3
+ain|3
+
+i_yod|3
+y_yod|3
+u_glisse|3
+ou_glisse|3
+
+pp|3
+bb|3
+tt|3
+dd|3
+ff|3
+mm|3
+nn|3
+ll|3
+rr|3
+
+cc|3
+gg|3
+gu|3
+ph|3
+c_s|3
+ç|3
+s_z|3
+g_j|3
+th|3
+
+oin|3
+ui|3
+
+
+# ------------------------------------------------------------
+# NIVEAU 4 — COMPLEXE
+# Graphies peu transparentes, yod complexe, valeurs secondaires,
+# graphies polyphonémiques et compositions complexes fréquentes
+# dans les apprentissages avancés.
+# ------------------------------------------------------------
+
+e_circonflexe_ferme|4
+ai_circonflexe_ouvert|4
+
+aim|4
+ein|4
+en_in|4
+um|4
+
+il_yod|4
+ill|4
+ill_ij|4
+w_w|4
+
+ck|4
+w_v|4
+sc|4
+zz|4
+sh|4
+ge|4
+
+i_ij|4
+y_ij|4
+x_ks|4
+
+oy|4
+ay|4
+ay_ferme|4
+ien|4
+ion|4
+
+ouil|4
+ouille|4
+
+ail|4
+aille|4
+
+eil|4
+eille|4
+
+euil|4
+euille|4
+
+
+# ------------------------------------------------------------
+# NIVEAU 5 — TRÈS COMPLEXE, RARE OU EXCEPTIONNEL
+# Correspondances rares, atypiques, lexicales ou fortement
+# dépendantes du contexte.
+# ------------------------------------------------------------
+
+e_a|5
+eu_u|5
+aou|5
+oo_ou|5
+
+e_trema_ferme|5
+ey|5
+
+ai_schwa|5
+on_schwa|5
+
+e_eu|5
+oe|5
+u_eu|5
+
+oo_o|5
+u_o|5
+
+aon|5
+eim|5
+yn|5
+ym|5
+
+b_p|5
+cqu|5
+ch_k|5
+c_g|5
+gh|5
+
+t_s|5
+x_s|5
+x_z|5
+sch|5
+
+x_gz|5
+qu_kw|5
+oe_wa|5
+oê_wa|5
+
+ay_ei|5
