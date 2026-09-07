@@ -2591,3 +2591,163 @@ body.student-orientation-blocked{
     animation-duration:600ms;
   }
 }
+
+/* =========================
+   PROJECTION — PUPITRE ENSEIGNANT
+   ========================= */
+.session-page.session-page-projected .session-sidebar-reserve-right > *{
+  display:none !important;
+}
+
+.session-page.session-page-projected .session-sidebar-reserve-left{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+.session-page.session-page-projected .session-sidebar-reserve-left > :not(.projected-teacher-dock){
+  display:none !important;
+}
+
+.session-page .projected-teacher-dock{
+  width:var(--runtime-session-sidebar-panel-width, 132px);
+  min-height:0;
+  box-sizing:border-box;
+  padding:12px 9px;
+  border-radius:22px;
+  border:3px solid rgba(255,255,255,.88);
+  background:rgba(13,18,29,.72);
+  box-shadow:0 16px 34px rgba(0,0,0,.26), inset 0 0 0 1px rgba(91,155,255,.22);
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:9px;
+  color:#fff;
+  font-family:"Andika", system-ui, sans-serif;
+  pointer-events:auto;
+}
+
+.session-page .projected-teacher-dock-head{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  padding:0 2px 5px;
+  border-bottom:1px solid rgba(255,255,255,.14);
+  text-align:center;
+}
+
+.session-page .projected-teacher-dock-head strong{
+  width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:15px;
+  font-weight:1000;
+  line-height:1.2;
+}
+
+.session-page .projected-teacher-dock-head span{
+  color:rgba(255,255,255,.62);
+  font-size:12px;
+  font-weight:900;
+}
+
+.session-page .projected-teacher-dock-btn{
+  width:100%;
+  min-height:48px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+  background:rgba(255,255,255,.075);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:7px 5px;
+  font:inherit;
+  font-size:14px;
+  font-weight:900;
+  line-height:1;
+  cursor:pointer;
+}
+
+.session-page .projected-teacher-dock-btn:hover:not(:disabled){
+  background:rgba(255,255,255,.13);
+}
+
+.session-page .projected-teacher-dock-btn:disabled{
+  opacity:.34;
+  cursor:default;
+}
+
+.session-page .projected-teacher-dock-icon{
+  width:22px;
+  height:22px;
+  font-size:22px;
+}
+
+.session-page .projected-teacher-level-block{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:7px;
+  padding-top:3px;
+}
+
+.session-page .projected-teacher-level-label{
+  color:rgba(255,255,255,.70);
+  font-size:12px;
+  font-weight:900;
+}
+
+.session-page .projected-teacher-levels{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  flex-wrap:wrap;
+}
+
+.session-page .projected-teacher-level-btn{
+  width:34px;
+  height:34px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:10px;
+  background:rgba(255,255,255,.07);
+  color:#fff;
+  display:grid;
+  place-items:center;
+  padding:0;
+  font:inherit;
+  font-size:14px;
+  font-weight:1000;
+  cursor:pointer;
+}
+
+.session-page .projected-teacher-level-btn:hover:not(:disabled){
+  background:rgba(255,255,255,.14);
+}
+
+.session-page .projected-teacher-level-btn.is-active{
+  border-color:rgba(106,190,255,.90);
+  background:rgba(75,160,255,.30);
+  box-shadow:inset 0 0 0 1px rgba(135,206,255,.24);
+}
+
+.session-page .projected-teacher-level-btn:disabled{
+  opacity:.32;
+  cursor:default;
+}
+
+.session-page.session-page-projected.projected-ui-controls-hidden .session-shell-controls,
+.session-page.session-page-projected.projected-ui-controls-hidden .projected-teacher-dock{
+  opacity:0;
+  pointer-events:none;
+}

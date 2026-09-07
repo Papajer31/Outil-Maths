@@ -61,7 +61,7 @@ export function createActivity(initialContext = {}){
     },
 
     supportsShellValidation(context = state.latestContext){
-      return getResponseUi(context) === "boxed";
+      return getResponseUi(context) === "boxed" && !isAutoValidationQuestion(state);
     },
 
     canValidate(){
@@ -70,8 +70,17 @@ export function createActivity(initialContext = {}){
 
     validate(){
       if (!canSubmitAnswer(state)) return false;
+      state.attemptCount += 1;
       requestReveal(state);
       return true;
+    },
+
+    handleQuestionTimeout(){
+      return handleAutoQuestionTimeout(state);
+    },
+
+    getHistorySnapshot(stage = "question"){
+      return getQuizHistorySnapshot(state, stage);
     },
 
     unmount(container){
@@ -118,7 +127,15 @@ function createRuntimeState(initialContext = {}){
     submittedCategoryLabelOrder: new Map(),
     labelPositions: new Map(),
     activeLabelDrag: null,
-    answerDisplayMode: "correction"
+    answerDisplayMode: "correction",
+    autoReviewTimer: null,
+    autoCompletionPending: false,
+    autoTimedOut: false,
+    attemptCount: 0,
+    hintCount: 0,
+    currentHint: "",
+    seenMeaningfulAttempts: new Set(),
+    seenHintSignatures: new Set()
   };
 }
 
@@ -155,6 +172,14 @@ function loadNextQuestion(state, context = {}){
   state.labelPositions.clear();
   state.activeLabelDrag = null;
   state.answerDisplayMode = "correction";
+  clearAutoAnswerTimers(state);
+  state.autoCompletionPending = false;
+  state.autoTimedOut = false;
+  state.attemptCount = 0;
+  state.hintCount = 0;
+  state.currentHint = "";
+  state.seenMeaningfulAttempts.clear();
+  state.seenHintSignatures.clear();
   state.qcmChoiceFontSizes.clear();
   state.currentQuestion = pickNextQuestion(state, settings);
 
@@ -188,7 +213,7 @@ function buildRunnableQuestion(question){
   const runnableVariants = Array.from({ length:variantCount }, (_, variantIndex) => {
     const variant = materializeQuizQuestionVariant(question, variantIndex);
     const widgets = Array.isArray(variant?.widgets) ? variant.widgets : [];
-    const answerWidgets = widgets.filter((widget) => widget?.type === "answer");
+    const answerWidgets = widgets.filter((widget) => widget?.type === "answer" || widget?.type === "verified-answer");
     const qcmWidgets = widgets.filter((widget) => widget?.type === "qcm-text");
     const selectionWidgets = widgets.filter((widget) => widget?.type === "selection-words");
     const categoriesWidgets = widgets.filter((widget) => widget?.type === "categories");
@@ -280,7 +305,7 @@ function buildRunnableQuestion(question){
     return {
       ...variant,
       widgets,
-      responseType:"answer",
+      responseType:answerWidget.type === "verified-answer" ? "verified-answer" : "answer",
       answerWidgetCount:1,
       primaryAnswerWidgetId:answerWidget.id || "",
       primaryAnswerVisibleInQuestion:true,
@@ -415,6 +440,7 @@ function patchCorrectionView(state){
     const questionView = getWidgetView(widget, "question");
     const unchangedStaticWidget = node
       && widget.type !== "answer"
+      && widget.type !== "verified-answer"
       && widget.type !== "numeric-keypad"
       && widget.type !== "qcm-text"
       && widget.type !== "selection-words"
@@ -544,7 +570,7 @@ function renderWidget(state, widget, mode){
     return renderLabelsWidget(state, widget, view, mode, style);
   }
 
-  if (widget.type === "answer") {
+  if (widget.type === "answer" || widget.type === "verified-answer") {
     return renderAnswerWidget(state, widget, view, mode, style);
   }
 
@@ -863,7 +889,7 @@ function renderImageWidget(widget, view, style){
   return `
     <section class="quiz-runtime-widget quiz-runtime-widget--image" style="${style}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}" aria-label="${escapeHtml(alt)}">
       <img class="quiz-runtime-image" data-quiz-runtime-image-source="${payload}" alt="${escapeHtml(alt)}">
-      <div class="quiz-runtime-image-unavailable" aria-hidden="true">Image indisponible</div>
+      <div class="quiz-runtime-image-unavailable" aria-hidden="true">${escapeHtml(alt)}</div>
     </section>
   `;
 }
@@ -884,9 +910,23 @@ async function hydrateRuntimeImages(state){
         host?.classList.add("is-unavailable");
         return;
       }
+      const markReady = () => {
+        if (!node.isConnected || node.dataset.quizRuntimeImageSource !== payload) return;
+        node.classList.remove("is-unavailable");
+        host?.classList.remove("is-unavailable");
+      };
+      const markUnavailable = () => {
+        if (!node.isConnected || node.dataset.quizRuntimeImageSource !== payload) return;
+        node.classList.add("is-unavailable");
+        host?.classList.add("is-unavailable");
+      };
+      node.addEventListener("load", markReady, { once:true });
+      node.addEventListener("error", markUnavailable, { once:true });
       node.src = url;
-      node.classList.remove("is-unavailable");
-      host?.classList.remove("is-unavailable");
+      if (node.complete) {
+        if (node.naturalWidth > 0) markReady();
+        else markUnavailable();
+      }
     } catch (error) {
       console.warn("Impossible de charger une image du quiz.", error);
       if (node.isConnected) {
@@ -914,7 +954,17 @@ function renderAudioWidget(widget, view, style){
       <button class="quiz-runtime-audio-button" type="button" data-quiz-runtime-audio-toggle aria-label="Lire l’audio" title="Lire / mettre en pause">
         <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
       </button>
-      <input class="quiz-runtime-audio-seek" type="range" min="0" max="100" value="0" step="0.1" data-quiz-runtime-audio-seek aria-label="Position de lecture">
+      <div class="quiz-runtime-audio-track-stack">
+        <input class="quiz-runtime-audio-seek" type="range" min="0" max="100" value="0" step="0.1" data-quiz-runtime-audio-seek aria-label="Position de lecture">
+        <div class="quiz-runtime-audio-step-controls" aria-label="Déplacement précis dans l’audio">
+          <button class="quiz-runtime-audio-step" type="button" data-quiz-runtime-audio-step="-1" aria-label="Reculer d’une seconde" title="Reculer d’une seconde">
+            <svg class="quiz-runtime-audio-step-icon" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M860-240 500-480l360-240v480Zm-400 0L100-480l360-240v480Zm-80-240Zm400 0Zm-400 90v-180l-136 90 136 90Zm400 0v-180l-136 90 136 90Z"/></svg>
+          </button>
+          <button class="quiz-runtime-audio-step" type="button" data-quiz-runtime-audio-step="1" aria-label="Avancer d’une seconde" title="Avancer d’une seconde">
+            <svg class="quiz-runtime-audio-step-icon" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M100-240v-480l360 240-360 240Zm400 0v-480l360 240-360 240ZM180-480Zm400 0Zm-400 90 136-90-136-90v180Zm400 0 136-90-136-90v180Z"/></svg>
+          </button>
+        </div>
+      </div>
       <div class="quiz-runtime-audio-unavailable" aria-hidden="true">Audio indisponible</div>
     </section>
   `;
@@ -964,6 +1014,23 @@ async function hydrateRuntimeAudios(state){
   }));
 }
 
+function restoreVerifiedAnswerFocus(state){
+  if (!isAutoValidationQuestion(state) || state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return;
+  const input = state.answerInputEl;
+  if (!input?.isConnected || input.readOnly || input.disabled) return;
+  const selectionStart = Number.isFinite(input.selectionStart) ? input.selectionStart : String(input.value || "").length;
+  const selectionEnd = Number.isFinite(input.selectionEnd) ? input.selectionEnd : selectionStart;
+  window.requestAnimationFrame(() => {
+    if (!input.isConnected || state.answerInputEl !== input || state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return;
+    try {
+      input.focus({ preventScroll:true });
+      input.setSelectionRange?.(selectionStart, selectionEnd);
+    } catch {
+      input.focus?.();
+    }
+  });
+}
+
 function bindRuntimeAudios(state){
   state.audioAbortController?.abort();
   state.audioAbortController = new AbortController();
@@ -974,6 +1041,7 @@ function bindRuntimeAudios(state){
     const audio = host.querySelector(".quiz-runtime-audio-element");
     const button = host.querySelector("[data-quiz-runtime-audio-toggle]");
     const icon = button?.querySelector(".dashboard-material-icon");
+    const stepButtons = Array.from(host.querySelectorAll("[data-quiz-runtime-audio-step]"));
     const seek = host.querySelector("[data-quiz-runtime-audio-seek]");
     if (!audio || !button) return;
 
@@ -1022,12 +1090,38 @@ function bindRuntimeAudios(state){
       } else {
         audio.pause();
       }
+      restoreVerifiedAnswerFocus(state);
     }, { signal });
+
+    stepButtons.forEach((stepButton) => {
+      stepButton.addEventListener("click", () => {
+        if (!audio.src) return;
+        const delta = Number(stepButton.dataset.quizRuntimeAudioStep) || 0;
+        const duration = getDuration();
+        const maximum = duration > 0 ? duration : Number.POSITIVE_INFINITY;
+        try {
+          audio.currentTime = Math.max(0, Math.min(maximum, (Number(audio.currentTime) || 0) + delta));
+        } catch {}
+        sync();
+        restoreVerifiedAnswerFocus(state);
+      }, { signal });
+    });
+
     seek?.addEventListener("input", seekTo, { signal });
-    seek?.addEventListener("change", seekTo, { signal });
+    seek?.addEventListener("change", () => {
+      seekTo();
+      restoreVerifiedAnswerFocus(state);
+    }, { signal });
     seek?.addEventListener("pointerdown", () => { isSeeking = true; }, { signal });
-    seek?.addEventListener("pointerup", () => { isSeeking = false; }, { signal });
-    seek?.addEventListener("pointercancel", () => { isSeeking = false; }, { signal });
+    seek?.addEventListener("pointerup", () => {
+      isSeeking = false;
+      seekTo();
+      restoreVerifiedAnswerFocus(state);
+    }, { signal });
+    seek?.addEventListener("pointercancel", () => {
+      isSeeking = false;
+      restoreVerifiedAnswerFocus(state);
+    }, { signal });
     audio.addEventListener("play", () => { setPlaying(true); startProgressLoop(); }, { signal });
     audio.addEventListener("pause", () => { setPlaying(false); stopProgressLoop(); }, { signal });
     audio.addEventListener("timeupdate", sync, { signal });
@@ -1079,20 +1173,39 @@ function renderNumericKeypadWidget(widget, view, style){
 function renderAnswerWidget(state, widget, view, mode, style){
   const responseUi = getResponseUi(state.latestContext);
   const evaluation = state.answerRevealed ? getStoredEvaluation(state) : null;
+  const isVerifiedAnswer = widget.type === "verified-answer";
+  // La réponse vérifiée est un bloc de travail autonome : elle occupe sa propre
+  // ligne dans le runtime, quelle que soit sa largeur dans l'éditeur Quiz.
+  const runtimeStyle = isVerifiedAnswer
+    ? `${style};grid-column:1 / -1;grid-row:auto / span 2`
+    : style;
 
   if (mode === "question") {
     if (responseUi === "free") {
       return `
-        <section class="quiz-runtime-widget quiz-runtime-widget--answer" style="${style}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
+        <section class="quiz-runtime-widget quiz-runtime-widget--answer${isVerifiedAnswer ? " quiz-runtime-widget--verified-answer" : ""}" style="${runtimeStyle}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
           <div class="tool-answer-box quiz-runtime-answer-box quiz-runtime-answer-box--placeholder">Réponse à trouver</div>
         </section>
       `;
     }
 
-    return `
-      <section class="quiz-runtime-widget quiz-runtime-widget--answer" style="${style}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
-        <label class="tool-answer-box quiz-runtime-answer-box quiz-runtime-answer-box--input">
-          <input
+    const answerControl = isVerifiedAnswer
+      ? `<textarea
+            class="tool-answer-input quiz-runtime-answer-input quiz-runtime-verified-answer-input"
+            data-quiz-runtime-answer-input
+            data-quiz-runtime-verified-answer-input
+            rows="2"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            data-gramm="false"
+            data-gramm_editor="false"
+            data-enable-grammarly="false"
+            aria-label="Réponse"
+          ></textarea>`
+      : `<input
             class="tool-answer-input quiz-runtime-answer-input"
             data-quiz-runtime-answer-input
             type="text"
@@ -1105,8 +1218,14 @@ function renderAnswerWidget(state, widget, view, mode, style){
             data-gramm_editor="false"
             data-enable-grammarly="false"
             aria-label="Réponse"
-          />
+          />`;
+
+    return `
+      <section class="quiz-runtime-widget quiz-runtime-widget--answer${isVerifiedAnswer ? " quiz-runtime-widget--verified-answer" : ""}${isAutoValidationQuestion(state) ? " is-auto-validation" : ""}${state.autoCompletionPending ? " is-auto-correct" : ""}${state.autoTimedOut ? " is-auto-timeout" : ""}" style="${runtimeStyle}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
+        <label class="tool-answer-box quiz-runtime-answer-box quiz-runtime-answer-box--input">
+          ${answerControl}
         </label>
+        ${renderAutoAnswerFeedback(state)}
       </section>
     `;
   }
@@ -1127,10 +1246,370 @@ function renderAnswerWidget(state, widget, view, mode, style){
   ].filter(Boolean).join(" ");
 
   return `
-    <section class="quiz-runtime-widget quiz-runtime-widget--answer" style="${style}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
+    <section class="quiz-runtime-widget quiz-runtime-widget--answer${isVerifiedAnswer ? " quiz-runtime-widget--verified-answer" : ""}" style="${runtimeStyle}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}">
       <div class="${escapeHtml(classNames)}" data-quiz-runtime-text-fit>${escapeHtml(displayValue)}</div>
     </section>
   `;
+}
+
+function renderAutoAnswerFeedback(state){
+  if (!isAutoValidationQuestion(state)) return "";
+  const { kind, text } = getAutoAnswerFeedbackState(state);
+  return `
+    <div class="quiz-runtime-answer-feedback is-${escapeHtml(kind)}" data-quiz-runtime-answer-feedback aria-live="polite">${escapeHtml(text)}</div>
+  `;
+}
+
+function getAutoAnswerFeedbackState(state){
+  if (state.autoCompletionPending) return { kind:"success", text:"Réponse correcte" };
+  if (state.autoTimedOut) return { kind:"timeout", text:"Temps écoulé" };
+  if (state.currentHint) return { kind:"hint", text:state.currentHint };
+  return { kind:"idle", text:"" };
+}
+
+function updateAutoAnswerFeedbackUi(state){
+  if (!state.canvasEl || !isAutoValidationQuestion(state)) return;
+  const widgetNode = findRuntimeWidgetNode(state.canvasEl, state.currentQuestion?.primaryAnswerWidgetId);
+  if (!widgetNode) return;
+  const input = widgetNode.querySelector("[data-quiz-runtime-answer-input]");
+  if (input) input.readOnly = state.autoCompletionPending || state.autoTimedOut;
+  widgetNode.classList.toggle("is-auto-correct", state.autoCompletionPending);
+  widgetNode.classList.toggle("is-auto-timeout", state.autoTimedOut);
+  const feedback = widgetNode.querySelector("[data-quiz-runtime-answer-feedback]");
+  if (!feedback) return;
+  const { kind, text } = getAutoAnswerFeedbackState(state);
+  feedback.className = `quiz-runtime-answer-feedback is-${kind}`;
+  feedback.textContent = text;
+}
+
+function getPrimaryAnswerWidget(state){
+  const widgetId = String(state.currentQuestion?.primaryAnswerWidgetId || "");
+  return (state.currentQuestion?.widgets || []).find((widget) => (widget?.type === "answer" || widget?.type === "verified-answer") && String(widget.id || "") === widgetId)
+    || (state.currentQuestion?.widgets || []).find((widget) => widget?.type === "answer" || widget?.type === "verified-answer")
+    || null;
+}
+
+function isAutoValidationQuestion(state){
+  return state.currentQuestion?.responseType === "verified-answer";
+}
+
+function clearAutoAnswerTimers(state){
+  if (state.autoReviewTimer) window.clearTimeout(state.autoReviewTimer);
+  state.autoReviewTimer = null;
+}
+
+function handleAutoAnswerInput(state){
+  if (!isAutoValidationQuestion(state) || state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return;
+  if (state.autoReviewTimer) window.clearTimeout(state.autoReviewTimer);
+  state.autoReviewTimer = null;
+  state.currentHint = "";
+  updateAutoAnswerFeedbackUi(state);
+
+  if (isCurrentAnswerCorrect(state)) {
+    completeAutoValidatedAnswer(state);
+    return;
+  }
+
+  if (!String(getCurrentResponseValue(state) || "").trim()) return;
+  state.autoReviewTimer = window.setTimeout(() => {
+    state.autoReviewTimer = null;
+    reviewAutoAnswer(state);
+  }, 1400);
+}
+
+function reviewAutoAnswer(state){
+  if (!isAutoValidationQuestion(state) || state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return;
+  if (isCurrentAnswerCorrect(state)) {
+    completeAutoValidatedAnswer(state);
+    return;
+  }
+
+  const candidate = String(getCurrentResponseValue(state) || "").trim();
+  const expected = String(state.currentQuestion?.expectedAnswer || "").trim();
+  if (!candidate || !expected || !isMeaningfulAutoAttempt(candidate, expected)) return;
+
+  registerMeaningfulAttempt(state, candidate);
+  const hint = buildVerifiedAnswerHint(candidate, expected);
+  if (!hint) return;
+  const hintSignature = `${normalizeHintString(candidate)}::${hint}`;
+  if (!state.seenHintSignatures.has(hintSignature)) {
+    state.seenHintSignatures.add(hintSignature);
+    state.hintCount += 1;
+  }
+  state.currentHint = hint;
+  updateAutoAnswerFeedbackUi(state);
+}
+
+function registerMeaningfulAttempt(state, candidate){
+  const signature = normalizeHintString(candidate);
+  if (!signature || state.seenMeaningfulAttempts.has(signature)) return false;
+  state.seenMeaningfulAttempts.add(signature);
+  state.attemptCount += 1;
+  return true;
+}
+
+function completeAutoValidatedAnswer(state){
+  if (!isAutoValidationQuestion(state) || state.autoCompletionPending || state.autoTimedOut) return false;
+  const submitted = String(getCurrentResponseValue(state) || "").trim();
+  if (!submitted || !evaluateAnswer(state.currentQuestion, submitted).isCorrect) return false;
+
+  clearAutoAnswerTimers(state);
+  state.submittedAnswer = submitted;
+  state.responseDraftValue = submitted;
+  state.pendingValidationValue = "";
+  state.currentHint = "";
+  state.attemptCount += 1;
+  state.autoCompletionPending = true;
+  updateAutoAnswerFeedbackUi(state);
+  syncValidateState(state);
+
+  const accepted = state.latestContext?.services?.requestAnswerPhase?.({
+    manual:false,
+    showAnswerNow:true,
+    wasCorrect:true,
+    skipValidationReview:false
+  });
+  if (accepted !== true) return true;
+
+  return true;
+}
+
+function handleAutoQuestionTimeout(state){
+  if (!isAutoValidationQuestion(state) || state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return false;
+  if (isCurrentAnswerCorrect(state)) return completeAutoValidatedAnswer(state);
+
+  clearAutoAnswerTimers(state);
+  const submitted = String(getCurrentResponseValue(state) || "").trim();
+  if (submitted && isMeaningfulAutoAttempt(submitted, String(state.currentQuestion?.expectedAnswer || ""))) {
+    registerMeaningfulAttempt(state, submitted);
+  }
+  state.submittedAnswer = submitted;
+  state.responseDraftValue = submitted;
+  state.pendingValidationValue = "";
+  state.currentHint = "";
+  state.autoTimedOut = true;
+  updateAutoAnswerFeedbackUi(state);
+  syncValidateState(state);
+
+  const accepted = state.latestContext?.services?.requestAnswerPhase?.({
+    manual:false,
+    showAnswerNow:true,
+    wasCorrect:false,
+    skipValidationReview:false
+  });
+  if (accepted !== true) return false;
+
+  return true;
+}
+
+function normalizeHintString(value){
+  return String(value ?? "")
+    .normalize("NFC")
+    .replace(/[\u00a0\u202f]/gu, " ")
+    .replace(/[’‘‛`´]/gu, "'")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function tokenizeVerifiedAnswer(value){
+  const normalized = normalizeHintString(value);
+  return normalized.match(/[\p{L}\p{M}\p{N}]+(?:['-][\p{L}\p{M}\p{N}]+)*|[^\s\p{L}\p{M}\p{N}]/gu) || [];
+}
+
+function getVerifiedWordTokens(value){
+  return tokenizeVerifiedAnswer(value).filter((token) => /[\p{L}\p{M}\p{N}]/u.test(token[0] || ""));
+}
+
+function getVerifiedPunctuationTokens(value){
+  return tokenizeVerifiedAnswer(value).filter((token) => !/[\p{L}\p{M}\p{N}]/u.test(token[0] || ""));
+}
+
+function isMeaningfulAutoAttempt(candidate, expected){
+  const candidateWords = getVerifiedWordTokens(candidate);
+  const expectedWords = getVerifiedWordTokens(expected);
+  if (!candidateWords.length || !expectedWords.length) return false;
+  // On attend que la réponse soit réellement engagée avant de compter un essai
+  // ou d'afficher un indice. Ce seuil ne sert jamais à valider la réponse :
+  // il évite seulement de commenter une phrase encore en cours de saisie.
+  return candidateWords.length >= Math.max(1, Math.ceil(expectedWords.length * 0.7));
+}
+
+function formatPunctuationName(sign){
+  return ({
+    ".":"point", ",":"virgule", ";":"point-virgule", ":":"deux-points",
+    "!":"point d’exclamation", "?":"point d’interrogation", "…":"points de suspension",
+    "(":"parenthèse ouvrante", ")":"parenthèse fermante",
+    "[":"crochet ouvrant", "]":"crochet fermant",
+    "«":"guillemet ouvrant", "»":"guillemet fermant",
+    '"':"guillemet", "'":"apostrophe", "-":"trait d’union"
+  })[sign] || `signe « ${sign} »`;
+}
+
+function formatPunctuationWithArticle(sign){
+  const name = formatPunctuationName(sign);
+  if ([",", "(", ")", "'"].includes(sign)) return `une ${name}`;
+  if (sign === "…") return `des ${name}`;
+  return `un ${name}`;
+}
+
+function alignWordSequences(candidateWords, expectedWords){
+  const rows = candidateWords.length + 1;
+  const cols = expectedWords.length + 1;
+  const dp = Array.from({ length:rows }, () => Array(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const same = candidateWords[i - 1].toLocaleLowerCase("fr-FR") === expectedWords[j - 1].toLocaleLowerCase("fr-FR");
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (same ? 0 : 1)
+      );
+    }
+  }
+  const operations = [];
+  let i = candidateWords.length;
+  let j = expectedWords.length;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && candidateWords[i - 1].toLocaleLowerCase("fr-FR") === expectedWords[j - 1].toLocaleLowerCase("fr-FR") && dp[i][j] === dp[i - 1][j - 1]) {
+      operations.push({ type:"same", candidate:candidateWords[i - 1], expected:expectedWords[j - 1], candidateIndex:i - 1, expectedIndex:j - 1 });
+      i -= 1; j -= 1;
+    } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+      operations.push({ type:"replace", candidate:candidateWords[i - 1], expected:expectedWords[j - 1], candidateIndex:i - 1, expectedIndex:j - 1 });
+      i -= 1; j -= 1;
+    } else if (j > 0 && dp[i][j] === dp[i][j - 1] + 1) {
+      operations.push({ type:"missing", expected:expectedWords[j - 1], expectedIndex:j - 1 });
+      j -= 1;
+    } else {
+      operations.push({ type:"extra", candidate:candidateWords[i - 1], candidateIndex:i - 1 });
+      i -= 1;
+    }
+  }
+  return operations.reverse();
+}
+
+function buildWordCountHint(candidateWords, expectedWords){
+  const difference = expectedWords.length - candidateWords.length;
+  if (!difference) return "";
+  const operations = alignWordSequences(candidateWords, expectedWords);
+  if (difference > 0) {
+    const missing = operations.find((operation) => operation.type === "missing");
+    if (difference === 1 && missing) {
+      const before = expectedWords[missing.expectedIndex - 1] || "";
+      const after = expectedWords[missing.expectedIndex + 1] || "";
+      if (before && after) return `Il semble manquer un mot entre « ${before} » et « ${after} ».`;
+      if (before) return `Il semble manquer un mot après « ${before} ».`;
+      if (after) return `Il semble manquer un mot avant « ${after} ».`;
+    }
+    return `Il manque ${difference} mot${difference > 1 ? "s" : ""}.`;
+  }
+  const extraCount = Math.abs(difference);
+  const extra = operations.find((operation) => operation.type === "extra");
+  if (extraCount === 1 && extra?.candidate) return `Le mot « ${extra.candidate} » semble être en trop.`;
+  return `Il y a ${extraCount} mot${extraCount > 1 ? "s" : ""} en trop.`;
+}
+
+function getPunctuationByWordGap(value){
+  const tokens = tokenizeVerifiedAnswer(value);
+  const gaps = new Map();
+  let wordIndex = 0;
+  tokens.forEach((token) => {
+    if (/[\p{L}\p{M}\p{N}]/u.test(token[0] || "")) {
+      wordIndex += 1;
+      return;
+    }
+    const current = gaps.get(wordIndex) || [];
+    current.push(token);
+    gaps.set(wordIndex, current);
+  });
+  return gaps;
+}
+
+function formatPunctuationLocation(gapIndex, expectedWords){
+  if (gapIndex <= 0 && expectedWords[0]) return ` avant « ${expectedWords[0]} »`;
+  if (gapIndex >= expectedWords.length && expectedWords.length) return ` à la fin de la réponse`;
+  const before = expectedWords[gapIndex - 1] || "";
+  const after = expectedWords[gapIndex] || "";
+  if (before && after) return ` entre « ${before} » et « ${after} »`;
+  if (before) return ` après « ${before} »`;
+  if (after) return ` avant « ${after} »`;
+  return "";
+}
+
+function buildPunctuationHint(candidate, expected){
+  const expectedWords = getVerifiedWordTokens(expected);
+  const candidateGaps = getPunctuationByWordGap(candidate);
+  const expectedGaps = getPunctuationByWordGap(expected);
+  const gapIndexes = Array.from(new Set([...candidateGaps.keys(), ...expectedGaps.keys()])).sort((a, b) => a - b);
+  for (const gapIndex of gapIndexes) {
+    const actual = candidateGaps.get(gapIndex) || [];
+    const target = expectedGaps.get(gapIndex) || [];
+    if (actual.length === target.length && actual.every((sign, index) => sign === target[index])) continue;
+    const location = formatPunctuationLocation(gapIndex, expectedWords);
+    if (!actual.length && target.length === 1) return `Il manque ${formatPunctuationWithArticle(target[0])}${location}.`;
+    if (actual.length === 1 && !target.length) return `Il y a ${formatPunctuationWithArticle(actual[0])} en trop${location}.`;
+    if (actual.length === 1 && target.length === 1) {
+      return `Vérifie la ponctuation${location} : il faut ${formatPunctuationWithArticle(target[0])} et non ${formatPunctuationWithArticle(actual[0])}.`;
+    }
+    return `Vérifie la ponctuation${location}.`;
+  }
+  return "";
+}
+
+function buildVerifiedAnswerHint(candidate, expected){
+  const candidateWords = getVerifiedWordTokens(candidate);
+  const expectedWords = getVerifiedWordTokens(expected);
+
+  const wordCountHint = buildWordCountHint(candidateWords, expectedWords);
+  if (wordCountHint) return wordCountHint;
+
+  const punctuationHint = buildPunctuationHint(candidate, expected);
+  if (punctuationHint) return punctuationHint;
+
+  const caseMismatches = candidateWords
+    .map((word, index) => ({ word, expected:expectedWords[index] || "" }))
+    .filter(({ word, expected:target }) => word !== target && word.toLocaleLowerCase("fr-FR") === target.toLocaleLowerCase("fr-FR"));
+  if (caseMismatches.length === 1) {
+    const { word, expected:target } = caseMismatches[0];
+    return target[0] === target[0]?.toLocaleUpperCase("fr-FR")
+      ? `Vérifie la majuscule du mot « ${word} ».`
+      : `Le mot « ${word} » ne doit pas prendre de majuscule ici.`;
+  }
+  if (caseMismatches.length > 1) return "Vérifie les majuscules et les minuscules.";
+
+  const spellingMismatches = candidateWords
+    .map((word, index) => ({ word, expected:expectedWords[index] || "" }))
+    .filter(({ word, expected:target }) => word !== target);
+  if (spellingMismatches.length === 1) {
+    return `Le mot « ${spellingMismatches[0].word} » semble mal écrit.`;
+  }
+  if (spellingMismatches.length > 1) return "Plusieurs mots semblent mal écrits.";
+
+  return "Relis attentivement ta réponse : il reste une erreur.";
+}
+
+function getQuizHistorySnapshot(state, stage = "question"){
+  const currentValue = state.answerRevealed
+    ? String(state.submittedAnswer || "")
+    : String(state.submittedAnswer || getCurrentResponseValue(state) || "");
+  const snapshot = {
+    responseType:String(state.currentQuestion?.responseType || ""),
+    questionId:String(state.currentQuestion?.id || ""),
+    validationMode:isAutoValidationQuestion(state) ? "auto" : "manual",
+    comparisonMode:isAutoValidationQuestion(state) ? "verified" : "standard",
+    hintsEnabled:isAutoValidationQuestion(state),
+    attemptCount:Math.max(0, Number(state.attemptCount) || 0),
+    hintCount:Math.max(0, Number(state.hintCount) || 0),
+    timedOut:state.autoTimedOut === true,
+    autoCompleted:state.autoCompletionPending === true,
+    submittedAnswer:currentValue
+  };
+  if (String(stage || "").toLowerCase() === "correction") {
+    snapshot.expectedAnswer = String(state.currentQuestion?.expectedAnswer || "");
+  }
+  if (state.currentHint) snapshot.lastHint = state.currentHint;
+  return snapshot;
 }
 
 function renderEmptyQuestion(state){
@@ -1168,17 +1647,24 @@ function bindAnswerInput(state){
   }, { signal });
 
   input.addEventListener("input", () => {
-    if (state.answerRevealed) return;
+    if (state.answerRevealed || state.autoCompletionPending || state.autoTimedOut) return;
     state.responseDraftValue = String(input.value ?? "");
     state.pendingValidationValue = "";
+    if (isAutoValidationQuestion(state)) fitVerifiedAnswerInput(state);
     syncValidateState(state);
+    if (isAutoValidationQuestion(state)) handleAutoAnswerInput(state);
   }, { signal });
 
   input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && isAutoValidationQuestion(state)) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "Enter" || state.answerRevealed || !canSubmitAnswer(state)) return;
     event.preventDefault();
     state.pendingValidationValue = String(input.value ?? "");
     state.responseDraftValue = state.pendingValidationValue;
+    state.attemptCount += 1;
     requestReveal(state);
   }, { signal });
 
@@ -1662,6 +2148,7 @@ function scheduleRuntimeTextFit(state){
 }
 
 function fitRuntimeTextWidgets(state){
+  fitVerifiedAnswerInput(state);
   // À l'ouverture d'un outil, le conteneur peut exister avant d'avoir reçu sa
   // taille finale. Ne surtout pas mémoriser alors une police réduite pour un
   // canevas de quelques pixels : le ResizeObserver relancera l'ajustement dès
@@ -1691,6 +2178,82 @@ function fitRuntimeTextWidgets(state){
     target.classList.toggle("is-overflowing", overflows);
     target.dataset.quizRuntimeFittedFontSize = String(size);
   });
+}
+
+function fitVerifiedAnswerInput(state){
+  if (!isAutoValidationQuestion(state) || state.answerRevealed) return;
+  const input = state.answerInputEl;
+  if (!(input instanceof HTMLTextAreaElement) || !input.matches("[data-quiz-runtime-verified-answer-input]")) return;
+  const host = input.closest(".quiz-runtime-widget--verified-answer");
+  if (!host) return;
+
+  // On garde d'abord une grande police et on favorise un passage en deux lignes
+  // relativement tôt. La réduction de police n'intervient qu'une fois les deux
+  // lignes réellement remplies.
+  input.style.width = "100%";
+  input.style.maxWidth = "100%";
+  input.style.marginInline = "0";
+  const availableWidth = input.parentElement?.clientWidth || input.clientWidth;
+  if (availableWidth < 80) return;
+
+  const targetSize = resolveRuntimeTargetFontSize(host, input);
+  const minimumSize = Math.min(targetSize, 28);
+  const inputStyle = window.getComputedStyle(input);
+  const mirror = document.createElement("div");
+  mirror.setAttribute("aria-hidden", "true");
+  Object.assign(mirror.style, {
+    position:"fixed",
+    left:"-100000px",
+    top:"0",
+    visibility:"hidden",
+    pointerEvents:"none",
+    boxSizing:"border-box",
+    margin:"0",
+    padding:inputStyle.padding,
+    border:"0",
+    overflowWrap:"anywhere",
+    wordBreak:"normal",
+    fontFamily:inputStyle.fontFamily,
+    fontWeight:inputStyle.fontWeight,
+    fontStyle:inputStyle.fontStyle,
+    letterSpacing:inputStyle.letterSpacing,
+    textTransform:inputStyle.textTransform,
+    lineHeight:"1.12"
+  });
+  mirror.textContent = String(input.value || " ");
+  document.body.appendChild(mirror);
+
+  // Mesure sans retour à la ligne à la taille nominale. Dès qu'une ligne est
+  // déjà bien remplie, on resserre uniquement la largeur de saisie pour obtenir
+  // deux lignes plus équilibrées, sans diminuer la police.
+  mirror.style.fontSize = `${targetSize}px`;
+  mirror.style.whiteSpace = "pre";
+  mirror.style.width = "max-content";
+  const singleLineWidth = mirror.scrollWidth;
+  let workingWidth = availableWidth;
+  if (singleLineWidth > availableWidth * 0.78 && singleLineWidth < availableWidth * 1.65) {
+    workingWidth = Math.min(
+      availableWidth,
+      Math.max(availableWidth * 0.66, singleLineWidth / 1.5)
+    );
+  }
+
+  input.style.width = `${Math.round(workingWidth)}px`;
+  input.style.maxWidth = "100%";
+  input.style.marginInline = "auto";
+  mirror.style.width = `${workingWidth}px`;
+  mirror.style.whiteSpace = "pre-wrap";
+
+  let size = targetSize;
+  while (size > minimumSize) {
+    mirror.style.fontSize = `${size}px`;
+    const lineHeight = parseFloat(window.getComputedStyle(mirror).lineHeight) || size * 1.12;
+    if (mirror.scrollHeight <= lineHeight * 2 + 2) break;
+    size = Math.max(minimumSize, size - 2);
+  }
+  mirror.remove();
+  input.style.fontSize = `${size}px`;
+  input.dataset.quizRuntimeFittedFontSize = String(size);
 }
 
 function hasUsableRuntimeFitBounds(rect, minimum = 120){
@@ -1904,7 +2467,7 @@ function getShellAnswerTransitionTargets(state){
     ));
   }
 
-  if (responseType === "answer") {
+  if (responseType === "answer" || responseType === "verified-answer") {
     const node = findRuntimeWidgetNode(state.canvasEl, state.currentQuestion.primaryAnswerWidgetId);
     return node ? [node] : [];
   }
@@ -1944,7 +2507,12 @@ function focusPrimaryInput(state){
   queueMicrotask(() => {
     try {
       state.answerInputEl.focus({ preventScroll: true });
-      state.answerInputEl.select?.();
+      if (isAutoValidationQuestion(state)) {
+        const end = String(state.answerInputEl.value || "").length;
+        state.answerInputEl.setSelectionRange?.(end, end);
+      } else {
+        state.answerInputEl.select?.();
+      }
     } catch {
       state.answerInputEl.focus?.();
     }
@@ -2101,6 +2669,7 @@ function teardownInputBindings(state){
   state.audioAbortController = null;
   stopRuntimeAudio(state);
   state.activeAudioEl = null;
+  clearAutoAnswerTimers(state);
   state.answerInputEl = null;
 }
 
@@ -2128,6 +2697,13 @@ function teardownState(state, container){
   state.labelPositions.clear();
   state.activeLabelDrag = null;
   state.answerDisplayMode = "correction";
+  state.autoCompletionPending = false;
+  state.autoTimedOut = false;
+  state.attemptCount = 0;
+  state.hintCount = 0;
+  state.currentHint = "";
+  state.seenMeaningfulAttempts.clear();
+  state.seenHintSignatures.clear();
   state.qcmResizeObserver?.disconnect?.();
   state.qcmResizeObserver = null;
   state.qcmFitTimers.forEach((timer) => window.clearTimeout(timer));

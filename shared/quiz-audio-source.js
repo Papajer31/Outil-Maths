@@ -23,6 +23,12 @@ export function normalizeQuizAudioSource(source) {
   };
 }
 
+export function invalidateQuizAudioResourceUrl(resourceId = "") {
+  const id = String(resourceId || "").trim();
+  if (id) resourceUrlCache.delete(id);
+  else resourceUrlCache.clear();
+}
+
 export async function resolveQuizAudioSourceUrl(source) {
   const normalized = normalizeQuizAudioSource(source);
   if (!normalized) return "";

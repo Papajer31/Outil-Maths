@@ -6,7 +6,7 @@ import {
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
 import { resolveQuizImageSourceUrl } from "../../../shared/quiz-local-image-store.js";
-import { resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
+import { invalidateQuizAudioResourceUrl, resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
 import { openAudioRecorderDialog } from "./audio-recorder-dialog.js";
 
 const RESOURCE_ROOT_PERSONAL = "__resource_root_personal";
@@ -101,6 +101,7 @@ export function createResourcesViewController({
   deleteResourceFolder,
   listResourcesForSpace,
   uploadResourceForSpace,
+  replaceAudioResourceFile,
   updateResource,
   deleteResource,
   createResourceSignedUrl
@@ -565,6 +566,11 @@ export function createResourcesViewController({
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-resource" data-resource-id="${escapeAttr(resourceId)}" title="Renommer la ressource" aria-label="Renommer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
           </button>
+          ${!isImage && resource.is_system !== true ? `
+            <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rerecord-resource-audio" data-resource-id="${escapeAttr(resourceId)}" title="Réenregistrer l’audio" aria-label="Réenregistrer l’audio">
+              <span class="dashboard-material-icon" aria-hidden="true">mic</span>
+            </button>
+          ` : ""}
           <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-resource" data-resource-id="${escapeAttr(resourceId)}" title="Supprimer la ressource" aria-label="Supprimer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">delete</span>
           </button>
@@ -977,6 +983,12 @@ export function createResourcesViewController({
         renamePersonalResource(button.dataset.resourceId);
       });
     });
+    list?.querySelectorAll('[data-action="rerecord-resource-audio"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void rerecordAudioResource(button.dataset.resourceId);
+      });
+    });
     list?.querySelectorAll('[data-action="delete-resource"]').forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1263,6 +1275,60 @@ export function createResourcesViewController({
     if (rejected.length) messages.push(`${rejected.length} incompatible${rejected.length > 1 ? "s" : ""}`);
     if (quotaRejected.length) messages.push(`${quotaRejected.length} hors quota`);
     showToast?.(`Import terminé : ${messages.join(", ")}.`, { isError: errors.length > 0 || ignoredCount > 0 });
+  }
+
+  async function rerecordAudioResource(resourceId){
+    if (isImporting || isRecordingResource || isMoving || typeof replaceAudioResourceFile !== "function") return;
+    const resource = personalResources.find((item) => String(item.id) === String(resourceId));
+    if (!resource || resource.type !== "audio" || resource.is_system === true) return;
+
+    const teacherSpaceId = getTeacherSpaceId();
+    isRecordingResource = true;
+    updateActions();
+    try {
+      const updated = await openAudioRecorderDialog({
+        teacherSpaceId,
+        defaultTitle:resource.title || "Audio",
+        dialogTitle:"Réenregistrer l’audio",
+        saveLabel:"Remplacer",
+        lockTitle:true,
+        onSaveRecording:async ({ blob, duration, mimeType }) => {
+          const resources = await listResourcesForSpace?.(teacherSpaceId) || [];
+          const usedBytesWithoutCurrent = (Array.isArray(resources) ? resources : [])
+            .filter((item) => item?.is_system !== true && String(item.id) !== String(resource.id))
+            .reduce((total, item) => total + Math.max(0, Number(item?.size_bytes) || 0), 0);
+          if (usedBytesWithoutCurrent + Math.max(0, Number(blob?.size) || 0) > RESOURCE_STORAGE_QUOTA_BYTES) {
+            throw new Error("Le quota de stockage personnel de 100 Mo serait dépassé.");
+          }
+
+          const file = new File([blob], "enregistrement-audio", {
+            type:mimeType || blob.type || "audio/webm",
+            lastModified:Date.now()
+          });
+          return await replaceAudioResourceFile(resource.id, file, {
+            duration,
+            title:resource.title,
+            alt:resource.alt || resource.title,
+            metadata:{
+              origin:"recording",
+              recorded_at:new Date().toISOString()
+            }
+          });
+        },
+        showToast
+      });
+      if (!updated?.id) return;
+      invalidateQuizAudioResourceUrl(updated.id);
+      await reloadRemoteState();
+      render();
+      showToast?.(`Audio « ${updated.title || resource.title || "Audio"} » remplacé.`);
+    } catch (error) {
+      console.error("Impossible de réenregistrer l’audio.", error);
+      showToast?.(error?.message || "Impossible de réenregistrer cet audio.", { isError:true });
+    } finally {
+      isRecordingResource = false;
+      updateActions();
+    }
   }
 
   async function recordAudioResource(){

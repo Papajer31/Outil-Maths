@@ -356,10 +356,6 @@ export function renderSessionView(root){
 
       await engine.startSession?.();
 
-      if (isProjectedTeacherMode) {
-        forceHideStudentManualButton();
-      }
-
       syncPauseButton();
       syncProjectedControls();
       syncFinalChallengePanel();
@@ -448,6 +444,22 @@ export function renderSessionView(root){
       await engine.goToNextTool?.();
       syncProjectedControls();
     }, { signal });
+
+    els.btnProjectedRestart?.addEventListener("click", async () => {
+      if (!engine || exitConfirmOpen) return;
+      const ui = engine.getUiState?.() ?? {};
+      const instanceId = String(ui.currentInstanceId || "").trim();
+      if (!instanceId) return;
+      await engine.goToToolByInstanceId?.(instanceId);
+      syncProjectedControls();
+    }, { signal });
+
+    els.projectedLevelButtons?.forEach?.((button) => {
+      button.addEventListener("click", async () => {
+        if (!engine || exitConfirmOpen) return;
+        await applyProjectedTeacherLevel(button.dataset.projectedLevel);
+      }, { signal });
+    });
 
     els.manualActionBtn?.addEventListener("click", () => {
       if (!engine || exitConfirmOpen) return;
@@ -543,12 +555,7 @@ export function renderSessionView(root){
   }
 
   function getVisibleNextQuestionButton(){
-    if (isProjectedTeacherMode) {
-      if (projectedControlsVisible !== true) return null;
-      if (!els.btnNextQuestion || els.btnNextQuestion.disabled) return null;
-      return els.btnNextQuestion;
-    }
-
+    if (isProjectedTeacherMode && projectedControlsVisible !== true) return null;
     const btn = els.manualActionBtn;
     if (!btn || btn.disabled) return null;
     if (btn.classList.contains("hidden")) return null;
@@ -880,32 +887,101 @@ export function renderSessionView(root){
     }
   }
 
+  function getProjectedPlaylistMeta(){
+    const playlist = studentState.projectedSession?.playlist;
+    return Array.isArray(playlist) ? playlist : [];
+  }
+
+  function syncProjectedTeacherDock(ui = engine?.getUiState?.() ?? {}){
+    if (!isProjectedTeacherMode) return;
+
+    const playlist = getProjectedPlaylistMeta();
+    const index = Number.isInteger(ui.currentToolIndex) ? ui.currentToolIndex : -1;
+    const item = index >= 0 ? playlist[index] : null;
+
+    if (els.projectedTeacherActivityTitle) {
+      els.projectedTeacherActivityTitle.textContent = String(item?.activityLabel || "Activité");
+      els.projectedTeacherActivityTitle.title = String(item?.activityLabel || "Activité");
+    }
+    if (els.projectedTeacherActivityPosition) {
+      els.projectedTeacherActivityPosition.textContent = playlist.length && index >= 0
+        ? `${index + 1} / ${playlist.length}`
+        : `— / ${playlist.length || 0}`;
+    }
+    if (els.btnPrevTool) els.btnPrevTool.disabled = !ui.canGoPrevTool;
+    if (els.btnNextTool) els.btnNextTool.disabled = !ui.canGoNextTool;
+    if (els.btnProjectedRestart) els.btnProjectedRestart.disabled = !String(ui.currentInstanceId || "").trim();
+
+    const level = Math.max(1, Math.min(5, Math.trunc(Number(item?.level) || 3)));
+    els.projectedLevelButtons?.forEach?.((button) => {
+      const buttonLevel = Math.trunc(Number(button.dataset.projectedLevel));
+      const active = buttonLevel === level;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.disabled = !item;
+    });
+  }
+
+  async function applyProjectedTeacherLevel(value){
+    if (!isProjectedTeacherMode || !engine) return false;
+    const nextLevel = Math.max(1, Math.min(5, Math.trunc(Number(value) || 3)));
+    const ui = engine.getUiState?.() ?? {};
+    const index = Number.isInteger(ui.currentToolIndex) ? ui.currentToolIndex : -1;
+    const playlist = getProjectedPlaylistMeta();
+    const item = index >= 0 ? playlist[index] : null;
+    const instanceId = String(ui.currentInstanceId || item?.instanceId || "").trim();
+    if (!item || !instanceId) return false;
+
+    const previousLevel = Math.max(1, Math.min(5, Math.trunc(Number(item.level) || 3)));
+    if (previousLevel === nextLevel) {
+      syncProjectedControls();
+      return true;
+    }
+
+    item.level = nextLevel;
+    const buildRuntimeConfig = studentState.projectedSession?.buildRuntimeConfig;
+    const nextConfig = typeof buildRuntimeConfig === "function"
+      ? buildRuntimeConfig(playlist)
+      : null;
+
+    if (!nextConfig || !Array.isArray(nextConfig.sequence)) {
+      item.level = previousLevel;
+      syncProjectedControls();
+      return false;
+    }
+
+    try {
+      const applied = await engine.applyLiveConfig?.({
+        globals: nextConfig.globals ?? {},
+        sequence: nextConfig.sequence
+      });
+      if (applied === false) throw new Error("Live config rejected");
+      await engine.goToToolByInstanceId?.(instanceId);
+      if (studentState.projectedSession) {
+        studentState.projectedSession.catalogDifficultyLevel = nextLevel;
+      }
+      studentState.projectedSession?.sendTeacherAction?.("set-item-level-live", {
+        itemId: item.id,
+        level: nextLevel
+      });
+      syncProjectedControls();
+      sendProjectedStatus();
+      return true;
+    } catch (error) {
+      console.error(error);
+      item.level = previousLevel;
+      syncProjectedControls();
+      return false;
+    }
+  }
+
   function syncProjectedControls(){
     syncShellAnswerToggle();
 
     if (isProjectedTeacherMode) {
-      forceHideStudentManualButton();
       syncProjectedControlsVisibility();
+      syncProjectedTeacherDock();
     }
-
-    if (!isProjectedTeacherMode || !engine) return;
-
-    const ui = engine.getUiState?.() ?? {};
-    if (els.btnPrevTool) els.btnPrevTool.disabled = !ui.canGoPrevTool;
-    if (els.btnShowAnswer) {
-      els.btnShowAnswer.disabled = !ui.projectedPrimaryActionEnabled;
-      const label = String(ui.projectedPrimaryActionLabel || "Réponse");
-      const icon = String(ui.projectedPrimaryActionIcon || "visibility");
-      const title = label;
-      els.btnShowAnswer.title = title;
-      els.btnShowAnswer.setAttribute('aria-label', title);
-      const iconEl = els.btnShowAnswer.querySelector('.projected-session-btn-icon');
-      const labelEl = els.btnShowAnswer.querySelector('.projected-session-btn-label');
-      if (iconEl) setMaterialIcon(iconEl, icon);
-      if (labelEl) labelEl.textContent = label;
-    }
-    if (els.btnNextQuestion) els.btnNextQuestion.disabled = !ui.canAdvanceQuestion;
-    if (els.btnNextTool) els.btnNextTool.disabled = !ui.canGoNextTool;
   }
 
   function syncShellAnswerToggle(){
@@ -1062,6 +1138,7 @@ export function renderSessionView(root){
       if (els.btnShowAnswer) fitResizeObserver.observe(els.btnShowAnswer);
       if (els.btnNextQuestion) fitResizeObserver.observe(els.btnNextQuestion);
       if (els.btnNextTool) fitResizeObserver.observe(els.btnNextTool);
+      if (els.btnProjectedRestart) fitResizeObserver.observe(els.btnProjectedRestart);
     }
 
     window.addEventListener("resize", updateSessionFitLayout, { signal, passive: true });

@@ -28,6 +28,7 @@ import {
   updateMissionFolder,
   deleteMissionFolder,
   listMissionsForSpace,
+  updateMissionPlacement,
   listMissionSteps,
   listMissionAssignments,
   saveMissionForSpace,
@@ -52,6 +53,9 @@ import {
   updateQuizFolder,
   deleteQuizFolder,
   listQuizzesForSpace,
+  updateQuizPlacement,
+  listQuizSummariesForSpace,
+  getQuizForSpace,
   saveQuizForSpace,
   deleteQuiz,
   listResourceFoldersForSpace,
@@ -62,6 +66,7 @@ import {
   deleteResourceFolder,
   listResourcesForSpace,
   uploadResourceForSpace,
+  replaceAudioResourceFile,
   updateResource,
   deleteResource,
   createResourceSignedUrl,
@@ -88,7 +93,7 @@ import { createAudioAdminViewController } from "./dashboard/audio-admin-view.js"
 import { createPhonologyWordsImportDialog } from "./dashboard/phonology-words-import-dialog.js";
 import { createSystemImagesImportDialog } from "./dashboard/system-images-import-dialog.js";
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
-import { getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues } from "../../tools/quiz/model.js";
+import { filterQuizSnapshotBySelection, getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues, normalizeQuizRuntimeSettings } from "../../tools/quiz/model.js";
 import {
   applyContextualHelpPreference,
   getContextualHelpEnabled,
@@ -356,6 +361,7 @@ missionsViewController = createMissionsViewController({
   updateMissionFolder,
   deleteMissionFolder,
   listMissionsForSpace,
+  updateMissionPlacement,
   listMissionSteps,
   listMissionAssignments,
   saveMissionForSpace,
@@ -363,7 +369,10 @@ missionsViewController = createMissionsViewController({
   reactivateMission,
   deleteMissionPermanently,
   listCatalogActivitiesForTeacherSpace,
-  listPedagogicalNodesForTeacher
+  listPedagogicalNodesForTeacher,
+  listQuizSummariesForSpace,
+  getQuizForSpace,
+  showToast: showDashboardShareToast
 });
 
 function testQuizSnapshot(snapshot) {
@@ -373,10 +382,14 @@ function testQuizSnapshot(snapshot) {
     return;
   }
 
+  const runtimeSettings = normalizeQuizRuntimeSettings(snapshot?.runtimeSettings, snapshot);
   const quizSettings = {
     ...getDefaultQuizSettings(),
     quizId: snapshot.id || "",
     quizTitle: snapshot.title || "",
+    sourceInstruction: snapshot.instruction || "",
+    drawMode: runtimeSettings.drawMode,
+    questionSelection: runtimeSettings.questionSelection,
     quizSnapshot: snapshot
   };
 
@@ -386,7 +399,7 @@ function testQuizSnapshot(snapshot) {
     pedagogical_node_id: "autres",
     tool_id: "quiz",
     description: "Test direct depuis l’Atelier de quiz.",
-    default_question_count: snapshot.questions.reduce((total, question) => total + Math.max(1, question?.variants?.length || 1), 0),
+    default_question_count: Math.max(1, filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection).length),
     settings: quizSettings,
     difficulty_levels: {
       3: {
@@ -530,6 +543,12 @@ quizExplorerViewController = createQuizExplorerViewController({
     if (String(quiz?.editorMode || "") === "series") showQuizSeries({ quiz });
     else showQuizWorkshop({ quiz });
   },
+  onAssignQuiz: async (quiz) => {
+    currentDashboardSection = "missions";
+    renderDashboardShellState();
+    await ensureMissionsViewMounted({ forceRefresh:true });
+    await missionsViewController?.createMissionFromQuiz?.(quiz);
+  },
   getCurrentTeacherSpace: () => currentTeacherSpace,
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listQuizFoldersForSpace,
@@ -537,6 +556,7 @@ quizExplorerViewController = createQuizExplorerViewController({
   updateQuizFolder,
   deleteQuizFolder,
   listQuizzesForSpace,
+  updateQuizPlacement,
   saveQuizForSpace,
   deleteQuiz,
   showToast: showDashboardShareToast
@@ -579,6 +599,7 @@ resourcesViewController = createResourcesViewController({
   deleteResourceFolder,
   listResourcesForSpace,
   uploadResourceForSpace,
+  replaceAudioResourceFile,
   updateResource,
   deleteResource,
   createResourceSignedUrl
@@ -598,6 +619,8 @@ teacherToolsViewController = createTeacherToolsViewController({
   host: teacherToolsHost,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   getCurrentStudents: () => currentStudents,
+  listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher,
   showToast: showDashboardShareToast
 });
 

@@ -353,7 +353,7 @@ function renderFirstLetterHint(state, question) {
 
 function getDisplayedAnswerIds(state) {
   if (state.phaseMode !== "answer") return normalizeAnswerIds(state.currentQuestion, state.answerIds);
-  if (state.answerDisplayMode === "student") {
+  if (state.lastEvaluation?.isCorrect || state.answerDisplayMode === "student") {
     return normalizeAnswerIds(state.currentQuestion, state.studentAnswerSnapshot || []);
   }
   return [...(state.currentQuestion?.expectedLetterIds || [])];

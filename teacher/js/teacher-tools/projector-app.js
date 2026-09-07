@@ -559,11 +559,8 @@ function normalizeSceneMeta(rawScene = {}){
 }
 
 function normalizeScene(rawScene = {}){
-  return {
-    version: Math.max(1, Math.trunc(Number(rawScene.version) || 1)),
-    scene: normalizeSceneMeta(rawScene),
-    selectedWidgetId: String(rawScene.selectedWidgetId || ""),
-    widgets: (Array.isArray(rawScene.widgets) ? rawScene.widgets : []).map((widget, index) => {
+  const singletonToolIds = new Set();
+  const widgets = (Array.isArray(rawScene.widgets) ? rawScene.widgets : []).map((widget, index) => {
       const { layer: _legacyLayer, ...widgetWithoutLayer } = widget || {};
       const state = widget?.state && typeof widget.state === "object" ? widget.state : {};
       const geometry = widget?.toolId === "drawing-layer"
@@ -577,7 +574,9 @@ function normalizeScene(rawScene = {}){
         icon: String(widget?.icon || "widgets"),
         visible: widget?.visible !== false,
         locked: normalizeWidgetLocked(widget?.locked),
-        viewMode: normalizeWidgetViewMode(widget?.viewMode),
+        viewMode: getTeacherTool(widget?.toolId)?.exclusiveStage === true && normalizeWidgetViewMode(widget?.viewMode) === WIDGET_VIEW_MODE_COLLAPSED
+          ? WIDGET_VIEW_MODE_NORMAL
+          : normalizeWidgetViewMode(widget?.viewMode),
         zIndex: Math.max(1, Math.trunc(Number(widget?.zIndex) || index + 1)),
         layout: widget?.toolId === "drawing-layer"
           ? geometry.layout
@@ -585,6 +584,19 @@ function normalizeScene(rawScene = {}){
         state: widget?.toolId === "drawing-layer" ? geometry.state : state
       };
     }).filter((widget) => widget.id && widget.toolId)
+      .filter((widget) => {
+        const tool = getTeacherTool(widget.toolId);
+        if (tool?.singleton !== true) return true;
+        if (singletonToolIds.has(tool.id)) return false;
+        singletonToolIds.add(tool.id);
+        return true;
+      });
+
+  return {
+    version: Math.max(1, Math.trunc(Number(rawScene.version) || 1)),
+    scene: normalizeSceneMeta(rawScene),
+    selectedWidgetId: String(rawScene.selectedWidgetId || ""),
+    widgets
   };
 }
 
@@ -2155,6 +2167,10 @@ function isWidgetLocked(widget){
 }
 
 function getWidgetRenderZIndex(widget){
+  const tool = getTeacherTool(widget?.toolId);
+  if (tool?.exclusiveStage === true && getWidgetViewMode(widget?.id) === WIDGET_VIEW_MODE_STAGE) {
+    return 150000;
+  }
   return Math.max(1, Math.trunc(Number(widget?.zIndex) || 1));
 }
 
@@ -2198,9 +2214,12 @@ function renderWidgetbar(){
   const isCollapsed = viewMode === WIDGET_VIEW_MODE_COLLAPSED;
   const isStageMaximized = viewMode === WIDGET_VIEW_MODE_STAGE;
   const canMutateWidget = hasWidget && !sceneLocked && !widgetLocked;
+  const canLockWidget = hasWidget && !sceneLocked && tool?.canLock !== false;
   const canMoveWidget = canMutateWidget && interaction.moveMode !== TEACHER_TOOL_MOVE_MODE_NONE;
   const canCollapse = canMutateWidget && interaction.canCollapse !== false;
   const canStage = canMutateWidget && !isCollapsed && interaction.canStage !== false;
+  const canDuplicateWidget = canMutateWidget && tool?.canDuplicate !== false && tool?.singleton !== true;
+  const canReorderWidget = canMutateWidget && tool?.canReorder !== false;
   const canRemove = canMutateWidget;
   const specificControlsHtml = hasWidget && typeof tool?.renderWidgetbarControls === "function"
     ? String(tool.renderWidgetbarControls({ state: widget.state, widget, disabled: !canMutateWidget }) || "").trim()
@@ -2228,7 +2247,7 @@ function renderWidgetbar(){
         action: "toggle-lock",
         icon: widgetLocked ? "lock" : "lock_open",
         label: widgetLocked ? "Déverrouiller" : "Verrouiller",
-        disabled: !hasWidget,
+        disabled: !canLockWidget,
         pressed: widgetLocked
       })}
       ${getWidgetbarButton({
@@ -2244,9 +2263,9 @@ function renderWidgetbar(){
         disabled: !canMutateWidget || (!isStageMaximized && !canStage)
       })}
       ${getWidgetbarButton({ action: "center", icon: "filter_center_focus", label: "Centrer", disabled: !canMoveWidget })}
-      ${getWidgetbarButton({ action: "duplicate", icon: "content_copy", label: "Dupliquer", disabled: !canMutateWidget })}
-      ${getWidgetbarButton({ action: "front", icon: "flip_to_front", label: "Devant", disabled: !canMutateWidget })}
-      ${getWidgetbarButton({ action: "back", icon: "flip_to_back", label: "Derrière", disabled: !canMutateWidget })}
+      ${getWidgetbarButton({ action: "duplicate", icon: "content_copy", label: "Dupliquer", disabled: !canDuplicateWidget })}
+      ${getWidgetbarButton({ action: "front", icon: "flip_to_front", label: "Devant", disabled: !canReorderWidget })}
+      ${getWidgetbarButton({ action: "back", icon: "flip_to_back", label: "Derrière", disabled: !canReorderWidget })}
       ${getWidgetbarButton({ action: "remove", icon: "delete", label: "Retirer", disabled: !canRemove, danger: true })}
     </div>
     ${specificControlsHtml ? `
@@ -2311,6 +2330,7 @@ function handleWidgetbarAction(action){
   const sceneLocked = isSceneLocked();
 
   if (safeAction === "toggle-lock") {
+    if (getTeacherTool(widget.toolId)?.canLock === false) return;
     setWidgetLockedFromProjector(widget.id, !widgetLocked);
     return;
   }
@@ -2334,6 +2354,9 @@ function handleWidgetbarAction(action){
     return;
   }
 
+  const selectedTool = getTeacherTool(widget.toolId);
+  if (safeAction === "duplicate" && (selectedTool?.canDuplicate === false || selectedTool?.singleton === true)) return;
+  if ((safeAction === "front" || safeAction === "back") && selectedTool?.canReorder === false) return;
   const commandByAction = {
     center: "center-widget",
     duplicate: "duplicate-widget",
@@ -2383,7 +2406,11 @@ function setWidgetViewMode(widgetId, mode, { notify = true } = {}){
   const safeWidgetId = String(widgetId || "").trim();
   if (!safeWidgetId) return;
   const previousMode = getWidgetViewMode(safeWidgetId);
-  const safeMode = normalizeWidgetViewMode(mode);
+  let safeMode = normalizeWidgetViewMode(mode);
+  const targetTool = getTeacherTool(getWidgetById(safeWidgetId)?.toolId);
+  if (targetTool?.exclusiveStage === true && safeMode === WIDGET_VIEW_MODE_COLLAPSED) {
+    safeMode = WIDGET_VIEW_MODE_NORMAL;
+  }
 
   sceneState = {
     ...sceneState,
@@ -2419,6 +2446,8 @@ function updateWidgetFrameState(){
     frame.classList.toggle("is-collapsed", viewMode === WIDGET_VIEW_MODE_COLLAPSED);
     frame.classList.toggle("is-stage-maximized", viewMode === WIDGET_VIEW_MODE_STAGE);
     const widget = getWidgetById(widgetId);
+    const tool = getTeacherTool(widget?.toolId);
+    frame.classList.toggle("is-exclusive-stage-widget", tool?.exclusiveStage === true && viewMode === WIDGET_VIEW_MODE_STAGE);
     const interaction = getWidgetInteraction(widget);
     const widgetLocked = isWidgetLocked(widget);
     frame.classList.toggle("is-widget-locked", widgetLocked);
@@ -2429,6 +2458,13 @@ function updateWidgetFrameState(){
     frame.style.zIndex = String(getWidgetRenderZIndex(widget));
   });
   widgetHost?.classList.toggle("has-stage-maximized-widget", hasStageMaximizedWidget);
+  const exclusiveStageWidget = sceneState.widgets.find((widget) => (
+    widget.visible !== false
+    && getWidgetViewMode(widget.id) === WIDGET_VIEW_MODE_STAGE
+    && getTeacherTool(widget.toolId)?.exclusiveStage === true
+  )) || null;
+  widgetHost?.classList.toggle("has-exclusive-stage-widget", Boolean(exclusiveStageWidget));
+  stage?.classList.toggle("has-exclusive-activity-stage", exclusiveStageWidget?.toolId === "activity");
   renderWidgetbar();
   updateDrawFillColorAvailability();
 }
@@ -3869,6 +3905,7 @@ function renderWidget(widget, existingFrame = null){
   frame.classList.toggle("is-chrome-visible", widget.id === visibleChromeWidgetId);
   frame.classList.toggle("is-collapsed", viewMode === WIDGET_VIEW_MODE_COLLAPSED);
   frame.classList.toggle("is-stage-maximized", viewMode === WIDGET_VIEW_MODE_STAGE);
+  frame.classList.toggle("is-exclusive-stage-widget", tool.exclusiveStage === true && viewMode === WIDGET_VIEW_MODE_STAGE);
   const isActiveDrag = dragState?.widgetId === widget.id && dragState?.hasStarted === true;
   frame.classList.toggle("is-dragging", isActiveDrag);
   frame.classList.toggle("is-rotating", isActiveDrag && dragState?.mode === "drawing-rotate");
@@ -3957,16 +3994,24 @@ function render(){
   applyBackground();
 
   const visibleWidgets = sceneState.widgets.filter((widget) => widget.visible !== false);
-  widgetHost.classList.toggle("has-stage-maximized-widget", visibleWidgets.some((widget) => (
-    getWidgetViewMode(widget.id) === WIDGET_VIEW_MODE_STAGE
-  )));
+  const stageWidgets = visibleWidgets.filter((widget) => getWidgetViewMode(widget.id) === WIDGET_VIEW_MODE_STAGE);
+  const exclusiveStageWidget = stageWidgets.find((widget) => getTeacherTool(widget.toolId)?.exclusiveStage === true) || null;
+  widgetHost.classList.toggle("has-stage-maximized-widget", stageWidgets.length > 0);
+  widgetHost.classList.toggle("has-exclusive-stage-widget", Boolean(exclusiveStageWidget));
+  stage?.classList.toggle("has-exclusive-activity-stage", exclusiveStageWidget?.toolId === "activity");
 
   if (visibleChromeWidgetId && !visibleWidgets.some((widget) => widget.id === visibleChromeWidgetId)) {
     visibleChromeWidgetId = "";
   }
 
   if (!visibleWidgets.length) {
+    widgetHost.querySelectorAll(".ttp-widget-frame[data-widget-id]").forEach((frame) => {
+      const widget = getWidgetById(frame.dataset.widgetId);
+      getTeacherTool(frame.dataset.toolId || widget?.toolId)?.disposeProjector?.({ widget, widgetId: frame.dataset.widgetId, host: frame.querySelector(":scope > .ttp-widget-body") });
+    });
     widgetHost.innerHTML = "";
+    widgetHost.classList.remove("has-exclusive-stage-widget");
+    stage?.classList.remove("has-exclusive-activity-stage");
     updateDrawFillColorAvailability();
     return;
   }
@@ -3988,14 +4033,25 @@ function render(){
       const frame = renderWidget(widget, reusableFrame);
       if (frame) {
         renderedWidgetIds.add(widget.id);
-        if (existingFrame && existingFrame !== frame) existingFrame.remove();
+        if (existingFrame && existingFrame !== frame) {
+          getTeacherTool(existingFrame.dataset.toolId)?.disposeProjector?.({
+            widgetId: existingFrame.dataset.widgetId,
+            host: existingFrame.querySelector(":scope > .ttp-widget-body")
+          });
+          existingFrame.remove();
+        }
         widgetHost.append(frame);
         syncFrameLayoutForView(frame, widget);
       }
     });
 
   existingFrames.forEach((frame, widgetId) => {
-    if (!renderedWidgetIds.has(widgetId)) frame.remove();
+    if (renderedWidgetIds.has(widgetId)) return;
+    getTeacherTool(frame.dataset.toolId)?.disposeProjector?.({
+      widgetId,
+      host: frame.querySelector(":scope > .ttp-widget-body")
+    });
+    frame.remove();
   });
   updateDrawFillColorAvailability();
 }

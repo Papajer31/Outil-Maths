@@ -148,7 +148,7 @@ function renderShell(state) {
       <div class="dm-stage">
         <div class="dm-image-frame" data-dm-image-frame role="button" tabindex="0" aria-label="Agrandir l’image" aria-expanded="false">
           <img class="dm-image" data-dm-image alt="" draggable="false">
-          <div class="dm-image-placeholder" data-dm-image-placeholder aria-hidden="true">Image indisponible</div>
+          <div class="dm-image-placeholder" data-dm-image-placeholder aria-hidden="true">Image</div>
         </div>
 
         <div class="dm-answer-row" data-dm-answer-row>
@@ -373,6 +373,9 @@ function renderPrefix(state, question) {
 function renderImage(state, question) {
   if (!state.imageEl || !state.imageFrameEl) return;
   const url = getPublicImageAssetUrl(question?.imageStoragePath, { bucket: IMAGE_BUCKET });
+  const imageLabel = String(question?.word || question?.slug || "Image").trim() || "Image";
+  const placeholder = state.imageFrameEl.querySelector("[data-dm-image-placeholder]");
+  if (placeholder) placeholder.textContent = imageLabel;
 
   state.imageFrameEl.classList.remove("is-ready", "is-error");
   state.imageFrameEl.classList.add("is-loading");

@@ -374,6 +374,10 @@ function preserveSequenceMetadata(source, target) {
     target.mission_step_id = missionStepId;
   }
 
+  if (source.auto_exit_session_on_complete != null || source.autoExitSessionOnComplete != null) {
+    target.auto_exit_session_on_complete = (source.auto_exit_session_on_complete ?? source.autoExitSessionOnComplete) === true;
+  }
+
   return target;
 }
 

@@ -7,6 +7,11 @@ import {
   sortFoldersByMeta
 } from "../../shared/api-common.js";
 import {
+  filterQuizSnapshotBySelection,
+  normalizeQuizRuntimeSettings,
+  normalizeQuizSnapshot
+} from "../../tools/quiz/model.js";
+import {
   applyCatalogVisibility,
   filterEffectivelyActivePedagogicalNodes,
   getCatalogActivities,
@@ -791,11 +796,13 @@ export async function listPedagogicalNodesForTeacher() {
 }
 
 export async function listPedagogicalNodesForAdmin() {
+  const hideRuntimeNodes = (nodes) => (Array.isArray(nodes) ? nodes : [])
+    .filter((node) => !String(node?.id || "").startsWith("system-runtime"));
   try {
-    return await queryPedagogicalNodes();
+    return hideRuntimeNodes(await queryPedagogicalNodes());
   } catch (err) {
     console.warn("Arborescence pédagogique Admin indisponible, utilisation du secours local.", err);
-    return getPedagogicalNodes();
+    return hideRuntimeNodes(getPedagogicalNodes());
   }
 }
 
@@ -975,6 +982,24 @@ export async function listMissionsForSpace(teacherSpaceId) {
   return Array.isArray(data) ? data : [];
 }
 
+export async function updateMissionPlacement(missionId, updates = {}) {
+  const id = normalizeUuid(missionId);
+  if (!id) throw new Error("Mission invalide.");
+  const payload = {};
+  if ("folder_id" in updates) payload.folder_id = normalizeNullableUuid(updates.folder_id);
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  if (!Object.keys(payload).length) throw new Error("Aucun déplacement de mission à enregistrer.");
+
+  const { data, error } = await supabase
+    .from("missions")
+    .update(payload)
+    .eq("id", id)
+    .select("id, teacher_space_id, folder_id, title, title_normalized, description, status, inactive_reason, current_run, answer_mode, intent_mode, question_count, question_time_seconds, answer_display_seconds, transition_seconds, mission_time_seconds, instructions, display_order, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function listMissionSteps(missionId) {
   const { data, error } = await supabase
     .from("mission_steps")
@@ -1107,6 +1132,7 @@ export async function listCatalogActivitiesForAdmin() {
     .from("catalog_activities")
     .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
     .neq("status", "archived")
+    .neq("id", "system.quiz.direct")
     .order("pedagogical_node_id", { ascending: true })
     .order("adventure_tier", { ascending: true })
     .order("display_order", { ascending: true })
@@ -1683,6 +1709,25 @@ export async function listQuizzesForSpace(teacherSpaceId) {
   return (Array.isArray(data) ? data : []).map(normalizeQuizRecord);
 }
 
+export async function updateQuizPlacement(quizId, updates = {}, options = {}) {
+  const id = normalizeUuid(quizId);
+  if (!id) throw new Error("Quiz invalide.");
+  const payload = {};
+  if ("folder_id" in updates) payload.folder_id = normalizeNullableUuid(updates.folder_id);
+  if ("display_order" in updates) payload.display_order = Math.max(0, Number(updates.display_order) || 0);
+  if (!Object.keys(payload).length) throw new Error("Aucun déplacement de quiz à enregistrer.");
+
+  const { data, error } = await supabase
+    .from("quizzes")
+    .update(payload)
+    .eq("id", id)
+    .eq("is_system", options?.is_system === true)
+    .select(QUIZ_FIELDS)
+    .single();
+  if (error) throw error;
+  return normalizeQuizRecord(data);
+}
+
 // Le sélecteur de quiz n'a besoin que de l'arborescence. Éviter de transférer
 // tous les documents (qui peuvent contenir des centaines de variantes).
 export async function listQuizSummariesForSpace(teacherSpaceId) {
@@ -1714,6 +1759,72 @@ export async function getQuizForSpace(teacherSpaceId, quizId) {
   if (error) throw error;
   if (!data) throw new Error("Quiz introuvable.");
   return normalizeQuizRecord(data);
+}
+
+const DIRECT_QUIZ_CATALOG_ACTIVITY_ID = "system.quiz.direct";
+
+async function refreshDirectQuizMissionStepsForSpace(teacherSpaceId, quiz = {}) {
+  if (quiz?.is_system === true) return;
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const snapshot = normalizeQuizSnapshot(quiz);
+  const quizId = String(snapshot.id || quiz?.id || "").trim();
+  if (!quizId) return;
+
+  const runtimeSettings = normalizeQuizRuntimeSettings(snapshot.runtimeSettings, snapshot);
+  const selectedQuestions = filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection);
+  const questionCount = Math.max(1, selectedQuestions.length || 1);
+  const title = cleanDisplayName(snapshot.title || quiz?.title) || "Quiz sans titre";
+  const resourceIds = collectQuizResourceIds(snapshot);
+
+  const { data: missionRows, error: missionError } = await supabase
+    .from("missions")
+    .select("id")
+    .eq("teacher_space_id", spaceId);
+  if (missionError) throw missionError;
+  const missionIds = (Array.isArray(missionRows) ? missionRows : []).map((row) => String(row.id || "")).filter(Boolean);
+  if (!missionIds.length) return;
+
+  const { data: stepRows, error: stepError } = await supabase
+    .from("mission_steps")
+    .select("id, mission_id, catalog_activity_id, step_options_json")
+    .in("mission_id", missionIds)
+    .eq("catalog_activity_id", DIRECT_QUIZ_CATALOG_ACTIVITY_ID);
+  if (stepError) throw stepError;
+
+  const linkedSteps = (Array.isArray(stepRows) ? stepRows : []).filter((step) => (
+    String(step?.step_options_json?.direct_quiz?.quiz_id || "") === quizId
+    && step?.step_options_json?.direct_quiz?.follow_updates !== false
+  ));
+  if (!linkedSteps.length) return;
+
+  await Promise.all(linkedSteps.map(async (step) => {
+    const options = cloneJsonValue(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {});
+    options.direct_quiz = {
+      ...(options.direct_quiz && typeof options.direct_quiz === "object" ? options.direct_quiz : {}),
+      quiz_id: quizId,
+      title,
+      question_count: questionCount,
+      resource_ids: resourceIds
+    };
+    options.execution_limit = { mode:"questions", value:questionCount };
+    options.settings = {
+      ...(options.settings && typeof options.settings === "object" ? options.settings : {}),
+      quizId,
+      quizTitle:title,
+      sourceInstruction:String(snapshot.instruction || ""),
+      drawMode:runtimeSettings.drawMode,
+      questionSelection:runtimeSettings.questionSelection,
+      timeLimitSec:runtimeSettings.timeLimitSec,
+      autoExitOnComplete:runtimeSettings.autoExitOnComplete,
+      quizSnapshot:snapshot
+    };
+
+    const { error } = await supabase
+      .from("mission_steps")
+      .update({ step_options_json:options })
+      .eq("id", step.id);
+    if (error) throw error;
+  }));
 }
 
 export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
@@ -1764,6 +1875,7 @@ export async function saveQuizForSpace(teacherSpaceId, quiz = {}) {
   if (error) throw error;
   const saved = normalizeQuizRecord(data);
   await syncQuizResourceLinks(saved.id, saved.document || document);
+  await refreshDirectQuizMissionStepsForSpace(teacherSpaceId, saved);
   return saved;
 }
 
@@ -2036,6 +2148,94 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
   if (error) {
     await supabase.storage.from(TEACHER_RESOURCE_BUCKET).remove([storagePath]).catch(() => {});
     throw error;
+  }
+
+  return normalizeResourceRecord(data);
+}
+
+export async function replaceAudioResourceFile(resourceId, file, updates = {}) {
+  const id = normalizeUuid(resourceId);
+  if (!id) throw new Error("Ressource audio invalide.");
+  if (!(file instanceof Blob)) throw new Error("Fichier audio invalide.");
+  const mimeType = String(file.type || updates.mime_type || "").trim().toLowerCase();
+  if (!mimeType.startsWith("audio/")) throw new Error("Le nouveau fichier doit être un audio.");
+
+  const { data: existing, error: readError } = await supabase
+    .from("resources")
+    .select(RESOURCE_FIELDS)
+    .eq("id", id)
+    .eq("is_system", false)
+    .single();
+  if (readError) throw readError;
+  if (String(existing?.resource_type || "") !== "audio") throw new Error("Cette ressource n’est pas un audio personnel.");
+
+  const user = await getCurrentUser();
+  if (!user?.id) throw new Error("Utilisateur non connecté.");
+  const bucket = String(existing?.storage_bucket || TEACHER_RESOURCE_BUCKET).trim() || TEACHER_RESOURCE_BUCKET;
+  const extension = (() => {
+    const value = mimeType.toLowerCase();
+    if (value.includes("ogg")) return "ogg";
+    if (value.includes("mp4") || value.includes("m4a")) return "m4a";
+    if (value.includes("wav")) return "wav";
+    if (value.includes("mpeg") || value.includes("mp3")) return "mp3";
+    return "webm";
+  })();
+  const storagePath = `${user.id}/${id}/audio-${Date.now()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, file, {
+      contentType: mimeType,
+      cacheControl: "3600",
+      upsert: false
+    });
+  if (uploadError) throw uploadError;
+
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+    ? cloneJsonValue(existing.metadata)
+    : {};
+  const replacementMetadata = updates?.metadata && typeof updates.metadata === "object" && !Array.isArray(updates.metadata)
+    ? cloneJsonValue(updates.metadata)
+    : {};
+  const payload = {
+    storage_bucket: bucket,
+    storage_path: storagePath,
+    mime_type: mimeType,
+    size_bytes: Math.max(0, Number(file.size) || 0),
+    width: 0,
+    height: 0,
+    duration_seconds: Math.max(0, Number(updates.duration) || 0),
+    metadata: {
+      ...existingMetadata,
+      ...replacementMetadata,
+      replaced_at: new Date().toISOString()
+    }
+  };
+  if ("title" in updates) {
+    const title = cleanDisplayName(updates.title);
+    if (title) payload.title = title;
+  }
+  if ("alt" in updates || "alt_text" in updates) {
+    payload.alt_text = String(updates.alt_text ?? updates.alt ?? "").trim();
+  }
+
+  const { data, error } = await supabase
+    .from("resources")
+    .update(payload)
+    .eq("id", id)
+    .eq("is_system", false)
+    .select(RESOURCE_FIELDS)
+    .single();
+  if (error) {
+    await supabase.storage.from(bucket).remove([storagePath]).catch(() => {});
+    throw error;
+  }
+
+  const oldBucket = String(existing?.storage_bucket || bucket).trim() || bucket;
+  const oldPath = String(existing?.storage_path || "").trim();
+  if (oldPath && (oldBucket !== bucket || oldPath !== storagePath)) {
+    const { error: removeError } = await supabase.storage.from(oldBucket).remove([oldPath]);
+    if (removeError) console.warn("Le nouvel audio est enregistré, mais l’ancien fichier Storage n’a pas pu être supprimé.", removeError);
   }
 
   return normalizeResourceRecord(data);

@@ -195,6 +195,7 @@ function renderQuestionMarkup(question) {
   const tokenText = String(question?.target?.bubbleText || "").trim();
   const tokenLength = Math.max(1, Array.from(tokenText).length);
   const tokenLabel = tokenText ? `Son ${tokenText}` : "Son recherché";
+  const imageLabel = String(question?.word || question?.slug || "Image").trim() || "Image";
 
   return `
     <div class="collection-row collection-row--verify sp-question-row">
@@ -205,7 +206,7 @@ function renderQuestionMarkup(question) {
       <div class="collection-display collection-display--prompt sp-image-host">
         <div class="sp-image-frame is-loading" data-sp-image-frame>
           <img class="sp-image" data-sp-image src="${escapeHtml(imageUrl)}" alt="" draggable="false">
-          <div class="sp-image-placeholder" data-sp-image-placeholder>Image indisponible</div>
+          <div class="sp-image-placeholder" data-sp-image-placeholder>${escapeHtml(imageLabel)}</div>
         </div>
       </div>
     </div>

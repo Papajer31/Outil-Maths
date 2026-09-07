@@ -1,4 +1,4 @@
-const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words", "categories"]);
+const RESPONSE_WIDGET_TYPES = new Set(["answer", "verified-answer", "qcm-text", "selection-words", "categories"]);
 const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "numeric-keypad", "qcm-text", "selection-words"]);
 const SERIES_STATIC_WIDGET_TYPES = new Set(["numeric-keypad"]);
 
@@ -283,7 +283,7 @@ function isVisibleInCorrection(widget = {}){
 }
 
 function getIndicatorForWidget(widget = {}){
-  if (widget.type === "answer") return "RÉPONSE";
+  if (widget.type === "answer" || widget.type === "verified-answer") return "RÉPONSE";
   if (widget.type === "numeric-keypad") return "CLAVIER";
   if (widget.type === "qcm-text") return "QCM";
   if (widget.type === "selection-words") return "SÉLECTION";

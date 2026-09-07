@@ -67,7 +67,40 @@ export function createSessionShell(root, options = {}) {
               </div>
 
               <div class="session-content-band">
-                <div class="session-sidebar-reserve session-sidebar-reserve-left" aria-hidden="true"></div>
+                <div class="session-sidebar-reserve session-sidebar-reserve-left"${isProjectedTeacherMode ? "" : ' aria-hidden="true"'}>
+                  ${isProjectedTeacherMode ? `
+                    <aside class="projected-teacher-dock" id="projectedTeacherDock" aria-label="Commandes de projection" data-skip-autofs="true">
+                      <div class="projected-teacher-dock-head">
+                        <strong id="projectedTeacherActivityTitle">Activité</strong>
+                        <span id="projectedTeacherActivityPosition">1 / 1</span>
+                      </div>
+
+                      <button class="projected-teacher-dock-btn" id="btnProjectedRestart" type="button" title="Relancer cette activité" aria-label="Relancer cette activité" data-skip-autofs="true">
+                        ${renderMaterialIcon("refresh", { className: "student-icon projected-teacher-dock-icon" })}
+                        <span>Relancer</span>
+                      </button>
+
+                      <button class="projected-teacher-dock-btn" id="btnPrevTool" type="button" title="Outil précédent" aria-label="Outil précédent" data-skip-autofs="true">
+                        ${renderMaterialIcon("skip_previous", { className: "student-icon projected-teacher-dock-icon" })}
+                        <span>Outil −</span>
+                      </button>
+
+                      <button class="projected-teacher-dock-btn" id="btnNextTool" type="button" title="Outil suivant" aria-label="Outil suivant" data-skip-autofs="true">
+                        ${renderMaterialIcon("skip_next", { className: "student-icon projected-teacher-dock-icon" })}
+                        <span>Outil +</span>
+                      </button>
+
+                      <div class="projected-teacher-level-block">
+                        <span class="projected-teacher-level-label">Niveau</span>
+                        <div class="projected-teacher-levels" role="group" aria-label="Niveau de l’activité courante">
+                          ${[1,2,3,4,5].map((level) => `
+                            <button class="projected-teacher-level-btn" type="button" data-projected-level="${level}" aria-label="Niveau ${level}" aria-pressed="false" data-skip-autofs="true">${level}</button>
+                          `).join("")}
+                        </div>
+                      </div>
+                    </aside>
+                  ` : ""}
+                </div>
                 <div class="session-content-main-wrap">
                   <div id="sessionWorkArea" class="session-workarea"></div>
                 </div>
@@ -116,54 +149,25 @@ export function createSessionShell(root, options = {}) {
               <div class="session-chrome-bottom">
                 <div class="session-bottom-slot session-bottom-slot-left" aria-hidden="true"></div>
                 <div class="session-bottom-slot session-bottom-slot-center">
-                  ${isProjectedTeacherMode ? `
-                    <div class="projected-session-controls" id="projectedSessionControls" data-skip-autofs="true">
-                      <button class="projected-session-btn" id="btnPrevTool" type="button" title="Outil précédent" aria-label="Outil précédent" data-skip-autofs="true">
-                        ${renderMaterialIcon("skip_previous", { className: "student-icon projected-session-btn-icon" })}
-                        <span class="projected-session-btn-label">Outil −</span>
-                      </button>
-
-                      <button class="projected-session-btn" id="btnShowAnswer" type="button" title="Afficher la réponse" aria-label="Afficher la réponse" data-skip-autofs="true">
-                        ${renderMaterialIcon("visibility", { className: "student-icon projected-session-btn-icon" })}
-                        <span class="projected-session-btn-label">Réponse</span>
-                      </button>
-
-                      <button class="projected-session-btn hidden" id="btnAnswerDisplayToggle" type="button" title="Voir ma réponse" aria-label="Voir ma réponse" data-skip-autofs="true">
-                        ${renderMaterialIcon("sync_alt", { className: "student-icon projected-session-btn-icon" })}
-                        <span class="projected-session-btn-label">Voir ma réponse</span>
-                      </button>
-
-                      <button class="projected-session-btn" id="btnNextQuestion" type="button" title="Question suivante" aria-label="Question suivante" data-skip-autofs="true">
-                        ${renderMaterialIcon("arrow_forward", { className: "student-icon projected-session-btn-icon" })}
-                        <span class="projected-session-btn-label">Question</span>
-                      </button>
-
-                      <button class="projected-session-btn" id="btnNextTool" type="button" title="Outil suivant" aria-label="Outil suivant" data-skip-autofs="true">
-                        ${renderMaterialIcon("skip_next", { className: "student-icon projected-session-btn-icon" })}
-                        <span class="projected-session-btn-label">Outil +</span>
-                      </button>
-                    </div>
-                  ` : `
-                    <div class="session-shell-controls" id="sessionShellControls" data-skip-autofs="true">
-                      <button
-                        class="student-manual-btn session-answer-toggle-btn hidden"
-                        id="btnAnswerDisplayToggle"
-                        type="button"
-                        title="Voir ma réponse"
-                        aria-label="Voir ma réponse"
-                        data-skip-autofs="true"
-                      >
-                        ${renderMaterialIcon("sync_alt", { className: "student-icon session-shell-btn-icon" })}
-                        <span class="session-shell-btn-label">Voir ma réponse</span>
-                      </button>
-                      <button
-                        class="student-manual-btn hidden"
-                        id="btnManualAction"
-                        type="button"
-                        data-skip-autofs="true"
-                      ></button>
-                    </div>
-                  `}
+                  <div class="session-shell-controls" id="sessionShellControls" data-skip-autofs="true">
+                    <button
+                      class="student-manual-btn session-answer-toggle-btn hidden"
+                      id="btnAnswerDisplayToggle"
+                      type="button"
+                      title="Voir ma réponse"
+                      aria-label="Voir ma réponse"
+                      data-skip-autofs="true"
+                    >
+                      ${renderMaterialIcon("sync_alt", { className: "student-icon session-shell-btn-icon" })}
+                      <span class="session-shell-btn-label">Voir ma réponse</span>
+                    </button>
+                    <button
+                      class="student-manual-btn hidden"
+                      id="btnManualAction"
+                      type="button"
+                      data-skip-autofs="true"
+                    ></button>
+                  </div>
                 </div>
                 <div class="session-bottom-slot session-bottom-slot-right">
                   <div
@@ -208,6 +212,11 @@ export function getSessionShellRefs(root) {
     btnNextQuestion: root.querySelector("#btnNextQuestion"),
     answerDisplayToggleBtn: root.querySelector("#btnAnswerDisplayToggle"),
     btnNextTool: root.querySelector("#btnNextTool"),
+    btnProjectedRestart: root.querySelector("#btnProjectedRestart"),
+    projectedTeacherDock: root.querySelector("#projectedTeacherDock"),
+    projectedTeacherActivityTitle: root.querySelector("#projectedTeacherActivityTitle"),
+    projectedTeacherActivityPosition: root.querySelector("#projectedTeacherActivityPosition"),
+    projectedLevelButtons: Array.from(root.querySelectorAll("[data-projected-level]")),
     manualActionBtn: root.querySelector("#btnManualAction"),
     viewport: root.querySelector("#sessionViewport"),
     fitHost: root.querySelector("#sessionFitHost"),

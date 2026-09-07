@@ -986,6 +986,8 @@ export function buildCatalogActivityConfig(activityOrId, options = {}) {
   };
 }
 
+const DIRECT_QUIZ_CATALOG_ACTIVITY_ID = "system.quiz.direct";
+
 export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}) {
   const catalogActivities = Array.isArray(options.catalogActivities) ? options.catalogActivities : null;
   const activityMode = normalizeRuntimeMode(options.activityMode);
@@ -999,6 +1001,55 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
 
   const sequence = (Array.isArray(steps) ? steps : [])
     .map((step, index) => {
+      const directQuiz = String(step?.catalog_activity_id || "") === DIRECT_QUIZ_CATALOG_ACTIVITY_ID
+        ? step?.step_options_json?.direct_quiz
+        : null;
+      if (directQuiz) {
+        const settings = step?.step_options_json?.settings && typeof step.step_options_json.settings === "object"
+          ? step.step_options_json.settings
+          : null;
+        if (!settings?.quizSnapshot) return null;
+        const title = String(directQuiz?.title || settings?.quizTitle || "Quiz").trim() || "Quiz";
+        const executionLimit = normalizeExecutionLimit(
+          step?.step_options_json?.execution_limit ?? { mode: "questions", value: directQuiz?.question_count ?? 1 },
+          { mode: "questions", value: 1 }
+        );
+        const directQuizTimeLimitSec = Math.max(0, Math.trunc(Number(settings?.timeLimitSec ?? settings?.time_limit_sec) || 0));
+        const resolvedQuestionTime = directQuizTimeLimitSec > 0
+          ? directQuizTimeLimitSec
+          : (questionTime == null || questionTime <= 0 ? null : questionTime);
+        return {
+          instanceId: `quiz_${String(step?.id || index).replace(/[^a-zA-Z0-9_-]+/g, "-")}`,
+          toolId: "quiz",
+          catalog_activity_id: DIRECT_QUIZ_CATALOG_ACTIVITY_ID,
+          catalog_activity_title: title,
+          catalog_context: "mission",
+          catalog_difficulty_level: 3,
+          catalog_levels: null,
+          catalog_adaptive: false,
+          mission_id: String(mission?.id || ""),
+          mission_step_id: String(step?.id || ""),
+          auto_exit_session_on_complete: settings?.autoExitOnComplete === true || settings?.auto_exit_on_complete === true,
+          draft: {
+            enabled: true,
+            executionLimit,
+            questionCount: executionLimit.mode === "questions" ? executionLimit.value : 1,
+            timePerQ: resolvedQuestionTime == null ? 40 : resolvedQuestionTime,
+            infiniteTimePerQ: resolvedQuestionTime == null,
+            answerTime: answerDisplay == null ? 5 : answerDisplay,
+            infiniteAnswerTime: answerDisplay == null,
+            questionTransitionSec: transition,
+            questionTransitionInfinite: false,
+            toolMaxTimeMin: 10,
+            toolMaxTimeInfinite: true,
+            questionFlowMode: DEFAULT_QUESTION_FLOW_MODE,
+            successGoalCorrectCount: 10,
+            successGoalSafetyMilestones: 3,
+            settings
+          }
+        };
+      }
+
       const activity = getCatalogActivityById(step?.catalog_activity_id, catalogActivities);
       if (!activity) return null;
       const difficultyMode = String(step?.difficulty_mode || "normal").trim().toLowerCase();

@@ -37,6 +37,7 @@ const DEFAULT_MAX_LETTERS = 8;
 const DEFAULT_CLOUD_MODE = CLOUD_MODES.FIXED;
 
 let WORD_CATALOG = [];
+let WORD_CATALOG_LOOKUP = new Set();
 let ELIGIBLE_CACHE = new Map();
 
 export function getDefaultSettings() {
@@ -118,6 +119,9 @@ export function normalizeSettings(settings = {}) {
 
 export function setWordCatalog(words = []) {
   WORD_CATALOG = normalizeWordCatalog(words);
+  WORD_CATALOG_LOOKUP = new Set(WORD_CATALOG
+    .map((entry) => normalizeComparableWord(entry.word))
+    .filter(Boolean));
   ELIGIBLE_CACHE = new Map();
 }
 
@@ -285,15 +289,23 @@ export function buildPrompt(targetOrSettings = {}) {
 }
 
 export function evaluateAnswer(question, answerIds = []) {
-  const letterById = new Map((Array.isArray(question?.letters) ? question.letters : [])
+  const letters = Array.isArray(question?.letters) ? question.letters : [];
+  const letterById = new Map(letters
     .map((letter) => [String(letter?.id || ""), String(letter?.text || "")]));
   const normalizedIds = normalizeAnswerIds(question, answerIds);
   const studentWord = normalizedIds.map((id) => letterById.get(id) || "").join("");
   const expectedWord = String(question?.word || "").normalize("NFC");
+  const studentComparable = normalizeComparableWord(studentWord);
+  const expectedComparable = normalizeComparableWord(expectedWord);
+  const usesEveryLetter = normalizedIds.length === letters.length;
+  const hasSameLetters = usesEveryLetter
+    && getAnagramSignature(studentComparable) === getAnagramSignature(expectedComparable);
+  const isExpectedWord = studentComparable === expectedComparable;
+  const isKnownAnagram = hasSameLetters && WORD_CATALOG_LOOKUP.has(studentComparable);
 
   return {
-    isCorrect: studentWord.normalize("NFC").toLocaleLowerCase("fr-FR")
-      === expectedWord.toLocaleLowerCase("fr-FR"),
+    isCorrect: usesEveryLetter && (isExpectedWord || isKnownAnagram),
+    isAlternativeAnagram: usesEveryLetter && !isExpectedWord && isKnownAnagram,
     studentWord,
     expectedWord,
     answerIds: normalizedIds
@@ -324,6 +336,16 @@ export function splitWordLetters(word) {
     return [...segmenter.segment(text)].map((entry) => entry.segment);
   }
   return Array.from(text);
+}
+
+function normalizeComparableWord(value) {
+  return String(value || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+}
+
+function getAnagramSignature(value) {
+  return splitWordLetters(normalizeComparableWord(value))
+    .sort((a, b) => a.localeCompare(b, "fr", { sensitivity:"variant" }))
+    .join("\u0000");
 }
 
 function normalizeWordCatalog(words) {

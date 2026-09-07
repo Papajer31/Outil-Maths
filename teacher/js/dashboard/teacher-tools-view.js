@@ -217,7 +217,16 @@ function ensureSystemWidgets(rawState = {}){
   const widgets = Array.isArray(rawState?.widgets) ? rawState.widgets : [];
   const existingBackground = widgets.find(isBackgroundWidget) || null;
   const backgroundWidget = createBackgroundWidget(existingBackground);
-  const regularWidgets = widgets.filter((widget) => !isBackgroundWidget(widget));
+  const singletonToolIds = new Set();
+  const regularWidgets = widgets
+    .filter((widget) => !isBackgroundWidget(widget))
+    .filter((widget) => {
+      const tool = getTeacherTool(widget?.toolId);
+      if (tool?.singleton !== true) return true;
+      if (singletonToolIds.has(tool.id)) return false;
+      singletonToolIds.add(tool.id);
+      return true;
+    });
   const selectedWidgetId = String(rawState?.selectedWidgetId || "").trim();
   const selectedStillExists = selectedWidgetId === BACKGROUND_WIDGET_ID
     || regularWidgets.some((widget) => widget.id === selectedWidgetId);
@@ -257,7 +266,7 @@ function disposeWidgetState(widget = {}){
   } catch {}
 }
 
-function cloneSceneState(sceneState, { getStudents, sceneAspectRatio = DEFAULT_SCENE_ASPECT_RATIO } = {}){
+function cloneSceneState(sceneState, { getStudents, getTeacherSpace, sceneAspectRatio = DEFAULT_SCENE_ASPECT_RATIO } = {}){
   const safeSceneState = ensureSystemWidgets(sceneState);
   const selectedWidget = safeSceneState.widgets.find((widget) => widget.id === safeSceneState.selectedWidgetId) || null;
   return {
@@ -272,7 +281,8 @@ function cloneSceneState(sceneState, { getStudents, sceneAspectRatio = DEFAULT_S
         const rawState = cloneWidgetState(widget?.state);
         const projectorState = tool?.createProjectorState?.({
           state: rawState,
-          students: getStudents?.() || []
+          students: getStudents?.() || [],
+          teacherSpace: getTeacherSpace?.() || null
         }) || rawState;
 
         return {
@@ -292,6 +302,8 @@ export function createTeacherToolsViewController({
   host,
   getCurrentTeacherSpace,
   getCurrentStudents,
+  listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher,
   showToast
 } = {}){
   const tools = listTeacherTools();
@@ -398,7 +410,11 @@ export function createTeacherToolsViewController({
     if (!safeWidgetId) return;
     if (!sceneState.widgets.some((widget) => widget.id === safeWidgetId)) return;
 
-    const safeMode = normalizeWidgetViewMode(mode);
+    let safeMode = normalizeWidgetViewMode(mode);
+    const targetTool = getTeacherTool(sceneState.widgets.find((widget) => widget.id === safeWidgetId)?.toolId);
+    if (targetTool?.exclusiveStage === true && safeMode === WIDGET_VIEW_MODE_COLLAPSED) {
+      safeMode = WIDGET_VIEW_MODE_NORMAL;
+    }
     sceneState = {
       ...sceneState,
       widgets: sceneState.widgets.map((widget) => {
@@ -523,6 +539,7 @@ export function createTeacherToolsViewController({
     sendToProjector("scene-state", {
       scene: cloneSceneState(sceneState, {
         getStudents: () => getCurrentStudents?.() || [],
+        getTeacherSpace: () => getCurrentTeacherSpace?.() || null,
         sceneAspectRatio: getActiveSceneAspectRatio()
       })
     });
@@ -783,6 +800,8 @@ export function createTeacherToolsViewController({
   function duplicateWidget(widgetId){
     const widget = getWidgetById(widgetId);
     if (!widget || isSystemWidget(widget)) return;
+    const tool = getTeacherTool(widget.toolId);
+    if (tool?.canDuplicate === false || tool?.singleton === true) return;
 
     const clone = {
       ...widget,
@@ -973,15 +992,19 @@ export function createTeacherToolsViewController({
       return `<div class="tt-widget-picker-empty">Aucun widget disponible.</div>`;
     }
 
-    return tools.map((tool) => `
-      <button class="tt-widget-picker-option" type="button" data-teacher-tool-pick="${escapeAttr(tool.id)}">
-        <span class="dashboard-material-icon tt-widget-picker-icon" aria-hidden="true">${escapeHtml(tool.icon || "widgets")}</span>
-        <span class="tt-widget-picker-copy">
-          <strong>${escapeHtml(tool.label || "Widget")}</strong>
-          <small>${escapeHtml(tool.description || "Widget de tableau interactif.")}</small>
-        </span>
-      </button>
-    `).join("");
+    return tools.map((tool) => {
+      const singletonAlreadyPresent = tool.singleton === true
+        && sceneState.widgets.some((widget) => widget.toolId === tool.id);
+      return `
+        <button class="tt-widget-picker-option${singletonAlreadyPresent ? " is-disabled" : ""}" type="button" data-teacher-tool-pick="${escapeAttr(tool.id)}" ${singletonAlreadyPresent ? "disabled aria-disabled=\"true\"" : ""}>
+          <span class="dashboard-material-icon tt-widget-picker-icon" aria-hidden="true">${escapeHtml(tool.icon || "widgets")}</span>
+          <span class="tt-widget-picker-copy">
+            <strong>${escapeHtml(tool.label || "Widget")}</strong>
+            <small>${escapeHtml(singletonAlreadyPresent ? "Déjà présent sur le Tableau." : (tool.description || "Widget de tableau interactif."))}</small>
+          </span>
+        </button>
+      `;
+    }).join("");
   }
 
   function closeWidgetPickerOverlay({ restoreFocusTo = null } = {}){
@@ -1252,6 +1275,10 @@ export function createTeacherToolsViewController({
   function addWidget(toolId){
     const tool = getTeacherTool(toolId);
     if (!tool || tool.systemWidget === true) return;
+    if (tool.singleton === true && sceneState.widgets.some((widget) => widget.toolId === tool.id)) {
+      showToast?.(`${tool.label} est déjà présent sur le Tableau.`, { isError: true });
+      return;
+    }
 
     const widget = createWidget(tool.id, { widgets: sceneState.widgets });
     sceneState = {
@@ -1266,6 +1293,7 @@ export function createTeacherToolsViewController({
     const tool = getTeacherTool(rawWidget?.toolId);
     const widgetId = String(rawWidget?.id || "").trim();
     if (!tool || !widgetId || tool.systemWidget === true) return;
+    if (tool.singleton === true && sceneState.widgets.some((item) => item.toolId === tool.id && item.id !== widgetId)) return;
 
     const widget = {
       id: widgetId,
@@ -1274,7 +1302,9 @@ export function createTeacherToolsViewController({
       icon: String(rawWidget.icon || tool.icon || "widgets"),
       visible: rawWidget.visible !== false,
       locked: normalizeWidgetLocked(rawWidget.locked),
-      viewMode: normalizeWidgetViewMode(rawWidget.viewMode),
+      viewMode: tool.exclusiveStage === true && normalizeWidgetViewMode(rawWidget.viewMode) === WIDGET_VIEW_MODE_COLLAPSED
+        ? WIDGET_VIEW_MODE_NORMAL
+        : normalizeWidgetViewMode(rawWidget.viewMode),
       zIndex: Math.max(1, Math.trunc(Number(rawWidget.zIndex) || getNextWidgetZIndex(sceneState.widgets))),
       layout: normalizeLayout(rawWidget.layout, tool.id, rawWidget.state || {}, { sceneAspectRatio }),
       state: rawWidget.state && typeof rawWidget.state === "object" ? cloneWidgetState(rawWidget.state) : tool.createInitialState?.() || {}
@@ -1326,15 +1356,20 @@ export function createTeacherToolsViewController({
       getWidget: () => getSelectedWidget(),
       updateWidget: (patch = {}, options = {}) => updateWidget(selectedWidget.id, patch, options),
       getStudents: () => getCurrentStudents?.() || [],
+      getTeacherSpace: () => getCurrentTeacherSpace?.() || null,
+      listCatalogActivitiesForTeacherSpace,
+      listPedagogicalNodesForTeacher,
       sendToProjector,
       syncProjector,
       openProjector,
+      setWidgetViewMode,
       showToast,
       sceneBackgrounds: SCENE_BACKGROUNDS,
       getSceneBackground: () => normalizeSceneMeta(sceneState),
       setSceneBackground: (background, options = {}) => setBackground(background, options),
       sceneState: cloneSceneState(sceneState, {
-        getStudents: () => getCurrentStudents?.() || []
+        getStudents: () => getCurrentStudents?.() || [],
+        getTeacherSpace: () => getCurrentTeacherSpace?.() || null
       })
     }) || null;
   }
@@ -1373,6 +1408,9 @@ export function createTeacherToolsViewController({
     const canSelectedWidgetStage = selectedWidget && !selectedWidgetIsSystem && selectedWidgetInteraction.canStage !== false;
     const canSelectedWidgetCenter = selectedWidget && !selectedWidgetIsSystem && selectedWidgetInteraction.moveMode !== "none";
     const canMutateSelectedWidget = selectedWidget && !selectedWidgetIsSystem;
+    const canLockSelectedWidget = canMutateSelectedWidget && selectedWidgetTool?.canLock !== false;
+    const canDuplicateSelectedWidget = canMutateSelectedWidget && selectedWidgetTool?.canDuplicate !== false && selectedWidgetTool?.singleton !== true;
+    const canReorderSelectedWidget = canMutateSelectedWidget && selectedWidgetTool?.canReorder !== false;
     const isSelectedWidgetCollapsed = selectedWidgetViewMode === WIDGET_VIEW_MODE_COLLAPSED;
     const isSelectedWidgetStageMode = selectedWidgetViewMode === WIDGET_VIEW_MODE_STAGE;
     const isSelectedWidgetLocked = selectedWidget ? normalizeWidgetLocked(selectedWidget.locked) : false;
@@ -1422,7 +1460,7 @@ export function createTeacherToolsViewController({
               </div>
               <div class="tt-board-header-right">
                 <div class="tt-board-actions">
-                  <button id="ttToggleWidgetLock" class="tt-board-action-btn ${isSelectedWidgetLocked ? "is-locked" : ""}" type="button" title="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-label="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-pressed="${isSelectedWidgetLocked ? "true" : "false"}" ${canMutateSelectedWidget ? "" : "disabled"}>
+                  <button id="ttToggleWidgetLock" class="tt-board-action-btn ${isSelectedWidgetLocked ? "is-locked" : ""}" type="button" title="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-label="${isSelectedWidgetLocked ? "Déverrouiller le widget" : "Verrouiller le widget"}" aria-pressed="${isSelectedWidgetLocked ? "true" : "false"}" ${canLockSelectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">${isSelectedWidgetLocked ? "lock" : "lock_open"}</span>
                     <span>${isSelectedWidgetLocked ? "Déverrouiller" : "Verrouiller"}</span>
                   </button>
@@ -1438,15 +1476,15 @@ export function createTeacherToolsViewController({
                     <span class="dashboard-material-icon" aria-hidden="true">filter_center_focus</span>
                     <span>Centrer</span>
                   </button>
-                  <button id="ttDuplicateWidget" class="tt-board-action-btn" type="button" title="Dupliquer le widget" aria-label="Dupliquer le widget" ${canMutateSelectedWidget ? "" : "disabled"}>
+                  <button id="ttDuplicateWidget" class="tt-board-action-btn" type="button" title="Dupliquer le widget" aria-label="Dupliquer le widget" ${canDuplicateSelectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">content_copy</span>
                     <span>Dupliquer</span>
                   </button>
-                  <button id="ttBringWidgetFront" class="tt-board-action-btn" type="button" title="Mettre le widget devant" aria-label="Mettre le widget devant" ${canMutateSelectedWidget ? "" : "disabled"}>
+                  <button id="ttBringWidgetFront" class="tt-board-action-btn" type="button" title="Mettre le widget devant" aria-label="Mettre le widget devant" ${canReorderSelectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">flip_to_front</span>
                     <span>Devant</span>
                   </button>
-                  <button id="ttSendWidgetBack" class="tt-board-action-btn" type="button" title="Mettre le widget derrière" aria-label="Mettre le widget derrière" ${canMutateSelectedWidget ? "" : "disabled"}>
+                  <button id="ttSendWidgetBack" class="tt-board-action-btn" type="button" title="Mettre le widget derrière" aria-label="Mettre le widget derrière" ${canReorderSelectedWidget ? "" : "disabled"}>
                     <span class="dashboard-material-icon" aria-hidden="true">flip_to_back</span>
                     <span>Derrière</span>
                   </button>

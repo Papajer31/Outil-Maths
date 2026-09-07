@@ -18,7 +18,7 @@ const GRID_COLUMNS = 12;
 const GRID_ROWS = 8;
 const DEFAULT_DRAW_MODE = "random";
 const DRAW_MODES = new Set(["in_order", "random"]);
-const SUPPORTED_WIDGET_TYPES = new Set(["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
+const SUPPORTED_WIDGET_TYPES = new Set(["text", "answer", "verified-answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
@@ -84,17 +84,44 @@ function serializeCategoryAnswerMap(value){
   return JSON.stringify(normalizeCategoryAnswerMap(value));
 }
 
+export function getDefaultQuizRuntimeSettings(){
+  return {
+    drawMode: DEFAULT_DRAW_MODE,
+    questionSelection: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    timeLimitSec: 0,
+    autoExitOnComplete: false
+  };
+}
+
+export function normalizeQuizRuntimeSettings(settings = {}, snapshot = null){
+  const safe = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const drawMode = DRAW_MODES.has(String(safe.drawMode || safe.draw_mode || "").trim())
+    ? String(safe.drawMode || safe.draw_mode).trim()
+    : DEFAULT_DRAW_MODE;
+  const questionSelection = normalizeQuestionSelection(safe.questionSelection || safe.question_selection || {});
+  const timeLimitSec = Math.max(0, Math.min(3600, Math.trunc(Number(safe.timeLimitSec ?? safe.time_limit_sec) || 0)));
+  const autoExitOnComplete = safe.autoExitOnComplete === true || safe.auto_exit_on_complete === true;
+  return {
+    drawMode,
+    questionSelection: snapshot
+      ? normalizeQuizSelectionForSnapshot(snapshot, questionSelection)
+      : questionSelection,
+    timeLimitSec,
+    autoExitOnComplete
+  };
+}
+
 export function getDefaultSettings(){
   return {
     quizId: "",
     quizTitle: "",
-    drawMode: DEFAULT_DRAW_MODE,
-    questionSelection: { mode: DEFAULT_QUESTION_SELECTION_MODE, questionKeys: [] },
+    ...getDefaultQuizRuntimeSettings(),
     quizSnapshot: {
       version: 1,
       id: "",
       title: "",
       instruction: "",
+      runtimeSettings: getDefaultQuizRuntimeSettings(),
       grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
       questions: []
     }
@@ -116,14 +143,23 @@ export function normalizeSettings(settings = {}){
     ?? ""
   ).trim();
 
+  const runtimeSettings = normalizeQuizRuntimeSettings({
+    drawMode,
+    questionSelection: safe.questionSelection || safe.question_selection || {},
+    timeLimitSec: safe.timeLimitSec ?? safe.time_limit_sec ?? snapshot.runtimeSettings?.timeLimitSec,
+    autoExitOnComplete: safe.autoExitOnComplete ?? safe.auto_exit_on_complete ?? snapshot.runtimeSettings?.autoExitOnComplete
+  }, snapshot);
+
   return {
     ...getDefaultSettings(),
     ...safe,
     quizId: String(safe.quizId || safe.quiz_id || snapshot.id || "").trim(),
     quizTitle: String(safe.quizTitle || safe.quiz_title || snapshot.title || "").trim(),
     sourceInstruction,
-    drawMode,
-    questionSelection: normalizeQuestionSelection(safe.questionSelection || safe.question_selection || {}),
+    drawMode: runtimeSettings.drawMode,
+    questionSelection: runtimeSettings.questionSelection,
+    timeLimitSec: runtimeSettings.timeLimitSec,
+    autoExitOnComplete: runtimeSettings.autoExitOnComplete,
     quizSnapshot: snapshot
   };
 }
@@ -146,6 +182,13 @@ export function normalizeQuizSnapshot(snapshot = {}){
     ?? ""
   ).trim();
 
+  const runtimeSettings = normalizeQuizRuntimeSettings(
+    safe.runtimeSettings ?? safe.runtime_settings ?? {
+      drawMode: safe.drawMode ?? safe.draw_mode,
+      questionSelection: safe.questionSelection ?? safe.question_selection
+    }
+  );
+
   const normalized = {
     version: Math.max(1, Math.trunc(Number(safe.version) || 1)),
     id: String(safe.id || "").trim(),
@@ -159,6 +202,7 @@ export function normalizeQuizSnapshot(snapshot = {}){
     ),
     editorMode,
     seriesModelId,
+    runtimeSettings,
     grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
     questions
   };
@@ -227,6 +271,8 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const type = String(safe.type || "text").trim().toLowerCase();
   if (!SUPPORTED_WIDGET_TYPES.has(type)) return null;
   const isAnswer = type === "answer";
+  const isVerifiedAnswer = type === "verified-answer";
+  const isTextAnswer = isAnswer || isVerifiedAnswer;
   const isImage = type === "image";
   const isAudio = type === "audio";
   const isLabels = type === "labels";
@@ -262,7 +308,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     safe.column,
     safe.columnSpan ?? safe.column_span,
     sourceGridColumns,
-    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isAnswer ? 8 : 5
+    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isTextAnswer ? 8 : 5
   );
   const correctionArea = migrateHorizontalArea(
     safe.correctionColumn ?? safe.correction_column ?? safe.column,
@@ -295,7 +341,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   return {
     id: String(safe.id || `widget-${index + 1}`).trim() || `widget-${index + 1}`,
     type,
-    label: String(safe.label || (isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
+    label: String(safe.label || (isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
     questionText,
     correctionText,
     questionHtml,
@@ -551,7 +597,7 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
     widget,
     variant?.widgetContents?.[widget.id] || captureVariantWidgetContent(widget)
   ));
-  const answerWidgets = materializedWidgets.filter((widget) => widget.type === "answer");
+  const answerWidgets = materializedWidgets.filter((widget) => widget.type === "answer" || widget.type === "verified-answer");
   const qcmWidgets = materializedWidgets.filter((widget) => widget.type === "qcm-text");
   const selectionWidgets = materializedWidgets.filter((widget) => widget.type === "selection-words");
   const categoriesWidgets = materializedWidgets.filter((widget) => widget.type === "categories");
@@ -585,7 +631,7 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
     selectionWidgetCount: selectionWidgets.length,
     categoriesWidgetCount: categoriesWidgets.length,
     responseWidgetCount: answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length,
-    responseType: primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryCategoriesWidget ? "categories" : primaryAnswerWidget ? "answer" : "",
+    responseType: primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryCategoriesWidget ? "categories" : primaryAnswerWidget?.type === "verified-answer" ? "verified-answer" : primaryAnswerWidget ? "answer" : "",
     primaryAnswerWidgetId: primaryAnswerWidget?.id || "",
     primaryQcmWidgetId: primaryQcmWidget?.id || "",
     primarySelectionWidgetId: primarySelectionWidget?.id || "",
@@ -907,17 +953,42 @@ export function evaluateAnswer(question, rawAnswer = ""){
       isCorrect
     };
   }
+  if (question?.responseType === "verified-answer") {
+    const submittedAnswer = normalizeVerifiedTextAnswer(rawAnswer);
+    const expectedAnswer = normalizeVerifiedTextAnswer(question?.expectedAnswer || "");
+    return {
+      submittedAnswer,
+      expectedAnswer: String(question?.expectedAnswerLabel || question?.expectedAnswer || "").trim(),
+      comparisonMode:"verified",
+      isCorrect:Boolean(submittedAnswer) && Boolean(expectedAnswer) && submittedAnswer === expectedAnswer
+    };
+  }
+
   const submittedAnswer = normalizeSubmittedAnswer(rawAnswer);
   const expectedAnswer = normalizeSubmittedAnswer(question?.expectedAnswer || "");
   return {
     submittedAnswer,
     expectedAnswer: String(question?.expectedAnswerLabel || question?.expectedAnswer || "").trim(),
+    comparisonMode:"standard",
     isCorrect: Boolean(submittedAnswer) && Boolean(expectedAnswer) && submittedAnswer === expectedAnswer
   };
 }
 
 export function normalizeSubmittedAnswer(value = ""){
   return String(value ?? "").replace(/\s+/gu, " ").trim();
+}
+
+export function normalizeVerifiedTextAnswer(value = ""){
+  return String(value ?? "")
+    .normalize("NFC")
+    .replace(/[\u00a0\u202f]/gu, " ")
+    .replace(/[’‘‛`´]/gu, "'")
+    .replace(/\s+/gu, " ")
+    .trim()
+    // Les élèves ne sont pas évalués sur les conventions d'espacement typographique.
+    // On neutralise donc tout espace placé immédiatement avant ou après un signe
+    // de ponctuation, sans modifier le signe lui-même ni la casse ni l'orthographe.
+    .replace(/\s*([\p{P}])\s*/gu, "$1");
 }
 
 export function getQuizTestIssues(snapshot = {}){
@@ -931,8 +1002,8 @@ export function getQuizTestIssues(snapshot = {}){
     variants.forEach((variant, variantIndex) => {
       const suffix = variants.length > 1 ? `, variante ${variantIndex + 1}` : "";
       if (variant.responseWidgetCount !== 1) {
-        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « QCM », « Sélection de mots » ou « Catégories »).`);
-      } else if (variant.responseType === "answer" && !variant.primaryAnswerVisibleInQuestion) {
+        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « Réponse texte vérifiée », « QCM », « Sélection de mots » ou « Catégories »).`);
+      } else if ((variant.responseType === "answer" || variant.responseType === "verified-answer") && !variant.primaryAnswerVisibleInQuestion) {
         issues.push(`Affichez la zone « Réponse de l’élève » de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "qcm-text" && !variant.primaryQcmVisibleInQuestion) {
         issues.push(`Affichez le QCM de la question ${index + 1}${suffix} dans la vue Question.`);

@@ -524,6 +524,17 @@ export function createSessionEngine({
     }
   }
 
+  function handleRuntimeQuestionTimeout(item, reason = "question") {
+    if (!item || !activeRuntime || session[currentToolIndex] !== item) return false;
+    if (typeof activeRuntime.handleQuestionTimeout !== "function") return false;
+    try {
+      return activeRuntime.handleQuestionTimeout(els.workArea, getToolContext(item), { reason }) === true;
+    } catch (err) {
+      onFatalError?.(err?.message || "Erreur pendant la fin du temps imparti.");
+      return false;
+    }
+  }
+
   async function goToNextQuestionNow() {
     if (paused || !isSessionRunning) return false;
 
@@ -1442,6 +1453,7 @@ export function createSessionEngine({
         return;
       }
 
+      if (handleRuntimeQuestionTimeout(item, "question")) return;
       if (validateCurrentResponse(item)) return;
 
       beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
@@ -1768,6 +1780,7 @@ export function createSessionEngine({
         catalogContext,
         missionId: String(item.mission_id || item.missionId || "").trim(),
         missionStepId: String(item.mission_step_id || item.missionStepId || "").trim(),
+        autoExitSessionOnComplete: item.auto_exit_session_on_complete === true || item.autoExitSessionOnComplete === true,
         catalogLevels: item.catalog_levels && typeof item.catalog_levels === "object" && !Array.isArray(item.catalog_levels) ? cloneData(item.catalog_levels) : null,
         catalogAdaptive,
         catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalog_difficulty_level ?? item.catalogDifficultyLevel ?? catalogDifficultyFallback),
@@ -2038,6 +2051,7 @@ export function createSessionEngine({
     // la correction, mais ne peut jamais prolonger indéfiniment l'activité.
     if (phase.kind === "QUESTION" && item.hasAnswerPhase !== false) {
       toolEndAfterAnswerPending = true;
+      if (handleRuntimeQuestionTimeout(item, "tool")) return true;
       if (validateCurrentResponse(item)) return true;
 
       beginAnswerPhase(item, getTimedOutFinalAnswerDurationMs(item), { showAnswerNow: true });
@@ -2222,6 +2236,18 @@ export function createSessionEngine({
     isSessionRunning = false;
     setStatus("Séance terminée", "good");
     emitStateChange();
+
+    const autoExitOnComplete = runMode === "student"
+      && session.length > 0
+      && session[session.length - 1]?.autoExitSessionOnComplete === true;
+    if (autoExitOnComplete) {
+      clearSessionStage();
+      void attemptFinalizePromise.finally(() => {
+        onExitToActivities?.();
+      });
+      return;
+    }
+
     showSessionMessage({
       title: finalTitle,
       bodyHtml: sessionProgressMode === "practice" ? "" : renderGroupSessionSummaryHtml(),
@@ -2828,6 +2854,7 @@ export function createSessionEngine({
           sessionControls,
           requestAnswerPhase: sessionControls.requestAnswerPhase,
           requestNextQuestion: sessionControls.requestNextQuestion,
+          requestValidationFeedback: sessionControls.requestValidationFeedback,
           getPhaseKind: sessionControls.getPhaseKind
         },
         sessionControls
@@ -2871,6 +2898,7 @@ export function createSessionEngine({
         sessionControls,
         requestAnswerPhase: sessionControls.requestAnswerPhase,
         requestNextQuestion: sessionControls.requestNextQuestion,
+        requestValidationFeedback: sessionControls.requestValidationFeedback,
         getPhaseKind: sessionControls.getPhaseKind,
         notifyValidationStateChanged: sessionControls.notifyValidationStateChanged
       },
@@ -2921,6 +2949,14 @@ export function createSessionEngine({
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "ANSWER") return false;
         completeAnswerPhase(item);
+        return true;
+      },
+
+      requestValidationFeedback(wasCorrect = false) {
+        if (!item || !isSessionRunning || paused || validationReviewPending) return false;
+        if (session[currentToolIndex] !== item) return false;
+        if (phase.kind !== "QUESTION") return false;
+        flashValidationFeedback(wasCorrect === true);
         return true;
       },
 
@@ -3318,11 +3354,6 @@ export function createSessionEngine({
 
   function refreshShellManualAction(item) {
     if (validationReviewPending) {
-      hideManualAction();
-      return;
-    }
-
-    if (runMode === "projected-teacher") {
       hideManualAction();
       return;
     }

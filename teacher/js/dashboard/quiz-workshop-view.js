@@ -13,6 +13,14 @@ import {
 } from "./audio-recorder-dialog.js";
 import { QUESTION_MODELS } from "./quiz-question-models.js";
 import {
+  getDefaultQuizRuntimeSettings,
+  normalizeQuizRuntimeSettings
+} from "../../../tools/quiz/model.js";
+import {
+  readQuizRuntimeSettingsEditor,
+  renderQuizRuntimeSettingsEditor
+} from "./quiz-runtime-settings-ui.js";
+import {
   findQuizSelectionIndexesFromText,
   formatQuizSelectionIndexes,
   getQuizSelectionWordCount,
@@ -30,7 +38,7 @@ const QCM_DEFAULT_CHOICES = 4;
 const QCM_MAX_CHOICES = 6;
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
-const RESPONSE_WIDGET_TYPES = new Set(["answer", "qcm-text", "selection-words", "categories"]);
+const RESPONSE_WIDGET_TYPES = new Set(["answer", "verified-answer", "qcm-text", "selection-words", "categories"]);
 const CORRECTION_VISIBILITY_STATES = ["visible", "correct", "incorrect", "hidden"];
 const QUESTION_ELEMENT_GROUPS = [
   { id:"content", title:"Contenu" },
@@ -62,6 +70,14 @@ const QUESTION_ELEMENTS = [
     title: "Réponse de l’élève",
     description: "Zone de réponse textuelle.",
     detail: "Éditable dans la vue correction."
+  },
+  {
+    id: "verified-answer",
+    group: "response",
+    icon: "fact_check",
+    title: "Réponse texte vérifiée",
+    description: "Réponse textuelle validée automatiquement.",
+    detail: "Les indices sont affichés automatiquement jusqu’à la bonne réponse."
   },
   {
     id: "image",
@@ -655,8 +671,10 @@ function getWidgetMinimumGridSize(type = ""){
 
 function createWidget(source = {}){
   const rawType = String(source.type || "text").trim().toLowerCase();
-  const type = ["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
+  const type = ["text", "answer", "verified-answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
   const isAnswer = type === "answer";
+  const isVerifiedAnswer = type === "verified-answer";
+  const isTextAnswer = isAnswer || isVerifiedAnswer;
   const isImage = type === "image";
   const isAudio = type === "audio";
   const isLabels = type === "labels";
@@ -664,14 +682,14 @@ function createWidget(source = {}){
   const isQcmText = type === "qcm-text";
   const isSelectionWords = type === "selection-words";
   const isCategories = type === "categories";
-  const defaultQuestionPlaceholder = isAnswer
-    ? "Réponse de l’élève"
+  const defaultQuestionPlaceholder = isTextAnswer
+    ? (isVerifiedAnswer ? "Réponse vérifiée de l’élève" : "Réponse de l’élève")
     : isSelectionWords
       ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
       : isNumericKeypad || isImage || isAudio || isLabels || isCategories
         ? ""
         : "Saisissez le texte";
-  const defaultCorrectionPlaceholder = isAnswer ? "Saisissez la réponse attendue" : defaultQuestionPlaceholder;
+  const defaultCorrectionPlaceholder = isTextAnswer ? "Saisissez la réponse attendue" : defaultQuestionPlaceholder;
   const sourceQuestionModel = source.questionFormatting
     ? { text: String(source.questionText ?? ""), formatting: source.questionFormatting }
     : richHtmlToModel(source.questionHtml ?? plainTextToHtml(source.questionText ?? ""));
@@ -1459,7 +1477,7 @@ function getWidgetStyle(widgetView){
 function getTemplatePreviewMarkup(model){
   const blocks = model.widgets.map((widget) => `
     <span
-      class="quiz-workshop-model-preview-block${widget.type === "answer" ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
+      class="quiz-workshop-model-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
       style="${getPositionStyle(widget)}"
     ></span>
   `).join("");
@@ -1475,7 +1493,7 @@ function getQuestionPreviewMarkup(question){
   const blocks = getQuestionPreviewWidgets(question).map(({ widget, view }) => {
     return `
       <span
-        class="quiz-workshop-card-preview-block${widget.type === "answer" ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
+        class="quiz-workshop-card-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
         style="${getPositionStyle(view)}"
       ></span>
     `;
@@ -1558,6 +1576,7 @@ export function createQuizWorkshopViewController({
   const colorToggle = textToolbar?.querySelector("[data-quiz-color-toggle]") || null;
   const quickEntryButton = drawer?.querySelector("[data-quiz-quick-entry]") || null;
   const variantNavigation = drawer?.querySelector("[data-quiz-variant-navigation]") || null;
+  const runtimeSettingsHost = view?.querySelector("[data-quiz-runtime-settings]") || null;
 
   let isMounted = false;
   let activeLibraryTab = "models";
@@ -1579,6 +1598,7 @@ export function createQuizWorkshopViewController({
   let currentQuizUpdatedAt = "";
   let currentQuizDisplayOrder = null;
   let currentQuizIsSystem = false;
+  let quizRuntimeSettings = getDefaultQuizRuntimeSettings();
   let isQuizDirty = false;
   let lastDrawerTrigger = addButton || null;
   let canvasResizeObserver = null;
@@ -2226,7 +2246,7 @@ export function createQuizWorkshopViewController({
     return `
       <div class="quiz-workshop-image-content${source ? " has-image" : " is-empty"}">
         ${imageMarkup}
-        ${source ? `<div class="quiz-workshop-image-unavailable">Image indisponible</div>` : ""}
+        ${source ? `<div class="quiz-workshop-image-unavailable">${escapeHtml(label)}</div>` : ""}
         ${source ? `
           <div class="quiz-workshop-image-actions is-remove${isSelected ? " is-visible" : ""}">
             <button class="btn quiz-workshop-image-action" type="button" data-remove-quiz-image="${escapeHtml(widget.id)}">
@@ -2270,9 +2290,23 @@ export function createQuizWorkshopViewController({
           host?.classList.add("is-unavailable");
           return;
         }
+        const markReady = () => {
+          if (!node.isConnected || node.dataset.quizImageSource !== expectedPayload) return;
+          node.classList.remove("is-unavailable");
+          host?.classList.remove("is-unavailable");
+        };
+        const markUnavailable = () => {
+          if (!node.isConnected || node.dataset.quizImageSource !== expectedPayload) return;
+          node.classList.add("is-unavailable");
+          host?.classList.add("is-unavailable");
+        };
+        node.addEventListener("load", markReady, { once:true });
+        node.addEventListener("error", markUnavailable, { once:true });
         node.src = url;
-        node.classList.remove("is-unavailable");
-        host?.classList.remove("is-unavailable");
+        if (node.complete) {
+          if (node.naturalWidth > 0) markReady();
+          else markUnavailable();
+        }
       } catch (error) {
         console.warn("Impossible de charger l’image du widget Quiz.", error);
         if (node.isConnected) {
@@ -2908,6 +2942,8 @@ export function createQuizWorkshopViewController({
       const isResizing = interactionState?.type === "resize" && interactionState.widgetId === widget.id;
       const visibilityPresentation = getVisibilityControlPresentation(widgetView.visibilityMode, previewMode);
       const isAnswerWidget = widget.type === "answer";
+      const isVerifiedAnswerWidget = widget.type === "verified-answer";
+      const isTextAnswerWidget = isAnswerWidget || isVerifiedAnswerWidget;
       const isImageWidget = widget.type === "image";
       const isAudioWidget = widget.type === "audio";
       const isLabelsWidget = widget.type === "labels";
@@ -2921,7 +2957,7 @@ export function createQuizWorkshopViewController({
         && !isNumericKeypadWidget
         && !isQcmTextWidget
         && !isCategoriesWidget
-        && (!isAnswerWidget || previewMode === "correction")
+        && (!isTextAnswerWidget || previewMode === "correction")
         && (!isSelectionWordsWidget || previewMode === "question");
       const isContentEmpty = !widgetView.text;
       const editorAttributes = canEditContent
@@ -3069,6 +3105,42 @@ export function createQuizWorkshopViewController({
     renderEditorHeader();
   }
 
+  function buildQuizContentSnapshot(){
+    return {
+      version: 1,
+      id: currentQuizId,
+      title: getQuizTitle() || "Quiz sans titre",
+      folder_id: currentQuizFolderId,
+      display_order: currentQuizDisplayOrder,
+      is_system: currentQuizIsSystem,
+      created_at: currentQuizCreatedAt,
+      updated_at: currentQuizUpdatedAt,
+      grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
+      questions: cloneValue(questions)
+    };
+  }
+
+  function syncQuizRuntimeSettingsFromDom(){
+    if (!runtimeSettingsHost) return;
+    quizRuntimeSettings = readQuizRuntimeSettingsEditor(runtimeSettingsHost, {
+      snapshot: buildQuizContentSnapshot(),
+      idPrefix: "quiz-workshop-runtime"
+    });
+  }
+
+  function renderQuizRuntimeSettings(){
+    if (!runtimeSettingsHost) return;
+    quizRuntimeSettings = renderQuizRuntimeSettingsEditor(runtimeSettingsHost, {
+      snapshot: buildQuizContentSnapshot(),
+      settings: quizRuntimeSettings,
+      idPrefix: "quiz-workshop-runtime",
+      onChange: (nextSettings) => {
+        quizRuntimeSettings = nextSettings;
+        markQuizDirty();
+      }
+    }) || quizRuntimeSettings;
+  }
+
   function renderQuestions(){
     const count = questions.length;
 
@@ -3077,7 +3149,10 @@ export function createQuizWorkshopViewController({
     emptyState?.classList.toggle("hidden", count > 0);
     questionsHost?.classList.toggle("hidden", count === 0);
     addQuestionAfterListButton?.classList.toggle("hidden", count === 0);
-    if (!questionsHost) return;
+    if (!questionsHost) {
+      renderQuizRuntimeSettings();
+      return;
+    }
 
     questionsHost.innerHTML = questions.map((question, index) => {
       const compositionIssues = getQuestionCompositionIssues(question.widgets);
@@ -3111,6 +3186,7 @@ export function createQuizWorkshopViewController({
       </article>
     `;
     }).join("");
+    renderQuizRuntimeSettings();
   }
 
   function openDrawer(event, question = null){
@@ -3221,8 +3297,10 @@ export function createQuizWorkshopViewController({
   }
 
   function addWidget(elementType = "text", { column = null, row = null, columnSpan = null, rowSpan = null } = {}){
-    const normalizedType = ["text", "answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
+    const normalizedType = ["text", "answer", "verified-answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
     const isAnswer = normalizedType === "answer";
+    const isVerifiedAnswer = normalizedType === "verified-answer";
+    const isTextAnswer = isAnswer || isVerifiedAnswer;
     const isImage = normalizedType === "image";
     const isAudio = normalizedType === "audio";
     const isLabels = normalizedType === "labels";
@@ -3230,7 +3308,7 @@ export function createQuizWorkshopViewController({
     const isQcmText = normalizedType === "qcm-text";
     const isSelectionWords = normalizedType === "selection-words";
     const isCategories = normalizedType === "categories";
-    if (isAnswer || isQcmText || isSelectionWords || isCategories) {
+    if (isTextAnswer || isQcmText || isSelectionWords || isCategories) {
       const existingResponse = draftWidgets.find(isResponseWidget);
       if (existingResponse) {
         selectWidget(existingResponse.id);
@@ -3245,7 +3323,7 @@ export function createQuizWorkshopViewController({
       }
     }
 
-    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isAnswer ? 7 : 5);
+    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isTextAnswer ? 7 : 5);
     const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords ? 2 : isImage || isAudio ? 2 : 1));
     const requested = column && row
       ? { column, row, columnSpan: resolvedColumnSpan, rowSpan: resolvedRowSpan }
@@ -3255,17 +3333,17 @@ export function createQuizWorkshopViewController({
     const availableLabelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
     const widget = ensureWidgetContent(normalizeWidgetPosition(createWidget({
       type: normalizedType,
-      label: isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
+      label: isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
       questionText: "",
       correctionText: "",
-      questionPlaceholder: isAnswer
-        ? "Réponse de l’élève"
+      questionPlaceholder: isTextAnswer
+        ? (isVerifiedAnswer ? "Réponse vérifiée de l’élève" : "Réponse de l’élève")
         : isSelectionWords
           ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
           : isNumericKeypad || isImage || isAudio || isLabels || isCategories
             ? ""
             : "Saisissez le texte",
-      correctionPlaceholder: isAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : "Saisissez le texte",
+      correctionPlaceholder: isTextAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : "Saisissez le texte",
       labelsSourceWidgetId:isCategories && availableLabelWidgets.length ? availableLabelWidgets[0].id : "",
       column: requested.column,
       row: requested.row,
@@ -3347,7 +3425,7 @@ export function createQuizWorkshopViewController({
     let labelsIndex = 0;
     let categoriesIndex = 0;
     return draftWidgets
-      .filter((widget) => ["text", "answer", "qcm-text", "selection-words", "labels", "categories"].includes(widget.type))
+      .filter((widget) => ["text", "answer", "verified-answer", "qcm-text", "selection-words", "labels", "categories"].includes(widget.type))
       .map((widget, originalIndex) => ({
         widget,
         originalIndex,
@@ -3359,7 +3437,7 @@ export function createQuizWorkshopViewController({
         || first.originalIndex - second.originalIndex
       ))
       .map(({ widget }) => {
-        if (widget.type === "answer") {
+        if (widget.type === "answer" || widget.type === "verified-answer") {
           answerIndex += 1;
           return { widget, token:`réponse${answerIndex}` };
         }
@@ -3403,7 +3481,7 @@ export function createQuizWorkshopViewController({
         choices: normalizeQcmChoices(content.qcmChoices ?? content.qcm_choices ?? field.widget.qcmChoices, { ensureDefaultSlots:true })
       };
     }
-    if (field.widget.type === "answer") {
+    if (field.widget.type === "answer" || field.widget.type === "verified-answer") {
       return {
         text:String(content.correctionText ?? content.questionText ?? ""),
         formatting:content.correctionFormatting || content.questionFormatting || []
@@ -3532,7 +3610,7 @@ export function createQuizWorkshopViewController({
       }
 
       const parsed = parseMiniMarkup(String(values[index] ?? "").trim());
-      if (field.widget.type === "answer") {
+      if (field.widget.type === "answer" || field.widget.type === "verified-answer") {
         content.correctionText = parsed.text;
         content.correctionFormatting = parsed.formatting;
         content.correctionTextOverridden = true;
@@ -4908,17 +4986,11 @@ export function createQuizWorkshopViewController({
   }
 
   function buildQuizSnapshot(){
+    syncQuizRuntimeSettingsFromDom();
+    const snapshot = buildQuizContentSnapshot();
     return {
-      version: 1,
-      id: currentQuizId,
-      title: getQuizTitle() || "Quiz sans titre",
-      folder_id: currentQuizFolderId,
-      display_order: currentQuizDisplayOrder,
-      is_system: currentQuizIsSystem,
-      created_at: currentQuizCreatedAt,
-      updated_at: currentQuizUpdatedAt,
-      grid: { columns: GRID_COLUMNS, rows: GRID_ROWS },
-      questions: cloneValue(questions)
+      ...snapshot,
+      runtimeSettings: normalizeQuizRuntimeSettings(quizRuntimeSettings, snapshot)
     };
   }
 
@@ -5110,6 +5182,8 @@ export function createQuizWorkshopViewController({
     is_system = false,
     created_at = "",
     updated_at = "",
+    runtimeSettings = null,
+    runtime_settings = null,
     grid = null,
     questions: sourceQuestions = []
   } = {}){
@@ -5121,6 +5195,7 @@ export function createQuizWorkshopViewController({
     currentQuizIsSystem = is_system === true;
     currentQuizCreatedAt = String(created_at || "");
     currentQuizUpdatedAt = String(updated_at || "");
+    quizRuntimeSettings = normalizeQuizRuntimeSettings(runtimeSettings ?? runtime_settings ?? getDefaultQuizRuntimeSettings());
     const sourceColumns = normalizeGridColumnCount(grid?.columns);
     questions = Array.isArray(sourceQuestions)
       ? sourceQuestions.map((question) => normalizeQuestion(migrateQuestionGrid(question, sourceColumns)))

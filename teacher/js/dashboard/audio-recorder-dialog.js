@@ -24,6 +24,8 @@ export function openAudioRecorderDialog({
   uploadResourceForSpace,
   defaultTitle = "",
   promptText = "",
+  dialogTitle = "Enregistrer un audio",
+  saveLabel = "Enregistrer",
   lockTitle = false,
   onSaveRecording = null,
   showToast = null
@@ -56,7 +58,7 @@ export function openAudioRecorderDialog({
     overlay.innerHTML = `
       <section class="dashboard-audio-recorder-card">
         <header class="dashboard-audio-recorder-header">
-          <h2 id="dashboardAudioRecorderTitle">Enregistrer un audio</h2>
+          <h2 id="dashboardAudioRecorderTitle">${escapeHtml(dialogTitle || "Enregistrer un audio")}</h2>
           <div class="dashboard-audio-recorder-message" data-audio-recorder-message aria-live="polite"></div>
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-audio-recorder-close aria-label="Fermer" title="Fermer">
             <span class="dashboard-material-icon" aria-hidden="true">close</span>
@@ -99,7 +101,7 @@ export function openAudioRecorderDialog({
               </button>
               <button class="btn primary dashboard-btn-with-icon" type="button" data-audio-recorder-save disabled hidden>
                 <span class="dashboard-material-icon" aria-hidden="true">save</span>
-                Enregistrer
+                ${escapeHtml(saveLabel || "Enregistrer")}
               </button>
             </div>
           </div>

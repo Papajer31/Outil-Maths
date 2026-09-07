@@ -20,6 +20,7 @@ export function createQuizExplorerViewController({
   onCreateQuiz,
   onCreateSeries,
   onOpenQuiz,
+  onAssignQuiz,
   getCurrentTeacherSpace,
   getIsSuperAdmin,
   listQuizFoldersForSpace,
@@ -27,6 +28,7 @@ export function createQuizExplorerViewController({
   updateQuizFolder,
   deleteQuizFolder,
   listQuizzesForSpace,
+  updateQuizPlacement,
   saveQuizForSpace,
   deleteQuiz,
   showToast
@@ -36,6 +38,9 @@ export function createQuizExplorerViewController({
   let isLoading = false;
   let loadError = "";
   let currentOpenFolderId = null;
+  let isMovingExplorerNode = false;
+  let draggedExplorerNode = null;
+  let explorerDropTarget = null;
   const collapsedFolderIds = new Set();
   const knownFolderIds = new Set();
 
@@ -297,6 +302,7 @@ export function createQuizExplorerViewController({
         class="dashboard-activity-tree-row dashboard-tree-node ${isSelected ? "is-selected" : ""}"
         data-node-type="folder"
         data-node-id="${escapeAttr(folderId)}"
+        data-drop-folder-id="${escapeAttr(folderId)}"
         style="--dashboard-tree-depth:${Math.max(0, Number(node.depth) || 0)};"
       >
         <div class="dashboard-tree-indent" aria-hidden="true"></div>
@@ -340,7 +346,7 @@ export function createQuizExplorerViewController({
       : "";
 
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}">
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" data-drop-folder-id="${escapeAttr(folder.id)}" ${canEdit ? 'draggable="true"' : ""}>
         <button
           class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder"
           type="button"
@@ -359,7 +365,7 @@ export function createQuizExplorerViewController({
     if (!selectedFolder) return "";
     const parentId = normalizeTreeId(selectedFolder.parent_id);
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--parent">
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--parent" data-drop-folder-id="${escapeAttr(parentId || selectedFolder.id || "")}">
         <button
           class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder"
           type="button"
@@ -394,7 +400,7 @@ export function createQuizExplorerViewController({
       : "";
 
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--activity" data-node-type="quiz" data-node-id="${escapeAttr(quizId)}">
+      <article class="dashboard-activity-tile dashboard-activity-tile--activity" data-node-type="quiz" data-node-id="${escapeAttr(quizId)}" ${canEdit ? 'draggable="true"' : ""}>
         <button
           class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity"
           type="button"
@@ -406,6 +412,16 @@ export function createQuizExplorerViewController({
           </span>
           <span class="dashboard-activity-tile-title">${escapeHtml(quiz.title || "Quiz sans titre")}</span>
           ${seriesBadge}
+        </button>
+        <button
+          class="dashboard-quiz-assign-pill"
+          type="button"
+          data-action="assign-quiz"
+          data-quiz-id="${escapeAttr(quizId)}"
+          title="Créer une mission avec ce quiz"
+        >
+          <span class="dashboard-material-icon" aria-hidden="true">playlist_add</span>
+          <span>Attribuer ce quiz</span>
         </button>
         ${actions}
       </article>
@@ -433,7 +449,7 @@ export function createQuizExplorerViewController({
       <div class="dashboard-activities-explorer" style="--dashboard-tree-pane-width:18%;">
         <aside class="dashboard-activity-tree-pane panel">
           <div class="dashboard-activity-tree-list">
-            <div class="dashboard-activity-tree-row dashboard-activity-tree-root ${currentOpenFolderId ? "" : "is-selected"}">
+            <div class="dashboard-activity-tree-row dashboard-activity-tree-root ${currentOpenFolderId ? "" : "is-selected"}" data-quiz-global-root>
               <button class="dashboard-activity-tree-main dashboard-activity-tree-main--root" type="button" data-action="open-root">
                 <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">home</span>
                 <span class="dashboard-activity-tree-node-label">Quiz</span>
@@ -675,6 +691,236 @@ export function createQuizExplorerViewController({
     }
   }
 
+  function clearExplorerDropMarkers(){
+    explorerDropTarget = null;
+    list?.querySelectorAll(".is-dragging, .is-drop-inside").forEach((element) => {
+      element.classList.remove("is-dragging", "is-drop-inside");
+    });
+  }
+
+  function getDraggedExplorerRecord(source = draggedExplorerNode){
+    if (!source?.id || !source?.type) return null;
+    if (source.type === "folder") return folders.find((folder) => String(folder.id) === String(source.id)) || null;
+    return quizzes.find((quiz) => String(quiz.id) === String(source.id)) || null;
+  }
+
+  function getDraggedScopeRoot(source = draggedExplorerNode){
+    const record = getDraggedExplorerRecord(source);
+    if (!record) return "";
+    return record.is_system === true ? QUIZ_ROOT_SYSTEM : QUIZ_ROOT_PERSONAL;
+  }
+
+  function getQuizDropTargetFromEvent(event){
+    const targetElement = event.target instanceof Element ? event.target : null;
+    if (!targetElement || !list?.contains(targetElement)) return null;
+    const sourceRoot = getDraggedScopeRoot();
+    if (!sourceRoot) return null;
+    const sourceIsSystem = sourceRoot === QUIZ_ROOT_SYSTEM;
+
+    const globalRoot = targetElement.closest("[data-quiz-global-root]");
+    if (globalRoot) return { rawFolderId:sourceRoot, element:globalRoot };
+
+    const explicitTarget = targetElement.closest("[data-drop-folder-id]");
+    if (explicitTarget) {
+      const rawFolderId = String(explicitTarget.dataset.dropFolderId || "").trim() || sourceRoot;
+      if (isSystemLocation(rawFolderId) !== sourceIsSystem) return null;
+      return { rawFolderId, element:explicitTarget };
+    }
+
+    const folderTarget = targetElement.closest("[data-node-type='folder'][data-node-id]");
+    if (folderTarget) {
+      const rawFolderId = String(folderTarget.dataset.nodeId || "").trim();
+      if (!rawFolderId || isSystemLocation(rawFolderId) !== sourceIsSystem) return null;
+      return { rawFolderId, element:folderTarget };
+    }
+
+    const tilesPane = targetElement.closest(".dashboard-activity-tiles-pane");
+    if (tilesPane) {
+      const rawFolderId = normalizeTreeId(currentOpenFolderId) || sourceRoot;
+      if (isSystemLocation(rawFolderId) !== sourceIsSystem) return null;
+      return { rawFolderId, element:tilesPane };
+    }
+    return null;
+  }
+
+  function renderQuizDropTarget(dropTarget){
+    list?.querySelectorAll(".is-drop-inside").forEach((element) => element.classList.remove("is-drop-inside"));
+    if (dropTarget?.element instanceof Element) dropTarget.element.classList.add("is-drop-inside");
+    if (!draggedExplorerNode?.id || !draggedExplorerNode?.type) return;
+    const selector = `[data-node-type="${CSS.escape(draggedExplorerNode.type)}"][data-node-id="${CSS.escape(draggedExplorerNode.id)}"]`;
+    list?.querySelectorAll(selector).forEach((element) => element.classList.add("is-dragging"));
+  }
+
+  function getStoredTargetFolderId(rawFolderId){
+    const safeId = normalizeTreeId(rawFolderId);
+    return isVirtualRoot(safeId) ? null : safeId;
+  }
+
+  function isQuizFolderInside(rawTargetFolderId, sourceFolderId){
+    const treeState = buildTreeState();
+    let cursor = treeState.folderById.get(String(rawTargetFolderId || "")) || null;
+    const visited = new Set();
+    while (cursor) {
+      const id = String(cursor.id || "");
+      if (!id || visited.has(id)) return false;
+      if (id === String(sourceFolderId || "")) return true;
+      visited.add(id);
+      const parentId = normalizeTreeId(cursor.parent_id);
+      cursor = parentId ? (treeState.folderById.get(parentId) || null) : null;
+    }
+    return false;
+  }
+
+  function getNextQuizFolderOrder(targetFolderId, sourceFolderId, isSystem){
+    return folders
+      .filter((folder) => folder.is_system === isSystem)
+      .filter((folder) => String(folder.id) !== String(sourceFolderId || ""))
+      .filter((folder) => normalizeTreeId(folder.parent_id) === normalizeTreeId(targetFolderId))
+      .reduce((maximum, folder) => Math.max(maximum, Number(folder.display_order) || 0), -1) + 1;
+  }
+
+  function getNextQuizOrder(targetFolderId, sourceQuizId, isSystem){
+    return quizzes
+      .filter((quiz) => quiz.is_system === isSystem)
+      .filter((quiz) => String(quiz.id) !== String(sourceQuizId || ""))
+      .filter((quiz) => normalizeTreeId(quiz.folder_id) === normalizeTreeId(targetFolderId))
+      .reduce((maximum, quiz) => Math.max(maximum, Number(quiz.display_order) || 0), -1) + 1;
+  }
+
+  async function moveExplorerNodeToTarget(source, dropTarget){
+    if (!source?.id || !source?.type || !dropTarget || isMovingExplorerNode) return;
+    const sourceRecord = getDraggedExplorerRecord(source);
+    if (!sourceRecord) return;
+    const isSystem = sourceRecord.is_system === true;
+    if (isSystem && !canEditSystemContent()) return;
+    if (isSystemLocation(dropTarget.rawFolderId) !== isSystem) return;
+    const targetFolderId = getStoredTargetFolderId(dropTarget.rawFolderId);
+
+    if (source.type === "folder") {
+      if (String(sourceRecord.id) === String(targetFolderId || "") || (targetFolderId && isQuizFolderInside(dropTarget.rawFolderId, sourceRecord.id))) {
+        showToast?.("Un dossier ne peut pas être déplacé dans lui-même ou dans l’un de ses sous-dossiers.", { isError:true });
+        clearExplorerDropMarkers();
+        return;
+      }
+      if (normalizeTreeId(sourceRecord.parent_id) === normalizeTreeId(targetFolderId)) {
+        clearExplorerDropMarkers();
+        return;
+      }
+      const previousFolders = [...folders];
+      const displayOrder = getNextQuizFolderOrder(targetFolderId, sourceRecord.id, isSystem);
+      folders = folders.map((folder) => String(folder.id) === String(sourceRecord.id)
+        ? { ...folder, parent_id:targetFolderId, display_order:displayOrder }
+        : folder);
+      isMovingExplorerNode = true;
+      if (dropTarget.rawFolderId) expandFolderPath(dropTarget.rawFolderId);
+      render();
+      try {
+        const updated = await updateQuizFolder?.(sourceRecord.id, {
+          parent_id:targetFolderId,
+          display_order:displayOrder,
+          is_system:isSystem
+        });
+        if (updated) folders = folders.map((folder) => String(folder.id) === String(updated.id) ? updated : folder);
+        showToast?.("Dossier déplacé.");
+      } catch (error) {
+        folders = previousFolders;
+        showToast?.(error?.message || "Impossible de déplacer le dossier.", { isError:true });
+      } finally {
+        isMovingExplorerNode = false;
+        draggedExplorerNode = null;
+        clearExplorerDropMarkers();
+        render();
+      }
+      return;
+    }
+
+    if (source.type === "quiz") {
+      if (normalizeTreeId(sourceRecord.folder_id) === normalizeTreeId(targetFolderId)) {
+        clearExplorerDropMarkers();
+        return;
+      }
+      const previousQuizzes = [...quizzes];
+      const displayOrder = getNextQuizOrder(targetFolderId, sourceRecord.id, isSystem);
+      quizzes = quizzes.map((quiz) => String(quiz.id) === String(sourceRecord.id)
+        ? { ...quiz, folder_id:targetFolderId, display_order:displayOrder }
+        : quiz);
+      isMovingExplorerNode = true;
+      if (dropTarget.rawFolderId) expandFolderPath(dropTarget.rawFolderId);
+      render();
+      try {
+        const updated = await updateQuizPlacement?.(sourceRecord.id, {
+          folder_id:targetFolderId,
+          display_order:displayOrder
+        }, { is_system:isSystem });
+        if (updated) quizzes = quizzes.map((quiz) => String(quiz.id) === String(updated.id) ? updated : quiz);
+        showToast?.("Quiz déplacé.");
+      } catch (error) {
+        quizzes = previousQuizzes;
+        showToast?.(error?.message || "Impossible de déplacer le quiz.", { isError:true });
+      } finally {
+        isMovingExplorerNode = false;
+        draggedExplorerNode = null;
+        clearExplorerDropMarkers();
+        render();
+      }
+    }
+  }
+
+  function handleExplorerDragStart(event){
+    const sourceElement = event.currentTarget;
+    const type = String(sourceElement?.dataset?.nodeType || "");
+    const id = String(sourceElement?.dataset?.nodeId || "");
+    if (!id || !["folder", "quiz"].includes(type) || isMovingExplorerNode) {
+      event.preventDefault();
+      return;
+    }
+    if (event.target instanceof Element && event.target.closest(".dashboard-activity-tile-actions, .dashboard-activity-tile-corner-actions, .dashboard-quiz-assign-pill")) {
+      event.preventDefault();
+      return;
+    }
+    const record = getDraggedExplorerRecord({ type, id });
+    if (!record || (record.is_system === true && !canEditSystemContent())) {
+      event.preventDefault();
+      return;
+    }
+    draggedExplorerNode = { type, id };
+    sourceElement.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", `${type}:${id}`);
+    }
+  }
+
+  function handleExplorerDragOver(event){
+    if (!draggedExplorerNode || isMovingExplorerNode) return;
+    const dropTarget = getQuizDropTargetFromEvent(event);
+    if (!dropTarget) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    explorerDropTarget = dropTarget;
+    renderQuizDropTarget(dropTarget);
+  }
+
+  function handleExplorerDragLeave(event){
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && list?.contains(relatedTarget)) return;
+    clearExplorerDropMarkers();
+  }
+
+  async function handleExplorerDrop(event){
+    if (!draggedExplorerNode || isMovingExplorerNode) return;
+    const dropTarget = explorerDropTarget || getQuizDropTargetFromEvent(event);
+    if (!dropTarget) return;
+    event.preventDefault();
+    const source = { ...draggedExplorerNode };
+    await moveExplorerNodeToTarget(source, dropTarget);
+  }
+
+  function handleExplorerDragEnd(){
+    draggedExplorerNode = null;
+    clearExplorerDropMarkers();
+  }
+
   function bindRenderedEvents(){
     list?.querySelectorAll('[data-action="open-root"]').forEach((button) => {
       button.addEventListener("click", () => setCurrentFolder(null));
@@ -706,6 +952,14 @@ export function createQuizExplorerViewController({
         if (quiz) onOpenQuiz?.(quiz);
       });
     });
+    list?.querySelectorAll('[data-action="assign-quiz"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const quiz = quizzes.find((item) => String(item.id) === String(button.dataset.quizId || ""));
+        if (quiz && typeof onAssignQuiz === "function") void onAssignQuiz(quiz);
+      });
+    });
     list?.querySelectorAll('[data-action="rename-quiz"]').forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -718,7 +972,15 @@ export function createQuizExplorerViewController({
         void removeQuiz(button.dataset.quizId);
       });
     });
+    list?.querySelectorAll('[draggable="true"][data-node-type][data-node-id]').forEach((element) => {
+      element.addEventListener("dragstart", handleExplorerDragStart);
+      element.addEventListener("dragend", handleExplorerDragEnd);
+    });
   }
+
+  list?.addEventListener("dragover", handleExplorerDragOver);
+  list?.addEventListener("dragleave", handleExplorerDragLeave);
+  list?.addEventListener("drop", (event) => { void handleExplorerDrop(event); });
 
   createQuizButton?.addEventListener("click", () => {
     if (!normalizeTreeId(currentOpenFolderId)) return;
