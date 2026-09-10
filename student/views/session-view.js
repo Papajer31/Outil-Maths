@@ -400,6 +400,7 @@ export function renderSessionView(root){
 
     els.btnPause?.addEventListener("click", () => {
       if (!engine || exitConfirmOpen) return;
+      if (engine.getUiState?.().pauseAllowed !== true) return;
 
       if (engine.isPaused?.()) {
         engine.resumeAfterPause?.();
@@ -513,6 +514,7 @@ export function renderSessionView(root){
 
       if (key === " ") {
         if (isEditableEventTarget(e.target)) return;
+        if (engine.getUiState?.().pauseAllowed !== true) return;
         e.preventDefault();
         if (engine.isPaused?.()) {
           engine.resumeAfterPause?.();
@@ -614,7 +616,7 @@ export function renderSessionView(root){
     if (!engine || exitConfirmOpen) return;
 
     if (command === "pause") {
-      if (!engine.isPaused?.()) {
+      if (engine.getUiState?.().pauseAllowed === true && !engine.isPaused?.()) {
         engine.pauseForInterruption?.();
       }
       sendProjectedStatus();
@@ -873,11 +875,13 @@ export function renderSessionView(root){
   function syncPauseButton(){
     const paused = !!engine?.isPaused?.();
     const running = !!engine?.isRunning?.();
+    const pauseAllowed = engine?.getUiState?.().pauseAllowed === true;
 
     els.page?.classList.toggle("session-page-paused", paused);
 
     if (els.btnPause) {
-      els.btnPause.disabled = !running && !paused;
+      els.btnPause.hidden = !pauseAllowed;
+      els.btnPause.disabled = !pauseAllowed || (!running && !paused);
       els.btnPause.title = paused ? "Reprendre" : "Pause";
       els.btnPause.setAttribute("aria-label", paused ? "Reprendre" : "Pause");
     }
@@ -1032,7 +1036,7 @@ export function renderSessionView(root){
     }
 
     if (!engine.isPaused?.()) {
-      engine.pauseForInterruption?.();
+      engine.pauseForInterruption?.({ force: true });
     }
 
     exitConfirmOpen = true;
@@ -1407,7 +1411,11 @@ export function renderSessionView(root){
           const safe = String(state || "pending").trim();
           const cls = safe === "correct"
             ? "is-correct"
-            : (safe === "incorrect" ? "is-incorrect" : "is-pending");
+            : safe === "incorrect"
+              ? "is-incorrect"
+              : safe === "neutral"
+                ? "is-neutral"
+                : "is-pending";
           return `<div class="session-progress-segment ${cls}"></div>`;
         }).join("")}
       </div>

@@ -20,6 +20,9 @@ import {
   normalizeQuizSelectionIndexes,
   renderQuizSelectionTextToHtml
 } from "../../shared/quiz-selection-text.js";
+
+const MASKED_TEXT_KEYBOARD_ASSET_URL = new URL("../../shared/ui-assets/clavier.webp", import.meta.url).href;
+
 let stylesInjected = false;
 
 export function createActivity(initialContext = {}){
@@ -61,11 +64,15 @@ export function createActivity(initialContext = {}){
     },
 
     supportsShellValidation(context = state.latestContext){
-      return getResponseUi(context) === "boxed" && !isAutoValidationQuestion(state);
+      return getResponseUi(context) === "boxed" && !isAutoValidationQuestion(state) && !isDoneQuestion(state);
     },
 
     canValidate(){
       return canSubmitAnswer(state);
+    },
+
+    shouldHideShellRevealAction(){
+      return isDoneQuestion(state);
     },
 
     validate(){
@@ -76,6 +83,7 @@ export function createActivity(initialContext = {}){
     },
 
     handleQuestionTimeout(){
+      if (isDoneQuestion(state)) return handleDoneQuestionTimeout(state);
       return handleAutoQuestionTimeout(state);
     },
 
@@ -110,6 +118,14 @@ function createRuntimeState(initialContext = {}){
     labelsLayoutFrame: 0,
     audioAbortController: null,
     activeAudioEl: null,
+    audioPlayCounts: new Map(),
+    maskedTextAbortController: null,
+    maskedTextMetrics: new Map(),
+    maskedTextKeyState: { shiftLeft:false, enter:false },
+    maskedTextActive: false,
+    doneAbortController: null,
+    doneCompleted: false,
+    doneTimedOut: false,
     qcmResizeObserver: null,
     qcmFitTimers: [],
     qcmChoiceFontSizes: new Map(),
@@ -171,6 +187,12 @@ function loadNextQuestion(state, context = {}){
   state.submittedCategoryLabelOrder.clear();
   state.labelPositions.clear();
   state.activeLabelDrag = null;
+  state.audioPlayCounts.clear();
+  state.maskedTextMetrics.clear();
+  state.maskedTextKeyState = { shiftLeft:false, enter:false };
+  state.maskedTextActive = false;
+  state.doneCompleted = false;
+  state.doneTimedOut = false;
   state.answerDisplayMode = "correction";
   clearAutoAnswerTimers(state);
   state.autoCompletionPending = false;
@@ -217,7 +239,28 @@ function buildRunnableQuestion(question){
     const qcmWidgets = widgets.filter((widget) => widget?.type === "qcm-text");
     const selectionWidgets = widgets.filter((widget) => widget?.type === "selection-words");
     const categoriesWidgets = widgets.filter((widget) => widget?.type === "categories");
-    if (answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length !== 1) return null;
+    const doneWidgets = widgets.filter((widget) => widget?.type === "done");
+    if (answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length + doneWidgets.length !== 1) return null;
+
+    if (doneWidgets.length === 1) {
+      const doneWidget = doneWidgets[0];
+      const questionView = getWidgetView(doneWidget, "question");
+      if (!questionView?.visible) return null;
+      return {
+        ...variant,
+        widgets,
+        responseType:"done",
+        doneWidgetCount:1,
+        answerWidgetCount:0,
+        qcmWidgetCount:0,
+        selectionWidgetCount:0,
+        categoriesWidgetCount:0,
+        primaryDoneWidgetId:doneWidget.id || "",
+        primaryDoneVisibleInQuestion:true,
+        expectedAnswer:"",
+        expectedAnswerLabel:""
+      };
+    }
 
     if (qcmWidgets.length === 1) {
       const qcmWidget = qcmWidgets[0];
@@ -401,6 +444,8 @@ function renderCurrentView(state){
   bindRuntimeSelection(state);
   bindRuntimeLabels(state);
   bindRuntimeAudios(state);
+  bindRuntimeMaskedTexts(state);
+  bindRuntimeDone(state);
   hydrateRuntimeImages(state);
   hydrateRuntimeAudios(state);
   scheduleRuntimeTextFit(state);
@@ -446,6 +491,7 @@ function patchCorrectionView(state){
       && widget.type !== "selection-words"
       && widget.type !== "labels"
       && widget.type !== "categories"
+      && widget.type !== "masked-text"
       && getRuntimeWidgetViewSignature(widget, questionView) === getRuntimeWidgetViewSignature(widget, view);
     if (unchangedStaticWidget) return;
 
@@ -564,6 +610,14 @@ function renderWidget(state, widget, mode){
 
   if (widget.type === "audio") {
     return renderAudioWidget(widget, view, style);
+  }
+
+  if (widget.type === "masked-text") {
+    return renderMaskedTextWidget(widget, view, mode, style);
+  }
+
+  if (widget.type === "done") {
+    return renderDoneWidget(widget, style);
   }
 
   if (widget.type === "labels") {
@@ -937,6 +991,53 @@ async function hydrateRuntimeImages(state){
   }));
 }
 
+function renderMaskedTextWidget(widget, view, mode, style){
+  if (mode === "correction") {
+    return `
+      <section
+        class="quiz-runtime-widget quiz-runtime-widget--text quiz-runtime-widget--masked-text is-correction-visible"
+        style="${style}"
+        data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+        aria-label="${escapeHtml(widget.label || "Texte masqué")}"
+      >
+        <div class="quiz-runtime-widget-content" data-quiz-runtime-text-fit>${sanitizeRichHtml(view.html)}</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--masked-text"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      data-quiz-runtime-masked-text
+      aria-label="${escapeHtml(widget.label || "Texte masqué")}"
+    >
+      <div class="quiz-runtime-masked-text-model quiz-runtime-widget-content" data-quiz-runtime-text-fit aria-hidden="true">${sanitizeRichHtml(view.html)}</div>
+      <div class="quiz-runtime-masked-text-cover">
+        <div class="quiz-runtime-masked-text-keyboard-map" aria-hidden="true">
+          <img class="quiz-runtime-masked-text-keyboard" src="${escapeHtml(MASKED_TEXT_KEYBOARD_ASSET_URL)}" alt="" draggable="false" decoding="async">
+        </div>
+        <strong>Maintiens MAJ gauche et ENTRÉE</strong>
+        <small data-quiz-runtime-masked-text-count>Tu as regardé 0 fois.</small>
+      </div>
+    </section>
+  `;
+}
+
+function renderDoneWidget(widget, style){
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--done"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      aria-label="${escapeHtml(widget.label || "J’ai terminé")}"
+    >
+      <button class="student-manual-btn quiz-runtime-done-button" type="button" data-quiz-runtime-done>J’ai terminé</button>
+    </section>
+  `;
+}
+
 function renderAudioWidget(widget, view, style){
   const source = view?.audioSource && typeof view.audioSource === "object" ? view.audioSource : null;
   if (!source) return "";
@@ -1084,6 +1185,8 @@ function bindRuntimeAudios(state){
     button.addEventListener("click", () => {
       if (!audio.src) return;
       if (audio.paused) {
+        const widgetId = String(host.dataset.quizRuntimeWidgetId || "");
+        if (widgetId) state.audioPlayCounts.set(widgetId, (Number(state.audioPlayCounts.get(widgetId)) || 0) + 1);
         stopRuntimeAudio(state, audio);
         state.activeAudioEl = audio;
         void audio.play().catch(() => {});
@@ -1168,6 +1271,192 @@ function renderNumericKeypadWidget(widget, view, style){
       })}
     </section>
   `;
+}
+
+function getMaskedTextMetric(state, widgetId){
+  const key = String(widgetId || "");
+  let metric = state.maskedTextMetrics.get(key);
+  if (!metric) {
+    metric = { count:0, durationMs:0, activeStartedAt:null, views:[] };
+    state.maskedTextMetrics.set(key, metric);
+  }
+  return metric;
+}
+
+function updateMaskedTextCountLabel(host, metric){
+  const node = host?.querySelector?.("[data-quiz-runtime-masked-text-count]");
+  if (!node) return;
+  const count = Math.max(0, Math.trunc(Number(metric?.count) || 0));
+  node.textContent = `Tu as regardé ${count} fois.`;
+}
+
+function setMaskedTextVisible(state, visible){
+  const hosts = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-masked-text]") || []);
+  if (!hosts.length) {
+    state.maskedTextActive = false;
+    return;
+  }
+  // Ne pas se contenter de l'état mémorisé : un re-rendu peut avoir laissé
+  // une classe visuelle sur un ancien nœud alors que l'état JS a déjà été
+  // réinitialisé. Dans ce cas, il faut tout de même appliquer le masquage.
+  if (visible === state.maskedTextActive) {
+    hosts.forEach((host) => {
+      host.classList.toggle("is-visible", visible);
+      host.querySelector(".quiz-runtime-masked-text-model")?.setAttribute("aria-hidden", visible ? "false" : "true");
+    });
+    return;
+  }
+  const now = performance.now();
+  state.maskedTextActive = visible;
+  hosts.forEach((host) => {
+    const widgetId = String(host.dataset.quizRuntimeWidgetId || "");
+    const metric = getMaskedTextMetric(state, widgetId);
+    if (visible) {
+      metric.count += 1;
+      metric.activeStartedAt = now;
+      host.classList.add("is-visible");
+      host.querySelector(".quiz-runtime-masked-text-model")?.setAttribute("aria-hidden", "false");
+    } else {
+      host.classList.remove("is-visible");
+      host.querySelector(".quiz-runtime-masked-text-model")?.setAttribute("aria-hidden", "true");
+      if (Number.isFinite(metric.activeStartedAt)) {
+        const duration = Math.max(0, now - metric.activeStartedAt);
+        metric.durationMs += duration;
+        metric.views.push(Math.round(duration));
+        metric.activeStartedAt = null;
+      }
+      updateMaskedTextCountLabel(host, metric);
+    }
+  });
+}
+
+function resetMaskedTextKeys(state){
+  state.maskedTextKeyState.shiftLeft = false;
+  state.maskedTextKeyState.enter = false;
+  setMaskedTextVisible(state, false);
+}
+
+function bindRuntimeMaskedTexts(state){
+  state.maskedTextAbortController?.abort();
+  state.maskedTextAbortController = null;
+  const hosts = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-masked-text]") || []);
+  if (!hosts.length || state.answerRevealed) return;
+  const controller = new AbortController();
+  state.maskedTextAbortController = controller;
+  const { signal } = controller;
+  hosts.forEach((host) => updateMaskedTextCountLabel(host, getMaskedTextMetric(state, host.dataset.quizRuntimeWidgetId)));
+
+  const sync = () => {
+    const keys = state.maskedTextKeyState;
+    setMaskedTextVisible(state, keys.shiftLeft && keys.enter);
+  };
+  const maskedKeyForEvent = (event) => {
+    if (event?.code === "ShiftLeft" || (event?.key === "Shift" && event?.location === 1)) return "shiftLeft";
+    if (event?.code === "Enter" || (event?.key === "Enter" && event?.location !== 3)) return "enter";
+    return null;
+  };
+
+  window.addEventListener("keydown", (event) => {
+    const key = maskedKeyForEvent(event);
+    if (!key) {
+      // Une troisième touche signifie que les deux mains ne sont plus
+      // exclusivement occupées par la combinaison demandée.
+      if (state.maskedTextActive) resetMaskedTextKeys(state);
+      return;
+    }
+
+    // Entrée est réservée à ce geste tant que la question contient un texte
+    // masqué : elle ne doit ni valider la réponse ni insérer un retour ligne.
+    if (key === "enter") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    state.maskedTextKeyState[key] = true;
+    sync();
+  }, { signal, capture:true });
+
+  const concealOnKeyRelease = () => {
+    // Règle de sûreté : dès qu'une touche est relâchée, le modèle se replie.
+    // On ne dépend donc pas de `code`, `key` ou `location`, qui peuvent être
+    // incomplets avec certains pilotes/claviers. Les deux touches doivent être
+    // pressées à nouveau pour dévoiler le texte.
+    resetMaskedTextKeys(state);
+  };
+  window.addEventListener("keyup", concealOnKeyRelease, { signal, capture:true });
+  document.addEventListener("keyup", concealOnKeyRelease, { signal, capture:true });
+
+  const concealOnCopyAttempt = (event) => {
+    if (!state.maskedTextActive) return;
+    event.preventDefault();
+    resetMaskedTextKeys(state);
+  };
+  document.addEventListener("copy", concealOnCopyAttempt, { signal, capture:true });
+  document.addEventListener("cut", concealOnCopyAttempt, { signal, capture:true });
+  document.addEventListener("selectstart", concealOnCopyAttempt, { signal, capture:true });
+
+  window.addEventListener("blur", () => resetMaskedTextKeys(state), { signal });
+  window.addEventListener("focus", () => resetMaskedTextKeys(state), { signal });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") resetMaskedTextKeys(state);
+  }, { signal });
+}
+
+function isDoneQuestion(state){
+  return state.currentQuestion?.responseType === "done";
+}
+
+function requestDoneCompletion(state, { timedOut = false } = {}){
+  if (!isDoneQuestion(state) || state.answerRevealed || state.doneCompleted || state.doneTimedOut) return false;
+  state.doneTimedOut = timedOut === true;
+  state.doneCompleted = timedOut !== true;
+  resetMaskedTextKeys(state);
+
+  // Le shell moderne sait terminer une question de façon atomique. Cela évite
+  // la course entre requestAnswerPhase() et requestNextQuestion() qui pouvait
+  // laisser « J'ai terminé » visuellement cliqué mais sans effet.
+  const directCompletion = state.latestContext?.services?.requestQuestionCompletion;
+  if (typeof directCompletion === "function") {
+    const accepted = directCompletion({ outcome:"completed" });
+    if (accepted === true) return true;
+  }
+
+  // Compatibilité avec un shell plus ancien : on passe par une phase Réponse
+  // neutre, mais l'avance est différée au tour de boucle suivant.
+  const accepted = state.latestContext?.services?.requestAnswerPhase?.({
+    manual:false,
+    showAnswerNow:false,
+    wasCorrect:null,
+    outcome:"completed",
+    skipValidationReview:true
+  });
+  if (accepted !== true) {
+    state.doneTimedOut = false;
+    state.doneCompleted = false;
+    return false;
+  }
+  window.setTimeout(() => {
+    state.latestContext?.services?.requestNextQuestion?.();
+  }, 0);
+  return true;
+}
+
+function handleDoneQuestionTimeout(state){
+  return requestDoneCompletion(state, { timedOut:true });
+}
+
+function bindRuntimeDone(state){
+  state.doneAbortController?.abort();
+  state.doneAbortController = null;
+  if (!isDoneQuestion(state) || state.answerRevealed) return;
+  const button = state.canvasEl?.querySelector?.("[data-quiz-runtime-done]");
+  if (!button) return;
+  const controller = new AbortController();
+  state.doneAbortController = controller;
+  button.addEventListener("click", () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    if (!requestDoneCompletion(state)) button.disabled = false;
+  }, { signal:controller.signal });
 }
 
 function renderAnswerWidget(state, widget, view, mode, style){
@@ -1593,6 +1882,8 @@ function getQuizHistorySnapshot(state, stage = "question"){
   const currentValue = state.answerRevealed
     ? String(state.submittedAnswer || "")
     : String(state.submittedAnswer || getCurrentResponseValue(state) || "");
+  const maskedTextMetrics = getMaskedTextMetricsSnapshot(state);
+  const audioMetrics = getAudioMetricsSnapshot(state);
   const snapshot = {
     responseType:String(state.currentQuestion?.responseType || ""),
     questionId:String(state.currentQuestion?.id || ""),
@@ -1603,13 +1894,57 @@ function getQuizHistorySnapshot(state, stage = "question"){
     hintCount:Math.max(0, Number(state.hintCount) || 0),
     timedOut:state.autoTimedOut === true,
     autoCompleted:state.autoCompletionPending === true,
-    submittedAnswer:currentValue
+    submittedAnswer:currentValue,
+    ...(maskedTextMetrics.totalCount > 0 || maskedTextMetrics.widgets.length ? {
+      maskedTextViewCount:maskedTextMetrics.totalCount,
+      maskedTextVisibleDurationMs:maskedTextMetrics.totalDurationMs,
+      maskedTextViews:maskedTextMetrics.widgets
+    } : {}),
+    ...(audioMetrics.totalCount > 0 || audioMetrics.widgets.length ? {
+      audioPlayCount:audioMetrics.totalCount,
+      audioPlays:audioMetrics.widgets
+    } : {}),
+    ...(isDoneQuestion(state) ? {
+      completionType:"done",
+      completed:state.doneCompleted === true,
+      completionTimedOut:state.doneTimedOut === true
+    } : {})
   };
   if (String(stage || "").toLowerCase() === "correction") {
     snapshot.expectedAnswer = String(state.currentQuestion?.expectedAnswer || "");
   }
   if (state.currentHint) snapshot.lastHint = state.currentHint;
   return snapshot;
+}
+
+function getMaskedTextMetricsSnapshot(state){
+  const now = performance.now();
+  const widgets = Array.from(state.maskedTextMetrics.entries()).map(([widgetId, metric]) => {
+    let durationMs = Math.max(0, Number(metric?.durationMs) || 0);
+    if (Number.isFinite(metric?.activeStartedAt)) durationMs += Math.max(0, now - metric.activeStartedAt);
+    return {
+      widgetId:String(widgetId || ""),
+      count:Math.max(0, Math.trunc(Number(metric?.count) || 0)),
+      durationMs:Math.max(0, Math.round(durationMs)),
+      views:Array.isArray(metric?.views) ? metric.views.map((value) => Math.max(0, Math.round(Number(value) || 0))) : []
+    };
+  });
+  return {
+    widgets,
+    totalCount:widgets.reduce((sum, item) => sum + item.count, 0),
+    totalDurationMs:widgets.reduce((sum, item) => sum + item.durationMs, 0)
+  };
+}
+
+function getAudioMetricsSnapshot(state){
+  const widgets = Array.from(state.audioPlayCounts.entries()).map(([widgetId, count]) => ({
+    widgetId:String(widgetId || ""),
+    count:Math.max(0, Math.trunc(Number(count) || 0))
+  }));
+  return {
+    widgets,
+    totalCount:widgets.reduce((sum, item) => sum + item.count, 0)
+  };
 }
 
 function renderEmptyQuestion(state){
@@ -2388,6 +2723,7 @@ function requestReveal(state){
 function canSubmitAnswer(state){
   if (getResponseUi(state.latestContext) !== "boxed") return false;
   if (state.answerRevealed || !state.currentQuestion) return false;
+  if (state.currentQuestion.responseType === "done") return false;
   if (state.currentQuestion.responseType === "qcm-text") return Boolean(state.selectedChoiceId);
   if (state.currentQuestion.responseType === "selection-words") return state.selectedTokenIndexes.length > 0;
   if (state.currentQuestion.responseType === "categories") {
@@ -2400,6 +2736,7 @@ function canSubmitAnswer(state){
 
 function getCurrentResponseValue(state){
   if (state.answerRevealed) return String(state.submittedAnswer || "").trim();
+  if (state.currentQuestion?.responseType === "done") return "";
   if (state.currentQuestion?.responseType === "qcm-text") return String(state.selectedChoiceId || "").trim();
   if (state.currentQuestion?.responseType === "selection-words") {
     const indexes = state.answerRevealed ? state.submittedTokenIndexes : state.selectedTokenIndexes;
@@ -2502,7 +2839,7 @@ function normalizeAnswerDisplayMode(value){
 }
 
 function focusPrimaryInput(state){
-  if (["qcm-text", "selection-words", "categories"].includes(state.currentQuestion?.responseType)) return;
+  if (["qcm-text", "selection-words", "categories", "done"].includes(state.currentQuestion?.responseType)) return;
   if (!state.answerInputEl) return;
   queueMicrotask(() => {
     try {
@@ -2665,6 +3002,11 @@ function teardownInputBindings(state){
   state.canvasEl?.querySelectorAll?.(".quiz-runtime-label-chip.is-floating").forEach((node) => node.remove());
   clearRuntimeLabelDropTargets(state);
   state.activeLabelDrag = null;
+  resetMaskedTextKeys(state);
+  state.maskedTextAbortController?.abort();
+  state.maskedTextAbortController = null;
+  state.doneAbortController?.abort();
+  state.doneAbortController = null;
   state.audioAbortController?.abort();
   state.audioAbortController = null;
   stopRuntimeAudio(state);

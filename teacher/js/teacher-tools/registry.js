@@ -5,6 +5,7 @@ import { multiImagesTeacherTool } from "./widgets/multi-images/tool.js";
 import { clockTeacherTool } from "./widgets/clock/tool.js";
 import { geometryInstrumentsTeacherTool } from "./widgets/geometry-instruments/tool.js";
 import { gridTeacherTool } from "./widgets/grid/tool.js";
+import { seyesTeacherTool } from "./widgets/seyes/tool.js";
 import { labelsTeacherTool } from "./widgets/labels/tool.js";
 import { drawingLayerTeacherTool } from "./widgets/drawing-layer/tool.js";
 import { activityTeacherTool } from "./widgets/activity/tool.js";
@@ -18,6 +19,7 @@ export const TEACHER_TOOLS = Object.freeze([
   clockTeacherTool,
   geometryInstrumentsTeacherTool,
   gridTeacherTool,
+  seyesTeacherTool,
   labelsTeacherTool,
   drawingLayerTeacherTool
 ]);

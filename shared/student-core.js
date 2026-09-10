@@ -473,7 +473,7 @@ export function createSessionEngine({
     if (paused || !isSessionRunning) return false;
 
     const item = session[currentToolIndex];
-    if (!item || phase.kind !== "QUESTION" || item.hasAnswerPhase === false) {
+    if (!item || phase.kind !== "QUESTION" || !canRevealCurrentAnswer(item)) {
       return false;
     }
 
@@ -485,6 +485,18 @@ export function createSessionEngine({
     beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
     emitStateChange();
     return true;
+  }
+
+  function canRevealCurrentAnswer(item) {
+    if (!item || item.hasAnswerPhase === false) return false;
+    if (!activeRuntime || session[currentToolIndex] !== item) return true;
+    if (typeof activeRuntime.shouldHideShellRevealAction !== "function") return true;
+
+    try {
+      return activeRuntime.shouldHideShellRevealAction(els.workArea, getToolContext(item)) !== true;
+    } catch {
+      return false;
+    }
   }
 
   function triggerShellValidate() {
@@ -785,9 +797,10 @@ export function createSessionEngine({
       evaluationGauge: getEvaluationGaugeUiState(item),
       evaluationCounter: getEvaluationCounterUiState(item),
       fixedQuestionCounter: getFixedQuestionCounterUiState(item),
+      pauseAllowed: canPauseForInterruption(),
       canGoPrevTool: !paused && !toolMaxTimeAdvancePending && currentToolIndex > 0,
       canGoNextTool: !paused && !toolMaxTimeAdvancePending && (betweenTools ? currentToolIndex < session.length : currentToolIndex < (session.length - 1)),
-      canRevealAnswer: !paused && !toolMaxTimeExpired && !!item && phase.kind === "QUESTION" && item.hasAnswerPhase !== false && shellValidation.visible !== true,
+      canRevealAnswer: !paused && !toolMaxTimeExpired && !!item && phase.kind === "QUESTION" && canRevealCurrentAnswer(item) && shellValidation.visible !== true,
       canAdvanceQuestion: !paused && !validationReviewPending && !toolMaxTimeExpired && !!item && (phase.kind === "QUESTION" || phase.kind === "ANSWER" || phase.kind === "TRANSITION"),
       shellValidateVisible: shellValidation.visible === true,
       shellValidateEnabled: shellValidation.enabled === true,
@@ -980,7 +993,7 @@ export function createSessionEngine({
       kind: "answer",
       label: "Réponse",
       icon: "visibility",
-      enabled: !paused && phase.kind === "QUESTION" && item.hasAnswerPhase !== false
+      enabled: !paused && phase.kind === "QUESTION" && canRevealCurrentAnswer(item)
     };
   }
 
@@ -1247,10 +1260,16 @@ export function createSessionEngine({
     emitStateChange();
   }
 
-  function pauseForInterruption() {
+  function canPauseForInterruption() {
+    const item = session[currentToolIndex] ?? null;
+    return !item || item.infiniteTimePerQ === true;
+  }
+
+  function pauseForInterruption({ force = false } = {}) {
     if (!isSessionRunning) return;
     if (phase.kind === "GROUP_ATTRIBUTION") return;
     if (paused) return;
+    if (!force && !canPauseForInterruption()) return;
 
     const snap = captureCurrentPhase();
     pauseHistoryQuestion(session[currentToolIndex]);
@@ -1414,6 +1433,7 @@ export function createSessionEngine({
     engineState = "RUNNING_QUESTION";
     phase = createPhase("QUESTION", item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : remainingMs);
     item.currentQuestionResolvedCorrectly = false;
+    item.currentQuestionOutcomeKind = "pending";
     item.currentQuestionOutcomeCommitted = false;
     item.lastQuestionOutcome = "pending";
     setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionFlowMode === "fixed" ? item.questionCount : "∞"}`);
@@ -1788,6 +1808,7 @@ export function createSessionEngine({
         catalogDefaults: item.catalog_defaults && typeof item.catalog_defaults === "object" && !Array.isArray(item.catalog_defaults) ? cloneData(item.catalog_defaults) : {},
         progressSessionStats: { questions: 0, correct: 0 },
         currentQuestionResolvedCorrectly: false,
+        currentQuestionOutcomeKind: "pending",
         currentQuestionOutcomeCommitted: false,
         lastQuestionOutcome: "pending",
         historyClientAttemptId: createActivityAttemptClientId(),
@@ -2562,6 +2583,7 @@ export function createSessionEngine({
         item.finalChallengeCorrectCount = 0;
       }
       item.currentQuestionResolvedCorrectly = false;
+      item.currentQuestionOutcomeKind = "pending";
       item.currentQuestionOutcomeCommitted = false;
       item.lastQuestionOutcome = "pending";
       item.catalogCurrentLevel = normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? item.catalogCurrentLevel ?? 3);
@@ -2612,7 +2634,7 @@ export function createSessionEngine({
       mode: "finite",
       segments: Array.isArray(gauge.segments) ? gauge.segments.map((value) => {
         const safe = String(value || "pending").trim();
-        return safe === "correct" || safe === "incorrect" ? safe : "pending";
+        return safe === "correct" || safe === "incorrect" || safe === "neutral" ? safe : "pending";
       }) : [],
       completed: gauge.completed === true,
       launching: false,
@@ -2621,6 +2643,31 @@ export function createSessionEngine({
   }
 
   function commitCurrentQuestionOutcome(item) {
+    const outcomeKind = String(item?.currentQuestionOutcomeKind || "").trim().toLowerCase();
+    if (outcomeKind === "completed") {
+      const level = normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3);
+      finalizeHistoryQuestion(item, {
+        outcome:"unanswered",
+        isCorrect:null,
+        levelAfter:level,
+        pointsAwarded:0
+      });
+      if (item) {
+        item.lastQuestionOutcome = "completed";
+        item.currentQuestionResolvedCorrectly = false;
+        item.currentQuestionOutcomeKind = "pending";
+      }
+      if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) return false;
+      const gauge = item.evaluationGauge;
+      if (gauge?.mode === "finite" && Array.isArray(gauge.segments) && currentQuestionIndex >= 0 && currentQuestionIndex < gauge.segments.length) {
+        gauge.segments[currentQuestionIndex] = "neutral";
+        gauge.completed = gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
+        gauge.launching = false;
+        gauge.rocketState = "off";
+      }
+      return false;
+    }
+
     const isCorrect = item?.currentQuestionResolvedCorrectly === true;
     if (isFinalChallengeItem(item) && isCorrect) {
       incrementFinalChallengeCorrectCount(item);
@@ -2635,7 +2682,10 @@ export function createSessionEngine({
     });
 
     if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
-      if (item) item.currentQuestionResolvedCorrectly = false;
+      if (item) {
+        item.currentQuestionResolvedCorrectly = false;
+        item.currentQuestionOutcomeKind = "pending";
+      }
       return false;
     }
 
@@ -2648,23 +2698,26 @@ export function createSessionEngine({
       item.evaluationCounter = counter;
       item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
       item.currentQuestionResolvedCorrectly = false;
+      item.currentQuestionOutcomeKind = "pending";
       return false;
     }
 
     const gauge = item.evaluationGauge;
     if (!gauge) {
       item.currentQuestionResolvedCorrectly = false;
+      item.currentQuestionOutcomeKind = "pending";
       return false;
     }
 
     item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
     item.currentQuestionResolvedCorrectly = false;
+    item.currentQuestionOutcomeKind = "pending";
 
     if (gauge.mode === "finite") {
       if (Array.isArray(gauge.segments) && currentQuestionIndex >= 0 && currentQuestionIndex < gauge.segments.length) {
         gauge.segments[currentQuestionIndex] = isCorrect ? "correct" : "incorrect";
       }
-      gauge.completed = Array.isArray(gauge.segments) && gauge.segments.every((value) => value === "correct" || value === "incorrect");
+      gauge.completed = Array.isArray(gauge.segments) && gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
       gauge.launching = false;
       gauge.rocketState = "off";
       return false;
@@ -2854,6 +2907,7 @@ export function createSessionEngine({
           sessionControls,
           requestAnswerPhase: sessionControls.requestAnswerPhase,
           requestNextQuestion: sessionControls.requestNextQuestion,
+          requestQuestionCompletion: sessionControls.requestQuestionCompletion,
           requestValidationFeedback: sessionControls.requestValidationFeedback,
           getPhaseKind: sessionControls.getPhaseKind
         },
@@ -2898,6 +2952,7 @@ export function createSessionEngine({
         sessionControls,
         requestAnswerPhase: sessionControls.requestAnswerPhase,
         requestNextQuestion: sessionControls.requestNextQuestion,
+        requestQuestionCompletion: sessionControls.requestQuestionCompletion,
         requestValidationFeedback: sessionControls.requestValidationFeedback,
         getPhaseKind: sessionControls.getPhaseKind,
         notifyValidationStateChanged: sessionControls.notifyValidationStateChanged
@@ -2912,6 +2967,7 @@ export function createSessionEngine({
         manual = false,
         showAnswerNow = true,
         wasCorrect = null,
+        outcome = null,
         skipValidationReview = false,
         validationReviewDelayAfterPreparation = false,
         validationReviewDelayMs = null,
@@ -2922,6 +2978,13 @@ export function createSessionEngine({
         if (phase.kind !== "QUESTION") return false;
 
         item.currentQuestionResolvedCorrectly = wasCorrect === true;
+        item.currentQuestionOutcomeKind = String(outcome || "").trim().toLowerCase() === "completed"
+          ? "completed"
+          : wasCorrect === true
+            ? "correct"
+            : wasCorrect === false
+              ? "incorrect"
+              : "pending";
 
         const durationMs = manual
           ? Number.POSITIVE_INFINITY
@@ -2949,6 +3012,25 @@ export function createSessionEngine({
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "ANSWER") return false;
         completeAnswerPhase(item);
+        return true;
+      },
+
+      // Fin directe d'une question sans réponse numérique attendue (ex. widget
+      // Quiz « J'ai terminé »). On ne traverse pas artificiellement une phase
+      // Réponse : l'issue est enregistrée comme accomplie mais neutre, puis le
+      // moteur poursuit son flux normal vers la question suivante.
+      requestQuestionCompletion({ outcome = "completed" } = {}) {
+        if (!item || !isSessionRunning || paused || validationReviewPending) return false;
+        if (session[currentToolIndex] !== item) return false;
+        if (phase.kind !== "QUESTION") return false;
+
+        const safeOutcome = String(outcome || "completed").trim().toLowerCase();
+        if (safeOutcome !== "completed") return false;
+        item.currentQuestionResolvedCorrectly = false;
+        item.currentQuestionOutcomeKind = "completed";
+
+        hideManualAction();
+        void advanceToNextQuestion(item);
         return true;
       },
 
@@ -3084,6 +3166,7 @@ export function createSessionEngine({
       && sessionProgressMode === "evaluated"
       && runMode !== "projected-teacher"
       && !!item
+      && String(item.currentQuestionOutcomeKind || "").trim().toLowerCase() !== "completed"
       && phase.kind === "ANSWER"
       && item.hasAnswerPhase !== false
       && Array.isArray(selectedStudents)
@@ -3374,6 +3457,11 @@ export function createSessionEngine({
     }
 
     if (phase.kind === "QUESTION" && item.infiniteTimePerQ && item.usesCustomQuestionFlow !== true) {
+      if (item.hasAnswerPhase !== false && !canRevealCurrentAnswer(item)) {
+        hideManualAction();
+        return;
+      }
+
       showManualAction(item.hasAnswerPhase === false ? "Question suivante" : "Afficher la réponse", async () => {
         hideManualAction();
 

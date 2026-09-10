@@ -529,7 +529,6 @@
   justify-content: center;
   padding: 20px;
   background: rgba(4, 8, 14, 0.52);
-  backdrop-filter: blur(2px);
 }
 
 .phono-preset-dialog .modal-content {

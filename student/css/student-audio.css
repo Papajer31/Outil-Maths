@@ -14,7 +14,6 @@
   box-shadow:0 8px 24px rgba(0,0,0,.26);
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
-  backdrop-filter:blur(7px);
   transition:background-color .14s ease, border-color .14s ease, color .14s ease;
 }
 
@@ -111,7 +110,6 @@
   box-shadow:0 10px 30px rgba(0,0,0,.24);
   transform:translateX(-50%);
   transition:background-color .14s ease, border-color .14s ease, opacity .16s ease;
-  backdrop-filter:blur(5px);
 }
 
 @media (hover:hover) and (pointer:fine){

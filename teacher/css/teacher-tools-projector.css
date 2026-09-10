@@ -6,6 +6,7 @@
 @import url("../js/teacher-tools/widgets/clock/clock.css");
 @import url("../js/teacher-tools/widgets/geometry-instruments/geometry-instruments.css");
 @import url("../js/teacher-tools/widgets/grid/grid.css");
+@import url("../js/teacher-tools/widgets/seyes/seyes.css");
 @import url("../js/teacher-tools/widgets/labels/labels.css");
 @import url("../js/teacher-tools/widgets/drawing-layer/drawing-layer.css");
 
@@ -323,7 +324,6 @@ body{
   border:1px solid rgba(255,255,255,.12);
   border-radius:999px;
   background:rgba(0,0,0,.34);
-  backdrop-filter:blur(12px);
   box-shadow:0 16px 44px rgba(0,0,0,.24);
 }
 
@@ -417,7 +417,6 @@ body{
   color:#fff;
   padding:12px;
   box-shadow:0 18px 48px rgba(0,0,0,.28);
-  backdrop-filter:blur(14px);
 }
 
 .ttp-grid-popover[hidden]{
@@ -467,7 +466,6 @@ body{
   border:1px solid rgba(255,255,255,.12);
   border-radius:999px;
   background:rgba(0,0,0,.34);
-  backdrop-filter:blur(12px);
   box-shadow:0 16px 44px rgba(0,0,0,.24);
 }
 
@@ -616,7 +614,6 @@ body{
   background:var(--ttp-widget-surface);
   border:1px solid var(--ttp-widget-border-color);
   box-shadow:var(--ttp-widget-shadow);
-  backdrop-filter:blur(14px);
   color:#fff;
   cursor:grab;
   touch-action:none;

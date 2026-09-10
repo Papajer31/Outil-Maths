@@ -1630,6 +1630,10 @@ body.student-route-selectstudents .student-selection-class{
   background:#e03131;
 }
 
+.session-page .session-progress-segment.is-neutral{
+  background:#adb5bd;
+}
+
 @keyframes sessionGaugeRocketLaunch{
   0%{
     transform:translate3d(0, 0, 0) rotate(-90deg) scale(1);

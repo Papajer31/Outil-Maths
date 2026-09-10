@@ -133,7 +133,7 @@ export function readToolSettings(container, settings = {}){
     const question = selectedQuestions[incompleteIndex];
     const isVariant = Number.isFinite(Number(question.sourceVariantIndex));
     const displayIndex = isVariant ? Number(question.sourceVariantIndex) + 1 : incompleteIndex + 1;
-    throw new Error(`La ${isVariant ? "variante" : "question"} ${displayIndex} doit contenir un unique widget de réponse exécutable (réponse, QCM ou sélection de mots).`);
+    throw new Error(`La ${isVariant ? "variante" : "question"} ${displayIndex} doit contenir un unique widget de réponse exécutable (« Réponse de l’élève », « Réponse texte vérifiée », « J’ai terminé », « QCM », « Sélection de mots » ou « Catégories »).`);
   }
 
   return normalizeSettings({
@@ -576,6 +576,12 @@ function getQuestionAnswerPreview(question){
   if (variant.responseType === "selection-words") {
     return answer.split(";").map((word) => word.trim()).filter(Boolean).join(" - ") || "Réponse à définir";
   }
+  if (variant.responseType === "done") {
+    return "J’ai terminé";
+  }
+  if (variant.responseType === "categories") {
+    return variant.categoryAssignmentValid ? "Classement attendu" : "Classement à définir";
+  }
   return answer || "Réponse à définir";
 }
 
@@ -593,7 +599,16 @@ function isQuestionRunnable(question){
     if (variant.responseType === "selection-words") {
       return variant.primarySelectionVisibleInQuestion && variant.expectedTokenIndexes.length > 0;
     }
-    return variant.primaryAnswerVisibleInQuestion && Boolean(String(variant.expectedAnswer || "").trim());
+    if (variant.responseType === "categories") {
+      return variant.primaryCategoriesVisibleInQuestion && variant.categoryAssignmentValid;
+    }
+    if (variant.responseType === "done") {
+      return variant.primaryDoneVisibleInQuestion;
+    }
+    if (variant.responseType === "answer" || variant.responseType === "verified-answer") {
+      return variant.primaryAnswerVisibleInQuestion && Boolean(String(variant.expectedAnswer || "").trim());
+    }
+    return false;
   });
 }
 

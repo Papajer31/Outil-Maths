@@ -18,7 +18,7 @@ const GRID_COLUMNS = 12;
 const GRID_ROWS = 8;
 const DEFAULT_DRAW_MODE = "random";
 const DRAW_MODES = new Set(["in_order", "random"]);
-const SUPPORTED_WIDGET_TYPES = new Set(["text", "answer", "verified-answer", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
+const SUPPORTED_WIDGET_TYPES = new Set(["text", "masked-text", "answer", "verified-answer", "done", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
@@ -251,16 +251,19 @@ export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = 
     qcmWidgetCount: sample.qcmWidgetCount,
     selectionWidgetCount: sample.selectionWidgetCount,
     categoriesWidgetCount: sample.categoriesWidgetCount,
+    doneWidgetCount: sample.doneWidgetCount,
     responseWidgetCount: sample.responseWidgetCount,
     responseType: sample.responseType,
     primaryAnswerWidgetId: sample.primaryAnswerWidgetId,
     primaryQcmWidgetId: sample.primaryQcmWidgetId,
     primarySelectionWidgetId: sample.primarySelectionWidgetId,
     primaryCategoriesWidgetId: sample.primaryCategoriesWidgetId,
+    primaryDoneWidgetId: sample.primaryDoneWidgetId,
     primaryAnswerVisibleInQuestion: sample.primaryAnswerVisibleInQuestion,
     primaryQcmVisibleInQuestion: sample.primaryQcmVisibleInQuestion,
     primarySelectionVisibleInQuestion: sample.primarySelectionVisibleInQuestion,
     primaryCategoriesVisibleInQuestion: sample.primaryCategoriesVisibleInQuestion,
+    primaryDoneVisibleInQuestion: sample.primaryDoneVisibleInQuestion,
     expectedAnswer: sample.expectedAnswer,
     expectedAnswerLabel: sample.expectedAnswerLabel
   };
@@ -270,8 +273,10 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const safe = widget && typeof widget === "object" && !Array.isArray(widget) ? widget : {};
   const type = String(safe.type || "text").trim().toLowerCase();
   if (!SUPPORTED_WIDGET_TYPES.has(type)) return null;
+  const isMaskedText = type === "masked-text";
   const isAnswer = type === "answer";
   const isVerifiedAnswer = type === "verified-answer";
+  const isDone = type === "done";
   const isTextAnswer = isAnswer || isVerifiedAnswer;
   const isImage = type === "image";
   const isAudio = type === "audio";
@@ -281,8 +286,8 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const isSelectionWords = type === "selection-words";
   const isCategories = type === "categories";
 
-  const questionText = isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : String(safe.questionText ?? safe.question_text ?? "");
-  const correctionText = isNumericKeypad || isImage || isAudio || isLabels || isCategories ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
+  const questionText = isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.questionText ?? safe.question_text ?? "");
+  const correctionText = isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
   const questionImageSource = isImage
     ? normalizeQuizImageSource(safe.questionImageSource ?? safe.question_image_source ?? safe.imageSource ?? safe.image_source)
     : null;
@@ -308,7 +313,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     safe.column,
     safe.columnSpan ?? safe.column_span,
     sourceGridColumns,
-    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isTextAnswer ? 8 : 5
+    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isMaskedText || isTextAnswer ? 8 : isDone ? 3 : 5
   );
   const correctionArea = migrateHorizontalArea(
     safe.correctionColumn ?? safe.correction_column ?? safe.column,
@@ -319,16 +324,16 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const column = questionArea.column;
   const row = clampInt(safe.row, 1, GRID_ROWS, 1);
   const columnSpan = questionArea.columnSpan;
-  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio ? 2 : 1);
+  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio || isMaskedText ? 2 : 1);
   const overrides = normalizeCorrectionOverrides(safe.correctionOverrides || safe.correction_overrides || {});
-  const questionVisible = isNumericKeypad
+  const questionVisible = isNumericKeypad || isDone
     ? true
     : safe.questionVisible ?? safe.question_visible ?? safe.visibility !== "correction";
-  const correctionVisible = isNumericKeypad
+  const correctionVisible = isNumericKeypad || isDone
     ? false
     : safe.correctionVisible ?? safe.correction_visible ?? safe.visibility !== "question";
   const inheritedCorrectionVisibility = questionVisible ? "visible" : "hidden";
-  const correctionVisibility = isNumericKeypad
+  const correctionVisibility = isNumericKeypad || isDone
     ? "hidden"
     : normalizeCorrectionVisibility(
         safe.correctionVisibility ?? safe.correction_visibility,
@@ -341,7 +346,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   return {
     id: String(safe.id || `widget-${index + 1}`).trim() || `widget-${index + 1}`,
     type,
-    label: String(safe.label || (isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
+    label: String(safe.label || (isMaskedText ? "Texte masqué" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
     questionText,
     correctionText,
     questionHtml,
@@ -601,10 +606,12 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
   const qcmWidgets = materializedWidgets.filter((widget) => widget.type === "qcm-text");
   const selectionWidgets = materializedWidgets.filter((widget) => widget.type === "selection-words");
   const categoriesWidgets = materializedWidgets.filter((widget) => widget.type === "categories");
+  const doneWidgets = materializedWidgets.filter((widget) => widget.type === "done");
   const primaryAnswerWidget = answerWidgets[0] || null;
   const primaryQcmWidget = qcmWidgets[0] || null;
   const primarySelectionWidget = selectionWidgets[0] || null;
   const primaryCategoriesWidget = categoriesWidgets[0] || null;
+  const primaryDoneWidget = doneWidgets[0] || null;
   const correctionView = primaryAnswerWidget ? getWidgetView(primaryAnswerWidget, "correction") : null;
   const correctQcmChoice = primaryQcmWidget?.qcmChoices?.find((choice) => choice.isCorrect) || null;
   const selectionExpectedTokenIndexes = primarySelectionWidget
@@ -630,17 +637,22 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
     qcmWidgetCount: qcmWidgets.length,
     selectionWidgetCount: selectionWidgets.length,
     categoriesWidgetCount: categoriesWidgets.length,
-    responseWidgetCount: answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length,
-    responseType: primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryCategoriesWidget ? "categories" : primaryAnswerWidget?.type === "verified-answer" ? "verified-answer" : primaryAnswerWidget ? "answer" : "",
+    doneWidgetCount: doneWidgets.length,
+    responseWidgetCount: answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length + doneWidgets.length,
+    responseType: primaryDoneWidget ? "done" : primaryQcmWidget ? "qcm-text" : primarySelectionWidget ? "selection-words" : primaryCategoriesWidget ? "categories" : primaryAnswerWidget?.type === "verified-answer" ? "verified-answer" : primaryAnswerWidget ? "answer" : "",
     primaryAnswerWidgetId: primaryAnswerWidget?.id || "",
     primaryQcmWidgetId: primaryQcmWidget?.id || "",
     primarySelectionWidgetId: primarySelectionWidget?.id || "",
     primaryCategoriesWidgetId: primaryCategoriesWidget?.id || "",
+    primaryDoneWidgetId: primaryDoneWidget?.id || "",
     primaryAnswerVisibleInQuestion: Boolean(primaryAnswerWidget && getWidgetView(primaryAnswerWidget, "question")?.visible),
     primaryQcmVisibleInQuestion: Boolean(primaryQcmWidget && getWidgetView(primaryQcmWidget, "question")?.visible),
     primarySelectionVisibleInQuestion: Boolean(primarySelectionWidget && getWidgetView(primarySelectionWidget, "question")?.visible),
     primaryCategoriesVisibleInQuestion: Boolean(primaryCategoriesWidget && getWidgetView(primaryCategoriesWidget, "question")?.visible),
-    expectedAnswer: primaryQcmWidget
+    primaryDoneVisibleInQuestion: Boolean(primaryDoneWidget && getWidgetView(primaryDoneWidget, "question")?.visible),
+    expectedAnswer: primaryDoneWidget
+      ? ""
+      : primaryQcmWidget
       ? String(correctQcmChoice?.id || "")
       : primarySelectionWidget
         ? selectionExpectedTokenIndexes.join(",")
@@ -663,6 +675,23 @@ export function materializeQuizQuestionVariant(question = {}, variantIndex = 0){
 export function getWidgetView(widget, mode = "question"){
   if (!widget) return null;
   const visibilityState = getWidgetVisibilityState(widget, mode);
+  if (widget.type === "done") {
+    return normalizeViewBounds({
+      html:"",
+      text:"",
+      formatting:[],
+      placeholder:"",
+      column:widget.column,
+      row:widget.row,
+      columnSpan:widget.columnSpan,
+      rowSpan:widget.rowSpan,
+      textAlign:"center",
+      verticalAlign:"middle",
+      fontSize:widget.fontSize,
+      visible:mode !== "correction",
+      visibilityMode:mode !== "correction" ? "visible" : "hidden"
+    });
+  }
   if (widget.type === "numeric-keypad") {
     return normalizeViewBounds({
       html: "",
@@ -923,6 +952,15 @@ export function createQuestionDeck(questions = [], drawMode = DEFAULT_DRAW_MODE)
 }
 
 export function evaluateAnswer(question, rawAnswer = ""){
+  if (question?.responseType === "done") {
+    return {
+      submittedAnswer:"",
+      expectedAnswer:"",
+      comparisonMode:"none",
+      isCorrect:null,
+      completed:true
+    };
+  }
   if (question?.responseType === "categories") {
     const expected = normalizeCategoryAnswerMap(question?.expectedCategoryAssignments ?? question?.expectedAnswer);
     const submitted = normalizeCategoryAnswerMap(rawAnswer);
@@ -1002,7 +1040,7 @@ export function getQuizTestIssues(snapshot = {}){
     variants.forEach((variant, variantIndex) => {
       const suffix = variants.length > 1 ? `, variante ${variantIndex + 1}` : "";
       if (variant.responseWidgetCount !== 1) {
-        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « Réponse texte vérifiée », « QCM », « Sélection de mots » ou « Catégories »).`);
+        issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « Réponse texte vérifiée », « J’ai terminé », « QCM », « Sélection de mots » ou « Catégories »).`);
       } else if ((variant.responseType === "answer" || variant.responseType === "verified-answer") && !variant.primaryAnswerVisibleInQuestion) {
         issues.push(`Affichez la zone « Réponse de l’élève » de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "qcm-text" && !variant.primaryQcmVisibleInQuestion) {
@@ -1011,6 +1049,8 @@ export function getQuizTestIssues(snapshot = {}){
         issues.push(`Affichez la sélection de mots de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "categories" && !variant.primaryCategoriesVisibleInQuestion) {
         issues.push(`Affichez les catégories de la question ${index + 1}${suffix} dans la vue Question.`);
+      } else if (variant.responseType === "done" && !variant.primaryDoneVisibleInQuestion) {
+        issues.push(`Affichez le bouton « J’ai terminé » de la question ${index + 1}${suffix} dans la vue Question.`);
       } else if (variant.responseType === "categories" && !variant.categoryAssignmentValid) {
         issues.push(`Reliez le widget Catégories à des Étiquettes et classez toutes les étiquettes renseignées dans la question ${index + 1}${suffix}.`);
       } else if (variant.responseType === "qcm-text") {
@@ -1021,7 +1061,7 @@ export function getQuizTestIssues(snapshot = {}){
         }
       } else if (variant.responseType === "selection-words" && !variant.expectedTokenIndexes?.length) {
         issues.push(`Sélectionnez au moins un mot attendu dans la correction de la question ${index + 1}${suffix}.`);
-      } else if (!variant.expectedAnswer) {
+      } else if (variant.responseType !== "done" && !variant.expectedAnswer) {
         issues.push(`Renseignez la réponse attendue de la question ${index + 1}${suffix} dans la vue Correction.`);
       }
     });
@@ -1035,7 +1075,7 @@ function normalizeCorrectionVisibility(value, fallback = "visible"){
 }
 
 function getWidgetVisibilityState(widget, mode = "question"){
-  if (widget?.type === "numeric-keypad") {
+  if (widget?.type === "numeric-keypad" || widget?.type === "done") {
     const visible = mode !== "correction";
     return { visible, visibilityMode:visible ? "visible" : "hidden" };
   }

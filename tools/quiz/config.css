@@ -231,7 +231,6 @@ button.tool-choice-button.quiz-picker-button.quiz-picker-button--change:focus-vi
   place-items: center;
   padding: clamp(1rem, 3vw, 2.4rem);
   background: rgba(6, 12, 24, .62);
-  backdrop-filter: blur(4px);
 }
 
 .quiz-picker-modal {

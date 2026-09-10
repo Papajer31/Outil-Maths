@@ -200,7 +200,6 @@
   pointer-events:none;
   opacity:0;
   visibility:hidden;
-  backdrop-filter:blur(8px);
   transition:opacity .08s ease;
 }
 
@@ -246,7 +245,6 @@
   border:1px solid rgba(255,255,255,.12);
   border-radius:999px;
   background:rgba(0,0,0,.34);
-  backdrop-filter:blur(12px);
   box-shadow:0 16px 44px rgba(0,0,0,.24);
 }
 
@@ -370,7 +368,6 @@
   border-radius:14px;
   background:rgba(17,24,39,.94);
   box-shadow:0 18px 46px rgba(0,0,0,.30);
-  backdrop-filter:blur(12px);
   color:#fff;
 }
 
@@ -590,7 +587,6 @@
   border-radius:999px;
   background:rgba(17,24,39,.94);
   box-shadow:0 18px 46px rgba(0,0,0,.30);
-  backdrop-filter:blur(12px);
 }
 
 .ttp-drawbar-variant-row[hidden]{

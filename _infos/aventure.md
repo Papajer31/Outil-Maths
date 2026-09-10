@@ -1,6 +1,6 @@
 # Aventure — contrat fonctionnel et technique
 
-Dernière mise à jour : 2026-08-22.
+Dernière mise à jour : 2026-09-09.
 
 ## Objectif de rentrée
 
@@ -93,12 +93,12 @@ Les ouvertures suivantes reprennent la même journée et les mêmes passages. Un
 
 ### Case Objectif
 
-Le moteur devra :
+Le moteur :
 
-1. identifier le palier courant ;
-2. choisir une activité publiée de ce palier ;
-3. éviter autant que possible une répétition immédiate ;
-4. reprendre le niveau de question propre à cette activité dans le contexte Aventure.
+1. identifie le palier courant ;
+2. choisit une activité publiée de ce palier ;
+3. évite autant que possible une répétition immédiate ;
+4. reprend le niveau de question propre à cette activité dans le contexte Aventure.
 
 ### Case Activité
 
@@ -134,7 +134,7 @@ La jauge est bornée entre 0 et 50 et évolue question par question.
 
 ## Niveaux de question
 
-- niveau initial d’une activité : `2` ;
+- niveau initial d’une activité : `1` ;
 - bonne réponse : niveau `+1` ;
 - erreur : niveau `−1` ;
 - le niveau final devient le niveau initial de la tentative Aventure suivante pour cette activité ;
@@ -164,32 +164,40 @@ La séparation des contextes doit être respectée : le niveau atteint en Explor
 
 Les anciennes tables `adventure_objective_registry` et `teacher_adventure_objectives` sont historiques et ne sont plus utilisées par l’écran des menus.
 
-## MVP rentrée — état après le patch SQL 31
+## État après le patch SQL 43
 
-Le premier parcours élève est volontairement réduit aux **six passages obligatoires de type `activity`**. Pour ouvrir une nouvelle journée dans ce MVP, les six cases du jour doivent donc cibler des activités précises. Les cases `objective` restent dans les menus et seront réactivées dès que leur résolution automatique sera branchée.
+Les **six passages obligatoires** peuvent désormais cibler indifféremment une activité précise ou une case **Objectif**.
 
-Le patch SQL `31_adventure_required_activity_runtime.sql` prépare le runtime serveur :
+Pour une case Objectif :
 
-- niveau initial Aventure d’une activité = `2` ;
-- reprise du dernier `ended_level` de cette même activité en contexte `adventure` ;
-- liaison tentative ↔ passage via `metadata_json.adventure_passage_id` ;
-- matrice lente calculée côté serveur à chaque question ;
-- variation réellement appliquée stockée dans `student_activity_session_questions.points_awarded` ;
-- jauge bornée entre `0` et `50` ;
-- retries d’une même question idempotents ;
-- passage terminé lorsque la tentative est terminée ;
-- après les six obligatoires, passages 7 à 10 temporairement `skipped` et journée `completed` ;
-- une journée déjà figée reste reprenable même si le menu enseignant est ensuite modifié.
+- le dossier de niveau de l’OdApp est figé dans la journée élève ;
+- l’activité n’est pas choisie au début de la journée ;
+- lorsque ce passage devient le prochain à jouer, le serveur choisit le premier palier réellement disponible dont la jauge est inférieure à 50 ;
+- si tous les paliers sont à 50, le dernier palier reste jouable pour l’entretien ;
+- dans le palier choisi, le moteur évite autant que possible la répétition immédiate et privilégie les activités les moins récemment jouées ;
+- l’activité choisie est ensuite figée dans le passage : une interruption/reprise conserve exactement le même choix ;
+- le niveau de question reste propre à l’activité et au seul contexte Aventure, avec un premier démarrage à N1.
 
-`open_student_adventure_day` renvoie désormais `started_level` pour chaque passage possédant une activité. Le prochain patch client doit utiliser ce niveau pour construire la configuration d’exécution et fournir l’identifiant du passage dans les métadonnées de la tentative.
+La matrice lente continue d’être calculée côté serveur à chaque question et la jauge du palier réellement joué est mise à jour.
+
+Les passages **7 à 10 adaptatifs** sont désormais réellement joués. Ils ne sont résolus qu’un par un, après la fin des six obligatoires :
+
+- le pool est limité aux OdApp déjà rencontrés par l’élève ;
+- seuls les dossiers de niveau actifs possédant encore une activité Aventure publiée peuvent être choisis ;
+- le moteur calcule le palier courant de chaque OdApp, puis classe les candidats par jauge croissante ;
+- parmi les quatre adaptatifs, il privilégie d’abord des OdApp différents ;
+- à jauge égale, l’OdApp le moins récemment travaillé passe devant ;
+- le passage 8 n’est résolu qu’après la fin du 7, le 9 après le 8 et le 10 après le 9 : chaque résultat peut donc modifier le choix suivant ;
+- l’activité choisie est figée dans le passage pour garantir une reprise identique ;
+- chaque adaptatif conserve la limite actuelle de 5 questions ;
+- la journée n’est normalement clôturée qu’après les 10 passages.
+
+Si, exceptionnellement, aucun OdApp déjà rencontré n’est encore jouable (activité supprimée/dépubliée ou dossier désactivé), les adaptatifs restants sont marqués `skipped` pour ne pas bloquer l’élève.
 
 ## Ordre de réalisation restant
 
-1. Appliquer et valider `31_adventure_required_activity_runtime.sql`.
-2. Activer l’entrée Aventure côté élève et ouvrir/reprendre le jour courant.
-3. Lancer le premier passage `activity` avec son `started_level` et son `adventure_passage_id`.
-4. Revenir automatiquement à Aventure après l’activité et enchainer jusqu’au passage 6.
-5. Tester jauges, niveaux, interruption/reprise, retries et fin de journée avec plusieurs élèves.
-6. Réactiver les cases Objectif par sélection automatique du palier et de l’activité.
-7. Générer ensuite les quatre passages adaptatifs.
-8. Ajouter enfin vieillissement, rangs de maîtrise et reporting.
+1. Appliquer et valider `43_adventure_adaptive_passages.sql`.
+2. Tester une journée complète de 10 passages sur plusieurs profils de jauges.
+3. Vérifier la diversification des quatre adaptatifs et le recalcul après chaque passage.
+4. Faire un premier essai réel en classe avant de complexifier l’algorithme.
+5. Ajouter ensuite vieillissement, rangs de maîtrise et reporting.

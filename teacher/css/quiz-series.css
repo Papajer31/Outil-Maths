@@ -894,7 +894,6 @@
   justify-content:center;
   padding:24px;
   background:rgba(4,8,16,.72);
-  backdrop-filter:blur(3px);
 }
 
 .quiz-series-selection-picker-card{

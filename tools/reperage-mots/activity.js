@@ -1,9 +1,11 @@
 import {
   normalizeSettings,
+  setWordCatalog,
   pickQuestion,
   questionKey,
   evaluateSelection
 } from "./model.js";
+import { listPublicPhonologyWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -12,6 +14,7 @@ import {
 } from "../../shared/tool-instruction.js";
 
 let stylesReadyPromise = null;
+let phonologyWordCatalogPromise = null;
 
 const CURSIVE_LETTER_CLASS_BY_LETTER = new Map();
 "aceimnorsuvwx".split("").forEach((letter) => {
@@ -36,6 +39,7 @@ export function createActivity(initialContext = {}) {
       state.container = container;
       syncRuntimeState(state, context ?? state.latestContext);
       await injectActivityStyles();
+      await ensurePhonologyWordCatalog();
       renderShell(state);
       bindEvents(state);
       syncValidationState(state);
@@ -46,6 +50,7 @@ export function createActivity(initialContext = {}) {
       if (!state.container) return;
       syncRuntimeState(state, context ?? state.latestContext);
       await injectActivityStyles();
+      await ensurePhonologyWordCatalog();
 
       if (!state.root?.isConnected || state.root?.dataset.responseUi !== state.responseUi) {
         renderShell(state);
@@ -347,6 +352,23 @@ function getStudentSelection(state) {
 
 function syncValidationState(state) {
   state.latestContext?.services?.notifyValidationStateChanged?.();
+}
+
+async function ensurePhonologyWordCatalog() {
+  if (!phonologyWordCatalogPromise) {
+    phonologyWordCatalogPromise = listPublicPhonologyWords()
+      .then((rows) => {
+        const words = Array.isArray(rows) ? rows : [];
+        setWordCatalog(words);
+        return words;
+      })
+      .catch((error) => {
+        phonologyWordCatalogPromise = null;
+        setWordCatalog([]);
+        throw error;
+      });
+  }
+  return await phonologyWordCatalogPromise;
 }
 
 function teardownState(state, container) {

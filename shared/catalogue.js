@@ -794,6 +794,31 @@ function isQuizSeriesSettings(settings = null) {
   return editorMode === "series" || Boolean(seriesModelId);
 }
 
+function hasConfiguredQuizSnapshot(settings = null) {
+  const safe = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const snapshot = safe.quizSnapshot ?? safe.quiz_snapshot ?? safe.snapshot ?? null;
+  return !!(snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    && Array.isArray(snapshot.questions) && snapshot.questions.length > 0);
+}
+
+function getQuizLevelSettingsWithFallback(activity = {}, levelSettings = {}) {
+  const safeLevel = levelSettings && typeof levelSettings === "object" && !Array.isArray(levelSettings)
+    ? levelSettings
+    : {};
+  if (String(activity?.tool_id ?? activity?.toolId ?? "").trim() !== "quiz") return safeLevel;
+  if (hasConfiguredQuizSnapshot(safeLevel) || !hasConfiguredQuizSnapshot(activity?.settings)) return safeLevel;
+
+  // L'éditeur de catalogue s'ouvre au niveau 3, alors que l'adaptatif élève
+  // démarre au niveau 1. Un niveau Quiz encore vierge hérite donc du snapshot
+  // de référence de l'activité au lieu de lancer un quiz vide. Les éventuels
+  // réglages communs propres au niveau restent prioritaires.
+  const { quizSnapshot, quiz_snapshot, snapshot, ...levelOverrides } = safeLevel;
+  return {
+    ...(activity.settings && typeof activity.settings === "object" && !Array.isArray(activity.settings) ? activity.settings : {}),
+    ...levelOverrides
+  };
+}
+
 function getCatalogActivitySettingsCandidates(activity = {}) {
   const candidates = [];
   const push = (value) => {
@@ -856,7 +881,7 @@ export function buildCatalogActivityConfig(activityOrId, options = {}) {
   const difficultyLevel = clampDifficultyLevel(options.difficultyLevel ?? 3);
   const levelConfig = getCatalogLevelConfig(activity, difficultyLevel);
   const difficultyLevels = normalizeDifficultyLevels(activity.difficulty_levels);
-  const levelSettings = levelConfig.settings;
+  const levelSettings = getQuizLevelSettingsWithFallback(activity, levelConfig.settings);
   const settings = pickCatalogConfigValue(options, runtimeOverrides, "settings", levelSettings ?? activity.settings ?? null);
   const legacyQuestionCount = pickCatalogConfigValue(
     options,

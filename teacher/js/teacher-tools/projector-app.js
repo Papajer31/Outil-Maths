@@ -3966,7 +3966,13 @@ function renderWidget(widget, existingFrame = null){
   else {
     resizeHandle.hidden = false;
   }
-  frame.append(chrome, body, bottomChrome, resizeHandle);
+  // Ne pas réinsérer les nœuds déjà montés à chaque rendu : déplacer un
+  // sous-arbre contenant l'élément actif fait perdre le focus (notamment aux
+  // éditeurs contenteditable). Les nouveaux nœuds sont ajoutés une seule fois.
+  if (chrome.parentNode !== frame) frame.appendChild(chrome);
+  if (body.parentNode !== frame) frame.appendChild(body);
+  if (bottomChrome.parentNode !== frame) frame.appendChild(bottomChrome);
+  if (resizeHandle.parentNode !== frame) frame.appendChild(resizeHandle);
   syncDrawingLayerResizeHandles(frame, widget, sceneLocked || interaction.resize === false || widgetLocked);
   tool.renderProjector?.({
     host: body,
@@ -4040,7 +4046,10 @@ function render(){
           });
           existingFrame.remove();
         }
-        widgetHost.append(frame);
+        // Un frame déjà présent n'a pas besoin d'être append à nouveau. Le
+        // z-index porte l'ordre visuel ; éviter ce déplacement préserve le focus
+        // des contrôles interactifs internes pendant les synchronisations d'état.
+        if (frame.parentNode !== widgetHost) widgetHost.append(frame);
         syncFrameLayoutForView(frame, widget);
       }
     });

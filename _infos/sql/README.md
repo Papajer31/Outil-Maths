@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-09-03.
+Dernière mise à jour : 2026-09-09.
 
 ## Règle absolue
 
@@ -38,6 +38,9 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `38` | audios système de l’interface élève | **migration à appliquer avant l’enregistrement des consignes audio** |
 | `39` | cycle de vie des Missions et sessions de réactivation | **migration à appliquer avant la désactivation/réactivation automatique des Missions** |
 | `40` | niveau initial des activités adaptatives à N1, sans modifier les progressions existantes | **migration à appliquer avec le patch de rentrée du 03/09/2026** |
+| `41` | Quiz directs utilisables comme étapes de Mission | **migration active** |
+| `42` | résolution réelle des cases Objectif en Aventure : palier courant + activité figée au moment du passage | **migration à appliquer avant d’utiliser des cases Objectif côté élève** |
+| `43` | passages adaptatifs Aventure 7 à 10 : OdApp faibles déjà rencontrés, diversification et clôture après 10 passages | **migration à appliquer avant d’activer les quatre adaptatifs côté élève** |
 
 ## Script spécial d’arborescence
 

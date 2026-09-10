@@ -893,7 +893,6 @@ body .dashboard-share-popup.cfg-share-popup{
   position:fixed;
   inset:0;
   background: rgba(4, 8, 18, 0.62);
-  backdrop-filter: blur(4px);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -3516,7 +3515,6 @@ body .dashboard-share-popup.cfg-share-popup{
   position:absolute;
   inset:0;
   background:rgba(0,0,0,.55);
-  backdrop-filter:blur(4px);
 }
 
 .cfg-tool-picker-modal .cfg-modal-backdrop{
@@ -5733,7 +5731,6 @@ body.dashboard-catalog-test-fullscreen-lock{
   inset:0 0 0 26px;
   z-index:3;
   background:rgba(24,28,37,.94);
-  backdrop-filter:blur(3px);
 }
 
 .adventure-slot-choice-btn{

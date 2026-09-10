@@ -221,10 +221,10 @@ export async function startNextAdventurePassage(){
   }
   if (!day || day.availability !== "ready" || day.day_status === "completed") return false;
 
-  const requiredPassages = (Array.isArray(day.passages) ? day.passages : [])
-    .filter((passage) => String(passage?.passage_type || "") === "required")
+  const passages = (Array.isArray(day.passages) ? day.passages : [])
+    .slice()
     .sort((a, b) => Number(a?.passage_number || 0) - Number(b?.passage_number || 0));
-  const passage = requiredPassages.find((item) => !["completed", "skipped"].includes(String(item?.status || ""))) || null;
+  const passage = passages.find((item) => !["completed", "skipped"].includes(String(item?.status || ""))) || null;
 
   if (!passage) {
     await refreshAdventureDay();

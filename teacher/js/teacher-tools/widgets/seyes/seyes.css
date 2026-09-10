@@ -1,0 +1,456 @@
+@font-face{
+  font-family:"SeyesBelleAllureGS";
+  src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-FIN.OTF") format("opentype");
+  font-weight:400;
+  font-style:normal;
+  font-display:block;
+}
+
+@font-face{
+  font-family:"SeyesBelleAllureGS";
+  src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-GROS.OTF") format("opentype");
+  font-weight:700;
+  font-style:normal;
+  font-display:block;
+}
+
+@font-face{
+  font-family:"SeyesBelleAllureCM";
+  src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-FIN.OTF") format("opentype");
+  font-weight:400;
+  font-style:normal;
+  font-display:block;
+}
+
+@font-face{
+  font-family:"SeyesBelleAllureCM";
+  src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-GROS.OTF") format("opentype");
+  font-weight:700;
+  font-style:normal;
+  font-display:block;
+}
+
+/* ========================================
+   WIDGET TABLEAU — SEYÈS
+======================================== */
+
+.tt-seyes-control{
+  min-width:0;
+}
+
+.tt-seyes-control .tt-control-panel-head p{
+  margin:5px 0 0;
+  color:rgba(255,255,255,.62);
+  font-size:13px;
+  line-height:1.35;
+}
+
+.tt-seyes-settings-grid{
+  display:grid;
+  grid-template-columns:minmax(190px, .65fr) minmax(260px, 1.35fr);
+  gap:14px;
+}
+
+.tt-seyes-settings-section{
+  min-width:0;
+  padding:12px;
+  border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.045);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.tt-seyes-section-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  color:#eef3ff;
+  font-size:13px;
+  font-weight:900;
+}
+
+.tt-seyes-section-title strong{
+  color:#fff;
+  font-size:13px;
+}
+
+.tt-seyes-font-buttons .tt-widget-action-btn{
+  min-width:62px;
+}
+
+.tt-seyes-zoom-range{
+  width:100%;
+  accent-color:#7c98ff;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"]{
+  background:#fff;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-body{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  height:auto;
+  min-height:0;
+  padding:0;
+  overflow:hidden;
+  background:#fff;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-chrome,
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-bottom-chrome{
+  position:absolute;
+  left:0;
+  right:0;
+  z-index:20;
+  background:transparent;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-chrome{
+  top:0;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-bottom-chrome{
+  bottom:0;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-resize{
+  z-index:30;
+}
+
+.ttp-seyes-root{
+  --ttp-seyes-line:60.472440945px;
+  --ttp-seyes-subline:15.118110236px;
+  --ttp-seyes-margin:60.472440945px;
+  --ttp-seyes-first-fine:55.559055118px;
+  --ttp-seyes-first-main:100.913385827px;
+  --ttp-seyes-font-size:38px;
+  --ttp-seyes-safe-left:16px;
+  --ttp-seyes-safe-top:58px;
+  --ttp-seyes-safe-bottom:58px;
+  --ttp-seyes-editor-left:76.472440945px;
+  --ttp-seyes-editor-top:86px;
+  --ttp-seyes-editor-bottom:118.472440945px;
+  --ttp-seyes-font-family:"SeyesBelleAllureGS";
+  position:relative;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+  background:#fff;
+  color:#111827;
+  font-synthesis:style;
+}
+
+.ttp-seyes-viewport{
+  position:absolute;
+  inset:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  background:#fff;
+}
+
+.ttp-seyes-sheet{
+  position:relative;
+  min-width:100%;
+  min-height:100%;
+  background:#fff;
+  isolation:isolate;
+}
+
+.ttp-seyes-grid{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  width:100%;
+  height:100%;
+  min-height:100%;
+  overflow:visible;
+  pointer-events:none;
+  shape-rendering:geometricPrecision;
+}
+
+.ttp-seyes-paper-line{
+  fill:none;
+  stroke-linecap:square;
+  stroke-linejoin:miter;
+  vector-effect:non-scaling-stroke;
+}
+
+.ttp-seyes-paper-line.is-minor{
+  stroke:rgb(171,207,255);
+  stroke-width:1;
+}
+
+.ttp-seyes-paper-line.is-major{
+  stroke:rgb(118,178,255);
+  stroke-width:1.6;
+}
+
+.ttp-seyes-paper-line.is-margin{
+  stroke:rgb(255,96,96);
+  stroke-width:1.5;
+}
+
+.ttp-seyes-editor{
+  position:relative;
+  z-index:2;
+  box-sizing:border-box;
+  width:100%;
+  min-height:100%;
+  margin:0;
+  border:0;
+  outline:0;
+  padding:
+    var(--ttp-seyes-editor-top)
+    calc(var(--ttp-seyes-line) * .5)
+    var(--ttp-seyes-editor-bottom)
+    var(--ttp-seyes-editor-left);
+  background:transparent;
+  color:#427ebe;
+  caret-color:#111827;
+  font-family:var(--ttp-seyes-font-family);
+  font-size:var(--ttp-seyes-font-size);
+  font-weight:400;
+  font-style:normal;
+  line-height:var(--ttp-seyes-line);
+  white-space:pre-wrap;
+  overflow-wrap:break-word;
+  word-break:normal;
+  text-align:left;
+  cursor:text;
+  tab-size:4;
+}
+
+.ttp-seyes-editor:empty::before{
+  content:"Écrire ici…";
+  color:rgba(66,126,190,.30);
+  pointer-events:none;
+}
+
+.ttp-seyes-editor div,
+.ttp-seyes-editor p{
+  min-height:var(--ttp-seyes-line);
+  margin:0;
+  padding:0;
+  line-height:var(--ttp-seyes-line);
+}
+
+.ttp-seyes-editor b,
+.ttp-seyes-editor strong{
+  font-weight:700;
+}
+
+.ttp-seyes-editor i,
+.ttp-seyes-editor em{
+  font-style:italic;
+}
+
+.ttp-seyes-baseline-probe{
+  position:absolute;
+  z-index:-1;
+  top:0;
+  left:0;
+  visibility:hidden;
+  pointer-events:none;
+  white-space:nowrap;
+  font-family:var(--ttp-seyes-font-family);
+  font-size:var(--ttp-seyes-font-size);
+  font-weight:400;
+  font-style:normal;
+  line-height:var(--ttp-seyes-line);
+}
+
+.ttp-seyes-baseline-probe [data-seyes-baseline-marker]{
+  display:inline-block;
+  width:0;
+  height:0;
+  padding:0;
+  margin:0;
+  vertical-align:baseline;
+}
+
+.ttp-seyes-font-status{
+  position:absolute;
+  z-index:5;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:rgba(255,255,255,.96);
+  color:#475569;
+  font-family:Andika, sans-serif;
+  font-size:15px;
+  font-weight:800;
+  text-align:center;
+}
+
+.ttp-seyes-root.is-font-loading .ttp-seyes-font-status{
+  display:flex;
+}
+
+.ttp-seyes-root.is-font-error .ttp-seyes-font-status{
+  display:flex;
+  color:#b91c1c;
+}
+
+.ttp-seyes-root.is-font-error .ttp-seyes-font-status::before{
+  content:"Belle Allure n’a pas pu être chargée.";
+}
+
+.ttp-seyes-root.is-font-error .ttp-seyes-font-status{
+  font-size:0;
+}
+
+.ttp-seyes-root.is-font-error .ttp-seyes-font-status::before{
+  font-size:15px;
+}
+
+.ttp-seyes-toolbar{
+  position:absolute;
+  z-index:10;
+  left:50%;
+  top:calc(var(--ttp-widget-chrome-height) + 10px);
+  transform:translateX(-50%);
+  max-width:calc(100% - 24px);
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 8px;
+  border:1px solid rgba(15,23,42,.18);
+  border-radius:10px;
+  background:rgba(15,23,42,.90);
+  box-shadow:0 7px 18px rgba(15,23,42,.18);
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:thin;
+  color:#fff;
+}
+
+.ttp-seyes-tool-group{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+
+.ttp-seyes-tool-group + .ttp-seyes-tool-group{
+  padding-left:8px;
+  border-left:1px solid rgba(255,255,255,.16);
+}
+
+.ttp-seyes-tool-btn{
+  flex:0 0 auto;
+  min-width:32px;
+  height:30px;
+  padding:0 8px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:6px;
+  background:rgba(255,255,255,.07);
+  color:#fff;
+  font:inherit;
+  font-size:13px;
+  font-weight:800;
+  line-height:1;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.ttp-seyes-tool-btn:hover:not(:disabled),
+.ttp-seyes-tool-btn[aria-pressed="true"]{
+  background:rgba(124,152,255,.28);
+  border-color:rgba(164,181,255,.62);
+}
+
+.ttp-seyes-tool-btn:disabled{
+  opacity:.35;
+  cursor:default;
+}
+
+.ttp-seyes-tool-btn.is-format{
+  font-family:Georgia, "Times New Roman", serif;
+  font-size:18px;
+}
+
+.ttp-seyes-color-swatch{
+  width:23px;
+  height:23px;
+  flex:0 0 23px;
+  padding:0;
+  border:1px solid rgba(255,255,255,.78);
+  border-radius:4px;
+  background:var(--ttp-seyes-swatch);
+  cursor:pointer;
+}
+
+.ttp-seyes-color-swatch:hover{
+  outline:2px solid rgba(255,255,255,.72);
+  outline-offset:1px;
+}
+
+.ttp-seyes-custom-color{
+  position:relative;
+  width:28px;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:6px;
+  background:rgba(255,255,255,.07);
+  cursor:pointer;
+  overflow:hidden;
+}
+
+.ttp-seyes-custom-color input{
+  position:absolute;
+  inset:-8px;
+  width:calc(100% + 16px);
+  height:calc(100% + 16px);
+  opacity:0;
+  cursor:pointer;
+}
+
+.ttp-seyes-custom-color .ttp-material-icon{
+  font-size:18px;
+  pointer-events:none;
+}
+
+.ttp-seyes-zoom-value{
+  min-width:46px;
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+  white-space:nowrap;
+}
+
+.ttp-widget-frame[data-tool-id="seyes"].is-collapsed .ttp-seyes-toolbar{
+  display:none;
+}
+
+.ttp-stage[data-background="seyes"] .ttp-widget-frame[data-tool-id="seyes"]{
+  border-color:rgba(15,23,42,.16);
+}
+
+@media (max-width:760px){
+  .tt-seyes-settings-grid{
+    grid-template-columns:1fr;
+  }
+
+  .ttp-seyes-toolbar{
+    left:8px;
+    right:8px;
+    max-width:none;
+    transform:none;
+  }
+}

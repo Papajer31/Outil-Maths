@@ -363,11 +363,12 @@ function renderMissingTokenFeedback({ role, index, targetCount }) {
 }
 
 function renderSpeechBubble({ name, count }) {
+  const tokenLabel = count === 1 ? "jeton" : "jetons";
   return `
-    <div class="comparaison-speech" aria-label="${escapeHtml(name)} dit : J’ai ${escapeHtml(count)} jetons.">
+    <div class="comparaison-speech" aria-label="${escapeHtml(name)} dit : J’ai ${escapeHtml(count)} ${tokenLabel}.">
       <span>J’ai</span>
       <strong>${escapeHtml(count)}</strong>
-      <span>jetons.</span>
+      <span>${tokenLabel}.</span>
     </div>
   `;
 }

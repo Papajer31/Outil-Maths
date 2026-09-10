@@ -278,19 +278,21 @@ function renderAdventureContent(){
     `;
   }
 
-  const requiredPassages = (Array.isArray(day.passages) ? day.passages : [])
-    .filter((passage) => String(passage?.passage_type || "") === "required")
+  const passages = (Array.isArray(day.passages) ? day.passages : [])
+    .slice()
     .sort((a, b) => Number(a?.passage_number || 0) - Number(b?.passage_number || 0));
-  const completedCount = requiredPassages.filter((passage) => String(passage?.status || "") === "completed").length;
-  const nextPassage = requiredPassages.find((passage) => !["completed", "skipped"].includes(String(passage?.status || ""))) || null;
-  const isCompleted = String(day?.day_status || "") === "completed" || completedCount >= 6;
+  const completedCount = passages.filter((passage) => String(passage?.status || "") === "completed").length;
+  const settledCount = passages.filter((passage) => ["completed", "skipped"].includes(String(passage?.status || ""))).length;
+  const totalPassages = Math.max(1, passages.length || 10);
+  const nextPassage = passages.find((passage) => !["completed", "skipped"].includes(String(passage?.status || ""))) || null;
+  const isCompleted = String(day?.day_status || "") === "completed" || settledCount >= totalPassages;
 
   if (isCompleted) {
     return `
       <div class="activities-placeholder">
         <div style="font-size:1.35rem;font-weight:700;">Bravo !</div>
         <div style="margin-top:.5rem;">Ton Aventure du jour est terminée.</div>
-        <div style="margin-top:.35rem;opacity:.75;">6 activités sur 6</div>
+        <div style="margin-top:.35rem;opacity:.75;">${escapeHtml(`${settledCount} étapes sur ${totalPassages}`)}</div>
       </div>
     `;
   }
@@ -325,14 +327,14 @@ function renderAdventureContent(){
         >
           ${renderActivityPlanet(`adventure:passage:${passageNumber}`)}
         </span>
-        <span class="activity-tile-label">${escapeHtml(`${verb} · ${passageNumber}/6`)}</span>
+        <span class="activity-tile-label">${escapeHtml(`${verb} · ${passageNumber}/${totalPassages}`)}</span>
         <span class="activity-tile-hint" style="display:block;text-align:center;font-size:0.8rem;opacity:0.78;">
           ${escapeHtml(activityLabel)}
         </span>
       </button>
     </div>
     <div class="activities-placeholder" style="padding-top:.5rem;">
-      ${escapeHtml(`${completedCount} activité${completedCount > 1 ? "s" : ""} terminée${completedCount > 1 ? "s" : ""} sur 6`)}
+      ${escapeHtml(`${completedCount} activité${completedCount > 1 ? "s" : ""} terminée${completedCount > 1 ? "s" : ""} sur ${totalPassages}`)}
     </div>
   `;
 }

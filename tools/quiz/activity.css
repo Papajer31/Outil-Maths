@@ -699,3 +699,102 @@
 .quiz-runtime-widget--labels.is-correction .quiz-runtime-label-chip{
   cursor:default;
 }
+
+/* Texte masqué — le modèle n'est visible que pendant le maintien simultané
+   des deux touches Maj physiques. */
+.quiz-runtime-widget--masked-text{
+  position:relative;
+  color:var(--tool-question-color,#fff);
+  text-align:var(--quiz-runtime-text-align,center);
+  font-size:var(--quiz-runtime-target-font-size,var(--runtime-font-normal,48px));
+  font-weight:var(--tool-text-font-weight,500);
+  line-height:1.12;
+  overflow:hidden;
+}
+
+.quiz-runtime-masked-text-model{
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .08s linear;
+  pointer-events:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+.quiz-runtime-masked-text-cover{
+  position:absolute;
+  inset:clamp(4px,.45vmin,8px);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(5px,.55vmin,9px);
+  padding:clamp(8px,1vmin,16px);
+  border:2px dashed rgba(255,255,255,.34);
+  border-radius:clamp(12px,1.4vmin,20px);
+  background:rgba(255,255,255,.055);
+  color:rgba(255,255,255,.88);
+  text-align:center;
+  pointer-events:none;
+  transition:opacity .08s linear;
+}
+
+.quiz-runtime-masked-text-cover strong{
+  font-size:clamp(18px,2.15vmin,30px);
+  line-height:1.15;
+}
+
+.quiz-runtime-masked-text-cover small{
+  font-size:clamp(13px,1.35vmin,18px);
+  color:rgba(255,255,255,.58);
+}
+
+.quiz-runtime-masked-text-keyboard-map{
+  width:min(90%, 480px);
+  line-height:0;
+}
+
+.quiz-runtime-masked-text-keyboard{
+  display:block;
+  width:100%;
+  height:auto;
+  object-fit:contain;
+}
+
+.quiz-runtime-widget--masked-text.is-visible .quiz-runtime-masked-text-model{
+  opacity:1;
+  visibility:visible;
+}
+
+.quiz-runtime-widget--masked-text.is-visible .quiz-runtime-masked-text-cover{
+  opacity:0;
+  visibility:hidden;
+}
+
+.quiz-runtime-widget--masked-text.is-correction-visible .quiz-runtime-widget-content{
+  opacity:1;
+}
+
+/* Réponse « J'ai terminé » — même langage visuel que le bouton Valider
+   habituel du runtime, mais placé dans la grille du quiz. */
+.quiz-runtime-widget--done{
+  align-items:center;
+  justify-content:center;
+  padding:clamp(6px,.6vmin,10px);
+}
+
+.quiz-runtime-done-button.student-manual-btn{
+  position:static;
+  top:auto;
+  left:auto;
+  transform:none;
+  width:min(100%,560px);
+  max-width:100%;
+  min-width:min(220px,100%);
+  min-height:var(--runtime-session-control-min-height,58px);
+  height:auto;
+  margin:0;
+  padding:var(--runtime-session-control-padding-y,10px) calc(var(--runtime-session-control-padding-x,16px) + 6px);
+  font-size:var(--runtime-session-control-font-size,28px);
+  font-weight:800;
+}
