@@ -13,14 +13,6 @@ import {
 } from "./audio-recorder-dialog.js";
 import { QUESTION_MODELS } from "./quiz-question-models.js";
 import {
-  getDefaultQuizRuntimeSettings,
-  normalizeQuizRuntimeSettings
-} from "../../../tools/quiz/model.js";
-import {
-  readQuizRuntimeSettingsEditor,
-  renderQuizRuntimeSettingsEditor
-} from "./quiz-runtime-settings-ui.js";
-import {
   findQuizSelectionIndexesFromText,
   formatQuizSelectionIndexes,
   getQuizSelectionWordCount,
@@ -31,6 +23,10 @@ import {
 
 const GRID_COLUMNS = 12;
 const GRID_ROWS = 8;
+const DEFAULT_QUESTION_TIMER_SECONDS = 5;
+const MAX_QUESTION_TIMER_SECONDS = 300;
+const VARIANT_DRAW_MODES = new Set(["in_order", "random"]);
+const DEFAULT_VARIANT_DRAW_MODE = "in_order";
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
@@ -72,6 +68,14 @@ const QUESTION_ELEMENTS = [
     detail: "Le runtime compte les consultations et leur durée."
   },
   {
+    id: "flash-text",
+    group: "content",
+    icon: "bolt",
+    title: "Texte flash",
+    description: "Texte affiché automatiquement pendant une durée définie.",
+    detail: "Un compte à rebours en points précède son apparition."
+  },
+  {
     id: "answer",
     group: "response",
     icon: "short_text",
@@ -102,6 +106,14 @@ const QUESTION_ELEMENTS = [
     title: "Image",
     description: "Image des ressources ou image importée.",
     detail: "Toujours affichée sans recadrage."
+  },
+  {
+    id: "flash-image",
+    group: "content",
+    icon: "image",
+    title: "Image flash",
+    description: "Image affichée automatiquement pendant une durée définie.",
+    detail: "Un compte à rebours en points précède son apparition."
   },
   {
     id: "audio",
@@ -681,19 +693,33 @@ function getWidgetMinimumGridSize(type = ""){
   if (type === "categories") return { columnSpan:4, rowSpan:2 };
   if (type === "labels") return { columnSpan:4, rowSpan:3 };
   if (type === "qcm-text") return { columnSpan:3, rowSpan:1 };
-  if (type === "image" || type === "audio") return { columnSpan:2, rowSpan:2 };
+  if (type === "image" || type === "flash-image" || type === "audio") return { columnSpan:2, rowSpan:2 };
   return { columnSpan:1, rowSpan:1 };
+}
+
+function normalizeFlashDelaySeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 5;
+  return clamp(Math.round(numeric), 0, 60);
+}
+
+function normalizeFlashVisibleSeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 3;
+  return clamp(Math.round(numeric * 2) / 2, 0.5, 60);
 }
 
 function createWidget(source = {}){
   const rawType = String(source.type || "text").trim().toLowerCase();
-  const type = ["text", "masked-text", "answer", "verified-answer", "done", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
+  const type = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
   const isMaskedText = type === "masked-text";
+  const isFlashText = type === "flash-text";
+  const isFlashImage = type === "flash-image";
   const isAnswer = type === "answer";
   const isDone = type === "done";
   const isVerifiedAnswer = type === "verified-answer";
   const isTextAnswer = isAnswer || isVerifiedAnswer;
-  const isImage = type === "image";
+  const isImage = type === "image" || isFlashImage;
   const isAudio = type === "audio";
   const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
@@ -704,6 +730,8 @@ function createWidget(source = {}){
     ? (isVerifiedAnswer ? "Réponse vérifiée de l’élève" : "Réponse de l’élève")
     : isMaskedText
       ? "Saisissez le texte que l’élève devra mémoriser"
+      : isFlashText
+        ? "Saisissez le texte à afficher brièvement"
       : isSelectionWords
         ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
         : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories
@@ -751,8 +779,8 @@ function createWidget(source = {}){
   const minimumGridSize = getWidgetMinimumGridSize(type);
   const column = clamp(Number(source.column) || 1, 1, GRID_COLUMNS);
   const row = clamp(Number(source.row) || 1, 1, GRID_ROWS);
-  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText ? 7 : isDone ? 3 : 5), minimumGridSize.columnSpan, GRID_COLUMNS);
-  const rowSpan = clamp(Number(source.rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText ? 2 : isImage || isAudio ? 2 : 1), minimumGridSize.rowSpan, GRID_ROWS);
+  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText ? 7 : isDone ? 3 : 5), minimumGridSize.columnSpan, GRID_COLUMNS);
+  const rowSpan = clamp(Number(source.rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText || isFlashText ? 2 : isImage || isAudio ? 2 : 1), minimumGridSize.rowSpan, GRID_ROWS);
   const textAlign = source.textAlign || "center";
   const verticalAlign = source.verticalAlign || "middle";
   const sourceOverrides = source.correctionOverrides || {};
@@ -773,7 +801,7 @@ function createWidget(source = {}){
   return {
     id: source.id || createId("widget"),
     type,
-    label: source.label || (isMaskedText ? "Texte masqué" : isDone ? "J’ai terminé" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte"),
+    label: source.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte"),
     questionText,
     correctionText,
     questionPlaceholder: String(source.questionPlaceholder ?? defaultQuestionPlaceholder),
@@ -803,6 +831,10 @@ function createWidget(source = {}){
     correctionVerticalAlign: source.correctionVerticalAlign || verticalAlign,
     fontSize: normalizeQuizFontSize(source.fontSize ?? source.font_size),
     correctionFontSize: normalizeQuizFontSize(source.correctionFontSize ?? source.correction_font_size ?? source.fontSize ?? source.font_size),
+    ...((isFlashText || isFlashImage) ? {
+      flashDelaySeconds: normalizeFlashDelaySeconds(source.flashDelaySeconds ?? source.flash_delay_seconds),
+      flashVisibleSeconds: normalizeFlashVisibleSeconds(source.flashVisibleSeconds ?? source.flash_visible_seconds)
+    } : {}),
     qcmLayout: normalizeQcmLayout(source.qcmLayout ?? source.qcm_layout),
     qcmChoices: isQcmText
       ? normalizeQcmChoices(source.qcmChoices ?? source.qcm_choices ?? source.choices)
@@ -906,7 +938,7 @@ function getWidgetView(widget, mode = "question"){
     };
   }
 
-  if (widget?.type === "image") {
+  if (widget?.type === "image" || widget?.type === "flash-image") {
     const overrides = widget.correctionOverrides || {};
     const correctionMode = mode === "correction";
     return {
@@ -1079,7 +1111,7 @@ function captureWidgetVariantContent(widget){
       getQuizSelectionWordCount(widget.questionText)
     );
   }
-  if (widget.type === "image") {
+  if (widget.type === "image" || widget.type === "flash-image") {
     content.questionImageSource = normalizeQuizImageSource(widget.questionImageSource);
     content.correctionImageSource = normalizeQuizImageSource(widget.correctionImageSource ?? widget.questionImageSource);
     content.correctionImageOverridden = Boolean(widget.correctionOverrides?.image);
@@ -1105,7 +1137,7 @@ function ensureVariantContentShape(widget){
       getQuizSelectionWordCount(widget.questionText)
     );
   }
-  if (widget.type === "image") {
+  if (widget.type === "image" || widget.type === "flash-image") {
     widget.questionImageSource = normalizeQuizImageSource(widget.questionImageSource);
     widget.correctionImageSource = normalizeQuizImageSource(widget.correctionImageSource ?? widget.questionImageSource);
   }
@@ -1132,7 +1164,7 @@ function applyWidgetVariantContent(widget, source = {}){
       getQuizSelectionWordCount(source.questionText ?? widget.questionText)
     );
   }
-  if (widget.type === "image") {
+  if (widget.type === "image" || widget.type === "flash-image") {
     widget.questionImageSource = normalizeQuizImageSource(source.questionImageSource ?? source.question_image_source ?? widget.questionImageSource);
     widget.correctionImageSource = normalizeQuizImageSource(
       source.correctionImageSource ?? source.correction_image_source ?? widget.correctionImageSource ?? widget.questionImageSource
@@ -1191,7 +1223,7 @@ function createVariantFromWidgets(widgets = [], source = {}){
               getQuizSelectionWordCount(content.questionText ?? content.question_text ?? widget.questionText)
             )
           } : {}),
-          ...(widget.type === "image" ? {
+          ...((widget.type === "image" || widget.type === "flash-image") ? {
             questionImageSource: normalizeQuizImageSource(content.questionImageSource ?? content.question_image_source ?? widget.questionImageSource),
             correctionImageSource: normalizeQuizImageSource(
               content.correctionImageSource ?? content.correction_image_source ?? widget.correctionImageSource ?? widget.questionImageSource
@@ -1216,9 +1248,12 @@ function createVariantFromWidgets(widgets = [], source = {}){
 
 function normalizeQuestionVariants(sourceVariants, widgets = []){
   const variants = Array.isArray(sourceVariants) && sourceVariants.length
-    ? sourceVariants.map((variant) => createVariantFromWidgets(widgets, variant))
-    : [createVariantFromWidgets(widgets)];
-  return variants.length ? variants : [createVariantFromWidgets(widgets)];
+    ? sourceVariants.map((variant, index) => createVariantFromWidgets(widgets, {
+        ...(variant && typeof variant === "object" ? variant : {}),
+        id:String(variant?.id || `variant-${index + 1}`)
+      }))
+    : [createVariantFromWidgets(widgets, { id:"variant-1" })];
+  return variants.length ? variants : [createVariantFromWidgets(widgets, { id:"variant-1" })];
 }
 
 function parseMiniMarkup(value){
@@ -1514,7 +1549,7 @@ function getWidgetStyle(widgetView){
 function getTemplatePreviewMarkup(model){
   const blocks = model.widgets.map((widget) => `
     <span
-      class="quiz-workshop-model-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
+      class="quiz-workshop-model-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
       style="${getPositionStyle(widget)}"
     ></span>
   `).join("");
@@ -1530,7 +1565,7 @@ function getQuestionPreviewMarkup(question){
   const blocks = getQuestionPreviewWidgets(question).map(({ widget, view }) => {
     return `
       <span
-        class="quiz-workshop-card-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${widget.type === "image" ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
+        class="quiz-workshop-card-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
         style="${getPositionStyle(view)}"
       ></span>
     `;
@@ -1612,8 +1647,10 @@ export function createQuizWorkshopViewController({
   const colorMenu = textToolbar?.querySelector("[data-quiz-color-menu]") || null;
   const colorToggle = textToolbar?.querySelector("[data-quiz-color-toggle]") || null;
   const quickEntryButton = drawer?.querySelector("[data-quiz-quick-entry]") || null;
+  const questionTimerToggle = drawer?.querySelector("[data-quiz-question-timer-toggle]") || null;
+  const questionTimerNavigation = drawer?.querySelector("[data-quiz-question-timer-navigation]") || null;
+  const variantOrderToggle = drawer?.querySelector("[data-quiz-variant-order-toggle]") || null;
   const variantNavigation = drawer?.querySelector("[data-quiz-variant-navigation]") || null;
-  const runtimeSettingsHost = view?.querySelector("[data-quiz-runtime-settings]") || null;
 
   let isMounted = false;
   let activeLibraryTab = "models";
@@ -1627,6 +1664,9 @@ export function createQuizWorkshopViewController({
   let draftWidgets = [];
   let draftVariants = [];
   let activeVariantIndex = 0;
+  let draftQuestionTimerEnabled = false;
+  let draftQuestionTimerSeconds = DEFAULT_QUESTION_TIMER_SECONDS;
+  let draftVariantDrawMode = DEFAULT_VARIANT_DRAW_MODE;
   let draftAnswerGuide = null;
   let questions = [];
   let currentQuizId = "";
@@ -1635,7 +1675,6 @@ export function createQuizWorkshopViewController({
   let currentQuizUpdatedAt = "";
   let currentQuizDisplayOrder = null;
   let currentQuizIsSystem = false;
-  let quizRuntimeSettings = getDefaultQuizRuntimeSettings();
   let isQuizDirty = false;
   let lastDrawerTrigger = addButton || null;
   let canvasResizeObserver = null;
@@ -1669,15 +1708,27 @@ export function createQuizWorkshopViewController({
     updateSaveButton();
   }
 
-  function normalizeQuestion(source = {}){
+  function normalizeQuestion(source = {}, index = 0){
     const widgets = Array.isArray(source.widgets)
       ? source.widgets.map((widget) => ensureWidgetContent(normalizeWidgetPosition(createWidget(widget))))
       : [];
+    const timerSeconds = clamp(
+      Math.trunc(Number(source.timerSeconds ?? source.timer_seconds) || 0),
+      0,
+      MAX_QUESTION_TIMER_SECONDS
+    );
+    const variantDrawMode = VARIANT_DRAW_MODES.has(String(source.variantDrawMode ?? source.variant_draw_mode ?? "").trim())
+      ? String(source.variantDrawMode ?? source.variant_draw_mode).trim()
+      : DEFAULT_VARIANT_DRAW_MODE;
     return {
       ...cloneValue(source),
-      id: String(source.id || createId("question")),
+      // Les anciens quiz sans identifiant conservent un identifiant déterministe
+      // afin que les sélections de mission restent stables après réenregistrement.
+      id: String(source.id || `question-${index + 1}`),
       modelId: String(source.modelId || "free-layout"),
       title: String(source.title || "Disposition personnalisée"),
+      timerSeconds,
+      variantDrawMode,
       widgets,
       variants:normalizeQuestionVariants(source.variants, widgets),
       answerGuide: source.answerGuide ? cloneValue(source.answerGuide) : null
@@ -1798,6 +1849,43 @@ export function createQuizWorkshopViewController({
     renderQuestionWarnings();
   }
 
+  function renderQuestionTimerControls(){
+    const enabled = draftQuestionTimerEnabled === true;
+    const seconds = clamp(
+      Math.trunc(Number(draftQuestionTimerSeconds) || DEFAULT_QUESTION_TIMER_SECONDS),
+      1,
+      MAX_QUESTION_TIMER_SECONDS
+    );
+    draftQuestionTimerSeconds = seconds;
+
+    if (questionTimerToggle) {
+      questionTimerToggle.classList.toggle("is-active", enabled);
+      questionTimerToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+      questionTimerToggle.title = enabled
+        ? `Chronomètre activé — ${seconds} s`
+        : "Activer le chronomètre pour cette question";
+    }
+    if (questionTimerNavigation) {
+      questionTimerNavigation.dataset.quizQuestionTimerSeconds = String(seconds);
+      questionTimerNavigation.classList.toggle("is-disabled", !enabled);
+      questionTimerNavigation.querySelectorAll("[data-quiz-question-timer-step]").forEach((button) => {
+        button.disabled = !enabled;
+      });
+    }
+  }
+
+  function renderVariantOrderControls(){
+    if (!variantOrderToggle) return;
+    const random = draftVariantDrawMode === "random";
+    variantOrderToggle.classList.toggle("is-active", random);
+    variantOrderToggle.setAttribute("aria-pressed", random ? "true" : "false");
+    variantOrderToggle.title = random
+      ? "Variantes en ordre aléatoire — cliquer pour conserver leur ordre"
+      : "Variantes dans l’ordre — cliquer pour les mélanger";
+    const label = variantOrderToggle.querySelector("[data-quiz-variant-order-label]");
+    if (label) label.textContent = random ? "Variantes aléatoires" : "Variantes dans l’ordre";
+  }
+
   function renderVariantNavigation(){
     if (!variantNavigation) return;
     const count = Math.max(1, draftVariants.length);
@@ -1883,6 +1971,9 @@ export function createQuizWorkshopViewController({
     editingQuestionId = "";
     previewMode = "question";
     activeLibraryTab = "models";
+    draftQuestionTimerEnabled = false;
+    draftQuestionTimerSeconds = DEFAULT_QUESTION_TIMER_SECONDS;
+    draftVariantDrawMode = DEFAULT_VARIANT_DRAW_MODE;
     setDraftFromModel("free-layout");
   }
 
@@ -1904,6 +1995,28 @@ export function createQuizWorkshopViewController({
         <span class="quiz-workshop-model-check dashboard-material-icon" aria-hidden="true">check_circle</span>
       </button>
     `).join("");
+  }
+
+  function closeQuizElementInfoPopovers(exceptShell = null){
+    if (!elementGrid) return;
+    elementGrid.querySelectorAll("[data-quiz-element-shell]").forEach((shell) => {
+      if (shell === exceptShell) return;
+      const button = shell.querySelector("[data-quiz-element-info]");
+      const popover = shell.querySelector("[data-quiz-element-info-popover]");
+      button?.setAttribute("aria-expanded", "false");
+      if (popover) popover.hidden = true;
+    });
+  }
+
+  function toggleQuizElementInfo(button){
+    const shell = button?.closest?.("[data-quiz-element-shell]");
+    const popover = shell?.querySelector?.("[data-quiz-element-info-popover]");
+    if (!shell || !popover) return;
+
+    const shouldOpen = popover.hidden;
+    closeQuizElementInfoPopovers(shell);
+    popover.hidden = !shouldOpen;
+    button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
   }
 
   function renderElements(){
@@ -1929,22 +2042,31 @@ export function createQuizWorkshopViewController({
             : "";
 
         return `
-          <button
-            class="quiz-workshop-element-tile${isDisabled ? " is-disabled" : ""}"
-            type="button"
-            draggable="${isDisabled ? "false" : "true"}"
-            data-quiz-element-id="${escapeHtml(element.id)}"
-            ${isDisabled ? `disabled aria-disabled="true" title="${escapeHtml(disabledTitle)}"` : ""}
-          >
-            <span class="quiz-workshop-element-icon dashboard-material-icon" aria-hidden="true">${escapeHtml(element.icon)}</span>
-            <span class="quiz-workshop-element-copy">
-              <strong>${escapeHtml(element.title)}</strong>
-              <span>
-                ${escapeHtml(element.description)}
-                ${element.detail ? `<span class="quiz-workshop-element-detail">${escapeHtml(element.detail)}</span>` : ""}
+          <div class="quiz-workshop-element-tile-shell" data-quiz-element-shell="${escapeHtml(element.id)}">
+            <button
+              class="quiz-workshop-element-tile${isDisabled ? " is-disabled" : ""}"
+              type="button"
+              draggable="${isDisabled ? "false" : "true"}"
+              data-quiz-element-id="${escapeHtml(element.id)}"
+              ${isDisabled ? `disabled aria-disabled="true" title="${escapeHtml(disabledTitle)}"` : ""}
+            >
+              <span class="quiz-workshop-element-icon dashboard-material-icon" aria-hidden="true">${escapeHtml(element.icon)}</span>
+              <span class="quiz-workshop-element-copy">
+                <strong>${escapeHtml(element.title)}</strong>
               </span>
-            </span>
-          </button>
+            </button>
+            <button
+              class="quiz-workshop-element-info-button"
+              type="button"
+              data-quiz-element-info="${escapeHtml(element.id)}"
+              aria-label="Informations sur ${escapeHtml(element.title)}"
+              aria-expanded="false"
+            >?</button>
+            <div class="quiz-workshop-element-info-popover" data-quiz-element-info-popover role="tooltip" hidden>
+              <span>${escapeHtml(element.description)}</span>
+              ${element.detail ? `<span class="quiz-workshop-element-detail">${escapeHtml(element.detail)}</span>` : ""}
+            </div>
+          </div>
         `;
       }).join("");
 
@@ -2025,6 +2147,48 @@ export function createQuizWorkshopViewController({
           </svg>
         </span>
       </div>
+    `;
+  }
+
+  function getFlashSettingsToolbarMarkup(widget, widgetView, isSelected, ariaLabel = "Réglages du flash"){
+    if (!isSelected) return "";
+    const rightFreeColumns = GRID_COLUMNS - (widgetView.column + widgetView.columnSpan - 1);
+    const leftFreeColumns = widgetView.column - 1;
+    const bottomFreeRows = GRID_ROWS - (widgetView.row + widgetView.rowSpan - 1);
+    const topFreeRows = widgetView.row - 1;
+    const toolbarPlacementClass = leftFreeColumns >= 2
+      ? " is-left"
+      : rightFreeColumns >= 2
+        ? ""
+        : bottomFreeRows >= 1
+          ? " is-below"
+          : topFreeRows >= 1
+            ? " is-above"
+            : " is-left";
+    return `
+      <div class="quiz-workshop-flash-settings-toolbar${toolbarPlacementClass}" aria-label="${escapeHtml(ariaLabel)}">
+        <label>
+          <span>Avant affichage</span>
+          <span class="quiz-workshop-flash-setting-value"><input type="number" min="0" max="60" step="1" inputmode="numeric" value="${normalizeFlashDelaySeconds(widget.flashDelaySeconds)}" data-quiz-flash-setting="delay" data-quiz-flash-widget-id="${escapeHtml(widget.id)}"> s</span>
+        </label>
+        <label>
+          <span>Durée d’affichage</span>
+          <span class="quiz-workshop-flash-setting-value"><input type="number" min="0.5" max="60" step="0.5" inputmode="decimal" value="${normalizeFlashVisibleSeconds(widget.flashVisibleSeconds)}" data-quiz-flash-setting="visible" data-quiz-flash-widget-id="${escapeHtml(widget.id)}"> s</span>
+        </label>
+      </div>
+    `;
+  }
+
+  function getFlashTextEditorMarkup(widget, widgetView, isSelected, { editorAttributes, editorHtml, isContentEmpty } = {}){
+    return `
+      <div class="quiz-workshop-canvas-widget-content-shell quiz-workshop-flash-text-shell">
+        <div
+          class="quiz-workshop-canvas-widget-content is-flash-text${isContentEmpty ? " is-empty" : ""}"
+          ${editorAttributes}
+          data-placeholder="${escapeHtml(widgetView.placeholder || "")}"
+        >${editorHtml}</div>
+      </div>
+      ${getFlashSettingsToolbarMarkup(widget, widgetView, isSelected, "Réglages du texte flash")}
     `;
   }
 
@@ -2309,6 +2473,15 @@ export function createQuizWorkshopViewController({
     `;
   }
 
+  function getFlashImageEditorMarkup(widget, widgetView, isSelected){
+    return `
+      <div class="quiz-workshop-flash-image-shell">
+        ${getImageEditorMarkup(widget, widgetView, isSelected)}
+      </div>
+      ${getFlashSettingsToolbarMarkup(widget, widgetView, isSelected, "Réglages de l’image flash")}
+    `;
+  }
+
   async function hydrateImagePreviews(root = canvas){
     const nodes = Array.from(root?.querySelectorAll?.("[data-quiz-image-source]") || []);
     await Promise.all(nodes.map(async (node) => {
@@ -2355,7 +2528,7 @@ export function createQuizWorkshopViewController({
   }
 
   function setWidgetImageSource(widget, source){
-    if (!widget || widget.type !== "image") return;
+    if (!widget || !["image", "flash-image"].includes(widget.type)) return;
     const normalized = normalizeQuizImageSource(source);
     if (previewMode === "correction") {
       detachCorrectionProperty(widget, "image");
@@ -2371,7 +2544,7 @@ export function createQuizWorkshopViewController({
 
   function removeWidgetImageSource(widgetId){
     const widget = draftWidgets.find((entry) => entry.id === widgetId);
-    if (!widget || widget.type !== "image") return;
+    if (!widget || !["image", "flash-image"].includes(widget.type)) return;
     if (previewMode === "correction") {
       detachCorrectionProperty(widget, "image");
       widget.correctionImageSource = null;
@@ -2475,7 +2648,7 @@ export function createQuizWorkshopViewController({
 
   async function chooseResourceImage(widgetId){
     const widget = draftWidgets.find((entry) => entry.id === widgetId);
-    if (!widget || widget.type !== "image") return;
+    if (!widget || !["image", "flash-image"].includes(widget.type)) return;
     try {
       const asset = await openToolAssetPicker({
         type:"image",
@@ -2549,7 +2722,7 @@ export function createQuizWorkshopViewController({
       return;
     }
     const widget = draftWidgets.find((entry) => entry.id === widgetId);
-    if (!widget || widget.type !== "image") return;
+    if (!widget || !["image", "flash-image"].includes(widget.type)) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -2979,11 +3152,13 @@ export function createQuizWorkshopViewController({
       const isResizing = interactionState?.type === "resize" && interactionState.widgetId === widget.id;
       const visibilityPresentation = getVisibilityControlPresentation(widgetView.visibilityMode, previewMode);
       const isMaskedTextWidget = widget.type === "masked-text";
+      const isFlashTextWidget = widget.type === "flash-text";
+      const isFlashImageWidget = widget.type === "flash-image";
       const isAnswerWidget = widget.type === "answer";
       const isVerifiedAnswerWidget = widget.type === "verified-answer";
       const isDoneWidget = widget.type === "done";
       const isTextAnswerWidget = isAnswerWidget || isVerifiedAnswerWidget;
-      const isImageWidget = widget.type === "image";
+      const isImageWidget = widget.type === "image" || isFlashImageWidget;
       const isAudioWidget = widget.type === "audio";
       const isLabelsWidget = widget.type === "labels";
       const isNumericKeypadWidget = widget.type === "numeric-keypad";
@@ -3012,6 +3187,8 @@ export function createQuizWorkshopViewController({
           ? getLabelsEditorMarkup(widget, widgetView, isSelected)
           : isCategoriesWidget
             ? getCategoriesEditorMarkup(widget, widgetView, isSelected)
+        : isFlashImageWidget
+          ? getFlashImageEditorMarkup(widget, widgetView, isSelected)
         : isImageWidget
           ? getImageEditorMarkup(widget, widgetView, isSelected)
           : isAudioWidget
@@ -3020,7 +3197,9 @@ export function createQuizWorkshopViewController({
             ? getQcmEditorMarkup(widget, widgetView, isSelected)
             : isSelectionWordsWidget && previewMode === "correction"
               ? getSelectionWordsEditorMarkup(widget, widgetView)
-              : `
+              : isFlashTextWidget
+                ? getFlashTextEditorMarkup(widget, widgetView, isSelected, { editorAttributes, editorHtml, isContentEmpty })
+                : `
           <div class="quiz-workshop-canvas-widget-content-shell">
             <div
               class="quiz-workshop-canvas-widget-content${isMaskedTextWidget ? " is-masked-text" : ""}${canEditContent ? "" : " is-readonly"}${isContentEmpty ? " is-empty" : ""}"
@@ -3143,6 +3322,8 @@ export function createQuizWorkshopViewController({
     renderElements();
     renderLibrary();
     renderCanvas();
+    renderQuestionTimerControls();
+    renderVariantOrderControls();
     renderVariantNavigation();
     renderEditorHeader();
   }
@@ -3162,26 +3343,6 @@ export function createQuizWorkshopViewController({
     };
   }
 
-  function syncQuizRuntimeSettingsFromDom(){
-    if (!runtimeSettingsHost) return;
-    quizRuntimeSettings = readQuizRuntimeSettingsEditor(runtimeSettingsHost, {
-      snapshot: buildQuizContentSnapshot(),
-      idPrefix: "quiz-workshop-runtime"
-    });
-  }
-
-  function renderQuizRuntimeSettings(){
-    if (!runtimeSettingsHost) return;
-    quizRuntimeSettings = renderQuizRuntimeSettingsEditor(runtimeSettingsHost, {
-      snapshot: buildQuizContentSnapshot(),
-      settings: quizRuntimeSettings,
-      idPrefix: "quiz-workshop-runtime",
-      onChange: (nextSettings) => {
-        quizRuntimeSettings = nextSettings;
-        markQuizDirty();
-      }
-    }) || quizRuntimeSettings;
-  }
 
   function renderQuestions(){
     const count = questions.length;
@@ -3191,10 +3352,7 @@ export function createQuizWorkshopViewController({
     emptyState?.classList.toggle("hidden", count > 0);
     questionsHost?.classList.toggle("hidden", count === 0);
     addQuestionAfterListButton?.classList.toggle("hidden", count === 0);
-    if (!questionsHost) {
-      renderQuizRuntimeSettings();
-      return;
-    }
+    if (!questionsHost) return;
 
     questionsHost.innerHTML = questions.map((question, index) => {
       const compositionIssues = getQuestionCompositionIssues(question.widgets);
@@ -3205,7 +3363,7 @@ export function createQuizWorkshopViewController({
         ${getQuestionPreviewMarkup(question)}
         <div class="quiz-workshop-question-main">
           <div class="quiz-workshop-question-meta">
-            ${question.widgets.length} élément${question.widgets.length > 1 ? "s" : ""} · ${Math.max(1, question.variants?.length || 1)} variante${Math.max(1, question.variants?.length || 1) > 1 ? "s" : ""}
+            ${question.widgets.length} élément${question.widgets.length > 1 ? "s" : ""} · ${Math.max(1, question.variants?.length || 1)} variante${Math.max(1, question.variants?.length || 1) > 1 ? "s" : ""}${Number(question.timerSeconds) > 0 ? ` · ⏱ ${Math.trunc(Number(question.timerSeconds))} s` : ""}${Math.max(1, question.variants?.length || 1) > 1 && question.variantDrawMode === "random" ? " · variantes aléatoires" : ""}
             ${compositionIssues.length ? `
               <span class="quiz-workshop-question-incomplete" role="img" aria-label="Question incomplète : ${escapeHtml(warningLabel)}" title="Question incomplète : ${escapeHtml(warningLabel)}">
                 <span class="dashboard-material-icon" aria-hidden="true">warning</span>
@@ -3228,7 +3386,6 @@ export function createQuizWorkshopViewController({
       </article>
     `;
     }).join("");
-    renderQuizRuntimeSettings();
   }
 
   function openDrawer(event, question = null){
@@ -3242,6 +3399,16 @@ export function createQuizWorkshopViewController({
       draftVariants = normalizeQuestionVariants(question.variants, draftWidgets);
       activeVariantIndex = 0;
       loadVariantContent(activeVariantIndex);
+      const storedTimerSeconds = clamp(
+        Math.trunc(Number(question.timerSeconds ?? question.timer_seconds) || 0),
+        0,
+        MAX_QUESTION_TIMER_SECONDS
+      );
+      draftQuestionTimerEnabled = storedTimerSeconds > 0;
+      draftQuestionTimerSeconds = storedTimerSeconds || DEFAULT_QUESTION_TIMER_SECONDS;
+      draftVariantDrawMode = VARIANT_DRAW_MODES.has(String(question.variantDrawMode ?? question.variant_draw_mode ?? "").trim())
+        ? String(question.variantDrawMode ?? question.variant_draw_mode).trim()
+        : DEFAULT_VARIANT_DRAW_MODE;
       draftAnswerGuide = question.answerGuide ? cloneValue(question.answerGuide) : null;
       previewMode = "question";
       activeLibraryTab = "models";
@@ -3325,6 +3492,8 @@ export function createQuizWorkshopViewController({
       id: editingQuestionId || createId("question"),
       modelId: selectedModelId,
       title: draftTitle || getSelectedModel()?.title || "Disposition personnalisée",
+      timerSeconds: draftQuestionTimerEnabled ? draftQuestionTimerSeconds : 0,
+      variantDrawMode:draftVariantDrawMode,
       widgets,
       variants:cloneValue(draftVariants),
       answerGuide: draftAnswerGuide ? cloneValue(draftAnswerGuide) : null
@@ -3339,13 +3508,15 @@ export function createQuizWorkshopViewController({
   }
 
   function addWidget(elementType = "text", { column = null, row = null, columnSpan = null, rowSpan = null } = {}){
-    const normalizedType = ["text", "masked-text", "answer", "verified-answer", "done", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
+    const normalizedType = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
     const isMaskedText = normalizedType === "masked-text";
+    const isFlashText = normalizedType === "flash-text";
+    const isFlashImage = normalizedType === "flash-image";
     const isAnswer = normalizedType === "answer";
     const isDone = normalizedType === "done";
     const isVerifiedAnswer = normalizedType === "verified-answer";
     const isTextAnswer = isAnswer || isVerifiedAnswer;
-    const isImage = normalizedType === "image";
+    const isImage = normalizedType === "image" || isFlashImage;
     const isAudio = normalizedType === "audio";
     const isLabels = normalizedType === "labels";
     const isNumericKeypad = normalizedType === "numeric-keypad";
@@ -3367,8 +3538,8 @@ export function createQuizWorkshopViewController({
       }
     }
 
-    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isTextAnswer ? 7 : isDone ? 3 : 5);
-    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText ? 2 : isImage || isAudio ? 2 : 1));
+    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText || isTextAnswer ? 7 : isDone ? 3 : 5);
+    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText || isFlashText ? 2 : isImage || isAudio ? 2 : 1));
     const requested = column && row
       ? { column, row, columnSpan: resolvedColumnSpan, rowSpan: resolvedRowSpan }
       : findAvailablePosition(resolvedColumnSpan, resolvedRowSpan);
@@ -3377,19 +3548,22 @@ export function createQuizWorkshopViewController({
     const availableLabelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
     const widget = ensureWidgetContent(normalizeWidgetPosition(createWidget({
       type: normalizedType,
-      label: isMaskedText ? "Texte masqué" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
+      label: isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
+      ...((isFlashText || isFlashImage) ? { flashDelaySeconds:5, flashVisibleSeconds:3 } : {}),
       questionText: "",
       correctionText: "",
       questionPlaceholder: isTextAnswer
         ? (isVerifiedAnswer ? "Réponse vérifiée de l’élève" : "Réponse de l’élève")
         : isMaskedText
           ? "Saisissez le texte que l’élève devra mémoriser"
+          : isFlashText
+            ? "Saisissez le texte à afficher brièvement"
           : isSelectionWords
             ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
             : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories
               ? ""
               : "Saisissez le texte",
-      correctionPlaceholder: isTextAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : isMaskedText ? "Saisissez le texte que l’élève devra mémoriser" : "Saisissez le texte",
+      correctionPlaceholder: isTextAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : isMaskedText ? "Saisissez le texte que l’élève devra mémoriser" : isFlashText ? "Saisissez le texte à afficher brièvement" : "Saisissez le texte",
       labelsSourceWidgetId:isCategories && availableLabelWidgets.length ? availableLabelWidgets[0].id : "",
       column: requested.column,
       row: requested.row,
@@ -3465,13 +3639,15 @@ export function createQuizWorkshopViewController({
 
   function getQuickEntryFields(){
     let textIndex = 0;
+    let imageIndex = 0;
+    let flashImageIndex = 0;
     let answerIndex = 0;
     let qcmIndex = 0;
     let selectionIndex = 0;
     let labelsIndex = 0;
     let categoriesIndex = 0;
     return draftWidgets
-      .filter((widget) => ["text", "masked-text", "answer", "verified-answer", "qcm-text", "selection-words", "labels", "categories"].includes(widget.type))
+      .filter((widget) => ["text", "masked-text", "flash-text", "image", "flash-image", "answer", "verified-answer", "qcm-text", "selection-words", "labels", "categories"].includes(widget.type))
       .map((widget, originalIndex) => ({
         widget,
         originalIndex,
@@ -3483,6 +3659,14 @@ export function createQuizWorkshopViewController({
         || first.originalIndex - second.originalIndex
       ))
       .map(({ widget }) => {
+        if (widget.type === "image") {
+          imageIndex += 1;
+          return { widget, token:`image${imageIndex}` };
+        }
+        if (widget.type === "flash-image") {
+          flashImageIndex += 1;
+          return { widget, token:`image_flash${flashImageIndex}` };
+        }
         if (widget.type === "answer" || widget.type === "verified-answer") {
           answerIndex += 1;
           return { widget, token:`réponse${answerIndex}` };
@@ -3522,6 +3706,11 @@ export function createQuizWorkshopViewController({
 
   function getVariantCellModel(variant, field){
     const content = variant?.widgetContents?.[field.widget.id] || captureWidgetVariantContent(field.widget);
+    if (field.widget.type === "image" || field.widget.type === "flash-image") {
+      return {
+        imageSource:normalizeQuizImageSource(content.questionImageSource ?? content.question_image_source ?? field.widget.questionImageSource)
+      };
+    }
     if (field.widget.type === "qcm-text") {
       return {
         choices: normalizeQcmChoices(content.qcmChoices ?? content.qcm_choices ?? field.widget.qcmChoices, { ensureDefaultSlots:true })
@@ -3560,12 +3749,195 @@ export function createQuizWorkshopViewController({
     };
   }
 
-  function serializeQuickEntryVariants(fields){
+  function normalizeQuickEntryImagePath(value){
+    const segments = String(value ?? "")
+      .trim()
+      .replace(/\\/g, "/")
+      .split(/\s*\/\s*/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    if (!segments.length) return "";
+    const lastIndex = segments.length - 1;
+    segments[lastIndex] = segments[lastIndex].replace(/\.(?:png|jpe?g|webp|gif|bmp|svg|avif)$/i, "");
+    return segments.map((segment) => normalizeResourceName(segment)).join("/");
+  }
+
+  function getQuickEntryImageAssetSegments(asset){
+    const categorySegments = String(asset?.category || "")
+      .split(/\s*\/\s*/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const label = String(asset?.label || "Image").trim() || "Image";
+    return [...categorySegments, label];
+  }
+
+  function buildQuickEntryImageCatalog(assets = []){
+    const normalizedAssets = (Array.isArray(assets) ? assets : [])
+      .filter((asset) => asset?.resourceId)
+      .map((asset) => ({ ...asset }));
+    const byId = new Map();
+    const byName = new Map();
+    const byPath = new Map();
+
+    const add = (map, key, asset) => {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(asset);
+    };
+
+    normalizedAssets.forEach((asset) => {
+      byId.set(String(asset.resourceId || ""), asset);
+      const segments = getQuickEntryImageAssetSegments(asset);
+      const simpleName = normalizeQuickEntryImagePath(segments.at(-1) || "");
+      add(byName, simpleName, asset);
+
+      // Tous les suffixes contenant au moins un dossier sont acceptés :
+      // Animaux/chat, Imagier/Animaux/chat, ... jusqu'au chemin complet.
+      for (let start = 0; start <= Math.max(0, segments.length - 2); start += 1) {
+        const suffix = segments.slice(start);
+        if (suffix.length < 2) continue;
+        add(byPath, normalizeQuickEntryImagePath(suffix.join("/")), asset);
+      }
+    });
+
+    return { assets:normalizedAssets, byId, byName, byPath };
+  }
+
+  async function loadQuickEntryImageCatalog(){
+    if (typeof listResourcesForSpace !== "function") {
+      throw new Error("Les ressources Images ne sont pas disponibles.");
+    }
+    const systemRoot = "Ressources système";
+    const personalRoot = "Ressources personnelles";
+    const teacherSpaceId = getActiveTeacherSpaceId();
+    const [folderRows, resourceRows] = await Promise.all([
+      typeof listResourceFoldersForSpace === "function" ? listResourceFoldersForSpace(teacherSpaceId) : [],
+      listResourcesForSpace(teacherSpaceId)
+    ]);
+    const visibleFolders = (Array.isArray(folderRows) ? folderRows : []).filter((folder) =>
+      !currentQuizIsSystem || folder?.is_system === true
+    );
+    const foldersById = new Map(visibleFolders.map((folder) => [String(folder.id || ""), folder]));
+    const assets = (Array.isArray(resourceRows) ? resourceRows : [])
+      .filter((resource) => resource?.type === "image" && (!currentQuizIsSystem || resource?.is_system === true))
+      .map((resource) => {
+        const root = resource.is_system === true ? systemRoot : personalRoot;
+        const folderPath = getResourceFolderPath(resource.folder_id, foldersById);
+        return {
+          resourceId:String(resource.id || ""),
+          label:String(resource.title || "Image").trim() || "Image",
+          alt:String(resource.alt || resource.title || "Image").trim() || "Image",
+          mimeType:String(resource.mime_type || "image/*").trim() || "image/*",
+          category:folderPath && folderPath !== "Sans dossier" ? `${root} / ${folderPath}` : root
+        };
+      });
+    return buildQuickEntryImageCatalog(assets);
+  }
+
+  function quickEntryImageSourceFromAsset(asset){
+    if (!asset?.resourceId) return null;
+    return normalizeQuizImageSource({
+      kind:"resource",
+      resourceId:asset.resourceId,
+      label:asset.label,
+      alt:asset.alt || asset.label,
+      mimeType:asset.mimeType || "image/*"
+    });
+  }
+
+  function getQuickEntryImageDisplayPath(asset, catalog){
+    if (!asset) return "";
+    const label = String(asset.label || "Image").trim() || "Image";
+    const nameKey = normalizeQuickEntryImagePath(label);
+    if ((catalog?.byName?.get(nameKey) || []).length <= 1) return label;
+
+    const segments = getQuickEntryImageAssetSegments(asset);
+    for (let length = 2; length <= segments.length; length += 1) {
+      const candidateSegments = segments.slice(segments.length - length);
+      const candidate = candidateSegments.join("/");
+      const matches = catalog?.byPath?.get(normalizeQuickEntryImagePath(candidate)) || [];
+      if (matches.length === 1) return candidate;
+    }
+    return segments.join("/");
+  }
+
+  function serializeQuickEntryImageSource(source, catalog){
+    const normalized = normalizeQuizImageSource(source);
+    if (!normalized) return "";
+    if (normalized.kind === "resource") {
+      const asset = catalog?.byId?.get(String(normalized.resourceId || ""));
+      if (asset) return getQuickEntryImageDisplayPath(asset, catalog);
+      return String(normalized.label || normalized.alt || "Image").trim();
+    }
+    return String(normalized.name || normalized.alt || "Image importée").trim();
+  }
+
+  function getQuickEntryExistingImageSource(variantIndex, field){
+    const variant = draftVariants[variantIndex] || draftVariants[0] || null;
+    const content = variant?.widgetContents?.[field.widget.id] || null;
+    return normalizeQuizImageSource(
+      content?.questionImageSource
+      ?? content?.question_image_source
+      ?? field.widget.questionImageSource
+    );
+  }
+
+  function resolveQuickEntryImageValue(value, catalog, existingSource = null){
+    const raw = String(value ?? "").trim();
+    if (!raw) return { source:null, error:"" };
+    const lookup = normalizeQuickEntryImagePath(raw);
+    if (!lookup) return { source:null, error:"" };
+
+    const existing = normalizeQuizImageSource(existingSource);
+    if (existing) {
+      const existingNames = existing.kind === "resource"
+        ? [existing.label, existing.alt]
+        : [existing.name, existing.alt];
+      const matchesExistingName = existingNames
+        .map(normalizeQuickEntryImagePath)
+        .filter(Boolean)
+        .includes(lookup);
+      const existingResourceStillListed = existing.kind === "resource"
+        && catalog?.byId?.has(String(existing.resourceId || ""));
+      if (matchesExistingName && (existing.kind === "local-upload" || !existingResourceStillListed)) {
+        return { source:existing, error:"" };
+      }
+    }
+
+    const usesPath = /[\\/]/.test(raw);
+    const matches = usesPath
+      ? (catalog?.byPath?.get(lookup) || [])
+      : (catalog?.byName?.get(lookup) || []);
+
+    if (matches.length === 1) {
+      return { source:quickEntryImageSourceFromAsset(matches[0]), error:"" };
+    }
+    if (!matches.length) {
+      return {
+        source:null,
+        error:`aucune image ne correspond à « ${raw} »${usesPath ? "" : ". Vérifiez son nom ou indiquez son chemin"}.`
+      };
+    }
+
+    const suggestions = matches
+      .slice(0, 4)
+      .map((asset) => getQuickEntryImageDisplayPath(asset, catalog))
+      .filter(Boolean);
+    return {
+      source:null,
+      error:`plusieurs images correspondent à « ${raw} ». Indiquez le chemin${suggestions.length ? `, par exemple : ${suggestions.join(" ; ")}` : ""}.`
+    };
+  }
+
+  function serializeQuickEntryVariants(fields, imageCatalog = null){
     persistActiveVariantContent();
     ensureDraftVariants();
     const lines = draftVariants.map((variant) => fields
       .map((field) => {
         const model = getVariantCellModel(variant, field);
+        if (field.widget.type === "image" || field.widget.type === "flash-image") {
+          return serializeQuickEntryImageSource(model.imageSource, imageCatalog);
+        }
         if (field.widget.type === "qcm-text") {
           const choices = model.choices || [];
           const correct = choices.find((choice) => choice.isCorrect) || choices[0];
@@ -3605,11 +3977,20 @@ export function createQuizWorkshopViewController({
     return lines.every((line) => !line.trim()) ? "" : lines.join("\n");
   }
 
-  function buildVariantFromQuickEntry(fields, values, sourceVariant = null){
+  function buildVariantFromQuickEntry(fields, values, sourceVariant = null, resolvedImages = new Map()){
     const variant = createVariantFromWidgets(draftWidgets, sourceVariant || {});
     fields.forEach((field, index) => {
       if (field.widget.type === "categories") return;
       const content = variant.widgetContents[field.widget.id] || captureWidgetVariantContent(field.widget);
+      if (field.widget.type === "image" || field.widget.type === "flash-image") {
+        if (resolvedImages.has(field.widget.id)) {
+          const imageSource = normalizeQuizImageSource(resolvedImages.get(field.widget.id));
+          content.questionImageSource = imageSource;
+          if (!content.correctionImageOverridden) content.correctionImageSource = imageSource;
+        }
+        variant.widgetContents[field.widget.id] = content;
+        return;
+      }
       if (field.widget.type === "labels") {
         const parsedLabels = parseLabelsQuickEntry(values[index], content.labelItems ?? field.widget.labelItems);
         if (!parsedLabels.error) content.labelItems = parsedLabels.items;
@@ -3686,14 +4067,15 @@ export function createQuizWorkshopViewController({
     return variant;
   }
 
-  function applyQuickEntryLines(fields, rows){
+  function applyQuickEntryLines(fields, rows, resolvedImagesByRow = []){
     const previousVariants = cloneValue(draftVariants);
     draftVariants = rows.map((values, index) => {
       const hasExistingVariant = Boolean(previousVariants[index]);
       const variant = buildVariantFromQuickEntry(
         fields,
         values,
-        previousVariants[index] || previousVariants[0] || null
+        previousVariants[index] || previousVariants[0] || null,
+        resolvedImagesByRow[index] || new Map()
       );
       if (!hasExistingVariant) variant.id = createId("variant");
       return variant;
@@ -3709,7 +4091,7 @@ export function createQuizWorkshopViewController({
     renderEditor();
   }
 
-  function openQuickEntryOverlay(){
+  async function openQuickEntryOverlay(){
     if (!quickEntryDrawer) return;
     const editor = getActiveEditor();
     if (editor) finalizeEditorContent(editor);
@@ -3720,6 +4102,17 @@ export function createQuizWorkshopViewController({
     }
 
     const example = fields.map((field) => field.token).join("|");
+    const hasImageField = fields.some((field) => field.widget.type === "image" || field.widget.type === "flash-image");
+    let quickEntryImageCatalog = null;
+    if (hasImageField) {
+      try {
+        quickEntryImageCatalog = await loadQuickEntryImageCatalog();
+      } catch (error) {
+        console.error("Impossible de charger les images pour la saisie rapide.", error);
+        window.alert(error?.message || "Impossible de charger les ressources Images.");
+        return;
+      }
+    }
     const hasQcmField = fields.some((field) => field.widget.type === "qcm-text");
     const hasSelectionField = fields.some((field) => field.widget.type === "selection-words");
     const hasLabelsField = fields.some((field) => field.widget.type === "labels");
@@ -3773,6 +4166,12 @@ export function createQuizWorkshopViewController({
             <button class="btn quiz-workshop-insert-pipe-btn" type="button" data-action="insert-pipe">|</button>
           </div>
         </div>
+        ${hasImageField ? `
+          <aside class="quiz-workshop-quick-entry-qcm-callout" aria-label="Consigne de saisie des images">
+            <span class="dashboard-material-icon" aria-hidden="true">image</span>
+            <span>Image → Saisissez son nom. S’il existe plusieurs images du même nom, indiquez le chemin : <code>Imagier/Animaux/chat</code>.</span>
+          </aside>
+        ` : ""}
         ${hasQcmField ? `
           <aside class="quiz-workshop-quick-entry-qcm-callout" aria-label="Consigne de saisie du QCM">
             <span class="dashboard-material-icon" aria-hidden="true">tips_and_updates</span>
@@ -3819,7 +4218,7 @@ export function createQuizWorkshopViewController({
     const markupHelpWrap = overlay.querySelector("[data-quiz-quick-markup-help]");
     const markupHelpButton = overlay.querySelector("[data-quiz-quick-markup-help-toggle]");
     const markupHelpPopup = overlay.querySelector("[data-quiz-quick-markup-help-popup]");
-    input.value = serializeQuickEntryVariants(fields);
+    input.value = serializeQuickEntryVariants(fields, quickEntryImageCatalog);
 
     let quickEntryMotion = null;
     let isQuickEntryClosing = false;
@@ -3938,6 +4337,7 @@ export function createQuizWorkshopViewController({
         return;
       }
       const rows = [];
+      const resolvedImagesByRow = [];
       for (let index = 0; index < lines.length; index += 1) {
         const values = lines[index].split("|");
         if (values.length !== fields.length) {
@@ -3946,6 +4346,21 @@ export function createQuizWorkshopViewController({
           input.focus();
           return;
         }
+        const resolvedImages = new Map();
+        for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+          const field = fields[fieldIndex];
+          if (field.widget.type !== "image" && field.widget.type !== "flash-image") continue;
+          const existingSource = getQuickEntryExistingImageSource(index, field);
+          const resolved = resolveQuickEntryImageValue(values[fieldIndex], quickEntryImageCatalog, existingSource);
+          if (resolved.error) {
+            message.textContent = `Ligne ${index + 1} : ${resolved.error}`;
+            message.classList.add("is-error");
+            input.focus();
+            return;
+          }
+          resolvedImages.set(field.widget.id, resolved.source);
+        }
+        resolvedImagesByRow.push(resolvedImages);
         for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
           if (fields[fieldIndex].widget.type !== "qcm-text") continue;
           const choices = String(values[fieldIndex] ?? "")
@@ -4014,7 +4429,7 @@ export function createQuizWorkshopViewController({
         }
         rows.push(values);
       }
-      applyQuickEntryLines(fields, rows);
+      applyQuickEntryLines(fields, rows, resolvedImagesByRow);
       close();
     };
 
@@ -4095,6 +4510,17 @@ export function createQuizWorkshopViewController({
   }
 
   function handleDrawerClick(event){
+    const elementInfoButton = event.target.closest?.("[data-quiz-element-info]");
+    if (elementInfoButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleQuizElementInfo(elementInfoButton);
+      return;
+    }
+
+    if (!event.target.closest?.("[data-quiz-element-info-popover]")) {
+      closeQuizElementInfoPopovers();
+    }
     const selectionToken = event.target.closest("[data-selection-token-index]");
     const selectionWidgetNode = selectionToken?.closest?.('[data-quiz-widget-id]');
     if (selectionToken && selectionWidgetNode && previewMode === "correction") {
@@ -4385,6 +4811,34 @@ export function createQuizWorkshopViewController({
       return;
     }
 
+    const timerToggleAction = event.target.closest("[data-quiz-question-timer-toggle]");
+    if (timerToggleAction) {
+      draftQuestionTimerEnabled = !draftQuestionTimerEnabled;
+      renderQuestionTimerControls();
+      return;
+    }
+
+    const timerStepAction = event.target.closest("[data-quiz-question-timer-step]");
+    if (timerStepAction && draftQuestionTimerEnabled) {
+      const step = Number(timerStepAction.dataset.quizQuestionTimerStep || 0);
+      if (Number.isFinite(step) && step) {
+        draftQuestionTimerSeconds = clamp(
+          draftQuestionTimerSeconds + step,
+          1,
+          MAX_QUESTION_TIMER_SECONDS
+        );
+        renderQuestionTimerControls();
+      }
+      return;
+    }
+
+    const variantOrderAction = event.target.closest("[data-quiz-variant-order-toggle]");
+    if (variantOrderAction) {
+      draftVariantDrawMode = draftVariantDrawMode === "random" ? "in_order" : "random";
+      renderVariantOrderControls();
+      return;
+    }
+
     const quickEntryAction = event.target.closest("[data-quiz-quick-entry]");
     if (quickEntryAction) {
       openQuickEntryOverlay();
@@ -4435,7 +4889,7 @@ export function createQuizWorkshopViewController({
     }
 
     const widgetNode = event.target.closest("[data-quiz-widget-id]");
-    if (widgetNode && !event.target.closest("[data-quiz-widget-editor-id], [data-quiz-label-editor], [data-quiz-category-title-editor], select")) {
+    if (widgetNode && !event.target.closest("[data-quiz-widget-editor-id], [data-quiz-label-editor], [data-quiz-category-title-editor], [data-quiz-flash-setting], select")) {
       editingWidgetId = "";
       editingChoiceId = "";
       hideTextToolbar();
@@ -4450,6 +4904,19 @@ export function createQuizWorkshopViewController({
   }
 
   function handleDrawerInput(event){
+    const flashSettingInput = event.target.closest("[data-quiz-flash-setting]");
+    if (flashSettingInput) {
+      const widget = draftWidgets.find((entry) => entry.id === String(flashSettingInput.dataset.quizFlashWidgetId || "") && ["flash-text", "flash-image"].includes(entry.type));
+      if (!widget) return;
+      if (flashSettingInput.dataset.quizFlashSetting === "delay") {
+        widget.flashDelaySeconds = normalizeFlashDelaySeconds(flashSettingInput.value);
+      } else {
+        widget.flashVisibleSeconds = normalizeFlashVisibleSeconds(flashSettingInput.value);
+      }
+      markLayoutAsCustom();
+      return;
+    }
+
     const labelsSourceSelect = event.target.closest("[data-quiz-categories-source]");
     if (labelsSourceSelect) {
       const widget = draftWidgets.find((entry) => entry.id === String(labelsSourceSelect.dataset.quizCategoriesSource || "") && entry.type === "categories");
@@ -4556,6 +5023,7 @@ export function createQuizWorkshopViewController({
   }
 
   function handleDrawerDragStart(event){
+    closeQuizElementInfoPopovers();
     const labelChip = event.target.closest("[data-quiz-category-label-chip]");
     if (labelChip) {
       const labelId = String(labelChip.dataset.quizCategoryLabelChip || "");
@@ -5032,11 +5500,19 @@ export function createQuizWorkshopViewController({
   }
 
   function buildQuizSnapshot(){
-    syncQuizRuntimeSettingsFromDom();
+    return buildQuizContentSnapshot();
+  }
+
+  function buildQuizTestSnapshot(){
     const snapshot = buildQuizContentSnapshot();
     return {
       ...snapshot,
-      runtimeSettings: normalizeQuizRuntimeSettings(quizRuntimeSettings, snapshot)
+      runtimeSettings:{
+        drawMode:"in_order",
+        questionSelection:{ mode:"all", questionKeys:[] },
+        timeLimitSec:0,
+        autoExitOnComplete:false
+      }
     };
   }
 
@@ -5075,7 +5551,7 @@ export function createQuizWorkshopViewController({
 
   function handleTestQuiz(){
     if (!questions.length || typeof onTestQuiz !== "function") return;
-    onTestQuiz(buildQuizSnapshot());
+    onTestQuiz(buildQuizTestSnapshot());
   }
 
   function duplicateQuestion(questionId, trigger){
@@ -5142,6 +5618,13 @@ export function createQuizWorkshopViewController({
     }
 
     if (event.key === "Escape") {
+      const openElementInfo = elementGrid?.querySelector?.('[data-quiz-element-info][aria-expanded="true"]');
+      if (openElementInfo) {
+        event.preventDefault();
+        closeQuizElementInfoPopovers();
+        openElementInfo.focus?.();
+        return;
+      }
       if (colorMenu && !colorMenu.hidden) {
         event.preventDefault();
         setColorMenuOpen(false);
@@ -5228,8 +5711,6 @@ export function createQuizWorkshopViewController({
     is_system = false,
     created_at = "",
     updated_at = "",
-    runtimeSettings = null,
-    runtime_settings = null,
     grid = null,
     questions: sourceQuestions = []
   } = {}){
@@ -5241,10 +5722,9 @@ export function createQuizWorkshopViewController({
     currentQuizIsSystem = is_system === true;
     currentQuizCreatedAt = String(created_at || "");
     currentQuizUpdatedAt = String(updated_at || "");
-    quizRuntimeSettings = normalizeQuizRuntimeSettings(runtimeSettings ?? runtime_settings ?? getDefaultQuizRuntimeSettings());
     const sourceColumns = normalizeGridColumnCount(grid?.columns);
     questions = Array.isArray(sourceQuestions)
-      ? sourceQuestions.map((question) => normalizeQuestion(migrateQuestionGrid(question, sourceColumns)))
+      ? sourceQuestions.map((question, index) => normalizeQuestion(migrateQuestionGrid(question, sourceColumns), index))
       : [];
     setQuizTitle(title);
     resetDraft();

@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-09-09.
+Dernière mise à jour : 2026-09-13.
 
 ## Règle absolue
 
@@ -20,16 +20,16 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `17` | paliers d’activités | migration active historique |
 | `18` | mini-clavier des codes élèves | migration active historique |
 | `19` et `20` | menus et fondations du moteur Aventure | migrations actives historiques |
-| `21` | import de `phonology_words` | migration active historique |
+| `21` | import de `phonology_words` | historique, table supprimée par `47` |
 | `22` à `24` | images système, explorateur, options d’import et suppression | migrations actives historiques |
-| `25` | préfixe d’affichage optionnel pour `phonology_words` | migration active historique |
+| `25` | préfixe d’affichage optionnel pour `phonology_words` | historique, table supprimée par `47` |
 | `26` | lecture publique ciblée d’un dossier d’images système | migration active historique |
-| `27` | syllabation de `phonology_words` et import synchronisé | migration active historique |
-| `28` | remplacement atomique complet de `phonology_words` | migration à appliquer avant d’utiliser « Remplacer complètement la base » |
-| `29` | ancienne familiarité lexicale de `phonology_words` | historique ; colonne conservée provisoirement mais non utilisée |
+| `27` | syllabation de `phonology_words` et import synchronisé | historique, table supprimée par `47` |
+| `28` | remplacement atomique complet de `phonology_words` | historique, ne plus appliquer |
+| `29` | ancienne familiarité lexicale de `phonology_words` | historique, table supprimée par `47` |
 | `30` | projection élève d’Exploration : libellé court et nœuds transparents | migration active |
 | `31` | runtime MVP Aventure pour les 6 passages obligatoires de type Activité | migration active |
-| `32` | niveau lexical CP/CE1/CE2/CM/X + score de régularité G-P de `phonology_words` | **migration à appliquer avant d’importer la nouvelle banque** |
+| `32` | ancien niveau scolaire + régularité de `phonology_words` | historique, table supprimée par `47` |
 | `33` | première suppression contrôlée d’une tentative dans l’historique élève | historique ; comportement remplacé par `37` |
 | `34` | progression individuelle des Missions : reprise, compteur et fin persistante | **migration à appliquer avant d’utiliser la reprise des Missions** |
 | `35` | limites d’exécution externes : Questions / Temps / contenu intrinsèque | **migration à appliquer avant les réglages de longueur Aventure/Missions** |
@@ -41,6 +41,10 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `41` | Quiz directs utilisables comme étapes de Mission | **migration active** |
 | `42` | résolution réelle des cases Objectif en Aventure : palier courant + activité figée au moment du passage | **migration à appliquer avant d’utiliser des cases Objectif côté élève** |
 | `43` | passages adaptatifs Aventure 7 à 10 : OdApp faibles déjà rencontrés, diversification et clôture après 10 passages | **migration à appliquer avant d’activer les quatre adaptatifs côté élève** |
+| `44` | première table provisoire `lexical_entries_v1` | historique, remplacée et supprimée par `46` |
+| `45` | import d’images système indépendant de `phonology_words` | migration active historique ; a préparé la suppression de `47` |
+| `46` | banque lexicale définitive `lexical_entries`, niveaux 1/2/3 et lecture publique des entrées actives | **migration à appliquer avec le patch banque lexicale du 13/09/2026** |
+| `47` | suppression définitive des anciennes banques `phonology_words` / `vocabulary_default_words` | **migration à appliquer avec le patch de nettoyage lexical** |
 
 ## Script spécial d’arborescence
 

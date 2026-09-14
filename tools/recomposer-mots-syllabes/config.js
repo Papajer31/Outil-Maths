@@ -6,7 +6,7 @@ import {
   bindBasicMinMax,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   WORD_COUNT_OPTIONS,
   ALL_TARGET_ID,
@@ -23,6 +23,7 @@ import {
   renderWordSelectionSelector,
   bindWordSelectionSelector,
   readWordSelectionSelector,
+  setWordSelectionCatalog,
   updateWordSelectionSpellingUsage
 } from "../../shared/word-selection-selector.js";
 
@@ -47,7 +48,7 @@ export function renderToolSettings(container, settings = {}) {
             label:`${value} mots`
           }))
         }),
-        renderBasicMinMax({
+        `<div data-rms-auto-selection-filter>${renderBasicMinMax({
           idPrefix:"rms_syllableCount",
           title:"Nombre de syllabes du mot",
           minLabel:"Minimum",
@@ -57,11 +58,11 @@ export function renderToolSettings(container, settings = {}) {
           inputMin:2,
           inputMax:6,
           step:1
-        }),
+        })}</div>`,
         renderWordSelectionSelector(cfg, {
           idPrefix:"rms",
           allTargetId:ALL_TARGET_ID,
-          showSchoolLevels:true,
+          showLexicalLevels:true,
           bankStatusMarkup:'<div class="rms-config-bank-status" data-rms-bank-status aria-live="polite"></div>'
         })
       )}
@@ -69,7 +70,10 @@ export function renderToolSettings(container, settings = {}) {
   `;
 
   bindRadio(container, "rms_wordCount", {
-    onChange:() => refreshSelectionState(container)
+    onChange:() => {
+      syncFixedModeControls(container);
+      refreshSelectionState(container);
+    }
   });
   bindBasicMinMax(container, "rms_syllableCount", { inputMin:2, inputMax:6 });
   bindWordSelectionSelector(container, {
@@ -84,9 +88,13 @@ export function renderToolSettings(container, settings = {}) {
     input?.addEventListener("change", () => refreshSelectionState(container));
   });
 
+  syncFixedModeControls(container);
   refreshSelectionState(container);
   ensureWordCatalogLoaded()
-    .then(() => refreshSelectionState(container))
+    .then((rows) => {
+      setWordSelectionCatalog(container, rows, { idPrefix:"rms" });
+      refreshSelectionState(container);
+    })
     .catch(() => refreshSelectionState(container));
 }
 
@@ -99,6 +107,9 @@ export function readToolSettings(container) {
   if (catalogStatus === "error") {
     throw new Error(catalogError || "La banque de mots est indisponible.");
   }
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED && !settings.fixedWordSlugs.length) {
+    throw new Error("Ajoute au moins un mot à la liste fixe.");
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     throw new Error("Ajoute au moins une entrée graphémique.");
   }
@@ -109,6 +120,9 @@ export function readToolSettings(container) {
   }
   if (!canGenerateQuestion(settings)) {
     const count = getEligibleWordCount(settings);
+    if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+      throw new Error(`La liste fixe doit contenir au moins ${settings.wordCount} mots compatibles (${count} actuellement).`);
+    }
     throw new Error(`La banque ne contient pas assez de mots compatibles de ${settings.minSyllables} à ${settings.maxSyllables} syllabes pour en proposer ${settings.wordCount} dans une même question (${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""}).`);
   }
 
@@ -128,6 +142,12 @@ function readCurrentSettings(container) {
     minSyllables:Number(container.querySelector("#rms_syllableCount_min")?.value),
     maxSyllables:Number(container.querySelector("#rms_syllableCount_max")?.value)
   });
+}
+
+function syncFixedModeControls(container) {
+  const settings = readCurrentSettings(container);
+  const filter = container.querySelector("[data-rms-auto-selection-filter]");
+  if (filter instanceof HTMLElement) filter.hidden = settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED;
 }
 
 function refreshSelectionState(container) {
@@ -156,6 +176,13 @@ function refreshBankStatus(container) {
   }
 
   const settings = readCurrentSettings(container);
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+    const count = getEligibleWordCount(settings);
+    const enough = canGenerateQuestion(settings);
+    host.classList.add(enough ? "is-ready" : "is-warning");
+    host.textContent = `${count} mot${count > 1 ? "s" : ""} dans la liste fixe${enough ? "." : ` : il en faut au moins ${settings.wordCount}.`}`;
+    return;
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     host.classList.add("is-warning");
     host.textContent = "Ajoute au moins une entrée graphémique.";
@@ -182,7 +209,7 @@ async function ensureWordCatalogLoaded() {
   if (!catalogPromise) {
     catalogStatus = "loading";
     catalogError = "";
-    catalogPromise = listPublicPhonologyWords()
+    catalogPromise = listPublicLexicalWords()
       .then((rows) => {
         setWordCatalog(Array.isArray(rows) ? rows : []);
         catalogStatus = "ready";

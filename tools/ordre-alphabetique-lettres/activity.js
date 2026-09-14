@@ -1,14 +1,9 @@
 import {
   normalizeSettings,
-  LIST_TYPES,
   pickQuestion,
   questionKey,
-  isAnswerCorrect,
-  getDiscriminatingLetterRanges
+  isAnswerCorrect
 } from "./model.js";
-import {
-  listPublicVocabularyWordsForSpace
-} from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -18,7 +13,6 @@ import {
 
 let stylesInjected = false;
 let activityStyleReadyPromise = null;
-const wordListCache = new Map();
 
 const DRAG_THRESHOLD_PX = 8;
 const CORRECTION_STAGGER_MS = 500;
@@ -129,7 +123,6 @@ function createRuntimeState(initialContext = {}) {
     drag: null,
     currentQuestion: null,
     lastQuestionId: null,
-    wordEntries: [],
     visualHintRanges: new Map(),
     itemMetaByValue: new Map(),
     answerRevealed: false,
@@ -281,26 +274,17 @@ async function loadNextQuestion(state, context = {}) {
   renderLoadingState(state);
   updatePromptDisplay(state);
 
-  let wordEntries = [];
-  if (settings.listType === LIST_TYPES.WORDS) {
-    wordEntries = await loadWordEntriesForAccessCode(context?.accessCode);
-  }
-
   const nextQuestion = pickQuestion(settings, {
-    wordEntries,
     avoidKey: state.lastQuestionId,
     attempts: 800
   });
 
   if (!nextQuestion) {
-    throw new Error(settings.listType === LIST_TYPES.WORDS
-      ? "Impossible de générer une question d’ordre alphabétique avec la banque de mots actuelle."
-      : "Impossible de générer une question d’ordre alphabétique avec ces réglages.");
+    throw new Error("Impossible de générer une question d’ordre alphabétique avec ces réglages.");
   }
 
   state.currentQuestion = nextQuestion;
   state.lastQuestionId = questionKey(nextQuestion);
-  state.wordEntries = wordEntries;
   state.itemMetaByValue = buildItemMetaByValue(nextQuestion);
   renderAlphabetHelp(state, settings);
   updateVisualHintRanges(state, settings, nextQuestion);
@@ -549,17 +533,8 @@ function renderLoadingState(state) {
   }
 }
 
-function updateVisualHintRanges(state, settings, question) {
-  if (
-    !settings?.visualHint
-    || question?.mode !== LIST_TYPES.WORDS
-    || !Array.isArray(question?.answerItems)
-  ) {
-    state.visualHintRanges = new Map();
-    return;
-  }
-
-  state.visualHintRanges = getDiscriminatingLetterRanges(question.answerItems);
+function updateVisualHintRanges(state) {
+  state.visualHintRanges = new Map();
 }
 
 function setChipLabelContent(chip, value, state) {
@@ -1212,24 +1187,6 @@ function teardownState(state, container) {
   if (container) {
     container.innerHTML = "";
   }
-}
-
-function loadWordEntriesForAccessCode(accessCode) {
-  const code = String(accessCode || "").trim();
-  if (!code) {
-    throw new Error("Code d’accès manquant pour charger la banque de mots.");
-  }
-
-  if (!wordListCache.has(code)) {
-    wordListCache.set(code, listPublicVocabularyWordsForSpace(code));
-  }
-
-  return Promise.resolve(wordListCache.get(code)).then((entries) => {
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error("La banque de mots de cet enseignant est vide.");
-    }
-    return entries;
-  });
 }
 
 function scheduleBankChipsLayoutRefresh(state) {

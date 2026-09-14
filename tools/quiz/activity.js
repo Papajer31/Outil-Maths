@@ -87,6 +87,11 @@ export function createActivity(initialContext = {}){
       return handleAutoQuestionTimeout(state);
     },
 
+    getQuestionTimeLimitSec(){
+      const seconds = Math.max(0, Math.min(300, Math.trunc(Number(state.currentQuestion?.timerSeconds) || 0)));
+      return seconds;
+    },
+
     getHistorySnapshot(stage = "question"){
       return getQuizHistorySnapshot(state, stage);
     },
@@ -121,6 +126,8 @@ function createRuntimeState(initialContext = {}){
     audioPlayCounts: new Map(),
     maskedTextAbortController: null,
     maskedTextMetrics: new Map(),
+    flashTextAbortController: null,
+    flashTextQuestionStartedAt: 0,
     maskedTextKeyState: { shiftLeft:false, enter:false },
     maskedTextActive: false,
     doneAbortController: null,
@@ -204,6 +211,7 @@ function loadNextQuestion(state, context = {}){
   state.seenHintSignatures.clear();
   state.qcmChoiceFontSizes.clear();
   state.currentQuestion = pickNextQuestion(state, settings);
+  state.flashTextQuestionStartedAt = performance.now();
 
   renderCurrentView(state);
   syncValidateState(state);
@@ -445,6 +453,7 @@ function renderCurrentView(state){
   bindRuntimeLabels(state);
   bindRuntimeAudios(state);
   bindRuntimeMaskedTexts(state);
+  bindRuntimeFlashTexts(state);
   bindRuntimeDone(state);
   hydrateRuntimeImages(state);
   hydrateRuntimeAudios(state);
@@ -492,6 +501,8 @@ function patchCorrectionView(state){
       && widget.type !== "labels"
       && widget.type !== "categories"
       && widget.type !== "masked-text"
+      && widget.type !== "flash-text"
+      && widget.type !== "flash-image"
       && getRuntimeWidgetViewSignature(widget, questionView) === getRuntimeWidgetViewSignature(widget, view);
     if (unchangedStaticWidget) return;
 
@@ -502,7 +513,7 @@ function patchCorrectionView(state){
     }
     if (node) node.replaceWith(replacement);
     else insertRuntimeWidgetNode(canvas, replacement, widgets, index);
-    needsImageHydration ||= widget.type === "image";
+    needsImageHydration ||= widget.type === "image" || widget.type === "flash-image";
     needsAudioHydration ||= widget.type === "audio";
     needsQcmFit ||= widget.type === "qcm-text";
   });
@@ -604,6 +615,10 @@ function renderWidget(state, widget, mode){
   if (!isRuntimeWidgetVisible(state, view, mode)) return "";
   const style = getWidgetStyle(view);
 
+  if (widget.type === "flash-image") {
+    return renderFlashImageWidget(widget, view, mode, style);
+  }
+
   if (widget.type === "image") {
     return renderImageWidget(widget, view, style);
   }
@@ -614,6 +629,10 @@ function renderWidget(state, widget, mode){
 
   if (widget.type === "masked-text") {
     return renderMaskedTextWidget(widget, view, mode, style);
+  }
+
+  if (widget.type === "flash-text") {
+    return renderFlashTextWidget(widget, view, mode, style);
   }
 
   if (widget.type === "done") {
@@ -948,6 +967,42 @@ function renderImageWidget(widget, view, style){
   `;
 }
 
+function renderFlashImageWidget(widget, view, mode, style){
+  const source = view?.imageSource && typeof view.imageSource === "object" ? view.imageSource : null;
+  if (!source) return "";
+  const payload = escapeHtml(JSON.stringify(source));
+  const alt = String(source.alt || source.label || source.name || widget.label || "Image flash").trim() || "Image flash";
+
+  if (mode === "correction") {
+    return `
+      <section class="quiz-runtime-widget quiz-runtime-widget--image quiz-runtime-widget--flash-image is-correction-visible" style="${style}" data-quiz-runtime-widget-id="${escapeHtml(widget.id)}" aria-label="${escapeHtml(alt)}">
+        <img class="quiz-runtime-image" data-quiz-runtime-image-source="${payload}" alt="${escapeHtml(alt)}">
+        <div class="quiz-runtime-image-unavailable" aria-hidden="true">${escapeHtml(alt)}</div>
+      </section>
+    `;
+  }
+
+  const delayMs = normalizeFlashDelaySeconds(widget.flashDelaySeconds) * 1000;
+  const visibleMs = normalizeFlashVisibleSeconds(widget.flashVisibleSeconds) * 1000;
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--image quiz-runtime-widget--flash-image"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      data-quiz-runtime-flash-text
+      data-flash-delay-ms="${delayMs}"
+      data-flash-visible-ms="${visibleMs}"
+      aria-label="${escapeHtml(alt)}"
+    >
+      <div class="quiz-runtime-flash-text-model quiz-runtime-flash-image-content" aria-hidden="true">
+        <img class="quiz-runtime-image" data-quiz-runtime-image-source="${payload}" alt="${escapeHtml(alt)}">
+        <div class="quiz-runtime-image-unavailable" aria-hidden="true">${escapeHtml(alt)}</div>
+      </div>
+      <div class="quiz-runtime-flash-text-countdown" data-quiz-runtime-flash-countdown aria-hidden="true"></div>
+    </section>
+  `;
+}
+
 async function hydrateRuntimeImages(state){
   const nodes = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-image-source]") || []);
   await Promise.all(nodes.map(async (node) => {
@@ -1021,6 +1076,50 @@ function renderMaskedTextWidget(widget, view, mode, style){
         <strong>Maintiens MAJ gauche et ENTRÉE</strong>
         <small data-quiz-runtime-masked-text-count>Tu as regardé 0 fois.</small>
       </div>
+    </section>
+  `;
+}
+
+function normalizeFlashDelaySeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 5;
+  return Math.max(0, Math.min(60, Math.round(numeric)));
+}
+
+function normalizeFlashVisibleSeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 3;
+  return Math.max(0.5, Math.min(60, Math.round(numeric * 2) / 2));
+}
+
+function renderFlashTextWidget(widget, view, mode, style){
+  if (mode === "correction") {
+    return `
+      <section
+        class="quiz-runtime-widget quiz-runtime-widget--text quiz-runtime-widget--flash-text is-correction-visible"
+        style="${style}"
+        data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+        aria-label="${escapeHtml(widget.label || "Texte flash")}"
+      >
+        <div class="quiz-runtime-widget-content" data-quiz-runtime-text-fit>${sanitizeRichHtml(view.html)}</div>
+      </section>
+    `;
+  }
+
+  const delayMs = normalizeFlashDelaySeconds(widget.flashDelaySeconds) * 1000;
+  const visibleMs = normalizeFlashVisibleSeconds(widget.flashVisibleSeconds) * 1000;
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--flash-text"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      data-quiz-runtime-flash-text
+      data-flash-delay-ms="${delayMs}"
+      data-flash-visible-ms="${visibleMs}"
+      aria-label="${escapeHtml(widget.label || "Texte flash")}"
+    >
+      <div class="quiz-runtime-flash-text-model quiz-runtime-widget-content" data-quiz-runtime-text-fit aria-hidden="true">${sanitizeRichHtml(view.html)}</div>
+      <div class="quiz-runtime-flash-text-countdown" data-quiz-runtime-flash-countdown aria-hidden="true"></div>
     </section>
   `;
 }
@@ -1399,6 +1498,76 @@ function bindRuntimeMaskedTexts(state){
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") resetMaskedTextKeys(state);
   }, { signal });
+}
+
+function renderFlashCountdownDots(host, count){
+  const countdown = host?.querySelector?.("[data-quiz-runtime-flash-countdown]");
+  if (!countdown) return;
+  const safeCount = Math.max(0, Math.trunc(Number(count) || 0));
+  if (countdown.dataset.flashDotCount === String(safeCount)) return;
+  countdown.dataset.flashDotCount = String(safeCount);
+  countdown.innerHTML = Array.from({ length:safeCount }, (_, index) => (
+    `<span class="quiz-runtime-flash-dot${index === safeCount - 1 ? " is-next" : ""}" aria-hidden="true">•</span>`
+  )).join("");
+  countdown.setAttribute("aria-label", safeCount ? `${safeCount} seconde${safeCount > 1 ? "s" : ""} avant affichage` : "");
+}
+
+function syncFlashTextHost(host, elapsedMs){
+  const delayMs = Math.max(0, Number(host?.dataset?.flashDelayMs) || 0);
+  const visibleMs = Math.max(500, Number(host?.dataset?.flashVisibleMs) || 3000);
+  const model = host?.querySelector?.(".quiz-runtime-flash-text-model");
+  const countdown = host?.querySelector?.("[data-quiz-runtime-flash-countdown]");
+
+  if (elapsedMs < delayMs) {
+    const remaining = Math.max(1, Math.ceil((delayMs - elapsedMs) / 1000));
+    host.classList.remove("is-visible", "is-finished");
+    model?.setAttribute("aria-hidden", "true");
+    countdown?.setAttribute("aria-hidden", "false");
+    renderFlashCountdownDots(host, remaining);
+    return false;
+  }
+
+  if (elapsedMs < delayMs + visibleMs) {
+    host.classList.add("is-visible");
+    host.classList.remove("is-finished");
+    model?.setAttribute("aria-hidden", "false");
+    countdown?.setAttribute("aria-hidden", "true");
+    return false;
+  }
+
+  host.classList.remove("is-visible");
+  host.classList.add("is-finished");
+  model?.setAttribute("aria-hidden", "true");
+  countdown?.setAttribute("aria-hidden", "true");
+  return true;
+}
+
+function bindRuntimeFlashTexts(state){
+  state.flashTextAbortController?.abort();
+  state.flashTextAbortController = null;
+  const hosts = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-flash-text]") || []);
+  if (!hosts.length || state.answerRevealed) return;
+
+  const controller = new AbortController();
+  state.flashTextAbortController = controller;
+  const { signal } = controller;
+  const startedAt = Number.isFinite(state.flashTextQuestionStartedAt) && state.flashTextQuestionStartedAt > 0
+    ? state.flashTextQuestionStartedAt
+    : performance.now();
+
+  const sync = () => {
+    const elapsedMs = Math.max(0, performance.now() - startedAt);
+    let allFinished = true;
+    hosts.forEach((host) => {
+      if (!syncFlashTextHost(host, elapsedMs)) allFinished = false;
+    });
+    if (allFinished) controller.abort();
+  };
+
+  sync();
+  if (signal.aborted) return;
+  const timer = window.setInterval(sync, 100);
+  signal.addEventListener("abort", () => window.clearInterval(timer), { once:true });
 }
 
 function isDoneQuestion(state){
@@ -3005,6 +3174,8 @@ function teardownInputBindings(state){
   resetMaskedTextKeys(state);
   state.maskedTextAbortController?.abort();
   state.maskedTextAbortController = null;
+  state.flashTextAbortController?.abort();
+  state.flashTextAbortController = null;
   state.doneAbortController?.abort();
   state.doneAbortController = null;
   state.audioAbortController?.abort();

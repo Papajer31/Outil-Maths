@@ -21,7 +21,7 @@ import {
 import {
   listPublicImageAssets,
   getPublicImageAssetUrl,
-  listPublicPhonologyWords
+  listPublicLexicalWords
 } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
@@ -49,7 +49,7 @@ function normalizeWordImageSlug(value) {
 
 async function ensurePhonologyWordCatalog() {
   if (!phonologyWordCatalogPromise) {
-    phonologyWordCatalogPromise = listPublicPhonologyWords()
+    phonologyWordCatalogPromise = listPublicLexicalWords()
       .then((rows) => {
         const words = Array.isArray(rows) ? rows : [];
         setWordCatalog(words);

@@ -6,7 +6,7 @@ import {
   isAnswerCorrect,
   getDiscriminatingLetterRanges
 } from "./model.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -1169,7 +1169,7 @@ function teardownState(state, container) {
 
 async function loadPublicWordCatalog() {
   if (!publicWordCatalogPromise) {
-    publicWordCatalogPromise = listPublicPhonologyWords()
+    publicWordCatalogPromise = listPublicLexicalWords()
       .then((rows) => Array.isArray(rows) ? rows : [])
       .catch((error) => {
         publicWordCatalogPromise = null;

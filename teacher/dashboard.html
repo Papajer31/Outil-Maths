@@ -18,7 +18,6 @@
   <link rel="stylesheet" href="./css/quiz-workshop.css">
   <link rel="stylesheet" href="./css/quiz-series.css">
   <link rel="stylesheet" href="./css/resources.css">
-  <link rel="stylesheet" href="./css/phonology-import.css">
   <link rel="stylesheet" href="./css/system-images-import.css">
   <link rel="stylesheet" href="./css/audio-recorder.css">
   <link rel="stylesheet" href="./css/audio-admin.css">
@@ -295,7 +294,6 @@
                       </label>
                       <div id="quizWorkshopQuestionCount" class="quiz-workshop-question-count">0 question</div>
                     </div>
-                    <div class="quiz-workshop-runtime-settings" data-quiz-runtime-settings></div>
   
                     <div id="quizWorkshopEmptyState" class="quiz-workshop-empty-state">
                       <div class="quiz-workshop-empty-icon" aria-hidden="true">
@@ -441,6 +439,34 @@
                               <span>Correction</span>
                             </button>
                           </div>
+                          <button
+                            class="quiz-workshop-quick-entry-btn quiz-workshop-question-timer-btn"
+                            type="button"
+                            data-quiz-question-timer-toggle
+                            aria-pressed="false"
+                            title="Activer le chronomètre pour cette question"
+                          >
+                            <span class="dashboard-material-icon" aria-hidden="true">timer</span>
+                            <span>Chrono</span>
+                          </button>
+                          <div class="quiz-workshop-question-timer-navigation is-disabled" data-quiz-question-timer-navigation data-quiz-question-timer-seconds="5">
+                            <button type="button" data-quiz-question-timer-step="1" aria-label="Augmenter le temps" title="Augmenter le temps" disabled>
+                              <span class="dashboard-material-icon" aria-hidden="true">expand_less</span>
+                            </button>
+                            <button type="button" data-quiz-question-timer-step="-1" aria-label="Réduire le temps" title="Réduire le temps" disabled>
+                              <span class="dashboard-material-icon" aria-hidden="true">expand_more</span>
+                            </button>
+                          </div>
+                          <button
+                            class="quiz-workshop-quick-entry-btn quiz-workshop-variant-order-btn"
+                            type="button"
+                            data-quiz-variant-order-toggle
+                            aria-pressed="false"
+                            title="Variantes dans l’ordre — cliquer pour les mélanger"
+                          >
+                            <span class="dashboard-material-icon" aria-hidden="true">shuffle</span>
+                            <span data-quiz-variant-order-label>Variantes dans l’ordre</span>
+                          </button>
                           <button
                             class="quiz-workshop-quick-entry-btn"
                             type="button"
@@ -588,7 +614,6 @@
                       </button>
                     </div>
                   </div>
-                  <div class="quiz-series-runtime-settings" data-quiz-series-runtime-settings></div>
                   <div id="quizSeriesMessage" class="quiz-series-message" aria-live="polite"></div>
                   <div id="quizSeriesTableHost" class="quiz-series-table-host"></div>
                 </div>
@@ -652,26 +677,6 @@
 
                 <div class="dashboard-config-header-actions dashboard-explorer-header-actions">
                   <button
-                    id="btnManagePhonologyWords"
-                    class="btn hidden"
-                    type="button"
-                    title="Importer la banque phonologique système"
-                    aria-label="Importer la banque phonologique système"
-                  >
-                    <span class="dashboard-material-icon" data-material-icon-name="spellcheck" aria-hidden="true"></span>
-                    <span>Banque phonologique</span>
-                  </button>
-                  <button
-                    id="btnManageSystemImages"
-                    class="btn hidden"
-                    type="button"
-                    title="Importer la banque d’images système"
-                    aria-label="Importer la banque d’images système"
-                  >
-                    <span class="dashboard-material-icon" data-material-icon-name="photo_library" aria-hidden="true"></span>
-                    <span>Banque d’images</span>
-                  </button>
-                  <button
                     id="btnCreateResourceFolder"
                     class="btn"
                     type="button"
@@ -734,6 +739,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="./js/dashboard.js"></script>
 
   <div id="accessCodeModal" class="modal hidden">

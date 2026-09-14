@@ -1,3 +1,4 @@
+import { isLexicalEntryAllowedAtLevel, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import {
   LEVELS,
   GRAPH_ORDER,
@@ -10,9 +11,7 @@ import {
   getPublicImageAssetUrl
 } from "../../shared/public-api.js";
 import {
-  isPhonologyWordAllowedAtLevel,
   normalizePhonologyRegularityScore,
-  normalizePhonologySchoolLevel,
   pickPhonologyWordByRegularity
 } from "../../shared/phonology-word-level.js";
 
@@ -76,7 +75,7 @@ export function getDefaultSettings() {
     mode: RESPONSE_MODES.LIBRE,
     individualValidationMode: INDIVIDUAL_VALIDATION_MODES.UNLIMITED,
     individualMaxAttempts: DEFAULT_INDIVIDUAL_MAX_ATTEMPTS,
-    schoolLevel:"CP",
+    lexicalLevel:1,
     graphOrder: getGraphsForStarterSelection()
   };
 }
@@ -238,7 +237,7 @@ export function normalizeSettings(settings) {
       MAX_INDIVIDUAL_MAX_ATTEMPTS,
       DEFAULT_INDIVIDUAL_MAX_ATTEMPTS
     ),
-    schoolLevel:normalizePhonologySchoolLevel(raw.schoolLevel ?? defaults.schoolLevel),
+    lexicalLevel:normalizeLexicalLevel(raw.lexicalLevel ?? defaults.lexicalLevel),
     graphOrder
   };
 }
@@ -247,7 +246,7 @@ export function getWordPool(settings) {
   const cfg = normalizeSettings(settings);
   const selectedGraphs = new Set(cfg.graphOrder);
   const resolvedCatalog = WORD_CATALOG
-    .filter((word) => isPhonologyWordAllowedAtLevel(word, cfg.schoolLevel))
+    .filter((word) => isLexicalEntryAllowedAtLevel(word, cfg.lexicalLevel))
     .map((word) => resolveWordCompositions(word, selectedGraphs));
 
   if (cfg.inputMode === INPUT_MODES.LETTERS) {
@@ -266,7 +265,7 @@ export function getSelectedGraphUsageStats(settings) {
   const cfg = normalizeSettings(settings);
   const selectedGraphs = new Set(cfg.graphOrder);
   const pool = WORD_CATALOG
-    .filter((word) => isPhonologyWordAllowedAtLevel(word, cfg.schoolLevel))
+    .filter((word) => isLexicalEntryAllowedAtLevel(word, cfg.lexicalLevel))
     .map((word) => resolveWordCompositions(word, selectedGraphs))
     .filter((word) => isWordGraphPlayable(word, selectedGraphs));
   const counts = new Map(cfg.graphOrder.map((graph) => [graph, 0]));
@@ -775,7 +774,7 @@ function normalizeWordCatalog(words) {
     .map((word) => ({
       word: String(word?.word || "").trim(),
       slug: String(word?.slug || "").trim().toLowerCase(),
-      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      lexicalLevel:normalizeLexicalLevel(word?.lexicalLevel, 1),
       regularityScore:normalizePhonologyRegularityScore(word?.regularityScore),
       units: normalizeWordUnits(word?.units)
     }))

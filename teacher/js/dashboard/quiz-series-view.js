@@ -6,14 +6,6 @@ import {
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
 import {
-  getDefaultQuizRuntimeSettings,
-  normalizeQuizRuntimeSettings
-} from "../../../tools/quiz/model.js";
-import {
-  readQuizRuntimeSettingsEditor,
-  renderQuizRuntimeSettingsEditor
-} from "./quiz-runtime-settings-ui.js";
-import {
   findQuizSelectionIndexesFromText,
   getQuizSelectionWordCount,
   normalizeQuizSelectionIndexes,
@@ -707,7 +699,6 @@ export function createQuizSeriesViewController({
   const titleOverlayInput = view?.querySelector("#quizSeriesTitleOverlayInput") || null;
   const titleOverlayMessage = view?.querySelector("#quizSeriesTitleOverlayMessage") || null;
   const applyTitleButton = view?.querySelector("#btnApplyQuizSeriesTitle") || null;
-  const runtimeSettingsHost = view?.querySelector("[data-quiz-series-runtime-settings]") || null;
   let isMounted = false;
   let currentQuizId = "";
   let currentFolderId = null;
@@ -721,7 +712,6 @@ export function createQuizSeriesViewController({
   let currentQuestion = null;
   let qcmChoiceCount = 4;
   let rows = [];
-  let quizRuntimeSettings = getDefaultQuizRuntimeSettings();
   let isDirty = false;
   let validationIssues = [];
   let importDrawerCloseTimer = 0;
@@ -1237,7 +1227,6 @@ export function createQuizSeriesViewController({
       </div>
     `;
     updateHeader();
-    renderQuizRuntimeSettings();
     const body = tableHost.querySelector(".quiz-series-table-body");
     if (!body) return;
     let nextRowIndex = 0;
@@ -1547,35 +1536,21 @@ export function createQuizSeriesViewController({
     };
   }
 
-  function syncQuizRuntimeSettingsFromDom(){
-    if (!runtimeSettingsHost || !currentAnalysis) return;
-    const snapshot = buildContentSnapshot();
-    quizRuntimeSettings = readQuizRuntimeSettingsEditor(runtimeSettingsHost, {
-      snapshot,
-      idPrefix:"quiz-series-runtime"
-    });
-  }
-
-  function renderQuizRuntimeSettings(){
-    if (!runtimeSettingsHost || !currentAnalysis) return;
-    const snapshot = buildContentSnapshot();
-    quizRuntimeSettings = renderQuizRuntimeSettingsEditor(runtimeSettingsHost, {
-      snapshot,
-      settings:quizRuntimeSettings,
-      idPrefix:"quiz-series-runtime",
-      onChange:(settings) => {
-        quizRuntimeSettings = settings;
-        markDirty();
-      }
-    }) || quizRuntimeSettings;
-  }
 
   function buildSnapshot(){
-    syncQuizRuntimeSettingsFromDom();
+    return buildContentSnapshot();
+  }
+
+  function buildTestSnapshot(){
     const snapshot = buildContentSnapshot();
     return {
       ...snapshot,
-      runtimeSettings:normalizeQuizRuntimeSettings(quizRuntimeSettings, snapshot)
+      runtimeSettings:{
+        drawMode:"in_order",
+        questionSelection:{ mode:"all", questionKeys:[] },
+        timeLimitSec:0,
+        autoExitOnComplete:false
+      }
     };
   }
 
@@ -1653,7 +1628,6 @@ export function createQuizSeriesViewController({
     currentQuestion = createBaseQuestion(model);
     qcmChoiceCount = Math.max(2, analysis.fields.find((field) => field.kind === "qcm")?.choiceCount || 4);
     rows = [createEmptyRow()];
-    quizRuntimeSettings = getDefaultQuizRuntimeSettings();
     if (titleInput) titleInput.value = String(title || "");
     if (instructionInput) instructionInput.value = String(instruction || "");
     validationIssues = [];
@@ -1682,7 +1656,6 @@ export function createQuizSeriesViewController({
     if (titleInput) titleInput.value = String(quiz.title || "");
     if (instructionInput) instructionInput.value = extractInstruction(currentQuestion, currentAnalysis);
     rows = extractRows(currentQuestion, currentAnalysis);
-    quizRuntimeSettings = normalizeQuizRuntimeSettings(quiz.runtimeSettings ?? quiz.runtime_settings ?? getDefaultQuizRuntimeSettings());
     validationIssues = [];
     isDirty = false;
     renderTable();
@@ -1719,7 +1692,7 @@ export function createQuizSeriesViewController({
 
   function handleTest(){
     if (!validate({ focus:true }) || typeof onTestQuiz !== "function") return;
-    onTestQuiz(buildSnapshot());
+    onTestQuiz(buildTestSnapshot());
   }
 
   async function handleBack(){

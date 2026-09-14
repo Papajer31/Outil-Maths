@@ -547,6 +547,18 @@ export function createSessionEngine({
     }
   }
 
+  function resolveRuntimeQuestionDurationMs(runtime, item, context, fallbackMs) {
+    if (!runtime || typeof runtime.getQuestionTimeLimitSec !== "function") return fallbackMs;
+    try {
+      const rawSeconds = runtime.getQuestionTimeLimitSec(els.workArea, context);
+      if (rawSeconds === null || rawSeconds === undefined) return fallbackMs;
+      const seconds = Math.max(0, Math.trunc(Number(rawSeconds) || 0));
+      return seconds > 0 ? seconds * 1000 : Number.POSITIVE_INFINITY;
+    } catch {
+      return fallbackMs;
+    }
+  }
+
   async function goToNextQuestionNow() {
     if (paused || !isSessionRunning) return false;
 
@@ -1382,7 +1394,7 @@ export function createSessionEngine({
       durationMs = item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : item.timePerQ * 1000;
     }
 
-    const remainingMs = clampPhaseDuration(durationMs);
+    let remainingMs = clampPhaseDuration(durationMs);
     const ctx = getToolContext(item);
 
 
@@ -1415,7 +1427,8 @@ export function createSessionEngine({
             }
             captureHistoryStage(item, "question");
             startHistoryQuestionTimer(item);
-            beginQuestionPhase(item, remainingMs, {
+            const resolvedDurationMs = resolveRuntimeQuestionDurationMs(runtimeForQuestion, item, ctx, remainingMs);
+            beginQuestionPhase(item, resolvedDurationMs, {
               generateQuestion: false,
               initialGaugeScale
             });
@@ -1428,17 +1441,19 @@ export function createSessionEngine({
 
       captureHistoryStage(item, "question");
       startHistoryQuestionTimer(item);
+      remainingMs = resolveRuntimeQuestionDurationMs(runtimeForQuestion, item, ctx, remainingMs);
     }
 
+    const questionIsInfinite = !Number.isFinite(remainingMs);
     engineState = "RUNNING_QUESTION";
-    phase = createPhase("QUESTION", item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : remainingMs);
+    phase = createPhase("QUESTION", questionIsInfinite ? Number.POSITIVE_INFINITY : remainingMs);
     item.currentQuestionResolvedCorrectly = false;
     item.currentQuestionOutcomeKind = "pending";
     item.currentQuestionOutcomeCommitted = false;
     item.lastQuestionOutcome = "pending";
     setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionFlowMode === "fixed" ? item.questionCount : "∞"}`);
 
-    if (item.infiniteTimePerQ) {
+    if (questionIsInfinite) {
       hideTimer();
 
       if (item.usesCustomQuestionFlow === true) {

@@ -13,6 +13,7 @@ const RESOURCE_ROOT_PERSONAL = "__resource_root_personal";
 const RESOURCE_ROOT_SYSTEM = "__resource_root_system";
 const RESOURCE_SYSTEM_IMAGES = "__resource_system_images";
 const RESOURCE_SYSTEM_AUDIO = "__resource_system_audio";
+const RESOURCE_SYSTEM_WORDS = "__resource_system_words";
 const SYSTEM_IMAGES_ROOT_ROLE = "system_images_root";
 const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
@@ -78,6 +79,15 @@ function createSystemVirtualFolders(){
       is_system: true,
       is_virtual_root: true,
       resource_type: "audio"
+    },
+    {
+      id: RESOURCE_SYSTEM_WORDS,
+      parent_id: RESOURCE_ROOT_SYSTEM,
+      name: "Mots",
+      display_order: 2,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "words"
     }
   ];
 }
@@ -104,7 +114,10 @@ export function createResourcesViewController({
   replaceAudioResourceFile,
   updateResource,
   deleteResource,
-  createResourceSignedUrl
+  createResourceSignedUrl,
+  getLexicalEntriesCount,
+  onOpenLexicalBank,
+  onImportSystemImages
 } = {}){
   let personalFolders = [];
   let personalResources = [];
@@ -118,6 +131,7 @@ export function createResourcesViewController({
   let isMoving = false;
   let draggedNode = null;
   let resourceDropTarget = null;
+  let lexicalEntryCount = null;
   const collapsedFolderIds = new Set();
   const knownFolderIds = new Set();
 
@@ -220,10 +234,17 @@ export function createResourcesViewController({
   async function reloadRemoteState(){
     personalLoadError = "";
     const teacherSpaceId = getTeacherSpaceId();
-    const [folderRows, resourceRows] = await Promise.all([
+    const [folderRows, resourceRows, lexicalCount] = await Promise.all([
       listResourceFoldersForSpace?.(teacherSpaceId),
-      listResourcesForSpace?.(teacherSpaceId)
+      listResourcesForSpace?.(teacherSpaceId),
+      typeof getLexicalEntriesCount === "function"
+        ? getLexicalEntriesCount().catch((error) => {
+            console.warn("Banque lexicale indisponible dans Ressources.", error);
+            return null;
+          })
+        : Promise.resolve(null)
     ]);
+    lexicalEntryCount = Number.isFinite(Number(lexicalCount)) ? Math.max(0, Number(lexicalCount)) : null;
     const allFolders = Array.isArray(folderRows) ? folderRows : [];
     const allResources = Array.isArray(resourceRows) ? resourceRows : [];
     personalFolders = allFolders.filter((folder) => folder?.is_system !== true);
@@ -381,6 +402,51 @@ export function createResourcesViewController({
     return folder?.managed_system_image === true ? safeId : undefined;
   }
 
+  function getSystemImageFolderPath(folderId = currentOpenFolderId){
+    const safeId = normalizeTreeId(folderId);
+    const rootId = getSystemImagesRootId();
+    if (!safeId || !rootId || safeId === RESOURCE_SYSTEM_IMAGES || safeId === rootId) return "";
+
+    const folderById = new Map(databaseSystemFolders.map((folder) => [String(folder?.id || ""), folder]));
+    const parts = [];
+    const visited = new Set();
+    let cursor = folderById.get(String(safeId)) || null;
+
+    while (cursor) {
+      const cursorId = String(cursor?.id || "");
+      if (!cursorId || visited.has(cursorId)) return "";
+      visited.add(cursorId);
+      if (cursorId === String(rootId)) break;
+
+      const name = String(cursor?.name || "").trim();
+      if (name) parts.unshift(name);
+
+      const parentId = normalizeTreeId(cursor?.parent_id);
+      if (!parentId) break;
+      if (parentId === rootId) break;
+      cursor = folderById.get(String(parentId)) || null;
+    }
+
+    return parts.join("/");
+  }
+
+  function openSystemImagesImportForCurrentFolder(){
+    if (getIsSuperAdmin?.() !== true || typeof onImportSystemImages !== "function") return;
+    const treeState = buildTreeState();
+    const { selectedFolder } = getCurrentFolderContents(treeState);
+    if (!selectedFolder || selectedFolder.managed_system_image !== true || selectedFolder.is_locked_system_role === true) return;
+    const folderPath = getSystemImageFolderPath(selectedFolder.id);
+    if (!folderPath) {
+      showToast?.("Impossible de déterminer le dossier système cible.", { isError:true });
+      return;
+    }
+    onImportSystemImages({
+      folderId:String(selectedFolder.id || ""),
+      folderPath,
+      folderName:String(selectedFolder.name || folderPath).trim() || folderPath
+    });
+  }
+
   function getWritableLocation(folderId = currentOpenFolderId, treeState = buildTreeState()){
     const personalFolderId = getPersonalTargetFolderId(folderId, treeState);
     if (personalFolderId !== undefined) return { scope:"personal", folderId:personalFolderId };
@@ -394,7 +460,8 @@ export function createResourcesViewController({
     return safeId === RESOURCE_ROOT_PERSONAL
       || safeId === RESOURCE_ROOT_SYSTEM
       || safeId === RESOURCE_SYSTEM_IMAGES
-      || safeId === RESOURCE_SYSTEM_AUDIO;
+      || safeId === RESOURCE_SYSTEM_AUDIO
+      || safeId === RESOURCE_SYSTEM_WORDS;
   }
 
   function syncKnownFolders(){
@@ -431,7 +498,12 @@ export function createResourcesViewController({
   }
 
   function setCurrentFolder(folderId = null){
-    currentOpenFolderId = normalizeTreeId(folderId);
+    const nextFolderId = normalizeTreeId(folderId);
+    if (nextFolderId === RESOURCE_SYSTEM_WORDS) {
+      onOpenLexicalBank?.();
+      return;
+    }
+    currentOpenFolderId = nextFolderId;
     if (currentOpenFolderId) expandFolderPath(currentOpenFolderId);
     render();
   }
@@ -451,6 +523,7 @@ export function createResourcesViewController({
   }
 
   function countResourcesInFolder(folderId, treeState){
+    if (String(folderId || "") === RESOURCE_SYSTEM_WORDS) return lexicalEntryCount ?? 0;
     let count = (treeState.activityChildren.get(String(folderId)) || []).length;
     for (const child of treeState.folderChildren.get(String(folderId)) || []) {
       count += countResourcesInFolder(child.id, treeState);
@@ -486,7 +559,7 @@ export function createResourcesViewController({
           <span class="dashboard-material-icon" aria-hidden="true">${isCollapsed ? "chevron_right" : "expand_more"}</span>
         </button>
         <button class="dashboard-activity-tree-main" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folderId)}">
-          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">folder</span>
+          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">${folderId === RESOURCE_SYSTEM_WORDS ? "menu_book" : "folder"}</span>
           <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name || "")}</span>
         </button>
       </div>
@@ -496,6 +569,10 @@ export function createResourcesViewController({
   function renderFolderTile(folder, treeState){
     const isManageable = canManageFolder(folder);
     const resourceCount = countResourcesInFolder(folder.id, treeState);
+    const isWordsShortcut = String(folder.id || "") === RESOURCE_SYSTEM_WORDS;
+    const countLabel = isWordsShortcut
+      ? (lexicalEntryCount == null ? "Banque lexicale" : `${resourceCount} mot${resourceCount > 1 ? "s" : ""}`)
+      : `${resourceCount} ressource${resourceCount > 1 ? "s" : ""}`;
     const actions = isManageable
       ? `
         <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
@@ -513,8 +590,8 @@ export function createResourcesViewController({
       <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-resource-folder-tile" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-resource-folder-topline">
-            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
-            <span class="dashboard-resource-folder-count">${resourceCount} ressource${resourceCount > 1 ? "s" : ""}</span>
+            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">${isWordsShortcut ? "menu_book" : "folder"}</span>
+            <span class="dashboard-resource-folder-count">${escapeHtml(countLabel)}</span>
           </span>
           <span class="dashboard-activity-tile-title">${escapeHtml(folder.name || "")}</span>
         </button>
@@ -602,17 +679,32 @@ export function createResourcesViewController({
   function renderFolderActions(selectedFolder, childResources){
     if (!selectedFolder || selectedFolder.is_virtual_root === true) return "";
     const manageableResources = (Array.isArray(childResources) ? childResources : []).filter(canManageResource);
-    if (!manageableResources.length) return "";
-    const label = manageableResources.every((resource) => resource?.type !== "audio")
-      ? `${manageableResources.length} image${manageableResources.length > 1 ? "s" : ""}`
-      : `${manageableResources.length} ressource${manageableResources.length > 1 ? "s" : ""}`;
+    const canImportSystemImages = getIsSuperAdmin?.() === true
+      && selectedFolder.managed_system_image === true
+      && selectedFolder.is_locked_system_role !== true
+      && typeof onImportSystemImages === "function";
+    if (!manageableResources.length && !canImportSystemImages) return "";
+
+    const label = manageableResources.length
+      ? (manageableResources.every((resource) => resource?.type !== "audio")
+          ? `${manageableResources.length} image${manageableResources.length > 1 ? "s" : ""}`
+          : `${manageableResources.length} ressource${manageableResources.length > 1 ? "s" : ""}`)
+      : "Dossier vide";
     return `
       <div class="dashboard-resource-folder-actions" role="toolbar" aria-label="Actions du dossier">
         <span class="dashboard-resource-folder-actions-count">${escapeHtml(label)}</span>
-        <button class="btn danger dashboard-btn-with-icon" type="button" data-action="empty-folder" ${isBulkDeleting ? "disabled" : ""}>
-          <span class="dashboard-material-icon" aria-hidden="true">delete_sweep</span>
-          <span>${isBulkDeleting ? "Suppression…" : "Vider le dossier"}</span>
-        </button>
+        ${canImportSystemImages ? `
+          <button class="btn dashboard-btn-with-icon" type="button" data-action="import-system-images">
+            <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
+            <span>Importer images</span>
+          </button>
+        ` : ""}
+        ${manageableResources.length ? `
+          <button class="btn danger dashboard-btn-with-icon" type="button" data-action="empty-folder" ${isBulkDeleting ? "disabled" : ""}>
+            <span class="dashboard-material-icon" aria-hidden="true">delete_sweep</span>
+            <span>${isBulkDeleting ? "Suppression…" : "Vider le dossier"}</span>
+          </button>
+        ` : ""}
       </div>
     `;
   }
@@ -683,7 +775,7 @@ export function createResourcesViewController({
           : personalWritable
             ? "Importer des fichiers personnels ici"
             : systemWritable
-              ? "Utilise le bouton « Banque d’images » pour importer des images système"
+              ? "Utilise le bouton « Importer images » dans le dossier courant"
               : "Les ressources système sont protégées en écriture";
       importResourcesButton.setAttribute("aria-busy", String(busy));
     }
@@ -993,6 +1085,11 @@ export function createResourcesViewController({
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         void deletePersonalResource(button.dataset.resourceId);
+      });
+    });
+    list?.querySelectorAll('[data-action="import-system-images"]').forEach((button) => {
+      button.addEventListener("click", () => {
+        openSystemImagesImportForCurrentFolder();
       });
     });
     list?.querySelectorAll('[data-action="empty-folder"]').forEach((button) => {
@@ -1787,6 +1884,10 @@ export function createResourcesViewController({
       render();
     },
     render,
+    showExplorer(){
+      currentOpenFolderId = RESOURCE_ROOT_SYSTEM;
+      render();
+    },
     getCurrentFolderId: () => currentOpenFolderId
   };
 }

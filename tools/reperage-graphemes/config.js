@@ -4,7 +4,7 @@ import {
   readRadio,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   WORD_COUNT_OPTIONS,
   ALL_TARGET_ID,
@@ -48,7 +48,8 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"rg",
           allTargetId:ALL_TARGET_ID,
-          showSchoolLevels:true,
+          showLexicalLevels:true,
+          allowFixedList:false,
           bankStatusMarkup:`<div class="rg-config-bank-status" data-rg-bank-status aria-live="polite"></div>`,
           afterSelectionMarkup:`<div data-rg-phonemic-only>${renderRadioGroup({
             title: "Affichage des graphies possibles",
@@ -167,7 +168,7 @@ function refreshBankStatus(container) {
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
 
-  const levelLabel = settings.schoolLevel;
+  const levelLabel = settings.lexicalLevel;
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
     if (!settings.graphemicEntries.length) {
       host.classList.remove("is-ready");
@@ -175,7 +176,7 @@ function refreshBankStatus(container) {
       host.textContent = "Ajoute au moins une entrée graphémique.";
       return;
     }
-    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau lexical ${levelLabel}${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
     return;
   }
 
@@ -184,14 +185,14 @@ function refreshBankStatus(container) {
     return;
   }
 
-  host.textContent = `${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} » dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
+  host.textContent = `${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau lexical ${levelLabel} dans la banque${enough ? "." : " : quantité insuffisante pour ce réglage."}`;
 }
 
 async function ensureWordCatalogLoaded() {
   if (!catalogPromise) {
     catalogStatus = "loading";
     catalogError = "";
-    catalogPromise = listPublicPhonologyWords()
+    catalogPromise = listPublicLexicalWords()
       .then((rows) => {
         setWordCatalog(Array.isArray(rows) ? rows : []);
         catalogStatus = "ready";

@@ -12,6 +12,7 @@ import {
   normalizeActivityQuestionOutcome,
   normalizeHistoryJson
 } from "./activity-history.js";
+import { buildLexicalRuntimeWords, normalizeLexicalEntries } from "./lexical-bank.js";
 import {
   applyCatalogVisibility,
   buildCatalogActivityConfig,
@@ -165,50 +166,21 @@ export function getPublicImageAssetUrl(storagePath, { bucket = "images" } = {}) 
   return String(data?.publicUrl || "").trim();
 }
 
-function normalizePhonologyWordSlug(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizePhonologyWordLabel(value) {
-  return cleanDisplayName(value);
-}
-
-function normalizePhonologyWordUnits(value) {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((unit) => ({
-      graph: String(unit?.graph || "").trim(),
-      text: String(unit?.text || "").trim(),
-      isSilent: unit?.isSilent === true
-    }))
-    .filter((unit) => unit.graph);
-}
-
-function normalizePhonologyWordSyllables(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((syllable) => String(syllable || "").trim())
-    .filter(Boolean);
-}
-
-export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
-  // Supabase/PostgREST limite par défaut une réponse à 1000 lignes.
-  // phonology_words dépasse désormais cette taille : sans pagination, les
-  // outils ne voyaient que les premiers mots par ordre alphabétique.
+export async function listPublicLexicalEntries({ activeOnly = true } = {}) {
+  // PostgREST limite les réponses à 1000 lignes par défaut. La banque lexicale
+  // dépasse 3000 entrées : pagination obligatoire pour ne jamais tronquer le
+  // corpus disponible dans les outils.
   const pageSize = 1000;
   const rows = [];
 
   for (let from = 0; ; from += pageSize) {
     let query = supabase
-      .from("phonology_words")
-      .select("slug, word, prefix, units, syllables, school_level, regularity_score, is_active")
-      .order("slug", { ascending: true })
+      .from("lexical_entries")
+      .select("entry_key, entry, category, lexical_level, phonology, syllabifications, introducers, masc_sing, fem_sing, masc_plur, fem_plur, is_active")
+      .order("entry_key", { ascending:true })
       .range(from, from + pageSize - 1);
 
-    if (activeOnly) {
-      query = query.eq("is_active", true);
-    }
+    if (activeOnly) query = query.eq("is_active", true);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -218,23 +190,18 @@ export async function listPublicPhonologyWords({ activeOnly = true } = {}) {
     if (page.length < pageSize) break;
   }
 
-  return rows
-    .map((row) => ({
-      slug: normalizePhonologyWordSlug(row?.slug),
-      word: normalizePhonologyWordLabel(row?.word),
-      prefix: normalizePhonologyWordLabel(row?.prefix),
-      units: normalizePhonologyWordUnits(row?.units),
-      syllables: normalizePhonologyWordSyllables(row?.syllables),
-      schoolLevel: ["CP", "CE1", "CE2", "CM", "X"].includes(String(row?.school_level || "").toLocaleUpperCase("fr-FR"))
-        ? String(row.school_level).toLocaleUpperCase("fr-FR")
-        : "X",
-      regularityScore: Number.isFinite(Number(row?.regularity_score))
-        ? Math.max(0, Math.min(100, Math.round(Number(row.regularity_score))))
-        : 50,
-      is_active: row?.is_active !== false
-    }))
-    .filter((row) => row.slug && row.word && row.units.length > 0)
-    .filter((row) => !activeOnly || row.is_active);
+  return normalizeLexicalEntries(rows)
+    .filter((entry) => !activeOnly || entry.isActive);
+}
+
+/**
+ * Catalogue runtime construit exclusivement depuis public.lexical_entries.
+ * Les outils n'ont ainsi aucune connaissance du schéma SQL ni de l'encodage
+ * humain des analyses phonologiques/syllabiques.
+ */
+export async function listPublicLexicalWords({ activeOnly = true } = {}) {
+  const entries = await listPublicLexicalEntries({ activeOnly });
+  return buildLexicalRuntimeWords(entries);
 }
 
 export async function listPublicPedagogicalNodesForSpace(accessCode) {
@@ -324,17 +291,6 @@ export async function listPublicVocabularyWordsForSpace(accessCode) {
   const { data, error } = await supabase.rpc("get_space_vocabulary_words", {
     p_access_code: code
   });
-
-  if (error) throw error;
-  return Array.isArray(data) ? data : [];
-}
-
-export async function listPublicDefaultVocabularyWords() {
-  const { data, error } = await supabase
-    .from("vocabulary_default_words")
-    .select("word, dictionary_page")
-    .order("word_normalized", { ascending: true })
-    .order("word", { ascending: true });
 
   if (error) throw error;
   return Array.isArray(data) ? data : [];

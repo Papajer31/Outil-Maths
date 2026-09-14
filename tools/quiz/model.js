@@ -17,14 +17,27 @@ import {
 const GRID_COLUMNS = 12;
 const GRID_ROWS = 8;
 const DEFAULT_DRAW_MODE = "random";
+const DEFAULT_VARIANT_DRAW_MODE = "in_order";
 const DRAW_MODES = new Set(["in_order", "random"]);
-const SUPPORTED_WIDGET_TYPES = new Set(["text", "masked-text", "answer", "verified-answer", "done", "image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
+const SUPPORTED_WIDGET_TYPES = new Set(["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
 const QCM_MAX_CHOICES = 6;
 const CORRECTION_VISIBILITY_MODES = new Set(["visible", "correct", "incorrect", "hidden"]);
 const normalizedQuizSnapshots = new WeakSet();
+
+function normalizeFlashDelaySeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 5;
+  return Math.max(0, Math.min(60, Math.round(numeric)));
+}
+
+function normalizeFlashVisibleSeconds(value){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 3;
+  return Math.max(0.5, Math.min(60, Math.round(numeric * 2) / 2));
+}
 
 function normalizeLabelItems(sourceItems, widgetIndex = 0){
   const source = Array.isArray(sourceItems) ? sourceItems : [];
@@ -228,6 +241,10 @@ function getSeriesInstructionFromQuestions(questions = []){
 
 export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = GRID_COLUMNS){
   const safe = question && typeof question === "object" && !Array.isArray(question) ? question : {};
+  const timerSeconds = Math.max(0, Math.min(300, Math.trunc(Number(safe.timerSeconds ?? safe.timer_seconds) || 0)));
+  const variantDrawMode = DRAW_MODES.has(String(safe.variantDrawMode ?? safe.variant_draw_mode ?? "").trim())
+    ? String(safe.variantDrawMode ?? safe.variant_draw_mode).trim()
+    : DEFAULT_VARIANT_DRAW_MODE;
   const widgets = (Array.isArray(safe.widgets) ? safe.widgets : [])
     .map((widget, widgetIndex) => normalizeQuizWidget(widget, widgetIndex, sourceColumns))
     .filter(Boolean);
@@ -244,6 +261,8 @@ export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = 
     id: sample.id,
     title: sample.title,
     modelId: sample.modelId,
+    timerSeconds,
+    variantDrawMode,
     widgets,
     variants,
     variantCount: variants.length,
@@ -274,11 +293,13 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const type = String(safe.type || "text").trim().toLowerCase();
   if (!SUPPORTED_WIDGET_TYPES.has(type)) return null;
   const isMaskedText = type === "masked-text";
+  const isFlashText = type === "flash-text";
+  const isFlashImage = type === "flash-image";
   const isAnswer = type === "answer";
   const isVerifiedAnswer = type === "verified-answer";
   const isDone = type === "done";
   const isTextAnswer = isAnswer || isVerifiedAnswer;
-  const isImage = type === "image";
+  const isImage = type === "image" || isFlashImage;
   const isAudio = type === "audio";
   const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
@@ -313,7 +334,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     safe.column,
     safe.columnSpan ?? safe.column_span,
     sourceGridColumns,
-    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isMaskedText || isTextAnswer ? 8 : isDone ? 3 : 5
+    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isMaskedText || isFlashText || isTextAnswer ? 8 : isDone ? 3 : 5
   );
   const correctionArea = migrateHorizontalArea(
     safe.correctionColumn ?? safe.correction_column ?? safe.column,
@@ -324,7 +345,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const column = questionArea.column;
   const row = clampInt(safe.row, 1, GRID_ROWS, 1);
   const columnSpan = questionArea.columnSpan;
-  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio || isMaskedText ? 2 : 1);
+  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio || isMaskedText || isFlashText ? 2 : 1);
   const overrides = normalizeCorrectionOverrides(safe.correctionOverrides || safe.correction_overrides || {});
   const questionVisible = isNumericKeypad || isDone
     ? true
@@ -346,7 +367,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   return {
     id: String(safe.id || `widget-${index + 1}`).trim() || `widget-${index + 1}`,
     type,
-    label: String(safe.label || (isMaskedText ? "Texte masqué" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
+    label: String(safe.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
     questionText,
     correctionText,
     questionHtml,
@@ -376,6 +397,10 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     correctionVerticalAlign: normalizeVerticalAlign(safe.correctionVerticalAlign ?? safe.correction_vertical_align ?? safe.verticalAlign ?? safe.vertical_align),
     fontSize: normalizeQuizFontSize(safe.fontSize ?? safe.font_size),
     correctionFontSize: normalizeQuizFontSize(safe.correctionFontSize ?? safe.correction_font_size ?? safe.fontSize ?? safe.font_size),
+    ...((isFlashText || isFlashImage) ? {
+      flashDelaySeconds: normalizeFlashDelaySeconds(safe.flashDelaySeconds ?? safe.flash_delay_seconds),
+      flashVisibleSeconds: normalizeFlashVisibleSeconds(safe.flashVisibleSeconds ?? safe.flash_visible_seconds)
+    } : {}),
     qcmLayout: normalizeQcmLayout(safe.qcmLayout ?? safe.qcm_layout),
     qcmChoices: isQcmText
       ? normalizeQcmChoices(safe.qcmChoices ?? safe.qcm_choices ?? safe.choices, index)
@@ -458,7 +483,7 @@ function captureVariantWidgetContent(widget){
       getQuizSelectionWordCount(widget.questionText)
     );
   }
-  if (widget?.type === "image") {
+  if (widget?.type === "image" || widget?.type === "flash-image") {
     content.questionImageSource = normalizeQuizImageSource(widget.questionImageSource);
     content.correctionImageSource = normalizeQuizImageSource(widget.correctionImageSource ?? widget.questionImageSource);
     content.correctionImageOverridden = Boolean(widget.correctionOverrides?.image);
@@ -507,7 +532,7 @@ function normalizeVariantWidgetContent(source = {}, widget){
         getQuizSelectionWordCount(questionText)
       )
     } : {}),
-    ...(widget?.type === "image" ? {
+    ...((widget?.type === "image" || widget?.type === "flash-image") ? {
       questionImageSource: normalizeQuizImageSource(
         source.questionImageSource ?? source.question_image_source ?? widget.questionImageSource
       ),
@@ -573,7 +598,7 @@ function applyVariantContentToWidget(widget, content = {}){
     ...(widget.type === "labels" ? { labelItems:normalized.labelItems } : {}),
     ...(widget.type === "categories" ? { categoryItems:normalized.categoryItems } : {}),
     ...(widget.type === "selection-words" ? { selectionExpectedTokenIndexes:normalized.selectionExpectedTokenIndexes } : {}),
-    ...(widget.type === "image" ? {
+    ...((widget.type === "image" || widget.type === "flash-image") ? {
       questionImageSource: normalized.questionImageSource,
       correctionImageSource: normalized.correctionImageSource
     } : {}),
@@ -585,7 +610,7 @@ function applyVariantContentToWidget(widget, content = {}){
       ...(widget.correctionOverrides || {}),
       text: normalized.correctionTextOverridden,
       formatting: normalized.correctionFormattingOverridden,
-      ...(widget.type === "image" ? { image:normalized.correctionImageOverridden } : {}),
+      ...((widget.type === "image" || widget.type === "flash-image") ? { image:normalized.correctionImageOverridden } : {}),
       ...(widget.type === "audio" ? { audio:normalized.correctionAudioOverridden } : {})
     }
   };
@@ -744,7 +769,7 @@ export function getWidgetView(widget, mode = "question"){
       ...visibilityState
     });
   }
-  if (widget.type === "image") {
+  if (widget.type === "image" || widget.type === "flash-image") {
     const correctionMode = mode === "correction";
     const overrides = widget.correctionOverrides || {};
     return normalizeViewBounds({
@@ -908,14 +933,25 @@ export function normalizeQuizSelectionForSnapshot(snapshot = {}, selection = {})
 
   const selectedKeys = new Set(normalizedSelection.questionKeys);
   const items = getQuizSelectionItems(snapshot);
-  return {
-    ...normalizedSelection,
-    // Les anciennes activités sélectionnaient la question conteneur. Cette clé
-    // continue donc de sélectionner toutes ses variantes.
-    questionKeys:items
-      .filter((item, index) => selectedKeys.has(getQuizQuestionSelectionKey(item, index)) || selectedKeys.has(item.sourceQuestionKey))
-      .map((item, index) => getQuizQuestionSelectionKey(item, index))
-  };
+  const itemKeys = new Set(items.map((item, index) => getQuizQuestionSelectionKey(item, index)));
+  const sourceQuestionKeys = new Set(items.map((item) => String(item.sourceQuestionKey || "")).filter(Boolean));
+  const expandedKeys = [];
+
+  // Compatibilité : les anciennes missions mémorisaient parfois la clé de la
+  // question conteneur. Elle continue de signifier « toutes ses variantes ».
+  items.forEach((item, index) => {
+    const key = getQuizQuestionSelectionKey(item, index);
+    if (selectedKeys.has(key) || selectedKeys.has(item.sourceQuestionKey)) expandedKeys.push(key);
+  });
+
+  // Ne jetons pas silencieusement les variantes/questions supprimées depuis la
+  // création de la mission : l’éditeur de mission pourra ainsi les signaler.
+  normalizedSelection.questionKeys.forEach((key) => {
+    if (itemKeys.has(key) || sourceQuestionKeys.has(key)) return;
+    if (!expandedKeys.includes(key)) expandedKeys.push(key);
+  });
+
+  return { ...normalizedSelection, questionKeys:expandedKeys };
 }
 
 export function filterQuizSnapshotBySelection(snapshot = {}, selection = {}){
@@ -942,13 +978,48 @@ export function getQuestionSelectionSignature(selection = {}){
 }
 
 export function createQuestionDeck(questions = [], drawMode = DEFAULT_DRAW_MODE){
-  const deck = Array.isArray(questions) ? questions.map((question) => ({ ...question })) : [];
-  if (drawMode !== "random") return deck;
-  for (let index = deck.length - 1; index > 0; index -= 1) {
+  const source = Array.isArray(questions) ? questions.map((question) => ({ ...question })) : [];
+  if (!source.length) return [];
+
+  // Les unités jouées sont les variantes sélectionnées, mais l’ordre de
+  // passation a deux étages distincts : la mission ordonne les QUESTIONS, puis
+  // chaque question décide elle-même de l’ordre de SES VARIANTES.
+  const groups = [];
+  const groupByQuestion = new Map();
+  source.forEach((item, index) => {
+    const groupKey = String(item?.sourceQuestionId || item?.id || `question-${index + 1}`);
+    let group = groupByQuestion.get(groupKey);
+    if (!group) {
+      group = {
+        key:groupKey,
+        variantDrawMode:DRAW_MODES.has(String(item?.variantDrawMode || "").trim())
+          ? String(item.variantDrawMode).trim()
+          : DEFAULT_VARIANT_DRAW_MODE,
+        items:[]
+      };
+      groupByQuestion.set(groupKey, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  });
+
+  if (drawMode === "random") shuffleInPlace(groups);
+
+  return groups.flatMap((group) => {
+    const variants = group.items.slice().sort((left, right) =>
+      Number(left?.sourceVariantIndex ?? 0) - Number(right?.sourceVariantIndex ?? 0)
+    );
+    if (group.variantDrawMode === "random") shuffleInPlace(variants);
+    return variants;
+  });
+}
+
+function shuffleInPlace(items = []){
+  for (let index = items.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
-    [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
-  return deck;
+  return items;
 }
 
 export function evaluateAnswer(question, rawAnswer = ""){

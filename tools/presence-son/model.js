@@ -1,9 +1,8 @@
+import { isLexicalEntryAllowedAtLevel, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import { getPhonemeTarget, getPhonemeTargets, normalizePhonologyTargetId } from "../../shared/phonology-targets.js";
 import { findPhonologyTargetOccurrences, getPhonologyUnitSurfaceText } from "../../shared/phonology-target-matcher.js";
 import {
-  isPhonologyWordAllowedAtLevel,
   normalizePhonologyRegularityScore,
-  normalizePhonologySchoolLevel,
   pickPhonologyWordByRegularity
 } from "../../shared/phonology-word-level.js";
 
@@ -37,7 +36,7 @@ export function getDefaultSettings() {
     targetIds: [ALL_TARGET_ID],
     enabledSpellings: [],
     enabledSpellingsByTarget: {},
-    schoolLevel: "CP"
+    lexicalLevel: 1
   };
 }
 
@@ -85,7 +84,7 @@ export function normalizeSettings(settings = {}) {
     targetIds: normalizedTargetIds,
     enabledSpellings,
     enabledSpellingsByTarget,
-    schoolLevel: normalizePhonologySchoolLevel(settings?.schoolLevel)
+    lexicalLevel: normalizeLexicalLevel(settings?.lexicalLevel)
   };
 }
 
@@ -122,7 +121,7 @@ export function getPhonemicSpellingUsage(settings = {}) {
     : cfg.targetIds.map(getPhonemeTarget).filter(Boolean);
 
   for (const target of targets) {
-    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.schoolLevel);
+    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.lexicalLevel);
     usageByTarget[target.id] = buildSpellingUsage(target, getPositiveWordsForMode(pools, cfg.questionMode));
   }
   return usageByTarget;
@@ -139,7 +138,7 @@ export function getEligibleStats(settings = {}) {
   const negative = new Set();
 
   for (const target of targets) {
-    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.schoolLevel);
+    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.lexicalLevel);
     getPositiveWordsForMode(pools, cfg.questionMode).forEach((word) => positive.add(word.slug));
     if (cfg.questionMode === QUESTION_MODES.EXISTENCE) {
       pools.negativeWords.forEach((word) => negative.add(word.slug));
@@ -176,7 +175,7 @@ export function pickQuestion(settings = {}, { avoidKey = "", attempts = 80 } = {
   for (let attempt = 0; attempt < Math.max(1, attempts); attempt += 1) {
     const orderedTargets = shuffleArray(targetChoices.length ? targetChoices : viableTargets);
     for (const target of orderedTargets) {
-      const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.schoolLevel);
+      const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.lexicalLevel);
       const question = cfg.questionMode === QUESTION_MODES.SYLLABLE_PLACE
         ? buildSyllablePlaceQuestion(target, pools, avoidKey)
         : buildExistenceQuestion(target, pools, avoidKey);
@@ -287,7 +286,7 @@ function getViableTargets(settings = {}) {
     : cfg.targetIds.map(getPhonemeTarget).filter(Boolean);
 
   return targets.filter((target) => {
-    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.schoolLevel);
+    const pools = getQuestionPoolsForTarget(target, getEnabledSpellings(cfg, target), cfg.lexicalLevel);
     const positiveWords = getPositiveWordsForMode(pools, cfg.questionMode);
     if (cfg.questionMode === QUESTION_MODES.SYLLABLE_PLACE) return positiveWords.length > 0;
     return positiveWords.length > 0 && (positiveWords.length + pools.negativeWords.length) > 0;
@@ -302,7 +301,7 @@ function getEnabledSpellings(settings = {}, target) {
     : (cfg.enabledSpellingsByTarget[target.id] || normalizeSpellings(target.spellings));
 }
 
-function getQuestionPoolsForTarget(target, enabledSpellings = null, schoolLevel = "CP") {
+function getQuestionPoolsForTarget(target, enabledSpellings = null, lexicalLevel = 1) {
   const targetId = String(target?.id || "").trim();
   if (!targetId) {
     return { positiveWords: [], syllablePlaceWords: [], negativeWords: [] };
@@ -311,7 +310,7 @@ function getQuestionPoolsForTarget(target, enabledSpellings = null, schoolLevel 
   const allowedSpellings = enabledSpellings === null
     ? normalizeSpellings(target?.spellings)
     : normalizeSpellings(enabledSpellings);
-  const normalizedLevel = normalizePhonologySchoolLevel(schoolLevel);
+  const normalizedLevel = normalizeLexicalLevel(lexicalLevel);
   const cacheKey = `${targetId}::${allowedSpellings.join("|")}::${normalizedLevel}::${IMAGE_CATALOG_BY_WORD.size}:${IMAGE_CATALOG_BY_LEGACY_SLUG.size}`;
   if (QUESTION_POOLS_CACHE.has(cacheKey)) return QUESTION_POOLS_CACHE.get(cacheKey);
 
@@ -321,7 +320,7 @@ function getQuestionPoolsForTarget(target, enabledSpellings = null, schoolLevel 
   const negativeWords = [];
 
   for (const entry of WORD_CATALOG) {
-    if (!isPhonologyWordAllowedAtLevel(entry, normalizedLevel)) continue;
+    if (!isLexicalEntryAllowedAtLevel(entry, normalizedLevel)) continue;
     const imageStoragePath = resolveImageStoragePath(entry);
     if (!imageStoragePath) continue;
 
@@ -330,7 +329,7 @@ function getQuestionPoolsForTarget(target, enabledSpellings = null, schoolLevel 
       slug: entry.slug,
       word: entry.word,
       prefix: entry.prefix,
-      schoolLevel: entry.schoolLevel,
+      lexicalLevel: entry.lexicalLevel,
       regularityScore: entry.regularityScore,
       imageStoragePath,
       syllables: [...entry.syllables],
@@ -473,7 +472,7 @@ function normalizeWordCatalog(words) {
       slug: normalizeSlug(word?.slug),
       word: String(word?.word || "").trim().normalize("NFC"),
       prefix: String(word?.prefix || "").trim().normalize("NFC"),
-      schoolLevel: normalizePhonologySchoolLevel(word?.schoolLevel, { allowX: true, fallback: "X" }),
+      lexicalLevel: normalizeLexicalLevel(word?.lexicalLevel, 1),
       regularityScore: normalizePhonologyRegularityScore(word?.regularityScore),
       units: (Array.isArray(word?.units) ? word.units : [])
         .map((unit) => ({

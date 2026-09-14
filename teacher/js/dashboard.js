@@ -70,10 +70,14 @@ import {
   updateResource,
   deleteResource,
   createResourceSignedUrl,
-  syncPhonologyWordsAsAdmin,
+  getLexicalEntriesCount,
+  listLexicalEntries,
+  saveLexicalEntryAsAdmin,
+  deleteLexicalEntryAsAdmin,
+  upsertLexicalEntriesAsAdmin,
   listImageAssetsAsAdmin,
-  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin,
+  listImagierAudioEntriesAsAdmin,
   listInterfaceAudioAssetsAsAdmin,
   uploadSystemInterfaceAudioAsAdmin,
   deleteSystemInterfaceAudioAsAdmin,
@@ -89,8 +93,8 @@ import { createQuizWorkshopViewController } from "./dashboard/quiz-workshop-view
 import { createQuizExplorerViewController } from "./dashboard/quiz-explorer-view.js";
 import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from "./dashboard/quiz-series-view.js";
 import { createResourcesViewController } from "./dashboard/resources-view.js";
+import { createLexicalBankViewController } from "./dashboard/lexical-bank-view.js";
 import { createAudioAdminViewController } from "./dashboard/audio-admin-view.js";
-import { createPhonologyWordsImportDialog } from "./dashboard/phonology-words-import-dialog.js";
 import { createSystemImagesImportDialog } from "./dashboard/system-images-import-dialog.js";
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
 import { filterQuizSnapshotBySelection, getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues, normalizeQuizRuntimeSettings } from "../../tools/quiz/model.js";
@@ -172,8 +176,6 @@ const quizSeriesMessage = document.getElementById("quizSeriesMessage");
 const resourcesView = document.getElementById("resourcesView");
 const resourcesHeader = document.getElementById("resourcesHeader");
 const resourcesList = document.getElementById("resourcesList");
-const btnManagePhonologyWords = document.getElementById("btnManagePhonologyWords");
-const btnManageSystemImages = document.getElementById("btnManageSystemImages");
 const btnCreateResourceFolder = document.getElementById("btnCreateResourceFolder");
 const btnImportResources = document.getElementById("btnImportResources");
 const btnRecordResourceAudio = document.getElementById("btnRecordResourceAudio");
@@ -250,7 +252,7 @@ let quizExplorerViewController = null;
 let quizWorkshopViewController = null;
 let quizSeriesViewController = null;
 let resourcesViewController = null;
-let phonologyWordsImportDialog = null;
+let lexicalBankViewController = null;
 let systemImagesImportDialog = null;
 let teacherToolsViewController = null;
 let audioAdminViewController = null;
@@ -562,21 +564,26 @@ quizExplorerViewController = createQuizExplorerViewController({
   showToast: showDashboardShareToast
 });
 
-phonologyWordsImportDialog = createPhonologyWordsImportDialog({
-  openButton: btnManagePhonologyWords,
-  getIsSuperAdmin: () => currentUserIsSuperAdmin,
-  syncPhonologyWordsAsAdmin,
-  showToast: showDashboardShareToast
-});
-
 systemImagesImportDialog = createSystemImagesImportDialog({
-  openButton: btnManageSystemImages,
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listImageAssetsAsAdmin,
-  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin,
   showToast: showDashboardShareToast,
   onImported: () => resourcesViewController?.refresh?.({ forceRefresh:false })
+});
+
+lexicalBankViewController = createLexicalBankViewController({
+  view: resourcesView,
+  host: resourcesList,
+  getIsSuperAdmin: () => currentUserIsSuperAdmin,
+  listLexicalEntries,
+  saveLexicalEntryAsAdmin,
+  deleteLexicalEntryAsAdmin,
+  upsertLexicalEntriesAsAdmin,
+  showToast: showDashboardShareToast,
+  onBack: () => {
+    void resourcesViewController?.refresh?.({ forceRefresh:true });
+  }
 });
 
 resourcesViewController = createResourcesViewController({
@@ -602,11 +609,17 @@ resourcesViewController = createResourcesViewController({
   replaceAudioResourceFile,
   updateResource,
   deleteResource,
-  createResourceSignedUrl
+  createResourceSignedUrl,
+  getLexicalEntriesCount,
+  onOpenLexicalBank: () => { void lexicalBankViewController?.open?.(); },
+  onImportSystemImages: ({ folderPath, folderName } = {}) => {
+    systemImagesImportDialog?.open?.({ destinationPath:folderPath, destinationLabel:folderName });
+  }
 });
 
 audioAdminViewController = createAudioAdminViewController({
   view: adminView,
+  listImagierAudioEntriesAsAdmin,
   listInterfaceAudioAssetsAsAdmin,
   uploadSystemInterfaceAudioAsAdmin,
   deleteSystemInterfaceAudioAsAdmin,
@@ -862,8 +875,6 @@ function renderDashboardShellState(){
     toggleHelpIcons.checked = showDashboardHelpIcons;
   }
 
-  phonologyWordsImportDialog?.setVisible?.(currentUserIsSuperAdmin === true);
-  systemImagesImportDialog?.setVisible?.(currentUserIsSuperAdmin === true);
   renderStudentViewToggle();
 }
 
@@ -936,7 +947,7 @@ btnNavAdmin?.addEventListener("click", async () => {
   if (currentUserIsSuperAdmin !== true) return;
   currentDashboardSection = "admin";
   renderDashboardShellState();
-  await ensureAdminViewMounted();
+  await ensureAdminViewMounted({ forceRefresh:true });
 });
 btnStudentListView?.addEventListener("click", async () => {
   if (studentViewMode === "list") return;

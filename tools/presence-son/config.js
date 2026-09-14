@@ -5,7 +5,7 @@ import {
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
 import {
-  listPublicPhonologyWords,
+  listPublicLexicalWords,
   listPublicImageAssetsInSystemFolder
 } from "../../shared/public-api.js";
 import {
@@ -14,7 +14,7 @@ import {
   readPhonologyTargetSelector,
   updatePhonologySpellingUsage
 } from "../../shared/phonology-target-selector.js";
-import { PHONOLOGY_SCHOOL_LEVELS, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
+import { LEXICAL_LEVELS, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import {
   ALL_TARGET_ID,
   QUESTION_MODES,
@@ -52,12 +52,12 @@ export function renderToolSettings(container, settings = {}) {
           ]
         }),
         renderRadioGroup({
-          title: "Niveau des mots",
-          id: "sp_schoolLevel",
-          value: cfg.schoolLevel,
-          options: PHONOLOGY_SCHOOL_LEVELS.map((level) => ({
-            value: level.id,
-            label: level.label
+          title: "Niveau lexical",
+          id: "sp_lexicalLevel",
+          value: cfg.lexicalLevel,
+          options: LEXICAL_LEVELS.map((level) => ({
+            value:String(level),
+            label:String(level)
           }))
         }),
         renderPhonologyTargetSelector(cfg, {
@@ -74,7 +74,7 @@ export function renderToolSettings(container, settings = {}) {
   bindRadio(container, "sp_questionMode", {
     onChange: () => refreshBankStatus(container)
   });
-  bindRadio(container, "sp_schoolLevel", {
+  bindRadio(container, "sp_lexicalLevel", {
     onChange: () => refreshBankStatus(container)
   });
   bindPhonologyTargetSelector(container, {
@@ -128,7 +128,7 @@ function readCurrentSettings(container) {
   return normalizeSettings({
     ...selection,
     questionMode: readRadio(container, "sp_questionMode", QUESTION_MODES.EXISTENCE),
-    schoolLevel: normalizePhonologySchoolLevel(readRadio(container, "sp_schoolLevel", "CP"))
+    lexicalLevel: normalizeLexicalLevel(readRadio(container, "sp_lexicalLevel", 1))
   });
 }
 
@@ -185,7 +185,7 @@ async function ensureCatalogsLoaded() {
     catalogsStatus = "loading";
     catalogsError = "";
     catalogsPromise = Promise.all([
-      listPublicPhonologyWords(),
+      listPublicLexicalWords(),
       listPublicImageAssetsInSystemFolder(getImageFolderName())
     ])
       .then(([words, images]) => {

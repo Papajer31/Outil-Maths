@@ -1,3 +1,4 @@
+import { getFixedWordsFromCatalog, isLexicalEntryAllowedAtLevel, normalizeFixedWordSlugs, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import { getPhonemeTarget, getPhonemeTargets, normalizePhonologyTargetId } from "../../shared/phonology-targets.js";
 import { findPhonologyTargetOccurrences } from "../../shared/phonology-target-matcher.js";
 import {
@@ -10,13 +11,11 @@ import {
   wordContainsAnyGraphemicEntry
 } from "../../shared/graphemic-targets.js";
 import {
-  isPhonologyWordAllowedAtLevel,
   isPhonologyWordAllowedByCgpComplexity,
   isPhonologyWordAllowedBySilentLetters,
   normalizePhonologyCgpComplexityLevel,
   normalizePhonologyRegularityScore,
   normalizePhonologySilentLettersMode,
-  normalizePhonologySchoolLevel,
   pickPhonologyWordByRegularity
 } from "../../shared/phonology-word-level.js";
 
@@ -50,7 +49,8 @@ export function getDefaultSettings() {
     enabledSpellingsByTarget: { [DEFAULT_TARGET_ID]:normalizeSpellings(target?.spellings) },
     graphemicEntries:[],
     excludedGraphemicEntries:[],
-    schoolLevel:"CP",
+    fixedWordSlugs:[],
+    lexicalLevel:1,
     silentLettersMode:"allow",
     cgpComplexityLevel:5,
     minLetters: DEFAULT_MIN_LETTERS,
@@ -105,9 +105,10 @@ export function normalizeSettings(settings = {}) {
     targetIds:normalizedTargetIds,
     graphemicEntries,
     excludedGraphemicEntries,
+    fixedWordSlugs:normalizeFixedWordSlugs(settings?.fixedWordSlugs || []),
     enabledSpellings,
     enabledSpellingsByTarget,
-    schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
+    lexicalLevel:normalizeLexicalLevel(settings?.lexicalLevel),
     silentLettersMode:normalizePhonologySilentLettersMode(settings?.silentLettersMode),
     cgpComplexityLevel:normalizePhonologyCgpComplexityLevel(settings?.cgpComplexityLevel),
     minLetters,
@@ -131,6 +132,7 @@ export function getWordCatalog() {
 
 export function getEligibleWords(settings = {}) {
   const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.FIXED) return getFixedEligibleWords(cfg);
   const bySlug = new Map();
   getSelectedTargets(cfg).forEach((target) => {
     getEligibleWordsForTarget(cfg, target).forEach((word) => bySlug.set(word.slug, word));
@@ -146,7 +148,7 @@ function getEligibleWordsForTarget(cfg, target) {
     enabledSpellings.join("|"),
     cfg.minLetters,
     cfg.maxLetters,
-    cfg.schoolLevel,
+    cfg.lexicalLevel,
     `silent:${cfg.silentLettersMode}`,
     `cgp:${cfg.cgpComplexityLevel}`,
     target.kind === "graphemic" ? `exclude:${cfg.excludedGraphemicEntries.join("|")}` : ""
@@ -154,7 +156,7 @@ function getEligibleWordsForTarget(cfg, target) {
   if (ELIGIBLE_CACHE.has(cacheKey)) return cloneData(ELIGIBLE_CACHE.get(cacheKey));
 
   const words = WORD_CATALOG
-    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, cfg.schoolLevel))
+    .filter((entry) => isLexicalEntryAllowedAtLevel(entry, cfg.lexicalLevel))
     .filter((entry) => isPhonologyWordAllowedBySilentLetters(entry, cfg.silentLettersMode))
     .filter((entry) => isPhonologyWordAllowedByCgpComplexity(entry, cfg.cgpComplexityLevel))
     .filter((entry) => isLettersOnly(entry.word))
@@ -216,11 +218,14 @@ export function getEligibleWordCount(settings = {}) {
 
 export function getEligibleTargetCount(settings = {}) {
   const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.FIXED) return getFixedEligibleWords(cfg).length ? 1 : 0;
   return getSelectedTargets(cfg).filter((target) => getEligibleWordsForTarget(cfg, target).length > 0).length;
 }
 
 export function canGenerateQuestion(settings = {}) {
-  return getEligibleWordCount(settings) > 0;
+  const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.FIXED) return getFixedEligibleWords(cfg).length > 0;
+  return getEligibleWordCount(cfg) > 0;
 }
 
 export function pickQuestion(settings = {}, {
@@ -228,6 +233,34 @@ export function pickQuestion(settings = {}, {
   usedWordSlugs = null
 } = {}) {
   const cfg = normalizeSettings(settings);
+  if (cfg.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+    const pool = getFixedEligibleWords(cfg);
+    if (!pool.length) return null;
+    const used = usedWordSlugs instanceof Set ? usedWordSlugs : new Set();
+    const unused = pool.filter((word) => !used.has(word.slug));
+    let candidates = unused.length ? unused : pool;
+    const previousSlug = String(avoidKey || "").split("::")[1] || "";
+    if (previousSlug && candidates.length > 1) {
+      const withoutPrevious = candidates.filter((word) => word.slug !== previousSlug);
+      if (withoutPrevious.length) candidates = withoutPrevious;
+    }
+    const chosen = pickPhonologyWordByRegularity(candidates);
+    if (!chosen) return null;
+    const letters = chosen.letters.map((text, originalIndex) => ({ id:`letter-${originalIndex}`, text, originalIndex }));
+    const expectedLetterIds = letters.map((letter) => letter.id);
+    const shuffledLetterIds = shuffleUntilDifferent(expectedLetterIds, letters);
+    return {
+      key:buildQuestionKey("fixed", chosen.slug),
+      target:{ id:"fixed", kind:"fixed", label:"Liste fixe", bubbleText:"" },
+      prompt:buildPrompt(),
+      slug:chosen.slug,
+      word:chosen.word,
+      letters,
+      expectedLetterIds,
+      shuffledLetterIds,
+      characterCount:letters.length
+    };
+  }
   const previousTargetId = String(avoidKey || "").split("::")[0];
   const viable = getSelectedTargets(cfg).filter((target) => getEligibleWordsForTarget(cfg, target).length);
   const choices = viable.filter((target) => target.id !== previousTargetId);
@@ -266,6 +299,12 @@ export function pickQuestion(settings = {}, {
     shuffledLetterIds,
     characterCount: letters.length
   };
+}
+
+function getFixedEligibleWords(cfg) {
+  return getFixedWordsFromCatalog(WORD_CATALOG, cfg.fixedWordSlugs)
+    .filter((entry) => isLettersOnly(entry.word))
+    .map((entry) => ({ ...entry, letters:splitWordLetters(entry.word), targetSpellings:[] }));
 }
 
 function getSelectedTargets(settings = {}) {
@@ -353,7 +392,7 @@ function normalizeWordCatalog(words) {
     .map((word) => ({
       slug: String(word?.slug || "").trim().toLocaleLowerCase("fr-FR"),
       word: String(word?.word || "").trim().normalize("NFC"),
-      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      lexicalLevel:normalizeLexicalLevel(word?.lexicalLevel, 1),
       regularityScore:normalizePhonologyRegularityScore(word?.regularityScore),
       units: (Array.isArray(word?.units) ? word.units : [])
         .map((unit) => ({

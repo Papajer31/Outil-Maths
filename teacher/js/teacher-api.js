@@ -1464,16 +1464,6 @@ export async function deleteCatalogActivityAsAdmin(activityId) {
   if (error) throw error;
 }
 
-export async function listDefaultVocabularyWordsAsAdmin() {
-  const { data, error } = await supabase
-    .from("vocabulary_default_words")
-    .select("id, word, word_normalized, dictionary_page, created_at, updated_at")
-    .order("word_normalized", { ascending: true })
-    .order("word", { ascending: true });
-  if (error) throw error;
-  return Array.isArray(data) ? data : [];
-}
-
 /* =========================
    QUIZ SUPABASE
    ========================= */
@@ -1770,9 +1760,6 @@ async function refreshDirectQuizMissionStepsForSpace(teacherSpaceId, quiz = {}) 
   const quizId = String(snapshot.id || quiz?.id || "").trim();
   if (!quizId) return;
 
-  const runtimeSettings = normalizeQuizRuntimeSettings(snapshot.runtimeSettings, snapshot);
-  const selectedQuestions = filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection);
-  const questionCount = Math.max(1, selectedQuestions.length || 1);
   const title = cleanDisplayName(snapshot.title || quiz?.title) || "Quiz sans titre";
   const resourceIds = collectQuizResourceIds(snapshot);
 
@@ -1799,6 +1786,15 @@ async function refreshDirectQuizMissionStepsForSpace(teacherSpaceId, quiz = {}) 
 
   await Promise.all(linkedSteps.map(async (step) => {
     const options = cloneJsonValue(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {});
+    const storedSettings = options.settings && typeof options.settings === "object" ? options.settings : {};
+    const runtimeSettings = normalizeQuizRuntimeSettings({
+      drawMode:storedSettings.drawMode ?? storedSettings.draw_mode ?? "in_order",
+      questionSelection:storedSettings.questionSelection ?? storedSettings.question_selection ?? { mode:"all", questionKeys:[] },
+      timeLimitSec:storedSettings.timeLimitSec ?? storedSettings.time_limit_sec ?? 0,
+      autoExitOnComplete:false
+    }, snapshot);
+    const selectedQuestions = filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection);
+    const questionCount = Math.max(1, selectedQuestions.length || 1);
     options.direct_quiz = {
       ...(options.direct_quiz && typeof options.direct_quiz === "object" ? options.direct_quiz : {}),
       quiz_id: quizId,
@@ -1808,14 +1804,14 @@ async function refreshDirectQuizMissionStepsForSpace(teacherSpaceId, quiz = {}) 
     };
     options.execution_limit = { mode:"questions", value:questionCount };
     options.settings = {
-      ...(options.settings && typeof options.settings === "object" ? options.settings : {}),
+      ...storedSettings,
       quizId,
       quizTitle:title,
       sourceInstruction:String(snapshot.instruction || ""),
       drawMode:runtimeSettings.drawMode,
       questionSelection:runtimeSettings.questionSelection,
       timeLimitSec:runtimeSettings.timeLimitSec,
-      autoExitOnComplete:runtimeSettings.autoExitOnComplete,
+      autoExitOnComplete:false,
       quizSnapshot:snapshot
     };
 
@@ -2350,54 +2346,153 @@ export async function deleteResource(resourceId, options = {}) {
   return resource;
 }
 
-export async function syncPhonologyWordsAsAdmin(words, {
-  deactivateMissing = true,
-  replaceAll = false
-} = {}) {
-  // Préflight volontaire : une ancienne fonction RPC accepterait le JSON
-  // enrichi mais pourrait ignorer silencieusement les nouveaux champs. On
-  // refuse donc la synchronisation tant que le schéma prefix + syllables + niveau + score
-  // n’est pas présent (migration 32).
-  const { error: phonologySchemaError } = await supabase
-    .from("phonology_words")
-    .select("prefix, syllables, school_level, regularity_score")
-    .limit(1);
-  if (phonologySchemaError) throw phonologySchemaError;
 
-  const payload = (Array.isArray(words) ? words : []).map((row) => ({
-    slug: String(row?.slug || "").trim().toLocaleLowerCase("fr-FR"),
-    word: String(row?.word || "").trim(),
-    prefix: String(row?.prefix || "").trim(),
-    units: Array.isArray(row?.units) ? row.units.map((unit) => ({
-      graph: String(unit?.graph || "").trim(),
-      text: String(unit?.text || "").trim(),
-      isSilent: unit?.isSilent === true
-    })) : [],
-    syllables: Array.isArray(row?.syllables)
-      ? row.syllables.map((syllable) => String(syllable || "").trim()).filter(Boolean)
-      : [],
-    school_level: ["CP", "CE1", "CE2", "CM", "X"].includes(String(row?.schoolLevel || "").toLocaleUpperCase("fr-FR"))
-      ? String(row.schoolLevel).toLocaleUpperCase("fr-FR")
-      : "X",
-    regularity_score: Number.isFinite(Number(row?.regularityScore))
-      ? Math.max(0, Math.min(100, Math.round(Number(row.regularityScore))))
-      : 50,
-    is_active: true
-  }));
+// ---------------------------------------------------------
+// Banque lexicale définitive
+// ---------------------------------------------------------
 
-  const rpcName = replaceAll === true
-    ? "replace_phonology_words_as_admin"
-    : "sync_phonology_words_as_admin";
-  const rpcArgs = replaceAll === true
-    ? { p_words: payload }
-    : {
-        p_words: payload,
-        p_deactivate_missing: deactivateMissing === true
-      };
+const LEXICAL_ENTRY_FIELDS = "id, entry_key, entry, category, lexical_level, phonology, syllabifications, introducers, masc_sing, fem_sing, masc_plur, fem_plur, is_active, created_at, updated_at";
 
-  const { data, error } = await supabase.rpc(rpcName, rpcArgs);
+function normalizeLexicalEntryKey(value) {
+  return String(value || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+}
+
+function normalizeLexicalStringArray(value) {
+  return Array.from(new Set(
+    (Array.isArray(value) ? value : [])
+      .map((item) => String(item || "").trim().normalize("NFC"))
+      .filter(Boolean)
+  ));
+}
+
+function normalizeNullableLexicalText(value) {
+  const text = String(value || "").trim().normalize("NFC");
+  return text || null;
+}
+
+function normalizeLexicalLevel(value) {
+  const level = Number(value);
+  return Number.isInteger(level) && level >= 1 && level <= 3 ? level : 0;
+}
+
+function normalizeLexicalEntryRecord(row = {}) {
+  return {
+    id: row?.id ? String(row.id) : null,
+    entry_key: normalizeLexicalEntryKey(row?.entry_key || row?.entry),
+    entry: String(row?.entry || "").trim().normalize("NFC"),
+    category: String(row?.category || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR"),
+    lexical_level: normalizeLexicalLevel(row?.lexical_level),
+    phonology: normalizeLexicalStringArray(row?.phonology),
+    syllabifications: normalizeLexicalStringArray(row?.syllabifications),
+    introducers: normalizeLexicalStringArray(row?.introducers),
+    masc_sing: normalizeNullableLexicalText(row?.masc_sing),
+    fem_sing: normalizeNullableLexicalText(row?.fem_sing),
+    masc_plur: normalizeNullableLexicalText(row?.masc_plur),
+    fem_plur: normalizeNullableLexicalText(row?.fem_plur),
+    is_active: row?.is_active !== false,
+    created_at: String(row?.created_at || ""),
+    updated_at: String(row?.updated_at || row?.created_at || "")
+  };
+}
+
+function buildLexicalEntryPayload(row = {}) {
+  const normalized = normalizeLexicalEntryRecord(row);
+  if (!normalized.entry || !normalized.entry_key) throw new Error("Entrée lexicale vide.");
+  if (!normalized.category) throw new Error(`Catégorie manquante pour « ${normalized.entry} ».`);
+  if (![1, 2, 3].includes(normalized.lexical_level)) {
+    throw new Error(`Niveau lexical invalide pour « ${normalized.entry} ».`);
+  }
+  return {
+    entry_key: normalized.entry_key,
+    entry: normalized.entry,
+    category: normalized.category,
+    lexical_level: normalized.lexical_level,
+    phonology: normalized.phonology,
+    syllabifications: normalized.syllabifications,
+    introducers: normalized.introducers,
+    masc_sing: normalized.masc_sing,
+    fem_sing: normalized.fem_sing,
+    masc_plur: normalized.masc_plur,
+    fem_plur: normalized.fem_plur,
+    is_active: normalized.is_active
+  };
+}
+
+export async function getLexicalEntriesCount() {
+  const { count, error } = await supabase
+    .from("lexical_entries")
+    .select("id", { count:"exact", head:true })
+    .eq("is_active", true);
   if (error) throw error;
-  return data && typeof data === "object" ? data : {};
+  return Math.max(0, Number(count) || 0);
+}
+
+export async function listLexicalEntries() {
+  const pageSize = 1000;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("lexical_entries")
+      .select(LEXICAL_ENTRY_FIELDS)
+      .order("entry_key", { ascending:true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows.map(normalizeLexicalEntryRecord);
+}
+
+export async function saveLexicalEntryAsAdmin(entry = {}) {
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+  const payload = buildLexicalEntryPayload(entry);
+  const id = normalizeUuid(entry?.id);
+  let query = null;
+  if (id) {
+    query = supabase
+      .from("lexical_entries")
+      .update(payload)
+      .eq("id", id);
+  } else {
+    query = supabase
+      .from("lexical_entries")
+      .insert(payload);
+  }
+  const { data, error } = await query.select(LEXICAL_ENTRY_FIELDS).single();
+  if (error) throw error;
+  return normalizeLexicalEntryRecord(data);
+}
+
+export async function upsertLexicalEntriesAsAdmin(entries = []) {
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+  const payload = (Array.isArray(entries) ? entries : []).map(buildLexicalEntryPayload);
+  if (!payload.length) throw new Error("Aucun mot à importer.");
+
+  const chunkSize = 500;
+  const imported = [];
+  for (let index = 0; index < payload.length; index += chunkSize) {
+    const chunk = payload.slice(index, index + chunkSize);
+    const { data, error } = await supabase
+      .from("lexical_entries")
+      .upsert(chunk, { onConflict:"entry_key" })
+      .select(LEXICAL_ENTRY_FIELDS);
+    if (error) throw error;
+    imported.push(...(Array.isArray(data) ? data : []));
+  }
+  return imported.map(normalizeLexicalEntryRecord);
+}
+
+export async function deleteLexicalEntryAsAdmin(entryId) {
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+  const id = normalizeUuid(entryId);
+  if (!id) throw new Error("Entrée lexicale invalide.");
+  const { error } = await supabase
+    .from("lexical_entries")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+  return true;
 }
 
 function normalizeImageAssetRecord(row = {}) {
@@ -2437,16 +2532,17 @@ export async function listImageAssetsAsAdmin() {
   return rows.map(normalizeImageAssetRecord);
 }
 
-export async function listPhonologyWordLexiconAsAdmin() {
+export async function listLexicalWordLexiconAsAdmin() {
   const pageSize = 1000;
   const rows = [];
 
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
-      .from("phonology_words")
-      .select("slug, word")
-      .order("slug", { ascending: true })
+      .from("lexical_entries")
+      .select("entry_key, entry")
+      .eq("is_active", true)
+      .order("entry_key", { ascending: true })
       .range(from, to);
     if (error) throw error;
     const page = Array.isArray(data) ? data : [];
@@ -2456,8 +2552,8 @@ export async function listPhonologyWordLexiconAsAdmin() {
 
   return rows
     .map((row) => ({
-      slug: String(row?.slug || "").trim().toLocaleLowerCase("fr-FR"),
-      word: String(row?.word || "").trim().normalize("NFC")
+      slug: String(row?.entry_key || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR"),
+      word: String(row?.entry || "").trim().normalize("NFC")
     }))
     .filter((row) => row.slug && row.word);
 }
@@ -2523,6 +2619,148 @@ export async function importSystemImageAssetAsAdmin(file, asset = {}) {
 
 
 // ---------------------------------------------------------
+// Entrées audio dynamiques de l’Imagier (super-admin)
+// ---------------------------------------------------------
+
+export async function listImagierAudioEntriesAsAdmin() {
+  if (!(await isCurrentUserSuperAdmin())) throw new Error("Accès super-admin requis.");
+
+  const [folderResult, resourceResult, assetRows, lexiconRows] = await Promise.all([
+    supabase
+      .from("resource_folders")
+      .select(RESOURCE_FOLDER_FIELDS)
+      .eq("is_system", true)
+      .order("display_order", { ascending:true })
+      .order("name", { ascending:true }),
+    supabase
+      .from("resources")
+      .select(RESOURCE_FIELDS)
+      .eq("is_system", true)
+      .eq("resource_type", "image")
+      .eq("storage_bucket", SYSTEM_IMAGE_BUCKET)
+      .order("display_order", { ascending:true })
+      .order("title", { ascending:true }),
+    listImageAssetsAsAdmin(),
+    listLexicalWordLexiconAsAdmin()
+  ]);
+
+  if (folderResult.error) throw folderResult.error;
+  if (resourceResult.error) throw resourceResult.error;
+
+  const folders = (Array.isArray(folderResult.data) ? folderResult.data : []).map(normalizeResourceFolderRecord);
+  const resources = (Array.isArray(resourceResult.data) ? resourceResult.data : []).map(normalizeResourceRecord);
+  const assets = Array.isArray(assetRows) ? assetRows : [];
+  const lexicon = Array.isArray(lexiconRows) ? lexiconRows : [];
+
+  const imagesRoot = folders.find((folder) => String(folder?.metadata?.system_role || "") === "system_images_root") || null;
+  if (!imagesRoot?.id) return [];
+
+  const imagierRoot = folders.find((folder) =>
+    folder?.is_system === true
+    && String(folder?.parent_id || "") === String(imagesRoot.id)
+    && String(folder?.name || "").trim().localeCompare("Imagier", "fr", { sensitivity:"base" }) === 0
+  ) || null;
+  if (!imagierRoot?.id) return [];
+
+  const childrenByParent = new Map();
+  for (const folder of folders) {
+    const parentId = String(folder?.parent_id || "");
+    if (!parentId) continue;
+    const list = childrenByParent.get(parentId) || [];
+    list.push(folder);
+    childrenByParent.set(parentId, list);
+  }
+
+  const imagierFolderIds = new Set();
+  const queue = [imagierRoot];
+  while (queue.length) {
+    const folder = queue.shift();
+    const folderId = String(folder?.id || "");
+    if (!folderId || imagierFolderIds.has(folderId)) continue;
+    imagierFolderIds.add(folderId);
+    for (const child of childrenByParent.get(folderId) || []) queue.push(child);
+  }
+
+  const folderById = new Map(folders.map((folder) => [String(folder?.id || ""), folder]));
+  const buildFolderPath = (folderId) => {
+    const parts = [];
+    const visited = new Set();
+    let cursor = folderById.get(String(folderId || "")) || null;
+    while (cursor) {
+      const cursorId = String(cursor?.id || "");
+      if (!cursorId || visited.has(cursorId)) break;
+      visited.add(cursorId);
+      if (cursorId === String(imagierRoot.id)) break;
+      parts.unshift(String(cursor?.name || "").trim());
+      cursor = folderById.get(String(cursor?.parent_id || "")) || null;
+    }
+    return parts.filter(Boolean).join(" / ");
+  };
+
+  const resourcesById = new Map(
+    resources
+      .filter((resource) => imagierFolderIds.has(String(resource?.folder_id || "")))
+      .map((resource) => [String(resource?.id || ""), resource])
+  );
+  const wordsBySlug = new Map(
+    lexicon
+      .map((row) => [
+        String(row?.slug || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR"),
+        String(row?.word || "").trim().normalize("NFC")
+      ])
+      .filter(([slug, word]) => slug && word)
+  );
+
+  const entries = [];
+  for (const asset of assets) {
+    if (asset?.is_active === false) continue;
+    const resource = resourcesById.get(String(asset?.resource_id || "")) || null;
+    if (!resource) continue;
+
+    const imageSlug = String(asset?.slug || resource?.metadata?.image_asset_slug || "").trim().toLowerCase();
+    if (!imageSlug) continue;
+    const wordSlug = String(asset?.word_slug || resource?.metadata?.image_word_slug || "")
+      .trim()
+      .normalize("NFC")
+      .toLocaleLowerCase("fr-FR");
+    const word = String(
+      wordsBySlug.get(wordSlug)
+      || asset?.metadata?.image_word
+      || resource?.metadata?.image_word
+      || resource?.title
+      || wordSlug
+      || imageSlug
+    ).trim().normalize("NFC");
+    if (!word) continue;
+
+    const storagePath = String(asset?.storage_path || resource?.storage_path || "").trim();
+    const { data:urlData } = storagePath
+      ? supabase.storage.from(SYSTEM_IMAGE_BUCKET).getPublicUrl(storagePath)
+      : { data:null };
+
+    entries.push({
+      key: `imagier.${imageSlug}`,
+      category: "Imagier",
+      label: word,
+      text: word,
+      imageSlug,
+      imageUrl: String(urlData?.publicUrl || "").trim(),
+      imagierFolderId: String(resource?.folder_id || imagierRoot.id),
+      imagierFolderPath: buildFolderPath(resource?.folder_id),
+      resourceId: String(resource?.id || "")
+    });
+  }
+
+  return entries.sort((a, b) => {
+    const folderCompare = String(a.imagierFolderPath || "").localeCompare(String(b.imagierFolderPath || ""), "fr", { sensitivity:"base", numeric:true });
+    if (folderCompare) return folderCompare;
+    const wordCompare = String(a.label || "").localeCompare(String(b.label || ""), "fr", { sensitivity:"base", numeric:true });
+    if (wordCompare) return wordCompare;
+    return String(a.imageSlug || "").localeCompare(String(b.imageSlug || ""), "fr", { sensitivity:"base", numeric:true });
+  });
+}
+
+// ---------------------------------------------------------
 // Centre audio système (super-admin)
 // ---------------------------------------------------------
 
@@ -2577,7 +2815,13 @@ export async function uploadSystemInterfaceAudioAsAdmin(audioKey, blob, meta = {
     mime_type:mimeType,
     size_bytes:Math.max(0, Number(blob.size) || 0),
     duration_seconds:Math.max(0, Number(meta.duration) || 0),
-    metadata:{ origin:"interface-audio-admin", recorded_at:new Date().toISOString() }
+    metadata:{
+      origin:"interface-audio-admin",
+      recorded_at:new Date().toISOString(),
+      ...(meta.metadata && typeof meta.metadata === "object" && !Array.isArray(meta.metadata)
+        ? cloneJsonValue(meta.metadata)
+        : {})
+    }
   };
 
   const { data, error } = await supabase

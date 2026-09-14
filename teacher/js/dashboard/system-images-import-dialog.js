@@ -204,10 +204,8 @@ function isMigrationMissingError(error){
 }
 
 export function createSystemImagesImportDialog({
-  openButton,
   getIsSuperAdmin,
   listImageAssetsAsAdmin,
-  listPhonologyWordLexiconAsAdmin,
   importSystemImageAssetAsAdmin,
   showToast,
   onImported
@@ -225,6 +223,8 @@ export function createSystemImagesImportDialog({
   let analyzedOptions = null;
   let isAnalyzing = false;
   let isImporting = false;
+  let fixedDestinationPath = "";
+  let fixedDestinationLabel = "";
 
   function ensureOverlay(){
     if (overlay) return;
@@ -236,8 +236,8 @@ export function createSystemImagesImportDialog({
       <section class="panel cfg-modal-card system-images-import-card" role="dialog" aria-modal="true" aria-labelledby="systemImagesImportTitle">
         <header class="cfg-modal-header">
           <div>
-            <div id="systemImagesImportTitle" class="cfg-modal-title">Banque d’images système</div>
-            <div class="cfg-modal-subtitle">Importe en masse les illustrations publiques utilisées par les activités.</div>
+            <div id="systemImagesImportTitle" class="cfg-modal-title">Importer des images</div>
+            <div class="cfg-modal-subtitle">Import en masse dans <strong data-system-images-target-label>le dossier sélectionné</strong>.</div>
           </div>
           <button class="btn cfg-modal-close" type="button" data-close-system-images-import="true" aria-label="Fermer">✕</button>
         </header>
@@ -268,8 +268,8 @@ export function createSystemImagesImportDialog({
           </label>
           <label class="system-images-import-option">
             <span>Dossier de destination</span>
-            <input type="text" maxlength="500" placeholder="Ex. Cartons graphèmes" data-system-image-destination>
-            <small>Créé sous Ressources système → Images s’il n’existe pas. Vide : À classer.</small>
+            <input type="text" maxlength="500" data-system-image-destination readonly aria-readonly="true">
+            <small>Le dossier cible est celui depuis lequel tu as ouvert l’import.</small>
           </label>
           <label class="system-images-import-option system-images-import-option--checkbox">
             <span>Arborescence du dossier sélectionné</span>
@@ -282,7 +282,7 @@ export function createSystemImagesImportDialog({
         </div>
 
         <div class="system-images-import-hint">
-          Le nom affiché reprend exactement le nom du fichier sans extension. L’identifiant est normalisé et peut recevoir le préfixe du lot : <strong>ail.webp + grapheme_ → grapheme_ail</strong>. Les sous-dossiers sont recréés et restent aussi enregistrés comme tags. Un remplacement conserve le classement et le nom visible déjà choisis, sauf si un dossier de destination est explicitement indiqué.
+          Le nom affiché reprend exactement le nom du fichier sans extension. L’identifiant est normalisé et peut recevoir le préfixe du lot : <strong>ail.webp + grapheme_ → grapheme_ail</strong>. Aucune présence dans la banque de mots n’est exigée. Si tu sélectionnes un dossier complet, ses sous-dossiers peuvent être recréés sous le dossier cible.
         </div>
 
         <div class="system-images-import-report" aria-live="polite">
@@ -307,6 +307,7 @@ export function createSystemImagesImportDialog({
     importButton = overlay.querySelector("[data-action='import-system-images']");
     prefixInput = overlay.querySelector("[data-system-image-prefix]");
     destinationInput = overlay.querySelector("[data-system-image-destination]");
+    preserveSubfoldersInput = overlay.querySelector("[data-system-image-preserve-subfolders]");
 
     overlay.querySelectorAll("[data-close-system-images-import]").forEach((element) => element.addEventListener("click", close));
     overlay.querySelector("[data-action='choose-system-image-files']")?.addEventListener("click", () => filesInput?.click());
@@ -316,19 +317,42 @@ export function createSystemImagesImportDialog({
     filesInput?.addEventListener("change", () => setSelectedFiles(filesInput.files));
     folderInput?.addEventListener("change", () => setSelectedFiles(folderInput.files));
     prefixInput?.addEventListener("input", invalidateAnalysis);
-    destinationInput?.addEventListener("input", invalidateAnalysis);
     preserveSubfoldersInput?.addEventListener("change", invalidateAnalysis);
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") close();
     });
   }
 
-  function open(){
+  function open({ destinationPath = "", destinationLabel = "" } = {}){
     if (getIsSuperAdmin?.() !== true) {
-      showToast?.("Cette banque est réservée au super-admin.", { isError: true });
+      showToast?.("L’import d’images système est réservé au super-admin.", { isError: true });
       return;
     }
+    fixedDestinationPath = normalizeDestinationPath(destinationPath);
+    fixedDestinationLabel = String(destinationLabel || fixedDestinationPath).trim() || fixedDestinationPath;
+    if (!fixedDestinationPath) {
+      showToast?.("Ouvre d’abord un sous-dossier de Ressources système → Images.", { isError: true });
+      return;
+    }
+
     ensureOverlay();
+    selectedFiles = [];
+    analysisRows = [];
+    analyzedOptions = null;
+    if (filesInput) filesInput.value = "";
+    if (folderInput) folderInput.value = "";
+    if (prefixInput) prefixInput.value = "";
+    if (destinationInput) destinationInput.value = fixedDestinationPath;
+    if (preserveSubfoldersInput) preserveSubfoldersInput.checked = true;
+    const targetLabel = overlay.querySelector("[data-system-images-target-label]");
+    if (targetLabel) targetLabel.textContent = fixedDestinationLabel || fixedDestinationPath;
+    const selectionLabel = overlay.querySelector("[data-system-images-selection]");
+    if (selectionLabel) selectionLabel.textContent = "Aucune image sélectionnée";
+    const analyzeButton = overlay.querySelector("[data-action='analyze-system-images']");
+    if (analyzeButton) analyzeButton.disabled = true;
+    if (importButton) importButton.disabled = true;
+    if (reportHost) reportHost.innerHTML = '<div class="dashboard-activity-empty-state">Choisis plusieurs images ou un dossier complet.</div>';
+
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     window.requestAnimationFrame(() => overlay.querySelector("[data-action='choose-system-image-files']")?.focus());
@@ -347,7 +371,7 @@ export function createSystemImagesImportDialog({
       rawPrefix,
       prefix,
       prefixIsValid: !rawPrefix || Boolean(prefix),
-      destinationPath: normalizeDestinationPath(destinationInput?.value || ""),
+      destinationPath: fixedDestinationPath,
       preserveSubfolders: preserveSubfoldersInput?.checked !== false
     };
   }
@@ -392,12 +416,8 @@ export function createSystemImagesImportDialog({
       const options = getImportOptions();
       if (!options.prefixIsValid) throw new Error("Le préfixe technique ne contient aucun caractère utilisable.");
       analyzedOptions = options;
-      const [existingRowsRaw, phonologyLexiconRaw] = await Promise.all([
-        listImageAssetsAsAdmin?.(),
-        listPhonologyWordLexiconAsAdmin?.()
-      ]);
+      const existingRowsRaw = await listImageAssetsAsAdmin?.();
       const existingRows = Array.isArray(existingRowsRaw) ? existingRowsRaw : [];
-      const phonologyLexicon = Array.isArray(phonologyLexiconRaw) ? phonologyLexiconRaw : [];
       const existingByWordSlug = new Map();
       const occupiedSlugs = new Set();
       for (const row of existingRows) {
@@ -406,14 +426,6 @@ export function createSystemImagesImportDialog({
         if (slug) occupiedSlugs.add(slug);
         if (wordSlug && !existingByWordSlug.has(wordSlug)) existingByWordSlug.set(wordSlug, row);
       }
-      const knownWordsBySlug = new Map(
-        phonologyLexicon
-          .map((row) => [
-            String(row?.slug || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR"),
-            String(row?.word || "").trim().normalize("NFC")
-          ])
-          .filter(([slug, word]) => slug && word)
-      );
       const rows = [];
       const slugCounts = new Map();
       const wordSlugCounts = new Map();
@@ -424,7 +436,7 @@ export function createSystemImagesImportDialog({
         const sourcePath = relativeSourcePath(file);
         const title = displayNameFromFile(file);
         const wordSlug = associatedWordSlugFromFile(file);
-        const associatedWord = knownWordsBySlug.get(wordSlug) || "";
+        const associatedWord = title;
         const previous = wordSlug ? (existingByWordSlug.get(wordSlug) || null) : null;
         let slug = String(previous?.slug || "").trim().toLowerCase();
         if (!slug) {
@@ -461,8 +473,6 @@ export function createSystemImagesImportDialog({
 
         if (!wordSlug) {
           row.error = "Nom de fichier inutilisable comme mot associé.";
-        } else if (!associatedWord) {
-          row.error = `Aucun mot de la banque ne correspond à « ${title || wordSlug} ».`;
         } else if (!slug || !/^[a-z0-9][a-z0-9_-]{0,119}$/.test(slug)) {
           row.error = "Impossible de générer un identifiant technique unique.";
         } else if (!ACCEPTED_MIME_TYPES.has(mimeType)) {
@@ -530,7 +540,7 @@ export function createSystemImagesImportDialog({
         <tr>
           <td><img class="system-images-import-preview" src="${escapeAttr(previewUrl)}" alt=""></td>
           <td><strong>${escapeHtml(row.title || "Image")}</strong><div class="system-images-import-path" title="${escapeAttr(row.sourcePath)}">${escapeHtml(row.sourcePath)}</div></td>
-          <td><strong>${escapeHtml(row.associatedWord || row.wordSlug || "—")}</strong><div class="system-images-import-path">${escapeHtml(row.wordSlug || "")}</div></td>
+          <td><strong>${escapeHtml(row.associatedWord || "—")}</strong><div class="system-images-import-path">${escapeHtml(row.wordSlug || "")}</div></td>
           <td><strong>${escapeHtml(row.slug || "—")}</strong></td>
           <td>${escapeHtml(row.destinationPath || "À classer")}</td>
           <td>${escapeHtml(formatBytes(row.sizeBytes))}${row.width && row.height ? `<div>${row.width} × ${row.height}</div>` : ""}</td>
@@ -577,8 +587,8 @@ export function createSystemImagesImportDialog({
       ? " Les sous-dossiers du dossier sélectionné seront recréés."
       : "";
     const confirmed = await openDashboardConfirmDialog({
-      title: "Importer la banque d’images",
-      message: `${rows.length} image${rows.length > 1 ? "s" : ""} seront envoyée${rows.length > 1 ? "s" : ""} dans le bucket public « images », à partir du dossier « ${destinationLabel} ».${folderDetail} Les anciennes versions remplacées seront supprimées après mise à jour de la base.`,
+      title: "Importer des images",
+      message: `${rows.length} image${rows.length > 1 ? "s" : ""} seront envoyée${rows.length > 1 ? "s" : ""} dans le dossier « ${destinationLabel} ».${folderDetail} Les anciennes versions remplacées seront supprimées après mise à jour de la base.`,
       confirmLabel: "Importer"
     });
     if (!confirmed) return;
@@ -623,7 +633,10 @@ export function createSystemImagesImportDialog({
       } catch (error) {
         console.error(`Import impossible pour ${row.sourcePath}.`, error);
         row.status = "error";
-        row.error = String(error?.message || "Échec de l’import.");
+        const rawMessage = String(error?.message || "Échec de l’import.");
+        row.error = rawMessage.toLowerCase().includes("unknown phonology word slug")
+          ? "La migration 45 doit être exécutée dans Supabase pour détacher l’import d’images de l’ancienne banque phonologique."
+          : rawMessage;
         failures.push(`${row.sourcePath} : ${row.error}`);
       }
       renderProgress(index + 1, rows.length, `Import de ${row.sourcePath}`);
@@ -647,13 +660,8 @@ export function createSystemImagesImportDialog({
       : `${importedCount} image${importedCount > 1 ? "s" : ""} importée${importedCount > 1 ? "s" : ""}.`, { isError: failures.length > 0, duration: 7000 });
   }
 
-  openButton?.addEventListener("click", open);
-
   return {
     open,
-    close,
-    setVisible(visible){
-      openButton?.classList.toggle("hidden", visible !== true);
-    }
+    close
   };
 }

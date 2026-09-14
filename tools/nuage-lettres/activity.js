@@ -7,7 +7,7 @@ import {
   evaluateAnswer,
   normalizeAnswerIds
 } from "./model.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -621,7 +621,7 @@ function getSizeClass(characterCount) {
 
 async function ensurePhonologyWordCatalog() {
   if (!phonologyWordCatalogPromise) {
-    phonologyWordCatalogPromise = listPublicPhonologyWords()
+    phonologyWordCatalogPromise = listPublicLexicalWords()
       .then((rows) => {
         const words = Array.isArray(rows) ? rows : [];
         setWordCatalog(words);

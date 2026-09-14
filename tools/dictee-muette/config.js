@@ -5,7 +5,7 @@ import {
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
 import {
-  listPublicPhonologyWords,
+  listPublicLexicalWords,
   listPublicImageAssetsInSystemFolder
 } from "../../shared/public-api.js";
 import {
@@ -26,6 +26,7 @@ import {
   renderWordSelectionSelector,
   bindWordSelectionSelector,
   readWordSelectionSelector,
+  setWordSelectionCatalog,
   updateWordSelectionSpellingUsage
 } from "../../shared/word-selection-selector.js";
 
@@ -62,7 +63,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"dm",
           allTargetId:ALL_TARGET_ID,
-          showSchoolLevels:true,
+          showLexicalLevels:true,
           bankStatusMarkup:`<div class="dm-config-bank-status" data-dm-bank-status aria-live="polite"></div>`
         })
       )}
@@ -80,7 +81,10 @@ export function renderToolSettings(container, settings = {}) {
 
   refreshBankStatus(container);
   ensureCatalogsLoaded()
-    .then(() => refreshBankStatus(container))
+    .then(({ words }) => {
+      setWordSelectionCatalog(container, words, { idPrefix:"dm" });
+      refreshBankStatus(container);
+    })
     .catch(() => refreshBankStatus(container));
 }
 
@@ -95,12 +99,18 @@ export function readToolSettings(container) {
     throw new Error(catalogsError || "La banque de mots ou l’Imagier est indisponible.");
   }
 
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED && !settings.fixedWordSlugs.length) {
+    throw new Error("Ajoute au moins un mot à la liste fixe.");
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     throw new Error("Ajoute au moins une entrée graphémique.");
   }
 
   if (!canGenerateQuestion(settings)) {
     const count = getEligibleWordCount(settings);
+    if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+      throw new Error("Aucun mot de la liste fixe ne possède une image exploitable dans le dossier « Imagier ».");
+    }
     if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
       throw new Error(`Le dossier « Imagier » ne contient que ${count} mot${count > 1 ? "s" : ""} compatible${count > 1 ? "s" : ""} avec ces entrées graphémiques.`);
     }
@@ -146,6 +156,13 @@ function refreshBankStatus(container) {
   }
 
   const settings = readCurrentSettings(container);
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+    const wordCount = getEligibleWordCount(settings);
+    const enough = canGenerateQuestion(settings);
+    host.classList.add(enough ? "is-ready" : "is-warning");
+    host.textContent = `${wordCount} mot${wordCount > 1 ? "s" : ""} de la liste fixe avec une image dans « ${getImageFolderName()} »${enough ? "." : " : aucun contenu jouable."}`;
+    return;
+  }
   updateWordSelectionSpellingUsage(container, {
     idPrefix:"dm",
     usageByTarget:getPhonemicSpellingUsage(settings)
@@ -177,7 +194,7 @@ async function ensureCatalogsLoaded() {
     catalogsStatus = "loading";
     catalogsError = "";
     catalogsPromise = Promise.all([
-      listPublicPhonologyWords(),
+      listPublicLexicalWords(),
       listPublicImageAssetsInSystemFolder(getImageFolderName())
     ])
       .then(([words, images]) => {

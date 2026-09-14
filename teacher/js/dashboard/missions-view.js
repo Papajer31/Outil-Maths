@@ -1,5 +1,6 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { openMissionProjectionRunner } from "./catalog-test-runner.js";
 import { isIntrinsicCatalogActivity } from "../../../shared/catalogue.js";
 import { normalizeConfigName } from "../../../shared/api-common.js";
 import {
@@ -7,6 +8,7 @@ import {
   normalizeQuizRuntimeSettings,
   normalizeQuizSnapshot
 } from "../../../tools/quiz/model.js";
+import { renderQuizRuntimeSettingsEditor } from "./quiz-runtime-settings-ui.js";
 
 const DIRECT_QUIZ_CATALOG_ACTIVITY_ID = "system.quiz.direct";
 const DIRECT_QUIZ_PICKER_ID = "__mission_direct_quizzes";
@@ -185,6 +187,7 @@ export function createMissionsViewController({
           <span class="dashboard-activity-tile-title">${escapeHtml(mission.title)}</span>
         </button>
         <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="project-mission" data-mission-id="${escapeAttr(mission.id)}" title="Projeter" aria-label="Projeter la mission"><span class="dashboard-material-icon" aria-hidden="true">cast</span></button>
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="edit-mission" data-mission-id="${escapeAttr(mission.id)}" title="Modifier"><span class="dashboard-material-icon" aria-hidden="true">edit</span></button>
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="duplicate-mission" data-mission-id="${escapeAttr(mission.id)}" title="Dupliquer" aria-label="Dupliquer la mission"><span class="dashboard-material-icon" aria-hidden="true">content_copy</span></button>
           ${lifecycleAction}
@@ -427,10 +430,51 @@ export function createMissionsViewController({
     clearExplorerDropMarkers();
   }
 
+  async function projectMission(missionId, trigger = null){
+    const mission = missions.find((item) => String(item?.id || "") === String(missionId || ""));
+    const space = getCurrentTeacherSpace?.();
+    if (!mission) {
+      showToast?.("Mission introuvable.", { isError:true });
+      return;
+    }
+
+    const accessCode = String(space?.access_code || "").trim().toUpperCase();
+    if (!accessCode) {
+      showToast?.("Impossible de projeter la mission : code de classe manquant.", { isError:true });
+      return;
+    }
+
+    if (trigger) trigger.disabled = true;
+    try {
+      const steps = await listMissionSteps?.(mission.id) || [];
+      if (!steps.length) {
+        showToast?.("Cette mission ne contient encore aucune activité ni aucun quiz.", { isError:true });
+        return;
+      }
+
+      openMissionProjectionRunner({
+        accessCode,
+        mission,
+        missionSteps:steps,
+        catalogActivities,
+        titleLabel:`Projection · ${String(mission.title || "Mission").trim() || "Mission"}`,
+        showToast
+      });
+    } catch (error) {
+      showToast?.(error?.message || "Impossible de projeter cette mission.", { isError:true });
+    } finally {
+      if (trigger) trigger.disabled = false;
+    }
+  }
+
   function bindExplorerEvents(){
     missionsList.querySelectorAll("[data-action='open-root']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = null; renderHeader(); renderExplorer(); }));
     missionsList.querySelectorAll("[data-action='open-folder']").forEach((btn) => btn.addEventListener("click", () => { currentFolderId = btn.dataset.folderId || null; renderHeader(); renderExplorer(); }));
     missionsList.querySelectorAll("[data-action='edit-mission']").forEach((btn) => btn.addEventListener("click", () => openEditor(btn.dataset.missionId || "")));
+    missionsList.querySelectorAll("[data-action='project-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await projectMission(btn.dataset.missionId || "", btn);
+    }));
     missionsList.querySelectorAll("[data-action='duplicate-mission']").forEach((btn) => btn.addEventListener("click", async (event) => {
       event.stopPropagation();
       await duplicateMission(btn.dataset.missionId || "", btn);
@@ -607,6 +651,7 @@ export function createMissionsViewController({
         </section>
     `;
     missionsView.append(missionEditorHost);
+    mountDirectQuizRuntimeSettingsEditors();
     const editorHost = missionEditorHost;
     if (shouldAnimateOpening) {
       editorHost?.classList.remove("is-open", "is-closing");
@@ -642,9 +687,14 @@ export function createMissionsViewController({
 
   function createDirectQuizStep(quiz = {}, { followUpdates = false } = {}){
     const snapshot = normalizeQuizSnapshot(quiz);
-    const runtimeSettings = normalizeQuizRuntimeSettings(snapshot.runtimeSettings, snapshot);
-    const selectedQuestions = filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection);
-    const questionCount = Math.max(1, selectedQuestions.length || 1);
+    const runtimeSettings = normalizeQuizRuntimeSettings({
+      drawMode:"in_order",
+      questionSelection:{ mode:"all", questionKeys:[] },
+      timeLimitSec:0,
+      autoExitOnComplete:false
+    }, snapshot);
+    const selectedVariants = filterQuizSnapshotBySelection(snapshot, runtimeSettings.questionSelection);
+    const questionCount = Math.max(1, selectedVariants.length || 1);
     const title = String(snapshot.title || quiz?.title || "Quiz").trim() || "Quiz";
     return {
       catalog_activity_id:DIRECT_QUIZ_CATALOG_ACTIVITY_ID,
@@ -666,11 +716,89 @@ export function createMissionsViewController({
           drawMode:runtimeSettings.drawMode,
           questionSelection:runtimeSettings.questionSelection,
           timeLimitSec:runtimeSettings.timeLimitSec,
-          autoExitOnComplete:runtimeSettings.autoExitOnComplete,
+          autoExitOnComplete:false,
           quizSnapshot:snapshot
         }
       }
     };
+  }
+
+  function getDirectQuizSnapshot(step){
+    return normalizeQuizSnapshot(step?.step_options_json?.settings?.quizSnapshot || {});
+  }
+
+  function getDirectQuizRuntimeSettings(step){
+    const snapshot = getDirectQuizSnapshot(step);
+    const stored = step?.step_options_json?.settings && typeof step.step_options_json.settings === "object"
+      ? step.step_options_json.settings
+      : {};
+    return normalizeQuizRuntimeSettings({
+      drawMode:stored.drawMode ?? stored.draw_mode ?? "in_order",
+      questionSelection:stored.questionSelection ?? stored.question_selection ?? { mode:"all", questionKeys:[] },
+      timeLimitSec:0,
+      autoExitOnComplete:false
+    }, snapshot);
+  }
+
+  function applyDirectQuizRuntimeSettings(step, nextSettings = {}){
+    if (!isDirectQuizStep(step)) return null;
+    const snapshot = getDirectQuizSnapshot(step);
+    const normalized = normalizeQuizRuntimeSettings({
+      drawMode:nextSettings.drawMode ?? nextSettings.draw_mode ?? "in_order",
+      questionSelection:nextSettings.questionSelection ?? nextSettings.question_selection ?? { mode:"all", questionKeys:[] },
+      timeLimitSec:0,
+      autoExitOnComplete:false
+    }, snapshot);
+    const selectedVariants = filterQuizSnapshotBySelection(snapshot, normalized.questionSelection);
+    const questionCount = Math.max(1, selectedVariants.length || 1);
+    const options = step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {};
+    step.step_options_json = {
+      ...options,
+      direct_quiz:{
+        ...(options.direct_quiz && typeof options.direct_quiz === "object" ? options.direct_quiz : {}),
+        question_count:questionCount
+      },
+      execution_limit:{ mode:"questions", value:questionCount },
+      settings:{
+        ...(options.settings && typeof options.settings === "object" ? options.settings : {}),
+        drawMode:normalized.drawMode,
+        questionSelection:normalized.questionSelection,
+        timeLimitSec:normalized.timeLimitSec,
+        autoExitOnComplete:false,
+        quizSnapshot:snapshot
+      }
+    };
+    return { settings:normalized, questionCount };
+  }
+
+  function updateDirectQuizSummary(step, index){
+    const summary = missionEditorHost?.querySelector(`[data-direct-quiz-summary="${index}"]`);
+    if (!summary) return;
+    const count = getDirectQuizQuestionCount(step);
+    const runtime = getDirectQuizRuntimeSettings(step);
+    const orderLabel = runtime.drawMode === "in_order" ? "questions dans l’ordre" : "questions aléatoires";
+    summary.textContent = `${count} variante${count > 1 ? "s" : ""} · ${orderLabel}`;
+  }
+
+  function mountDirectQuizRuntimeSettingsEditors(){
+    editingSteps.forEach((step, index) => {
+      if (!isDirectQuizStep(step)) return;
+      const host = missionEditorHost?.querySelector(`[data-mission-quiz-runtime-settings="${index}"]`);
+      if (!host) return;
+      const initial = applyDirectQuizRuntimeSettings(step, getDirectQuizRuntimeSettings(step))?.settings || getDirectQuizRuntimeSettings(step);
+      renderQuizRuntimeSettingsEditor(host, {
+        snapshot:getDirectQuizSnapshot(step),
+        settings:initial,
+        idPrefix:`mission-quiz-${index}`,
+        title:"Règles de passation",
+        description:"Choisis l’ordre des questions et exactement quelles variantes seront jouées dans cette mission.",
+        onChange:(nextSettings) => {
+          applyDirectQuizRuntimeSettings(step, nextSettings);
+          updateDirectQuizSummary(step, index);
+        }
+      });
+      updateDirectQuizSummary(step, index);
+    });
   }
 
   function getDirectQuizStepTitle(step){
@@ -680,6 +808,11 @@ export function createMissionsViewController({
   }
 
   function getDirectQuizQuestionCount(step){
+    if (isDirectQuizStep(step)) {
+      const snapshot = getDirectQuizSnapshot(step);
+      const runtime = getDirectQuizRuntimeSettings(step);
+      return filterQuizSnapshotBySelection(snapshot, runtime.questionSelection).length;
+    }
     return Math.max(1, Math.trunc(Number(
       step?.step_options_json?.direct_quiz?.question_count
       ?? step?.step_options_json?.execution_limit?.value
@@ -882,12 +1015,6 @@ export function createMissionsViewController({
       .join(" › ");
   }
 
-  function getDirectQuizTimeLabel(step){
-    const seconds = Math.max(0, Math.trunc(Number(step?.step_options_json?.settings?.timeLimitSec) || 0));
-    if (!seconds) return "sans chrono";
-    if (seconds % 60 === 0) return `${seconds / 60} min`;
-    return `${seconds} s`;
-  }
 
   function renderStepRow(step, index){
     if (isDirectQuizStep(step)) {
@@ -895,7 +1022,7 @@ export function createMissionsViewController({
       const count = getDirectQuizQuestionCount(step);
       const followUpdates = step?.step_options_json?.direct_quiz?.follow_updates !== false;
       const contentModeLabel = followUpdates ? "lié au quiz" : "copie figée";
-      return `<div class="dashboard-class-card dashboard-mission-step-card dashboard-mission-step-card--quiz"><div class="dashboard-class-card-main dashboard-mission-step-main" style="cursor:default;"><div class="dashboard-class-card-heading"><span class="dashboard-class-card-title">${index + 1}. ${escapeHtml(title)}</span></div><div class="dashboard-mission-step-settings"><div class="dashboard-mission-step-limit is-intrinsic"><span class="dashboard-material-icon" aria-hidden="true">quiz</span><span>${count} question${count > 1 ? "s" : ""} · ${escapeHtml(getDirectQuizTimeLabel(step))} · ${escapeHtml(contentModeLabel)}</span></div></div></div><div class="dashboard-class-card-actions"><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-up" data-step-index="${index}" ${index <= 0 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_upward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-down" data-step-index="${index}" ${index >= editingSteps.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_downward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="remove-step" data-step-index="${index}"><span class="dashboard-material-icon">delete</span></button></div></div>`;
+      return `<div class="dashboard-class-card dashboard-mission-step-card dashboard-mission-step-card--quiz"><div class="dashboard-class-card-main dashboard-mission-step-main" style="cursor:default;"><div class="dashboard-class-card-heading"><span class="dashboard-class-card-title">${index + 1}. ${escapeHtml(title)}</span><span class="dashboard-mini-pill">${escapeHtml(contentModeLabel)}</span></div><div class="dashboard-mission-step-settings"><div class="dashboard-mission-step-limit is-intrinsic"><span class="dashboard-material-icon" aria-hidden="true">quiz</span><span data-direct-quiz-summary="${index}">${count} variante${count > 1 ? "s" : ""}</span></div></div><div class="dashboard-mission-quiz-passation" data-mission-quiz-runtime-settings="${index}"></div></div><div class="dashboard-class-card-actions"><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-up" data-step-index="${index}" ${index <= 0 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_upward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-step-down" data-step-index="${index}" ${index >= editingSteps.length - 1 ? "disabled" : ""}><span class="dashboard-material-icon">arrow_downward</span></button><button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="remove-step" data-step-index="${index}"><span class="dashboard-material-icon">delete</span></button></div></div>`;
     }
     const activity = catalogActivities.find((item) => item.id === step.catalog_activity_id);
     const intrinsic = isIntrinsicCatalogActivity(activity);
@@ -1104,6 +1231,11 @@ export function createMissionsViewController({
     const assignments = editingAssignments;
     if (!editingSteps.length) {
       if (message) message.textContent = "Ajoute au moins une activité ou un quiz.";
+      return;
+    }
+    const emptyQuizStepIndex = editingSteps.findIndex((step) => isDirectQuizStep(step) && getDirectQuizQuestionCount(step) < 1);
+    if (emptyQuizStepIndex >= 0) {
+      if (message) message.textContent = `Sélectionne au moins une variante dans le quiz de l’étape ${emptyQuizStepIndex + 1}.`;
       return;
     }
     if (String(editingMission.status || "draft") === "active" && !assignments.length) {

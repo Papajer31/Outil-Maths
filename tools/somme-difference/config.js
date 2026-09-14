@@ -9,6 +9,8 @@ import {
 } from "../../shared/config-widgets.js";
 import {
   LIMITS,
+  OPERATION_MODE_LABELS,
+  OPERATION_MODES,
   RESPONSE_MODE_LABELS,
   RESPONSE_MODES,
   TRACE_MODE_LABELS,
@@ -16,6 +18,12 @@ import {
   getDefaultSettings,
   normalizeSettings
 } from "./model.js";
+
+const OPERATION_MODE_OPTIONS = Object.freeze([
+  { value: OPERATION_MODES.MIXED, label: OPERATION_MODE_LABELS[OPERATION_MODES.MIXED] },
+  { value: OPERATION_MODES.SUM_ONLY, label: OPERATION_MODE_LABELS[OPERATION_MODES.SUM_ONLY] },
+  { value: OPERATION_MODES.DIFFERENCE_ONLY, label: OPERATION_MODE_LABELS[OPERATION_MODES.DIFFERENCE_ONLY] }
+]);
 
 const RESPONSE_MODE_OPTIONS = Object.freeze([
   { value: RESPONSE_MODES.PROPOSED, label: RESPONSE_MODE_LABELS[RESPONSE_MODES.PROPOSED] },
@@ -52,6 +60,12 @@ export function renderToolSettings(container, settings = {}) {
           values: cfg.collectionRange.values
         }),
         renderRadioGroup({
+          title: "Type de calcul",
+          id: "sd_operationMode",
+          value: cfg.operationMode,
+          options: OPERATION_MODE_OPTIONS
+        }),
+        renderRadioGroup({
           title: "Mode de réponse",
           id: "sd_responseMode",
           value: cfg.responseMode,
@@ -72,6 +86,7 @@ export function renderToolSettings(container, settings = {}) {
     inputMin: LIMITS.minCount,
     inputMax: LIMITS.maxCount
   });
+  bindRadio(container, "sd_operationMode");
   bindRadio(container, "sd_responseMode");
   bindRadio(container, "sd_traceMode");
 }
@@ -91,6 +106,7 @@ export function readToolSettings(container, settings = {}) {
   return normalizeSettings({
     ...previous,
     collectionRange,
+    operationMode: readRadio(container, "sd_operationMode", previous.operationMode),
     responseMode: readRadio(container, "sd_responseMode", previous.responseMode),
     traceMode: readRadio(container, "sd_traceMode", previous.traceMode)
   });

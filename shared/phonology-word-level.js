@@ -3,16 +3,116 @@ export const PHONOLOGY_SILENT_LETTERS_MODES = Object.freeze({
   FORBID:"forbid"
 });
 
-export const PHONOLOGY_SCHOOL_LEVELS = Object.freeze([
-  Object.freeze({ id:"CP", label:"CP" }),
-  Object.freeze({ id:"CE1", label:"CE1" }),
-  Object.freeze({ id:"CE2", label:"CE2" }),
-  Object.freeze({ id:"CM", label:"CM" })
-]);
-
-const LEVEL_RANK = Object.freeze({ CP:0, CE1:1, CE2:2, CM:3 });
-const DEFAULT_LEVEL = "CP";
 const DEFAULT_REGULARITY_SCORE = 50;
+
+// Miroir runtime de _infos/phono/referentiel_score_regularite_gp.txt.
+// Les codes absents du référentiel reçoivent la valeur neutre 50 ; ils ne
+// sont jamais exclus pour cette raison.
+const PHONOLOGY_REGULARITY_BY_GRAPH = Object.freeze({
+  'a':100,
+  'a=à':55,
+  'a=â':70,
+  'ai_ferme':70,
+  'ai_ouvert':80,
+  'ain':80,
+  'am':80,
+  'an':90,
+  'au':90,
+  'ay':55,
+  'ay_ferme':55,
+  'b':100,
+  'c_k':90,
+  'c_s':80,
+  'cc':70,
+  'ch':100,
+  'ch_k':55,
+  'd':100,
+  'dd':70,
+  'e_aigu':100,
+  'e_circonflexe':55,
+  'e_circonflexe_ferme':55,
+  'e_ferme':80,
+  'e_grave':100,
+  'e_ouvert':80,
+  'e_schwa':80,
+  'eau':90,
+  'ei':70,
+  'ein':70,
+  'em':80,
+  'en_an':90,
+  'en_in':70,
+  'er':90,
+  'et_ouvert':55,
+  'eu':90,
+  'ez':80,
+  'f':100,
+  'ff':70,
+  'g_g':90,
+  'g_j':80,
+  'ge':80,
+  'gg':70,
+  'gn':90,
+  'gu':80,
+  'i':100,
+  'i=ï':70,
+  'i_ij':55,
+  'i_yod':80,
+  'il_yod':70,
+  'ill':70,
+  'ill_ij':55,
+  'im':80,
+  'in':90,
+  'j':100,
+  'k':70,
+  'l':100,
+  'll':70,
+  'm':100,
+  'mm':70,
+  'n':100,
+  'nn':70,
+  'o':100,
+  'o=ô':70,
+  'oeu=œu':70,
+  'oi':90,
+  'oin':70,
+  'om':80,
+  'on':100,
+  'ou':100,
+  'ou_glisse':70,
+  'oy':70,
+  'p':100,
+  'ph':70,
+  'pp':70,
+  'qu':90,
+  'r':100,
+  'rr':70,
+  's_s':90,
+  's_z':70,
+  'sc':55,
+  'ss':90,
+  't':100,
+  't_s':55,
+  'th':70,
+  'tt':70,
+  'u':100,
+  'u=û':70,
+  'u_eu':55,
+  'u_glisse':80,
+  'um':55,
+  'un':70,
+  'v':100,
+  'w_v':55,
+  'w_w':55,
+  'x_gz':55,
+  'x_ks':55,
+  'x_z':55,
+  'y_i':80,
+  'y_ij':55,
+  'y_yod':55,
+  'ym':55,
+  'z':100,
+  'ç':80,
+});
 
 export const PHONOLOGY_CGP_COMPLEXITY_LEVELS = Object.freeze([1, 2, 3, 4, 5]);
 
@@ -172,16 +272,6 @@ const PHONOLOGY_CGP_COMPLEXITY_BY_GRAPH = Object.freeze({
 });
 const DEFAULT_CGP_COMPLEXITY_LEVEL = 5;
 
-export function normalizePhonologySchoolLevel(value, { allowX = false, fallback = DEFAULT_LEVEL } = {}) {
-  const raw = String(value || "").trim().toLocaleUpperCase("fr-FR");
-  if (Object.prototype.hasOwnProperty.call(LEVEL_RANK, raw)) return raw;
-  if (allowX && raw === "X") return "X";
-  const safeFallback = String(fallback || DEFAULT_LEVEL).trim().toLocaleUpperCase("fr-FR");
-  if (Object.prototype.hasOwnProperty.call(LEVEL_RANK, safeFallback)) return safeFallback;
-  if (allowX && safeFallback === "X") return "X";
-  return DEFAULT_LEVEL;
-}
-
 export function normalizePhonologySilentLettersMode(value) {
   return String(value || "").trim().toLowerCase() === PHONOLOGY_SILENT_LETTERS_MODES.FORBID
     ? PHONOLOGY_SILENT_LETTERS_MODES.FORBID
@@ -220,26 +310,38 @@ export function isPhonologyWordAllowedByCgpComplexity(word, maxLevel = DEFAULT_C
   return getPhonologyWordCgpComplexity(word) <= normalizePhonologyCgpComplexityLevel(maxLevel);
 }
 
-export function isPhonologyWordAllowedAtLevel(wordOrLevel, selectedLevel = DEFAULT_LEVEL) {
-  const wordLevel = normalizePhonologySchoolLevel(
-    typeof wordOrLevel === "object" && wordOrLevel !== null ? wordOrLevel.schoolLevel ?? wordOrLevel.school_level : wordOrLevel,
-    { allowX:true, fallback:"X" }
-  );
-  if (wordLevel === "X") return false;
-  const selected = normalizePhonologySchoolLevel(selectedLevel);
-  return LEVEL_RANK[wordLevel] <= LEVEL_RANK[selected];
-}
-
 export function normalizePhonologyRegularityScore(value, fallback = DEFAULT_REGULARITY_SCORE) {
   const number = Number(value);
   if (!Number.isFinite(number)) return Math.max(0, Math.min(100, Math.round(Number(fallback) || DEFAULT_REGULARITY_SCORE)));
   return Math.max(0, Math.min(100, Math.round(number)));
 }
 
+export function getPhonologyWordRegularityScore(word) {
+  const explicit = Number(word?.regularityScore ?? word?.regularity_score);
+  if (Number.isFinite(explicit)) return normalizePhonologyRegularityScore(explicit);
+
+  const units = Array.isArray(word?.units) ? word.units : [];
+  const scores = units.map((unit) => {
+    if (unit?.isSilent === true || String(unit?.graph || "").trim() === "__silent__") {
+      const text = String(unit?.text || "").trim().normalize("NFC").toLocaleLowerCase("fr-FR");
+      if (text === "e") return 60;
+      if (text === "h") return 30;
+      return 40;
+    }
+    const graph = String(unit?.graph || "").trim();
+    return Number(PHONOLOGY_REGULARITY_BY_GRAPH[graph] ?? DEFAULT_REGULARITY_SCORE);
+  }).filter(Number.isFinite);
+
+  if (!scores.length) return DEFAULT_REGULARITY_SCORE;
+  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  // Règle historique : moyenne arithmétique ramenée au multiple de 5 inférieur.
+  return normalizePhonologyRegularityScore(Math.floor(mean / 5) * 5);
+}
+
 export function getPhonologyWordRegularityWeight(word) {
   // Pondération volontairement transparente : un score 100 pèse deux fois
   // plus qu'un score 50. Aucun score n'exclut jamais un mot éligible.
-  return Math.max(1, normalizePhonologyRegularityScore(word?.regularityScore ?? word?.regularity_score));
+  return Math.max(1, getPhonologyWordRegularityScore(word));
 }
 
 export function pickPhonologyWordByRegularity(words, random = Math.random) {

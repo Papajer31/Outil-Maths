@@ -6,8 +6,8 @@ import {
   bindCollapsibleSection,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
-import { PHONOLOGY_SCHOOL_LEVELS, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
+import { LEXICAL_LEVELS, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import {
   LIST_TYPES,
   PREFIX_CONSTRAINTS,
@@ -44,12 +44,12 @@ export function renderToolSettings(container, settings = {}) {
         }),
 
         renderRadioGroup({
-          title: "Niveau des mots",
-          id: "oam_schoolLevel",
-          value: cfg.schoolLevel,
-          options: PHONOLOGY_SCHOOL_LEVELS.map((level) => ({
-            value: level.id,
-            label: level.label
+          title: "Niveau lexical",
+          id: "oam_lexicalLevel",
+          value: cfg.lexicalLevel,
+          options: LEXICAL_LEVELS.map((level) => ({
+            value:String(level),
+            label:String(level)
           }))
         }),
 
@@ -85,7 +85,7 @@ export function renderToolSettings(container, settings = {}) {
   `;
 
   bindRadio(container, "oam_itemCount");
-  bindRadio(container, "oam_schoolLevel");
+  bindRadio(container, "oam_lexicalLevel");
   bindRadio(container, "oam_prefixConstraint");
   bindRadio(container, "oam_visualHint");
   bindCollapsibleSection(container, "oam_advanced");
@@ -99,7 +99,7 @@ export function readToolSettings(container) {
   const settings = normalizeSettings({
     listType: LIST_TYPES.WORDS,
     itemCount,
-    schoolLevel: normalizePhonologySchoolLevel(readRadio(container, "oam_schoolLevel", "CP")),
+    lexicalLevel: normalizeLexicalLevel(readRadio(container, "oam_lexicalLevel", 1)),
     prefixConstraint: readRadio(container, "oam_prefixConstraint", PREFIX_CONSTRAINTS.EXACT_1),
     visualHint: readRadio(container, "oam_visualHint", "no") === "yes",
     showAlphabet: container.querySelector("#oam_showAlphabet")?.checked === true
@@ -114,7 +114,7 @@ export function readToolSettings(container) {
   }
 
   if (!canGenerateQuestion(settings, { wordEntries: wordCatalog })) {
-    throw new Error(`Impossible de générer ${settings.itemCount} mots avec ces réglages au niveau « ${settings.schoolLevel} ».`);
+    throw new Error(`Impossible de générer ${settings.itemCount} mots avec ces réglages au niveau lexical ${settings.lexicalLevel}.`);
   }
 
   return settings;
@@ -137,7 +137,7 @@ async function ensureWordCatalogLoaded() {
   if (!wordCatalogPromise) {
     wordCatalogStatus = "loading";
     wordCatalogError = "";
-    wordCatalogPromise = listPublicPhonologyWords()
+    wordCatalogPromise = listPublicLexicalWords()
       .then((rows) => {
         wordCatalog = Array.isArray(rows) ? rows : [];
         wordCatalogStatus = "ready";

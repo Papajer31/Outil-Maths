@@ -21,9 +21,7 @@ Après le MVP : vieillissement au-dessus de 40, rangs de maîtrise, reporting en
 
 - [ ] Refaire l’outil Encodage sur une base propre.
 - [ ] Stabiliser `reperage-graphemes`, `dictee-muette` et `nuage-lettres` puis créer leurs activités d’Exploration.
-- [ ] Continuer l’enrichissement de `phonology_words` et des banques d’images sans redéploiement.
 - [ ] Étendre les listes blanches d’images propres à chaque outil lorsque nécessaire.
-- [ ] Prévoir l’interface technique pour `vocabulary_default_words`.
 
 ## Quiz
 

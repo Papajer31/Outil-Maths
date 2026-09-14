@@ -1,6 +1,6 @@
 # Supabase — état documentaire actuel
 
-Dernière mise à jour : 2026-08-07.
+Dernière mise à jour : 2026-09-13.
 
 ## Règle d’exécution
 
@@ -15,7 +15,7 @@ Dernière mise à jour : 2026-08-07.
 - fondations Aventure ;
 - Quiz ;
 - ressources personnelles et système ;
-- banques techniques `image_assets`, `phonology_words` et `vocabulary_default_words`.
+- banques techniques `image_assets` et `lexical_entries`.
 
 ## Tables utilisées par le client
 
@@ -23,11 +23,11 @@ Dernière mise à jour : 2026-08-07.
 - `pedagogical_nodes`
 - `catalog_activity_visibility`
 - `image_assets`
+- `lexical_entries`
 - `mission_assignments`
 - `mission_folders`
 - `mission_steps`
 - `missions`
-- `phonology_words`
 - `quiz_folders`
 - `quiz_resources`
 - `quizzes`
@@ -45,7 +45,6 @@ Dernière mise à jour : 2026-08-07.
 - `teacher_phonology_presets`
 - `teacher_spaces`
 - `teacher_vocabulary_words`
-- `vocabulary_default_words`
 
 ## RPC principales utilisées par le client
 
@@ -117,3 +116,8 @@ Les tables `adventure_class_cursors`, `student_adventure_tier_progress`, `studen
 ## Modèles supprimés
 
 `question_banks`, `question_bank_items` et `question_bank_folders` ont été supprimés physiquement avec `10_remove_question_banks.sql`. Aucune rétrocompatibilité n’est prévue.
+
+
+## Banque lexicale
+
+`lexical_entries` est la banque lexicale définitive (migration 46). `lexical_level` est un `smallint` limité à 1, 2 ou 3. Les entrées actives sont lisibles par `anon` et `authenticated`; les écritures sont réservées au super-admin. Depuis le patch de bascule des outils du 13/09/2026, les outils lexicaux/phonologiques concernés utilisent cette table via `listPublicLexicalWords()`. La migration 47 supprime définitivement les anciennes tables `phonology_words` et `vocabulary_default_words`.

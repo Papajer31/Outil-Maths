@@ -107,7 +107,7 @@
 }
 
 [data-tv-radio-group="oam_itemCount"] .tv-radio-options,
-[data-tv-radio-group="oam_schoolLevel"] .tv-radio-options,
+[data-tv-radio-group="oam_lexicalLevel"] .tv-radio-options,
 [data-tv-radio-group="oam_prefixConstraint"] .tv-radio-options,
 [data-tv-radio-group="oam_visualHint"] .tv-radio-options {
   flex-wrap: wrap;

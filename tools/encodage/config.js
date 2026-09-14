@@ -24,8 +24,8 @@ import {
   getSelectedGraphUsageStats,
   visibleTextOfGraph
 } from "./model.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
-import { PHONOLOGY_SCHOOL_LEVELS, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
+import { LEXICAL_LEVELS, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import {
   listTeacherPhonologyPresets,
   upsertTeacherPhonologyPreset,
@@ -86,7 +86,7 @@ export function renderToolSettings(container, settings, context = {}) {
       data-phono-length-hint-mode="${escapeAttr(cfg.lengthHintMode)}"
       data-phono-validation-mode="${escapeAttr(cfg.individualValidationMode)}"
       data-phono-validation-attempts="${escapeAttr(cfg.individualMaxAttempts)}"
-      data-phono-school-level="${escapeAttr(cfg.schoolLevel)}"
+      data-phono-lexical-level="${escapeAttr(cfg.lexicalLevel)}"
       data-graph-order-store="${escapeAttr(cfg.graphOrder.join("¦"))}"
     >
       <div class="phono-config-stack">
@@ -118,10 +118,10 @@ export function renderToolSettings(container, settings, context = {}) {
 
         <section class="tv-group tv-group-inline phono-mode-group">
           ${renderInlineRadioControl({
-          title: "Niveau des mots",
-          id: "phono_school_level",
-          value: cfg.schoolLevel,
-          options: PHONOLOGY_SCHOOL_LEVELS.map((level) => ({ value:level.id, label:level.label })),
+          title: "Niveau lexical",
+          id: "phono_lexical_level",
+          value: cfg.lexicalLevel,
+          options: LEXICAL_LEVELS.map((level) => ({ value:String(level), label:String(level) })),
           rootClassName: "phono-mode-radio-control"
         })}
         </section>
@@ -138,7 +138,7 @@ export function renderToolSettings(container, settings, context = {}) {
     }
   });
   bindRadio(container, "phono_length_hint_mode");
-  bindRadio(container, "phono_school_level", {
+  bindRadio(container, "phono_lexical_level", {
     onChange:() => refreshSelectionStats(container, readCurrentSettings(container))
   });
 
@@ -244,7 +244,7 @@ export function readToolSettings(container) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
-    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
+    lexicalLevel:readRadio(container, "phono_lexical_level", readStoredLexicalLevel(container)),
     graphOrder: readGraphOrder(container, [])
   });
 }
@@ -261,7 +261,7 @@ function createInitialPresetState(teacherSpaceId = null) {
 
 async function ensurePublicWordCatalogLoaded(container) {
   if (!publicPhonologyWordsPromise) {
-    publicPhonologyWordsPromise = listPublicPhonologyWords()
+    publicPhonologyWordsPromise = listPublicLexicalWords()
       .then((rows) => {
         const words = Array.isArray(rows) ? rows : [];
         setWordCatalog(words);
@@ -445,7 +445,7 @@ function setGraphOrder(container, graphOrder) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
-    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
+    lexicalLevel:readRadio(container, "phono_lexical_level", readStoredLexicalLevel(container)),
     graphOrder
   });
 
@@ -461,7 +461,7 @@ function readCurrentSettings(container) {
     lengthHintMode: readRadio(container, "phono_length_hint_mode", readStoredLengthHintMode(container)),
     individualValidationMode: readRadio(container, "phono_individual_validation", readStoredValidationMode(container)),
     individualMaxAttempts: readIndividualMaxAttempts(container),
-    schoolLevel:readRadio(container, "phono_school_level", readStoredSchoolLevel(container)),
+    lexicalLevel:readRadio(container, "phono_lexical_level", readStoredLexicalLevel(container)),
     graphOrder: readGraphOrder(container, [])
   });
 }
@@ -477,12 +477,12 @@ function storeCurrentSettings(container, cfg) {
   root.dataset.phonoLengthHintMode = cfg.lengthHintMode;
   root.dataset.phonoValidationMode = cfg.individualValidationMode;
   root.dataset.phonoValidationAttempts = String(cfg.individualMaxAttempts || DEFAULT_INDIVIDUAL_MAX_ATTEMPTS);
-  root.dataset.phonoSchoolLevel = cfg.schoolLevel;
+  root.dataset.phonoLexicalLevel = cfg.lexicalLevel;
   root.dataset.graphOrderStore = cfg.graphOrder.join("¦");
 }
 
-function readStoredSchoolLevel(container) {
-  return normalizePhonologySchoolLevel(getConfigRoot(container)?.dataset.phonoSchoolLevel || "CP");
+function readStoredLexicalLevel(container) {
+  return normalizeLexicalLevel(getConfigRoot(container)?.dataset.phonoLexicalLevel || 1);
 }
 
 function readStoredInputMode(container) {

@@ -4,7 +4,7 @@ import {
   readRadio,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   WORD_COUNT_OPTIONS,
   ALL_TARGET_ID,
@@ -21,6 +21,7 @@ import {
   renderWordSelectionSelector,
   bindWordSelectionSelector,
   readWordSelectionSelector,
+  setWordSelectionCatalog,
   updateWordSelectionSpellingUsage
 } from "../../shared/word-selection-selector.js";
 
@@ -48,7 +49,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"sm",
           allTargetId:ALL_TARGET_ID,
-          showSchoolLevels:true,
+          showLexicalLevels:true,
           bankStatusMarkup:'<div class="sm-config-bank-status" data-sm-bank-status aria-live="polite"></div>'
         })
       )}
@@ -66,7 +67,10 @@ export function renderToolSettings(container, settings = {}) {
 
   refreshSelectionState(container);
   ensureWordCatalogLoaded()
-    .then(() => refreshSelectionState(container))
+    .then((rows) => {
+      setWordSelectionCatalog(container, rows, { idPrefix:"sm" });
+      refreshSelectionState(container);
+    })
     .catch(() => refreshSelectionState(container));
 }
 
@@ -79,6 +83,9 @@ export function readToolSettings(container) {
   if (catalogStatus === "error") {
     throw new Error(catalogError || "La banque de mots est indisponible.");
   }
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED && !settings.fixedWordSlugs.length) {
+    throw new Error("Ajoute au moins un mot à la liste fixe.");
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     throw new Error("Ajoute au moins une entrée graphémique.");
   }
@@ -89,6 +96,9 @@ export function readToolSettings(container) {
   }
   if (!canGenerateQuestion(settings)) {
     const count = getEligibleWordCount(settings);
+    if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+      throw new Error(`La liste fixe doit contenir au moins ${settings.wordCount} mots compatibles (${count} actuellement).`);
+    }
     throw new Error(`La banque ne contient pas assez de mots compatibles pour en proposer ${settings.wordCount} dans une même question (${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""}).`);
   }
 
@@ -134,6 +144,13 @@ function refreshBankStatus(container) {
   }
 
   const settings = readCurrentSettings(container);
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+    const count = getEligibleWordCount(settings);
+    const enough = canGenerateQuestion(settings);
+    host.classList.add(enough ? "is-ready" : "is-warning");
+    host.textContent = `${count} mot${count > 1 ? "s" : ""} dans la liste fixe${enough ? "." : ` : il en faut au moins ${settings.wordCount}.`}`;
+    return;
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     host.classList.add("is-warning");
     host.textContent = "Ajoute au moins une entrée graphémique.";
@@ -144,21 +161,21 @@ function refreshBankStatus(container) {
   const targetCount = getEligibleTargetCount(settings);
   const enough = canGenerateQuestion(settings);
   host.classList.add(enough ? "is-ready" : "is-warning");
-  const levelLabel = settings.schoolLevel;
+  const levelLabel = settings.lexicalLevel;
 
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC) {
-    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : quantité insuffisante."}`;
+    host.textContent = `${targetCount} entrée${targetCount > 1 ? "s" : ""} graphémique${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau lexical ${levelLabel}${enough ? "." : " : quantité insuffisante."}`;
     return;
   }
 
-  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau « ${levelLabel} »${enough ? "." : " : quantité insuffisante."}`;
+  host.textContent = `${targetCount} phonème${targetCount > 1 ? "s" : ""} générable${targetCount > 1 ? "s" : ""} · ${count} mot${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""} au niveau lexical ${levelLabel}${enough ? "." : " : quantité insuffisante."}`;
 }
 
 async function ensureWordCatalogLoaded() {
   if (!catalogPromise) {
     catalogStatus = "loading";
     catalogError = "";
-    catalogPromise = listPublicPhonologyWords()
+    catalogPromise = listPublicLexicalWords()
       .then((rows) => {
         setWordCatalog(Array.isArray(rows) ? rows : []);
         catalogStatus = "ready";

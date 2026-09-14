@@ -1,0 +1,85 @@
+html,
+body.catalog-test-window-body{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  margin:0;
+  overflow:hidden;
+  background:#10151e;
+}
+
+.catalog-test-window-root{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+}
+
+.catalog-test-window-root > .session-page,
+.catalog-test-window-root > .session-page .session-viewport{
+  width:100%;
+  height:100%;
+  min-height:0;
+}
+
+.catalog-test-window-waiting,
+.catalog-test-window-error{
+  width:100%;
+  height:100%;
+  display:grid;
+  place-content:center;
+  gap:8px;
+  padding:24px;
+  text-align:center;
+  color:var(--text);
+}
+
+.catalog-test-window-waiting strong,
+.catalog-test-window-error strong{
+  font-size:clamp(22px, 3vw, 38px);
+}
+
+.catalog-test-window-waiting span,
+.catalog-test-window-error span{
+  color:var(--muted);
+  font-size:clamp(14px, 1.5vw, 19px);
+}
+
+.catalog-test-window-error strong{
+  color:var(--bad);
+}
+
+/* Le lecteur autonome ne contient qu’une activité/un quiz : les commandes
+   précédent/suivant outil du Tableau ne sont donc pas pertinentes ici. */
+.catalog-test-window-root #btnPrevTool,
+.catalog-test-window-root #btnNextTool{
+  display:none !important;
+}
+
+.catalog-test-window-root.is-quiz-test .projected-teacher-level-block{
+  display:none !important;
+}
+
+.catalog-test-window-root .catalog-test-window-dock-separator{
+  width:100%;
+  height:1px;
+  margin:1px 0;
+  background:rgba(255,255,255,.14);
+}
+
+.catalog-test-window-root .catalog-test-window-close-btn{
+  border-color:rgba(255,110,110,.24);
+  background:rgba(255,77,77,.10);
+}
+
+.catalog-test-window-root .catalog-test-window-close-btn:hover:not(:disabled){
+  background:rgba(255,77,77,.18);
+}
+
+.catalog-test-window-root .catalog-test-window-control-icon{
+  width:22px;
+  height:22px;
+  flex:0 0 22px;
+}

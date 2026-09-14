@@ -1,15 +1,14 @@
+import { isLexicalEntryAllowedAtLevel, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 import { FALLBACKS } from "../encodage/graphs-data.js";
 import { PHONOLOGY_GRAPH_BY_ID } from "../../shared/phonology-graph-data.js";
 import { getPhonemeTarget, getPhonemeTargets, normalizePhonologyTargetId } from "../../shared/phonology-targets.js";
 import { findPhonologyTargetOccurrences } from "../../shared/phonology-target-matcher.js";
 import {
-  isPhonologyWordAllowedAtLevel,
   isPhonologyWordAllowedByCgpComplexity,
   isPhonologyWordAllowedBySilentLetters,
   normalizePhonologyCgpComplexityLevel,
   normalizePhonologyRegularityScore,
   normalizePhonologySilentLettersMode,
-  normalizePhonologySchoolLevel,
   pickPhonologyWordByRegularity
 } from "../../shared/phonology-word-level.js";
 import {
@@ -76,7 +75,7 @@ export function getDefaultSettings() {
     enabledSpellingsByTarget: {},
     graphemicEntries: [],
     excludedGraphemicEntries: [],
-    schoolLevel: "CP",
+    lexicalLevel: 1,
     silentLettersMode: "allow",
     cgpComplexityLevel: 5,
     showPossibleSpellings: false
@@ -142,7 +141,7 @@ export function normalizeSettings(settings = {}) {
     wordCount,
     enabledSpellings,
     enabledSpellingsByTarget,
-    schoolLevel:normalizePhonologySchoolLevel(settings?.schoolLevel),
+    lexicalLevel:normalizeLexicalLevel(settings?.lexicalLevel),
     silentLettersMode:normalizePhonologySilentLettersMode(settings?.silentLettersMode),
     cgpComplexityLevel:normalizePhonologyCgpComplexityLevel(settings?.cgpComplexityLevel),
     showPossibleSpellings:settings?.showPossibleSpellings === true
@@ -198,7 +197,7 @@ export function getEligibleWords(settings = {}) {
   const targets = getSelectedTargets(cfg);
   for (const target of targets) {
     const spellings = getEnabledSpellingsForTarget(cfg, target);
-    for (const word of getPlayableWordsForTarget(target, spellings, cfg.schoolLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel)) {
+    for (const word of getPlayableWordsForTarget(target, spellings, cfg.lexicalLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel)) {
       if (!bySlug.has(word.slug)) bySlug.set(word.slug, word);
     }
   }
@@ -217,7 +216,7 @@ export function getPhonemicSpellingUsage(settings = {}) {
 
   for (const target of targets) {
     const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
-    const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, [], cfg.silentLettersMode, cfg.cgpComplexityLevel);
+    const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.lexicalLevel, [], cfg.silentLettersMode, cfg.cgpComplexityLevel);
     usageByTarget[target.id] = buildSpellingUsage(target, pool);
   }
   return usageByTarget;
@@ -266,7 +265,7 @@ export function pickQuestion(settings = {}, {
     : viableTargets;
   const target = shuffleArray(targetChoices.length ? targetChoices : viableTargets)[0];
   const enabledSpellings = getEnabledSpellingsForTarget(cfg, target);
-  const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel);
+  const pool = getPlayableWordsForTarget(target, enabledSpellings, cfg.lexicalLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel);
 
   const usedSet = usedWordSlugs instanceof Set ? usedWordSlugs : new Set();
   const available = pool.filter((word) => !usedSet.has(word.slug));
@@ -367,34 +366,34 @@ function normalizeWordCatalog(words) {
       syllables: (Array.isArray(word?.syllables) ? word.syllables : [])
         .map((syllable) => String(syllable || "").trim().normalize("NFC"))
         .filter(Boolean),
-      schoolLevel:normalizePhonologySchoolLevel(word?.schoolLevel, { allowX:true, fallback:"X" }),
+      lexicalLevel:normalizeLexicalLevel(word?.lexicalLevel, 1),
       regularityScore:normalizePhonologyRegularityScore(word?.regularityScore)
     }))
     .filter((word) => word.slug && word.word && word.units.length > 0);
 }
 
-function getPlayableWordsForTarget(target, enabledSpellings = null, schoolLevel = "CP", excludedGraphemicEntries = [], silentLettersMode = "allow", cgpComplexityLevel = 5) {
+function getPlayableWordsForTarget(target, enabledSpellings = null, lexicalLevel = 1, excludedGraphemicEntries = [], silentLettersMode = "allow", cgpComplexityLevel = 5) {
   const targetId = String(target?.id || "").trim();
   if (!targetId) return [];
   const allowedSpellings = enabledSpellings === null
     ? normalizeSpellings(target?.spellings)
     : normalizeSpellings(enabledSpellings);
-  const normalizedSchoolLevel = normalizePhonologySchoolLevel(schoolLevel);
+  const normalizedLexicalLevel = normalizeLexicalLevel(lexicalLevel);
   const exclusions = target?.kind === "graphemic" ? normalizeGraphemicEntries(excludedGraphemicEntries) : [];
   const normalizedSilentLettersMode = normalizePhonologySilentLettersMode(silentLettersMode);
   const normalizedCgpComplexityLevel = normalizePhonologyCgpComplexityLevel(cgpComplexityLevel);
-  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${normalizedSchoolLevel}::exclude:${exclusions.join("|")}::silent:${normalizedSilentLettersMode}::cgp:${normalizedCgpComplexityLevel}`;
+  const cacheKey = `${target?.kind || "phonemic"}::${targetId}::${allowedSpellings.join("|")}::${normalizedLexicalLevel}::exclude:${exclusions.join("|")}::silent:${normalizedSilentLettersMode}::cgp:${normalizedCgpComplexityLevel}`;
   if (PLAYABLE_WORDS_BY_TARGET.has(cacheKey)) {
     return PLAYABLE_WORDS_BY_TARGET.get(cacheKey);
   }
 
   const words = WORD_CATALOG
-    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, normalizedSchoolLevel))
+    .filter((entry) => isLexicalEntryAllowedAtLevel(entry, normalizedLexicalLevel))
     .filter((entry) => isPhonologyWordAllowedBySilentLetters(entry, normalizedSilentLettersMode))
     .filter((entry) => isPhonologyWordAllowedByCgpComplexity(entry, normalizedCgpComplexityLevel))
     .map((entry) => target?.kind === "graphemic"
-      ? buildGraphemicPlayableWord(entry, target, normalizedSchoolLevel, exclusions)
-      : buildPlayableWord(entry, target, allowedSpellings, normalizedSchoolLevel))
+      ? buildGraphemicPlayableWord(entry, target, normalizedLexicalLevel, exclusions)
+      : buildPlayableWord(entry, target, allowedSpellings, normalizedLexicalLevel))
     .filter(Boolean);
   PLAYABLE_WORDS_BY_TARGET.set(cacheKey, words);
   return words;
@@ -409,7 +408,7 @@ function getViableTargets(settings) {
 
   return targets
     .filter(({ target }) => !!target)
-    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.schoolLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel).length >= cfg.wordCount)
+    .filter(({ target, enabledSpellings }) => getPlayableWordsForTarget(target, enabledSpellings, cfg.lexicalLevel, cfg.excludedGraphemicEntries, cfg.silentLettersMode, cfg.cgpComplexityLevel).length >= cfg.wordCount)
     .map(({ target }) => target);
 }
 
@@ -438,8 +437,8 @@ function getQuestionTargetIdFromKey(key) {
   return String(key || "").split("::", 1)[0].trim();
 }
 
-function buildPlayableWord(entry, target, enabledSpellings, schoolLevel = "CP") {
-  if (!isPhonologyWordAllowedAtLevel(entry, schoolLevel)) return null;
+function buildPlayableWord(entry, target, enabledSpellings, lexicalLevel = 1) {
+  if (!isLexicalEntryAllowedAtLevel(entry, lexicalLevel)) return null;
   const occurrences = findPhonologyTargetOccurrences(entry.units, target);
   if (!occurrences.length) return null;
   const allowed = new Set(normalizeSpellings(enabledSpellings));
@@ -467,8 +466,8 @@ function buildPlayableWord(entry, target, enabledSpellings, schoolLevel = "CP") 
   };
 }
 
-function buildGraphemicPlayableWord(entry, target, schoolLevel = "CP", excludedGraphemicEntries = []) {
-  if (!isPhonologyWordAllowedAtLevel(entry, schoolLevel)) return null;
+function buildGraphemicPlayableWord(entry, target, lexicalLevel = 1, excludedGraphemicEntries = []) {
+  if (!isLexicalEntryAllowedAtLevel(entry, lexicalLevel)) return null;
   if (wordContainsAnyGraphemicEntry(entry.word, excludedGraphemicEntries)) return null;
   const occurrences = findGraphemicOccurrences(entry.word, target?.grapheme);
   if (!occurrences.length) return null;

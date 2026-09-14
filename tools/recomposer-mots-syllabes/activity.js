@@ -6,7 +6,7 @@ import {
   getTokenLabel,
   evaluateZoneOrders
 } from "./model.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -711,7 +711,7 @@ function updateInstruction(state) {
 
 async function ensureCatalog() {
   if (!catalogPromise) {
-    catalogPromise = listPublicPhonologyWords().then((rows) => {
+    catalogPromise = listPublicLexicalWords().then((rows) => {
       setWordCatalog(Array.isArray(rows) ? rows : []);
       return rows;
     }).catch((error) => {

@@ -6,7 +6,7 @@ import {
   evaluateSelection,
   makeSelectionKey
 } from "./model.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -459,7 +459,7 @@ function setsEqual(first, second) {
 
 async function ensurePhonologyWordCatalog() {
   if (!phonologyWordCatalogPromise) {
-    phonologyWordCatalogPromise = listPublicPhonologyWords()
+    phonologyWordCatalogPromise = listPublicLexicalWords()
       .then((rows) => {
         const words = Array.isArray(rows) ? rows : [];
         setWordCatalog(words);

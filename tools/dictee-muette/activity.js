@@ -11,7 +11,7 @@ import {
   getAnswerLength
 } from "./model.js";
 import {
-  listPublicPhonologyWords,
+  listPublicLexicalWords,
   listPublicImageAssetsInSystemFolder,
   getPublicImageAssetUrl
 } from "../../shared/public-api.js";
@@ -519,7 +519,7 @@ function teardownState(state, container) {
 async function ensureRuntimeCatalogs() {
   if (!runtimeCatalogsPromise) {
     runtimeCatalogsPromise = Promise.all([
-      listPublicPhonologyWords(),
+      listPublicLexicalWords(),
       listPublicImageAssetsInSystemFolder(getImageFolderName())
     ])
       .then(([words, images]) => {

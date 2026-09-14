@@ -1039,10 +1039,6 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
           step?.step_options_json?.execution_limit ?? { mode: "questions", value: directQuiz?.question_count ?? 1 },
           { mode: "questions", value: 1 }
         );
-        const directQuizTimeLimitSec = Math.max(0, Math.trunc(Number(settings?.timeLimitSec ?? settings?.time_limit_sec) || 0));
-        const resolvedQuestionTime = directQuizTimeLimitSec > 0
-          ? directQuizTimeLimitSec
-          : (questionTime == null || questionTime <= 0 ? null : questionTime);
         return {
           instanceId: `quiz_${String(step?.id || index).replace(/[^a-zA-Z0-9_-]+/g, "-")}`,
           toolId: "quiz",
@@ -1054,13 +1050,17 @@ export function buildMissionRuntimeConfig(mission = {}, steps = [], options = {}
           catalog_adaptive: false,
           mission_id: String(mission?.id || ""),
           mission_step_id: String(step?.id || ""),
-          auto_exit_session_on_complete: settings?.autoExitOnComplete === true || settings?.auto_exit_on_complete === true,
+          // Dans une mission, la fin du quiz rend toujours la main au moteur de mission.
+          auto_exit_session_on_complete: false,
           draft: {
             enabled: true,
             executionLimit,
             questionCount: executionLimit.mode === "questions" ? executionLimit.value : 1,
-            timePerQ: resolvedQuestionTime == null ? 40 : resolvedQuestionTime,
-            infiniteTimePerQ: resolvedQuestionTime == null,
+            // Le chrono est désormais porté par chaque question du quiz.
+            // Le moteur générique démarre donc le quiz sans limite globale ;
+            // le runtime Quiz fournit ensuite la durée de la question courante.
+            timePerQ: 40,
+            infiniteTimePerQ: true,
             answerTime: answerDisplay == null ? 5 : answerDisplay,
             infiniteAnswerTime: answerDisplay == null,
             questionTransitionSec: transition,

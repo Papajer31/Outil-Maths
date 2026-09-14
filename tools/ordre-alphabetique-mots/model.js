@@ -1,4 +1,4 @@
-import { isPhonologyWordAllowedAtLevel, normalizePhonologySchoolLevel } from "../../shared/phonology-word-level.js";
+import { isLexicalEntryAllowedAtLevel, normalizeLexicalLevel } from "../../shared/lexical-bank.js";
 
 export const LIST_TYPES = Object.freeze({
   LETTERS: "letters",
@@ -37,24 +37,23 @@ export function getDefaultSettings() {
     commonPrefixLength: 1,
     visualHint: false,
     showAlphabet: false,
-    schoolLevel: "CP"
+    lexicalLevel: 1
   };
 }
 
 export function normalizeSettings(settings) {
+  const source = settings ?? {};
+  const defaults = getDefaultSettings();
   const base = {
-    ...getDefaultSettings(),
-    ...(settings ?? {})
+    listType: source.listType === LIST_TYPES.LETTERS ? LIST_TYPES.LETTERS : LIST_TYPES.WORDS,
+    itemCount: clampInt(source.itemCount ?? defaults.itemCount, 2, 6),
+    prefixConstraint: source.prefixConstraint ?? defaults.prefixConstraint,
+    prefixMatchMode: source.prefixMatchMode ?? defaults.prefixMatchMode,
+    commonPrefixLength: source.commonPrefixLength ?? defaults.commonPrefixLength,
+    visualHint: normalizeBoolean(source.visualHint ?? defaults.visualHint),
+    showAlphabet: normalizeBoolean(source.showAlphabet ?? defaults.showAlphabet),
+    lexicalLevel: normalizeLexicalLevel(source.lexicalLevel)
   };
-
-  base.listType = base.listType === LIST_TYPES.LETTERS
-    ? LIST_TYPES.LETTERS
-    : LIST_TYPES.WORDS;
-
-  base.itemCount = clampInt(base.itemCount, 2, 6);
-  base.visualHint = normalizeBoolean(base.visualHint);
-  base.showAlphabet = normalizeBoolean(base.showAlphabet);
-  base.schoolLevel = normalizePhonologySchoolLevel(base.schoolLevel);
 
   const prefixConfig = normalizePrefixConstraint(
     base.prefixConstraint,
@@ -198,7 +197,7 @@ export function normalizeWordEntries(entries) {
       word,
       word_normalized: key,
       dictionary_page: dictionaryPage,
-      schoolLevel: normalizePhonologySchoolLevel(entry?.schoolLevel ?? entry?.school_level, { allowX: true, fallback: "X" })
+      lexicalLevel: normalizeLexicalLevel(entry?.lexicalLevel ?? entry?.lexical_level, 1)
     });
   }
 
@@ -326,7 +325,7 @@ function pickLettersQuestion(settings, { avoidKey = null, attempts = 100 } = {})
 function pickWordsQuestion(settings, wordEntries, { avoidKey = null, attempts = 400 } = {}) {
   const cfg = normalizeSettings(settings);
   const entries = normalizeWordEntries(wordEntries)
-    .filter((entry) => isPhonologyWordAllowedAtLevel(entry, cfg.schoolLevel));
+    .filter((entry) => isLexicalEntryAllowedAtLevel(entry, cfg.lexicalLevel));
 
   if (entries.length < cfg.itemCount) {
     return null;

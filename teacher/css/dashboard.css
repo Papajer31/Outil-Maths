@@ -7085,3 +7085,29 @@ body.dashboard-catalog-test-fullscreen-lock{
 .dashboard-activity-tile[data-node-type="quiz"] .dashboard-activity-tile-actions--activity{
   bottom:52px;
 }
+
+/* Missions — règles de passation propres aux étapes Quiz. */
+.dashboard-mission-step-card--quiz{
+  align-items:flex-start;
+}
+.dashboard-mission-step-card--quiz .dashboard-mission-step-main{
+  flex:1 1 auto;
+  width:100%;
+}
+.dashboard-mission-step-card--quiz .dashboard-class-card-heading{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.dashboard-mission-quiz-passation{
+  width:100%;
+  margin-top:4px;
+}
+.dashboard-mission-quiz-passation .quiz-runtime-settings-panel{
+  width:100%;
+  box-shadow:none;
+}
+.dashboard-mission-quiz-passation .general-question-selection-list{
+  max-height:220px;
+}

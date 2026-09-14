@@ -1,6 +1,7 @@
 export const WORD_SELECTION_MODES = Object.freeze({
   PHONEMIC:"phonemic",
-  GRAPHEMIC:"graphemic"
+  GRAPHEMIC:"graphemic",
+  FIXED:"fixed"
 });
 
 const LEGACY_GRAPHEMIC_TARGETS = Object.freeze({
@@ -26,9 +27,10 @@ const LEGACY_GRAPHEMIC_TARGETS = Object.freeze({
 });
 
 export function normalizeWordSelectionMode(value) {
-  return String(value || "").trim().toLocaleLowerCase("fr-FR") === WORD_SELECTION_MODES.GRAPHEMIC
-    ? WORD_SELECTION_MODES.GRAPHEMIC
-    : WORD_SELECTION_MODES.PHONEMIC;
+  const normalized = String(value || "").trim().toLocaleLowerCase("fr-FR");
+  if (normalized === WORD_SELECTION_MODES.GRAPHEMIC) return WORD_SELECTION_MODES.GRAPHEMIC;
+  if (normalized === WORD_SELECTION_MODES.FIXED) return WORD_SELECTION_MODES.FIXED;
+  return WORD_SELECTION_MODES.PHONEMIC;
 }
 
 export function normalizeGraphemicEntry(value) {
@@ -109,6 +111,9 @@ export function legacyGraphemicEntriesFromSettings(settings = {}) {
 export function inferWordSelectionMode(settings = {}, knownPhonemeIds = null) {
   const explicit = String(settings?.wordSelectionMode || settings?.selectionMode || "").trim();
   if (explicit) return normalizeWordSelectionMode(explicit);
+  if (Array.isArray(settings?.fixedWordSlugs) && settings.fixedWordSlugs.length) {
+    return WORD_SELECTION_MODES.FIXED;
+  }
   if (normalizeGraphemicEntries(settings?.graphemicEntries || settings?.graphemes).length) {
     return WORD_SELECTION_MODES.GRAPHEMIC;
   }

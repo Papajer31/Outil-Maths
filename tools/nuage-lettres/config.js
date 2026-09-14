@@ -6,7 +6,7 @@ import {
   bindBasicMinMax,
   renderToolSettingsStack
 } from "../../shared/config-widgets.js";
-import { listPublicPhonologyWords } from "../../shared/public-api.js";
+import { listPublicLexicalWords } from "../../shared/public-api.js";
 import {
   CLOUD_MODES,
   ALL_TARGET_ID,
@@ -23,6 +23,7 @@ import {
   renderWordSelectionSelector,
   bindWordSelectionSelector,
   readWordSelectionSelector,
+  setWordSelectionCatalog,
   updateWordSelectionSpellingUsage
 } from "../../shared/word-selection-selector.js";
 
@@ -48,7 +49,7 @@ export function renderToolSettings(container, settings = {}) {
             { value: CLOUD_MODES.FLOATING, label: "En mouvement" }
           ]
         }),
-        renderLengthSelector(cfg),
+        `<div data-nl-auto-selection-filter>${renderLengthSelector(cfg)}</div>`,
         renderRadioGroup({
           title: "Affichage de la première lettre",
           id: "nl_showFirstLetter",
@@ -61,7 +62,7 @@ export function renderToolSettings(container, settings = {}) {
         renderWordSelectionSelector(cfg, {
           idPrefix:"nl",
           allTargetId:ALL_TARGET_ID,
-          showSchoolLevels:true,
+          showLexicalLevels:true,
           bankStatusMarkup:`<div class="nl-config-bank-status" data-nl-bank-status aria-live="polite"></div>`
         })
       )}
@@ -74,7 +75,10 @@ export function renderToolSettings(container, settings = {}) {
   bindWordSelectionSelector(container, {
     idPrefix:"nl",
     allTargetId:ALL_TARGET_ID,
-    onChange:() => refreshBankStatus(container)
+    onChange:() => {
+      syncFixedModeControls(container);
+      refreshBankStatus(container);
+    }
   });
 
 
@@ -84,9 +88,13 @@ export function renderToolSettings(container, settings = {}) {
     input?.addEventListener("change", () => refreshBankStatus(container));
   });
 
+  syncFixedModeControls(container);
   refreshBankStatus(container);
   ensureWordCatalogLoaded()
-    .then(() => refreshBankStatus(container))
+    .then((rows) => {
+      setWordSelectionCatalog(container, rows, { idPrefix:"nl" });
+      refreshBankStatus(container);
+    })
     .catch(() => refreshBankStatus(container));
 }
 
@@ -99,6 +107,9 @@ export function readToolSettings(container) {
   if (catalogStatus === "error") {
     throw new Error(catalogError || "La banque de mots est indisponible.");
   }
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED && !settings.fixedWordSlugs.length) {
+    throw new Error("Ajoute au moins un mot à la liste fixe.");
+  }
   if (settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC && !settings.graphemicEntries.length) {
     throw new Error("Ajoute au moins une entrée graphémique.");
   }
@@ -108,6 +119,9 @@ export function readToolSettings(container) {
     throw new Error("Active au moins une graphie pour l’un des phonèmes ciblés.");
   }
   if (!canGenerateQuestion(settings)) {
+    if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+      throw new Error("La liste fixe ne contient aucun mot compatible avec cet outil.");
+    }
     throw new Error(settings.wordSelectionMode === WORD_SELECTION_MODES.GRAPHEMIC
       ? "Aucun mot de la banque ne correspond à ces entrées graphémiques et à cette longueur."
       : "Aucun mot de la banque ne correspond à ce phonème, à ces graphies et à cette longueur.");
@@ -146,6 +160,12 @@ function readCurrentSettings(container) {
   });
 }
 
+function syncFixedModeControls(container) {
+  const settings = readCurrentSettings(container);
+  const filter = container.querySelector("[data-nl-auto-selection-filter]");
+  if (filter instanceof HTMLElement) filter.hidden = settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED;
+}
+
 function refreshBankStatus(container) {
   const host = container.querySelector("[data-nl-bank-status]");
   if (!host) return;
@@ -162,6 +182,13 @@ function refreshBankStatus(container) {
   }
 
   const settings = readCurrentSettings(container);
+  if (settings.wordSelectionMode === WORD_SELECTION_MODES.FIXED) {
+    const count = getEligibleWordCount(settings);
+    const enough = canGenerateQuestion(settings);
+    host.classList.add(enough ? "is-ready" : "is-warning");
+    host.textContent = `${count} mot${count > 1 ? "s" : ""} dans la liste fixe${enough ? "." : " : ajoute au moins un mot compatible."}`;
+    return;
+  }
   updateWordSelectionSpellingUsage(container, {
     idPrefix:"nl",
     usageByTarget:getPhonemicSpellingUsage(settings)
@@ -189,7 +216,7 @@ async function ensureWordCatalogLoaded() {
   if (!catalogPromise) {
     catalogStatus = "loading";
     catalogError = "";
-    catalogPromise = listPublicPhonologyWords()
+    catalogPromise = listPublicLexicalWords()
       .then((rows) => {
         setWordCatalog(Array.isArray(rows) ? rows : []);
         catalogStatus = "ready";

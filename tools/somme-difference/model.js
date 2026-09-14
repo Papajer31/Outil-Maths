@@ -27,6 +27,18 @@ export const OPERATION_TYPES = Object.freeze({
   DIFFERENCE: "difference"
 });
 
+export const OPERATION_MODES = Object.freeze({
+  MIXED: "mixed",
+  SUM_ONLY: "sum-only",
+  DIFFERENCE_ONLY: "difference-only"
+});
+
+export const OPERATION_MODE_LABELS = Object.freeze({
+  [OPERATION_MODES.MIXED]: "Sommes et différences",
+  [OPERATION_MODES.SUM_ONLY]: "Uniquement des sommes",
+  [OPERATION_MODES.DIFFERENCE_ONLY]: "Uniquement des différences"
+});
+
 export const LIMITS = Object.freeze({
   minCount: 1,
   maxCount: 99,
@@ -82,6 +94,7 @@ export function getDefaultSettings() {
       step: 1,
       values: []
     },
+    operationMode: OPERATION_MODES.MIXED,
     responseMode: RESPONSE_MODES.SEGMENTED,
     traceMode: TRACE_MODES.ENABLED
   };
@@ -90,11 +103,13 @@ export function getDefaultSettings() {
 export function normalizeSettings(settings = {}) {
   const defaults = getDefaultSettings();
   const source = isPlainObject(settings) ? settings : {};
+  const operationMode = normalizeOperationMode(source.operationMode ?? defaults.operationMode);
   const responseMode = normalizeResponseMode(source.responseMode ?? source.answerMode ?? defaults.responseMode);
   const traceMode = normalizeTraceMode(source.traceMode ?? (source.traceEnabled === false ? TRACE_MODES.DISABLED : defaults.traceMode));
 
   return {
     collectionRange: normalizeCollectionRange(source.collectionRange || source.range || defaults.collectionRange),
+    operationMode,
     responseMode,
     traceMode
   };
@@ -199,7 +214,7 @@ function buildRandomQuestion(cfg) {
   const bottomCount = pickValueFromConstraint(cfg.collectionRange, { inputMin: LIMITS.minCount, inputMax: LIMITS.maxCount });
   if (!Number.isInteger(topCount) || !Number.isInteger(bottomCount)) return null;
 
-  const operationType = Math.random() < .5 ? OPERATION_TYPES.SUM : OPERATION_TYPES.DIFFERENCE;
+  const operationType = pickOperationType(cfg.operationMode);
   if (operationType === OPERATION_TYPES.DIFFERENCE && topCount === bottomCount) return null;
 
   const [topCharacter, bottomCharacter] = pickTwoDistinct(CHARACTER_POOL);
@@ -293,6 +308,17 @@ function normalizeCollectionRange(value) {
 function normalizeResponseMode(value) {
   const raw = String(value || "").trim();
   return Object.values(RESPONSE_MODES).includes(raw) ? raw : RESPONSE_MODES.SEGMENTED;
+}
+
+function normalizeOperationMode(value) {
+  const raw = String(value || "").trim();
+  return Object.values(OPERATION_MODES).includes(raw) ? raw : OPERATION_MODES.MIXED;
+}
+
+function pickOperationType(mode) {
+  if (mode === OPERATION_MODES.SUM_ONLY) return OPERATION_TYPES.SUM;
+  if (mode === OPERATION_MODES.DIFFERENCE_ONLY) return OPERATION_TYPES.DIFFERENCE;
+  return Math.random() < .5 ? OPERATION_TYPES.SUM : OPERATION_TYPES.DIFFERENCE;
 }
 
 function normalizeTraceMode(value) {
