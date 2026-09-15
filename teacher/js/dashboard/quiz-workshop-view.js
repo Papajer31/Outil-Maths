@@ -5508,7 +5508,7 @@ export function createQuizWorkshopViewController({
     return {
       ...snapshot,
       runtimeSettings:{
-        drawMode:"in_order",
+        drawMode:"random",
         questionSelection:{ mode:"all", questionKeys:[] },
         timeLimitSec:0,
         autoExitOnComplete:false

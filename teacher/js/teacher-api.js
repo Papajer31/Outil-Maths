@@ -1788,7 +1788,7 @@ async function refreshDirectQuizMissionStepsForSpace(teacherSpaceId, quiz = {}) 
     const options = cloneJsonValue(step.step_options_json && typeof step.step_options_json === "object" ? step.step_options_json : {});
     const storedSettings = options.settings && typeof options.settings === "object" ? options.settings : {};
     const runtimeSettings = normalizeQuizRuntimeSettings({
-      drawMode:storedSettings.drawMode ?? storedSettings.draw_mode ?? "in_order",
+      drawMode:storedSettings.drawMode ?? storedSettings.draw_mode ?? "random",
       questionSelection:storedSettings.questionSelection ?? storedSettings.question_selection ?? { mode:"all", questionKeys:[] },
       timeLimitSec:storedSettings.timeLimitSec ?? storedSettings.time_limit_sec ?? 0,
       autoExitOnComplete:false

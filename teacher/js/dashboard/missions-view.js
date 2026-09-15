@@ -688,7 +688,7 @@ export function createMissionsViewController({
   function createDirectQuizStep(quiz = {}, { followUpdates = false } = {}){
     const snapshot = normalizeQuizSnapshot(quiz);
     const runtimeSettings = normalizeQuizRuntimeSettings({
-      drawMode:"in_order",
+      drawMode:"random",
       questionSelection:{ mode:"all", questionKeys:[] },
       timeLimitSec:0,
       autoExitOnComplete:false
@@ -733,7 +733,7 @@ export function createMissionsViewController({
       ? step.step_options_json.settings
       : {};
     return normalizeQuizRuntimeSettings({
-      drawMode:stored.drawMode ?? stored.draw_mode ?? "in_order",
+      drawMode:stored.drawMode ?? stored.draw_mode ?? "random",
       questionSelection:stored.questionSelection ?? stored.question_selection ?? { mode:"all", questionKeys:[] },
       timeLimitSec:0,
       autoExitOnComplete:false
@@ -744,7 +744,7 @@ export function createMissionsViewController({
     if (!isDirectQuizStep(step)) return null;
     const snapshot = getDirectQuizSnapshot(step);
     const normalized = normalizeQuizRuntimeSettings({
-      drawMode:nextSettings.drawMode ?? nextSettings.draw_mode ?? "in_order",
+      drawMode:nextSettings.drawMode ?? nextSettings.draw_mode ?? "random",
       questionSelection:nextSettings.questionSelection ?? nextSettings.question_selection ?? { mode:"all", questionKeys:[] },
       timeLimitSec:0,
       autoExitOnComplete:false

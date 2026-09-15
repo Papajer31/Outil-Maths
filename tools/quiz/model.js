@@ -907,6 +907,7 @@ export function filterQuizQuestionsBySelection(questions = [], selection = {}){
 export function getQuizSelectionItems(snapshot = {}){
   const normalizedSnapshot = normalizeQuizSnapshot(snapshot);
   const questions = normalizedSnapshot.questions;
+  const isSeries = normalizedSnapshot.editorMode === "series" || Boolean(normalizedSnapshot.seriesModelId);
   return questions.flatMap((question) => {
     const variants = Array.isArray(question.variants) && question.variants.length
       ? question.variants
@@ -921,6 +922,13 @@ export function getQuizSelectionItems(snapshot = {}){
       selectionKey:`variant:${question.id}:${variant.id || variantIndex}`,
       sourceQuestionKey,
       sourceQuestionId:question.id,
+      // Dans une « série », chaque ligne est une question du point de vue de
+      // l'enseignant. Elle doit donc être une unité de tirage indépendante au
+      // niveau du quiz, même si le stockage repose sur une question conteneur
+      // et plusieurs variantes.
+      sourceDrawGroupId:isSeries
+        ? `series:${question.id}:${variant.id || variantIndex}`
+        : question.id,
       sourceVariantIndex:variantIndex,
       sourceVariantId:String(variant.id || "")
     }));
@@ -987,7 +995,7 @@ export function createQuestionDeck(questions = [], drawMode = DEFAULT_DRAW_MODE)
   const groups = [];
   const groupByQuestion = new Map();
   source.forEach((item, index) => {
-    const groupKey = String(item?.sourceQuestionId || item?.id || `question-${index + 1}`);
+    const groupKey = String(item?.sourceDrawGroupId || item?.sourceQuestionId || item?.id || `question-${index + 1}`);
     let group = groupByQuestion.get(groupKey);
     if (!group) {
       group = {
