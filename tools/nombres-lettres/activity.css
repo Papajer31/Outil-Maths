@@ -12,33 +12,27 @@
   min-height:0;
   display:flex;
   flex-direction:column;
-  gap:18px;
+  gap:clamp(12px, 1.8vh, 18px);
   padding:0;
   overflow:hidden;
-
-  --tool-answer-font-size:112px;
-  --tool-answer-font-weight:1000;
-  --tool-answer-line-height:1;
-  --tool-answer-min-height:146px;
-  --tool-answer-padding:14px 24px;
-  --tool-answer-radius:28px;
 }
 
 .nl-stage{
   flex:1 1 auto;
+  min-height:0;
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:42px;
+  gap:clamp(24px, 3vw, 42px);
   overflow:hidden;
 }
 
 .nl-stage--boxed{
-  padding:0 32px;
+  padding:0 clamp(18px, 2.4vw, 32px);
 }
 
 .nl-stage--free{
-  padding:0 24px;
+  padding:0 clamp(14px, 2vw, 24px);
 }
 
 .nl-stage-source,
@@ -63,26 +57,26 @@
 
 .nl-stage-arrow{
   flex:none;
-  width:90px;
+  width:clamp(58px, 6vw, 90px);
   text-align:center;
-  font-size:92px;
+  font-size:clamp(58px, 6vw, 92px);
   font-weight:900;
   color:rgba(255,255,255,.82);
 }
 
 .nl-number-card{
   width:min(620px, 100%);
-  min-height:270px;
+  min-height:clamp(190px, 27vh, 270px);
   border-radius:32px;
   display:flex;
   align-items:center;
   justify-content:center;
-  padding:28px 40px;
+  padding:clamp(22px, 3vw, 28px) clamp(26px, 4vw, 40px);
 }
 
 .nl-number-card-value{
   font-family:var(--tool-font-family);
-  font-size:156px;
+  font-size:clamp(104px, 10vw, 156px);
   font-weight:1000;
   line-height:1;
   letter-spacing:2px;
@@ -90,18 +84,35 @@
 
 .nl-source-number{
   max-width:100%;
-  font-size:156px;
+  font-size:clamp(104px, 10vw, 156px);
   font-weight:1000;
   line-height:1;
   letter-spacing:2px;
 }
 
+/*
+  Le Seyès sert dans les deux sens de l'exercice. La taille du texte saisi et
+  celle du texte affiché partagent volontairement les mêmes variables : plus
+  de saut de taille entre saisie et correction.
+*/
 .nl-seyes-panel{
-  --nl-seyes-step:78px;
-  --nl-seyes-substep:19.5px;
-  --nl-seyes-font-size:48px;
-  --nl-seyes-text-top:13px;
-  --tool-answer-bg:
+  --nl-seyes-base-step:78px;
+  --nl-seyes-base-substep:19.5px;
+  --nl-seyes-base-font-size:48px;
+  --nl-seyes-base-text-top:43px;
+  --nl-seyes-step:var(--nl-seyes-base-step);
+  --nl-seyes-substep:var(--nl-seyes-base-substep);
+  --nl-seyes-font-size:var(--nl-seyes-base-font-size);
+  --nl-seyes-text-top:var(--nl-seyes-base-text-top);
+  --nl-letter-font-family:"BelleAllureGS", "Andika", cursive;
+  position:relative;
+  width:min(1200px, 100%);
+  min-height:150px;
+  padding:0;
+  border:4px solid transparent;
+  border-radius:20px;
+  overflow:hidden;
+  background:
     repeating-linear-gradient(to bottom,
       rgba(95, 145, 205, .16) 0 1px,
       transparent 1px,
@@ -118,13 +129,18 @@
       transparent var(--nl-seyes-step)
     ),
     #fff;
-  --tool-answer-border-width:0px;
-  position:relative;
-  width:min(1200px, 100%);
-  min-height:150px;
-  border-radius:20px;
-  overflow:hidden;
+  color:#3859bb;
   box-shadow:0 18px 42px rgba(0,0,0,.18);
+}
+
+.nl-seyes-panel--script{
+  --nl-letter-font-family:"Andika", var(--tool-font-family), sans-serif;
+  --nl-seyes-base-font-size:44px;
+  --nl-seyes-base-text-top:48px;
+}
+
+.nl-seyes-panel--cursive{
+  --nl-letter-font-family:"BelleAllureGS", "Andika", cursive;
 }
 
 .nl-seyes-panel.is-empty::after{
@@ -135,47 +151,111 @@
 }
 
 .nl-seyes-text,
-.nl-seyes-input{
+.nl-seyes-input.tool-answer-input{
   position:absolute;
+  top:var(--nl-seyes-text-top);
   left:30px;
   right:30px;
-  font-family:"BelleAllureGS", "Andika", cursive;
+  margin:0;
+  padding:0;
+  font-family:var(--nl-letter-font-family);
   font-size:var(--nl-seyes-font-size);
+  font-weight:400;
   line-height:1;
+  letter-spacing:normal;
   color:#3859bb;
 }
 
-.nl-seyes-input{
-  top:var(--nl-seyes-text-top);
-}
-
 .nl-seyes-text{
-  top:calc(var(--nl-seyes-text-top) + 30px);
   white-space:nowrap;
+  text-align:center;
 }
 
 .nl-seyes-panel--input{
   cursor:text;
 }
 
-.nl-seyes-input{
-  width:calc(100% - 40px);
+.nl-seyes-input.tool-answer-input{
+  width:calc(100% - 60px);
+  top:calc(var(--nl-seyes-text-top) - .6em);
+  height:2.2em;
+  min-height:2.2em;
   border:none;
   background:transparent;
   outline:none;
-  padding:0;
+  line-height:1;
+  text-align:center;
 }
 
-.nl-seyes-input::placeholder{
+.nl-seyes-input.tool-answer-input::placeholder{
   color:rgba(36, 49, 89, .28);
 }
 
+.nl-seyes-panel--input:focus-within{
+  border-color:var(--tool-ui-focus);
+}
+
+.nl-seyes-panel.is-correct{
+  border-color:var(--tool-ui-success);
+  border-style:solid;
+  box-shadow:0 0 0 2px rgba(87,208,122,.16) inset, 0 18px 42px rgba(0,0,0,.18);
+}
+
+.nl-seyes-panel.is-incorrect{
+  border-color:var(--tool-ui-error);
+  border-style:solid;
+  box-shadow:0 0 0 2px rgba(239,107,115,.16) inset, 0 18px 42px rgba(0,0,0,.18);
+}
+
+.nl-seyes-panel.is-correction{
+  border-color:var(--tool-ui-success);
+  border-style:dashed;
+  box-shadow:0 0 0 2px rgba(87,208,122,.16) inset, 0 18px 42px rgba(0,0,0,.18);
+}
+
+/* En script, on reprend les blocs texte/réponse communs, comme Conjugaison. */
+.nl-script-question.tool-question{
+  width:min(1480px, 100%);
+  font-size:clamp(42px, 4.7vw, 68px);
+  font-weight:600;
+  line-height:1.18;
+}
+
+.nl-script-answer-box.tool-answer-box{
+  width:min(780px, 100%);
+  height:104px;
+  min-height:104px;
+  padding:16px 24px;
+  --tool-answer-font-size:clamp(28px, 2.7vw, 44px);
+  --tool-answer-font-weight:600;
+  --tool-answer-line-height:1.18;
+}
+
+.nl-script-answer-input.tool-answer-input{
+  width:100%;
+  min-width:0;
+  height:auto;
+  min-height:1.18em;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  line-height:inherit;
+  text-align:center;
+}
+
+.nl-script-answer-display{
+  overflow-wrap:anywhere;
+}
+
 .nl-response-shell{
-  min-height:280px;
+  flex:0 0 auto;
+  min-height:clamp(190px, 28vh, 260px);
   display:flex;
   align-items:flex-start;
   justify-content:center;
-  padding-top:18px;
+  padding:clamp(6px, 1.2vh, 14px) 20px 0;
 }
 
 .nl-response-shell > *{
@@ -183,35 +263,74 @@
   max-width:100%;
 }
 
-.nl-number-input,
-.nl-number-display{
-  width:min(440px, 100%);
-  --tool-answer-placeholder-color:rgba(24, 32, 52, .28);
-  --tool-answer-bg:rgba(255,255,255,.96);
-  --tool-answer-color:#182034;
-  --tool-answer-border-width:0px;
-  box-shadow:0 18px 42px rgba(0,0,0,.22);
+.nl-number-response-stack{
+  width:100%;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  gap:clamp(12px, 1.8vh, 20px);
 }
 
-.nl-number-display{
+.nl-number-answer-host{
+  min-height:clamp(82px, 11vh, 112px);
+  display:grid;
+  place-items:center;
+}
+
+/* Même brique numérique commune que les autres outils harmonisés. */
+.nl-number-answer.tool-numeric-answer.tool-answer-box{
+  --tool-numeric-answer-display-shift-y:0px;
+  width:clamp(8.5rem, 18vw, 12.5rem);
+  min-width:clamp(8.5rem, 18vw, 12.5rem);
+  min-height:clamp(5.4rem, 11vh, 7.4rem);
+  padding:clamp(10px, 1.4vh, 16px) clamp(16px, 1.7vw, 24px);
+  border-radius:1.25rem;
+  font-size:clamp(3.4rem, 7.2vw, 5.8rem);
+  font-weight:900;
+  line-height:1;
+}
+
+.nl-number-keypad{
+  width:min(70rem, 100%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:nowrap;
+  gap:clamp(.28rem, .62vw, .55rem);
+}
+
+.nl-number-keypad.tool-numeric-keypad--hidden{
+  visibility:hidden;
   pointer-events:none;
 }
 
-
-.nl-answer-card.is-correct,
-.nl-answer-panel.is-correct,
-.nl-number-input.is-correct,
-.nl-number-display.is-correct{
-  outline: 6px solid rgb(33, 192, 65);
-  outline-offset: 4px;
+.nl-number-keypad-button{
+  width:clamp(3.4rem, 5.4vw, 4.8rem);
+  height:clamp(3.4rem, 5.4vw, 4.8rem);
+  border-radius:.85rem;
+  padding:.25rem;
+  font-size:clamp(1.55rem, 2.85vw, 2.3rem);
+  font-weight:850;
+  display:grid;
+  place-items:center;
 }
 
-.nl-answer-card.is-incorrect,
-.nl-answer-panel.is-incorrect,
-.nl-number-input.is-incorrect,
-.nl-number-display.is-incorrect{
-  outline: 6px solid rgb(255, 77, 77);
-  outline-offset: 4px;
+.nl-number-keypad-button--clear{
+  color:#ef4444;
+  border-color:rgba(239, 68, 68, .8);
+}
+
+.nl-number-keypad-button--clear svg{
+  width:55%;
+  height:55%;
+}
+
+.nl-number-keypad-button--clear:hover,
+.nl-number-keypad-button--clear:focus-visible{
+  border-color:rgba(239, 68, 68, 1);
+  box-shadow:0 0 0 3px rgba(239, 68, 68, .18);
 }
 
 .nl-answer-card--placeholder,
@@ -219,44 +338,49 @@
   color:rgba(24, 32, 52, .28);
 }
 
-.nl-validate-btn{
-  min-height:72px;
-  padding:18px 34px;
-  border-radius:22px;
-  font-size:32px;
-  font-weight:1000;
-  line-height:1;
-}
-
-.nl-validate-btn--hidden{
-  visibility:hidden;
-}
-
 .nl-root--free .nl-stage-answer.is-filled .nl-number-card,
-.nl-root--free .nl-stage-answer.is-filled .nl-seyes-panel{
+.nl-root--free .nl-stage-answer.is-filled .nl-seyes-panel,
+.nl-root--free .nl-stage-answer.is-filled .nl-script-answer-box{
   box-shadow:0 0 0 3px rgba(255,255,255,.18), 0 18px 42px rgba(0,0,0,.22);
 }
 
 @media (max-width: 1400px){
-  .nl-root{
-    --tool-answer-font-size:96px;
-    --tool-answer-min-height:128px;
+  .nl-seyes-panel{
+    min-height:132px;
+    --nl-seyes-base-step:68px;
+    --nl-seyes-base-substep:17px;
+    --nl-seyes-base-font-size:42px;
+    --nl-seyes-base-text-top:39px;
+  }
+
+  .nl-seyes-panel--script{
+    --nl-seyes-base-font-size:39px;
+    --nl-seyes-base-text-top:43px;
   }
 
   .nl-number-card{
-    min-height:230px;
+    min-height:210px;
   }
 
-  .nl-number-card-value,
-  .nl-source-number{
-    font-size:132px;
+  .nl-script-answer-box.tool-answer-box{
+    height:78px;
+    min-height:78px;
+    padding:12px 22px;
+  }
+}
+
+@media (max-width: 900px){
+  .nl-response-shell{
+    min-height:240px;
   }
 
-  .nl-seyes-panel{
-    min-height:290px;
-    --nl-seyes-font-size:64px;
-    --nl-seyes-step:70px;
-    --nl-seyes-substep:17.5px;
-    --nl-seyes-text-top:78px;
+  .nl-number-keypad{
+    max-width:38rem;
+    flex-wrap:wrap;
+  }
+
+  .nl-number-keypad-button{
+    width:clamp(3.2rem, 8vw, 4.3rem);
+    height:clamp(3.2rem, 8vw, 4.3rem);
   }
 }

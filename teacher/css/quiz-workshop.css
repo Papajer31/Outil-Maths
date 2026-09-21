@@ -1743,26 +1743,6 @@
   flex-direction:column;
 }
 
-.quiz-workshop-back-btn{
-  width:42px;
-  height:42px;
-  flex:0 0 auto;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:12px;
-  background:rgba(255,255,255,.06);
-  color:#d9dfeb;
-  cursor:pointer;
-}
-
-.quiz-workshop-back-btn:hover{
-  border-color:rgba(255,255,255,.20);
-  background:rgba(255,255,255,.10);
-  color:#fff;
-}
-
 /* Test direct du quiz depuis l'atelier. */
 .quiz-workshop-header-actions{
   flex:0 0 auto;

@@ -27,6 +27,11 @@ export function createActivitiesViewController({
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
+  onBackToActivityHub,
+  onAssignCatalogActivity,
+  onDirectLaunchCatalogActivity,
+  onCreateSystemActivity,
+  onEditSystemActivity,
   showToast
 } = {}){
   let currentOpenFolderId = null;
@@ -58,7 +63,9 @@ export function createActivitiesViewController({
     updatePedagogicalNodeAsAdmin,
     deletePedagogicalNodeAsAdmin,
     showToast,
-    onReturnToCatalogue: ({ forceRefresh = false } = {}) => renderActivitiesForSpace({ forceRefresh })
+    onReturnToCatalogue: ({ forceRefresh = false } = {}) => renderActivitiesForSpace({ forceRefresh }),
+    onCreateSystemActivity,
+    onEditSystemActivity
   });
 
   function getFolderById(id){
@@ -116,6 +123,28 @@ export function createActivitiesViewController({
       usefulFolderIds.has(String(folder.id))
       && String(folder.parent_id || "") === normalizedParentId
     ));
+  }
+
+  function getActivityGradeLevel(activity){
+    const folderById = new Map(folders.map((folder) => [String(folder.id), folder]));
+    let folder = folderById.get(getActivityFolderId(activity)) || null;
+    const seen = new Set();
+
+    while (folder && !seen.has(String(folder.id))) {
+      seen.add(String(folder.id));
+      const gradeLevel = getPedagogicalNodeGradeLevel(folder);
+      if (gradeLevel) return gradeLevel;
+      folder = folderById.get(String(folder.parent_id || "")) || null;
+    }
+
+    return "";
+  }
+
+  function getActivitiesForSelectedGrade(activities = [], grade = selectedExplorationGrade){
+    if (grade === EXPLORATION_ALL_GRADES) return Array.isArray(activities) ? activities : [];
+    return (Array.isArray(activities) ? activities : []).filter(
+      (activity) => getActivityGradeLevel(activity) === grade
+    );
   }
 
   function getGradeFilteredFolderIds(activities = [], grade = selectedExplorationGrade){
@@ -284,6 +313,9 @@ export function createActivitiesViewController({
 
     configHeader.innerHTML = `
       <div class="dashboard-config-header-main">
+        <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-activity-hub" title="Retour aux activités" aria-label="Retour aux activités">
+          <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+        </button>
         <div class="dashboard-section-title">Exploration</div>
         <div class="dashboard-view-toggle dashboard-exploration-grade-tabs" role="group" aria-label="Filtrer Exploration par niveau">
           ${gradeButtons}
@@ -298,6 +330,8 @@ export function createActivitiesViewController({
         ${isSuperAdmin ? catalogAdminViewController.renderHeaderActions() : ""}
       </div>
     `;
+
+    configHeader.querySelector("[data-action='back-activity-hub']")?.addEventListener("click", () => onBackToActivityHub?.());
 
     configHeader.querySelectorAll("[data-action='open-root']").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -324,12 +358,13 @@ export function createActivitiesViewController({
 
   function renderTreeFolder(folder, visibleFolderIds, usefulFolderIds, depth = 0){
     const selected = String(currentOpenFolderId || "") === String(folder.id);
-    const isEmptyPath = currentRenderIsSuperAdmin && !usefulFolderIds.has(String(folder.id));
+    const isEmptyPath = !usefulFolderIds.has(String(folder.id));
+    const shouldDimEmptyPath = currentRenderIsSuperAdmin || selectedExplorationGrade !== EXPLORATION_ALL_GRADES;
     const childFolders = getVisibleChildFolders(folder.id, visibleFolderIds).sort(compareByOrderAndName);
     const hasChildFolders = childFolders.length > 0;
     const isCollapsed = hasChildFolders && collapsedFolderIds.has(String(folder.id));
     return `
-      <div class="dashboard-activity-tree-row dashboard-tree-node ${selected ? "is-selected" : ""} ${isEmptyPath ? "is-catalog-empty-path" : ""}" style="--dashboard-tree-depth:${depth};" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
+      <div class="dashboard-activity-tree-row dashboard-tree-node ${selected ? "is-selected" : ""} ${isEmptyPath && shouldDimEmptyPath ? "is-catalog-empty-path" : ""}" style="--dashboard-tree-depth:${depth};" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
         <div class="dashboard-tree-indent" aria-hidden="true"></div>
         ${hasChildFolders ? `
           <button
@@ -351,9 +386,10 @@ export function createActivitiesViewController({
   }
 
   function renderFolderTile(folder, usefulFolderIds){
-    const isEmptyPath = currentRenderIsSuperAdmin && !usefulFolderIds.has(String(folder.id));
+    const isEmptyPath = !usefulFolderIds.has(String(folder.id));
+    const shouldDimEmptyPath = currentRenderIsSuperAdmin || selectedExplorationGrade !== EXPLORATION_ALL_GRADES;
     return `
-      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder ${isEmptyPath ? "is-catalog-empty-path" : ""}" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
+      <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-activity-tile--catalog-folder ${isEmptyPath && shouldDimEmptyPath ? "is-catalog-empty-path" : ""}" ${currentRenderIsSuperAdmin ? catalogAdminViewController.getFolderDropTargetAttributes(folder.id) : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">folder</span>
           <span class="dashboard-activity-tile-labelbox">
@@ -408,6 +444,8 @@ export function createActivitiesViewController({
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="test-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Tester" aria-label="Tester">
             <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
           </button>
+          ${isPublished ? `<button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="assign-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Attribuer" aria-label="Attribuer"><span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span></button>` : ""}
+          ${isPublished ? `<button class="dashboard-icon-btn" type="button" data-action="direct-launch-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="QR / lien direct" aria-label="QR / lien direct">QR</button>` : ""}
           ${isPublished ? `
             <button class="dashboard-icon-btn dashboard-material-icon-btn ${visible ? "" : "is-muted"}" type="button" data-action="toggle-catalog-visible" data-catalog-activity-id="${escapeAttr(activity.id)}" title="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}" aria-label="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}">
               <span class="dashboard-material-icon" aria-hidden="true">${visible ? "visibility" : "visibility_off"}</span>
@@ -449,6 +487,8 @@ export function createActivitiesViewController({
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="test-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Tester" aria-label="Tester">
             <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
           </button>
+          ${isPublished ? `<button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="assign-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="Attribuer" aria-label="Attribuer"><span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span></button>` : ""}
+          ${isPublished ? `<button class="dashboard-icon-btn" type="button" data-action="direct-launch-catalog-activity" data-catalog-activity-id="${escapeAttr(activity.id)}" title="QR / lien direct" aria-label="QR / lien direct">QR</button>` : ""}
           ${isPublished ? `
             <button class="dashboard-icon-btn dashboard-material-icon-btn ${visible ? "" : "is-muted"}" type="button" data-action="toggle-catalog-visible" data-catalog-activity-id="${escapeAttr(activity.id)}" title="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}" aria-label="${visible ? "Masquer dans Exploration" : "Afficher dans Exploration"}">
               <span class="dashboard-material-icon" aria-hidden="true">${visible ? "visibility" : "visibility_off"}</span>
@@ -508,7 +548,9 @@ export function createActivitiesViewController({
   }
 
   function renderShell(activities, { isSuperAdmin = false } = {}){
-    const usefulFolderIds = getFolderIdsLeadingToActivities(activities);
+    const usefulFolderIds = getFolderIdsLeadingToActivities(
+      getActivitiesForSelectedGrade(activities)
+    );
     const visibleFolderIds = getGradeFilteredFolderIds(activities);
     const selectedFolder = getFolderById(currentOpenFolderId);
     const parentId = selectedFolder ? String(selectedFolder.id) : null;
@@ -622,6 +664,22 @@ export function createActivitiesViewController({
         } catch (err) {
           showToast?.(err?.message || "Impossible de modifier la visibilité.", { isError: true });
         }
+      });
+    });
+
+    configsList?.querySelectorAll("[data-action='assign-catalog-activity']").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const activityId = String(btn.dataset.catalogActivityId || "").trim();
+        const activity = (cachedRenderedCatalogActivities || []).find((item) => String(item?.id || "") === activityId);
+        if (activity) onAssignCatalogActivity?.(activity);
+      });
+    });
+
+    configsList?.querySelectorAll("[data-action='direct-launch-catalog-activity']").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const activityId = String(btn.dataset.catalogActivityId || "").trim();
+        const activity = (cachedRenderedCatalogActivities || []).find((item) => String(item?.id || "") === activityId);
+        if (activity) onDirectLaunchCatalogActivity?.(activity);
       });
     });
 
@@ -818,7 +876,9 @@ function mergeAdminAndTeacherActivities(adminActivities = [], teacherActivities 
       .filter(([id]) => id)
   );
   const adminIds = new Set();
-  const merged = (Array.isArray(adminActivities) ? adminActivities : []).map((activity) => {
+  const merged = (Array.isArray(adminActivities) ? adminActivities : [])
+    .filter((activity) => String(activity?.status || "draft") !== "archived")
+    .map((activity) => {
     const id = String(activity?.id || "");
     adminIds.add(id);
     const teacherActivity = teacherById.get(id) || null;

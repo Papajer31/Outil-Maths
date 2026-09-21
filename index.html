@@ -16,18 +16,35 @@
 <body class="student-welcome-pending">
   <div id="studentWelcomeScreen" class="student-audio-welcome-screen" role="dialog" aria-modal="true" aria-label="Démarrer">
     <button class="student-audio-welcome-start" type="button" aria-label="Démarrer et écouter la consigne">
-      <span class="student-audio-welcome-play" aria-hidden="true">
-        <svg viewBox="0 0 64 64" width="64" height="64">
-          <path fill="currentColor" d="M24 17.5v29l24-14.5-24-14.5Z"/>
-        </svg>
-      </span>
-      <span class="student-audio-welcome-rocket-stage" aria-hidden="true">
-        <span class="student-audio-welcome-rocket-visual">
-          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-off" src="./shared/ui-assets/rocket-off.svg" alt="" draggable="false">
-          <img class="student-audio-welcome-rocket student-audio-welcome-rocket-on" src="./shared/ui-assets/rocket-on.svg" alt="" draggable="false">
+      <span class="student-launchpad-stage" aria-hidden="true">
+        <img
+          class="student-launchpad-image"
+          src="./shared/ui-assets/PasDeTir.png"
+          alt=""
+          draggable="false"
+        >
+
+        <span class="student-audio-welcome-rocket-stage">
+          <span class="student-audio-welcome-rocket-visual">
+            <img class="student-audio-welcome-rocket student-audio-welcome-rocket-off" src="./shared/ui-assets/rocket-off.svg" alt="" draggable="false">
+            <img class="student-audio-welcome-rocket student-audio-welcome-rocket-on" src="./shared/ui-assets/rocket-on.svg" alt="" draggable="false">
+          </span>
+        </span>
+
+        <span class="student-launch-smoke-puffs">
+          <span class="student-launch-smoke-layer student-launch-smoke-layer-back"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="student-launch-smoke-layer student-launch-smoke-layer-middle"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="student-launch-smoke-layer student-launch-smoke-layer-front"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
         </span>
       </span>
     </button>
+
+    <a class="student-home-teacher-link" href="./teacher/login.html">
+      <span>ACCÈS ENSEIGNANT</span>
+      <svg class="student-home-teacher-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true" focusable="false">
+        <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v80h-80v-80H200v560h560v-80h80v80q0 33-23.5 56.5T760-120H200Zm480-160-56-56 103-104H360v-80h367L624-624l56-56 200 200-200 200Z"/>
+      </svg>
+    </a>
   </div>
 
   <div class="page-shell">
@@ -62,9 +79,6 @@
       </div>
     </main>
 
-    <footer class="page-footer" id="studentFooter">
-      <a class="footer-link" href="./teacher/login.html">Accès enseignant</a>
-    </footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

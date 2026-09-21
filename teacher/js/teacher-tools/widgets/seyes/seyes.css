@@ -1,456 +1,63 @@
-@font-face{
-  font-family:"SeyesBelleAllureGS";
-  src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-FIN.OTF") format("opentype");
-  font-weight:400;
-  font-style:normal;
-  font-display:block;
-}
+@font-face{font-family:"SeyesBelleAllureGS";src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-FIN.OTF") format("opentype");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"SeyesBelleAllureGS";src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-GROS.OTF") format("opentype");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"SeyesBelleAllureC";src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-FIN.OTF") format("opentype");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"SeyesBelleAllureC";src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-GROS.OTF") format("opentype");font-weight:700;font-style:normal;font-display:swap}
 
-@font-face{
-  font-family:"SeyesBelleAllureGS";
-  src:url("../../../../../shared/ui-assets/fonts/BELLEALLUREGS-GROS.OTF") format("opentype");
-  font-weight:700;
-  font-style:normal;
-  font-display:block;
-}
+/* === Mini-app Seyès — configuration principale === */
+.tt-seyes-control{min-width:0;padding:16px}
+.tt-seyes-main-grid{display:grid;grid-template-columns:minmax(300px,.9fr) minmax(420px,1.35fr);gap:14px;align-items:start}
+.tt-seyes-card{min-width:0;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.045);display:flex;flex-direction:column;gap:12px}
+.tt-seyes-card-title{display:flex;align-items:center;gap:8px;color:#fff}.tt-seyes-card-title .dashboard-material-icon{font-size:20px}.tt-seyes-card-title strong{font-size:14px}
+.tt-seyes-title-field,.tt-seyes-settings-row label,.tt-seyes-range-field{display:flex;flex-direction:column;gap:6px;color:rgba(255,255,255,.76);font-size:12px;font-weight:700}
+.tt-seyes-title-field input,.tt-seyes-settings-row select{min-height:42px;border:1px solid rgba(255,255,255,.13);border-radius:10px;background:rgba(7,12,22,.65);color:#fff;padding:0 11px;font:inherit;font-size:14px}
+.tt-seyes-actions{display:flex;flex-wrap:wrap;gap:8px}.tt-seyes-actions>button,.tt-seyes-file-button,.tt-seyes-settings-row>button,.tt-seyes-popover-anchor>button{min-height:42px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.07);color:#fff;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.tt-seyes-actions>button:hover,.tt-seyes-file-button:hover,.tt-seyes-settings-row>button:hover,.tt-seyes-popover-anchor>button:hover{background:rgba(255,255,255,.11)}
+.tt-seyes-actions>button.is-danger{background:rgba(177,40,40,.46);border-color:rgba(255,140,140,.35)}
+.tt-seyes-file-button{position:relative;overflow:hidden}.tt-seyes-file-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.tt-seyes-settings-row{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:10px;align-items:end}.tt-seyes-settings-row>button{min-width:118px}
+.tt-seyes-range-field>span{display:flex;justify-content:space-between;align-items:center}.tt-seyes-range-field input{width:100%;accent-color:#7c98ff}
+.tt-seyes-ruling-grid{display:grid;grid-template-columns:repeat(5,minmax(78px,1fr));gap:8px}
+.tt-seyes-ruling-tile{min-width:0;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.055);color:#fff;padding:7px;display:flex;flex-direction:column;gap:6px;align-items:stretch;cursor:pointer;font:inherit;font-size:11px;font-weight:700}
+.tt-seyes-ruling-tile.is-selected{border-color:#7c98ff;background:rgba(84,112,220,.24);box-shadow:inset 0 0 0 1px rgba(124,152,255,.4)}
+.tt-seyes-ruling-preview{height:42px;border-radius:6px;background-color:#fff;overflow:hidden;display:block}
+.tt-seyes-ruling-preview.is-seyes,.ttp-seyes-ruling-preview.is-seyes{background-image:linear-gradient(to right,transparent 0 20%,rgba(255,90,105,.88) 20% 21%,transparent 21%),repeating-linear-gradient(to bottom,#fff 0 7px,#b9d6ff 7px 8px)}
+.tt-seyes-ruling-preview.is-double,.ttp-seyes-ruling-preview.is-double{background-image:repeating-linear-gradient(to bottom,#fff 0 14px,#c7dcfb 14px 15px,#fff 15px 28px,#78aefa 28px 29px)}
+.tt-seyes-ruling-preview.is-single,.ttp-seyes-ruling-preview.is-single{background-image:repeating-linear-gradient(to bottom,#fff 0 27px,#78aefa 27px 28px)}
+.tt-seyes-ruling-preview.is-large,.ttp-seyes-ruling-preview.is-large{background-image:repeating-linear-gradient(to bottom,#fff 0 9px,#c7dcfb 9px 10px,#fff 10px 19px,#c7dcfb 19px 20px,#fff 20px 28px,#78aefa 28px 29px)}
+.tt-seyes-ruling-preview.is-earth,.ttp-seyes-ruling-preview.is-earth{background:linear-gradient(to bottom,rgba(128,205,255,.42) 0 33%,rgba(132,214,116,.42) 33% 66%,rgba(240,185,113,.48) 66% 100%)}
+.tt-seyes-actions.is-compact{align-items:flex-start}.tt-seyes-popover-anchor{position:relative;display:inline-flex}.tt-seyes-popover-anchor>button.is-active{background:rgba(84,112,220,.30);border-color:#7c98ff}
+.tt-seyes-mini-popover{position:absolute;z-index:15;left:0;top:calc(100% + 7px);min-width:240px;padding:10px;border:1px solid rgba(255,255,255,.14);border-radius:11px;background:#101827;box-shadow:0 12px 30px rgba(0,0,0,.28);display:flex;align-items:center;gap:10px}.tt-seyes-mini-popover input{flex:1;accent-color:#7c98ff}.tt-seyes-mini-popover b{min-width:44px;text-align:right;font-size:12px}
+.tt-seyes-help{margin:10px 0 0;color:rgba(255,255,255,.56);font-size:12px}
 
-@font-face{
-  font-family:"SeyesBelleAllureCM";
-  src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-FIN.OTF") format("opentype");
-  font-weight:400;
-  font-style:normal;
-  font-display:block;
-}
+/* === Document dans la popup === */
+.ttp-seyes-app{position:absolute;inset:0;overflow:hidden;background:#fff;color:#0f172a;--seyes-line:62px;--seyes-font-size:38px;--seyes-font-family:"SeyesBelleAllureGS";--seyes-letter-spacing:0em;--seyes-word-spacing:0em;--seyes-editor-left:94px;--seyes-editor-top:45px}
+.ttp-seyes-sheet{position:absolute;inset:0;overflow:auto;background:#fff;overscroll-behavior:contain}
+.ttp-seyes-paper-svg{position:absolute;inset:0;width:100%;height:max(100%,1600px);min-height:100%;pointer-events:none;shape-rendering:geometricPrecision}
+.ttp-seyes-grid-minor{stroke:#b9d6ff;stroke-width:1;vector-effect:non-scaling-stroke}.ttp-seyes-grid-major,.ttp-seyes-grid-vertical{stroke:#78aefa;stroke-width:1.35;vector-effect:non-scaling-stroke}.ttp-seyes-margin-line{stroke:#ef6d78;stroke-width:1.35;vector-effect:non-scaling-stroke}
+.ttp-seyes-editor{position:relative;z-index:2;width:100%;min-height:max(100%,1600px);box-sizing:border-box;padding:var(--seyes-editor-top) calc(var(--seyes-line)*.45) calc(var(--seyes-line)*1.2) var(--seyes-editor-left);outline:0;border:0;background:transparent;color:#427ebe;caret-color:#0f172a;font-family:var(--seyes-font-family),sans-serif;font-size:var(--seyes-font-size);line-height:var(--seyes-line);letter-spacing:var(--seyes-letter-spacing);word-spacing:var(--seyes-word-spacing);white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;tab-size:4}
+.ttp-seyes-editor:empty::before{content:"Écrire ici…";color:rgba(66,126,190,.28);pointer-events:none}
+.ttp-seyes-editor div,.ttp-seyes-editor p{margin:0;padding:0;min-height:var(--seyes-line);line-height:var(--seyes-line)}
+.ttp-seyes-editor span[data-seyes-circle="true"]{display:inline;border-style:solid}
 
-@font-face{
-  font-family:"SeyesBelleAllureCM";
-  src:url("../../../../../shared/ui-assets/fonts/BELLEALLURECM-GROS.OTF") format("opentype");
-  font-weight:700;
-  font-style:normal;
-  font-display:block;
-}
+/* === Panneau Config Seyès dans la popup === */
+.ttp-app-controls:has(.ttp-seyes-chrome){width:min(720px,calc(100vw - 120px));max-height:min(82vh,780px);overflow:auto}
+.ttp-app-controls-content:has(.ttp-seyes-chrome){display:block;margin-top:8px}
+.ttp-seyes-chrome{width:100%;display:flex;flex-direction:column;gap:12px;font-size:13px}
+.ttp-seyes-chrome-section{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,.10)}.ttp-seyes-chrome-section:first-child{padding-top:0;border-top:0}.ttp-seyes-chrome-section>strong{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.58)}
+.ttp-seyes-action-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.ttp-seyes-action-row>button,.ttp-seyes-file-button,.ttp-seyes-popover-anchor>button{min-height:46px;border:1px solid rgba(255,255,255,.12);border-radius:11px;background:rgba(255,255,255,.075);color:#fff;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-weight:700;cursor:pointer}.ttp-seyes-action-row>button.is-danger{background:rgba(167,42,42,.45)}
+.ttp-seyes-field{display:flex;flex-direction:column;gap:5px;color:rgba(255,255,255,.7);font-weight:700}.ttp-seyes-field select{height:44px;border:1px solid rgba(255,255,255,.13);border-radius:10px;background:#111827;color:#fff;padding:0 10px;font:inherit}
+.ttp-seyes-range-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}.ttp-seyes-range-row input{width:100%;accent-color:#7c98ff}.ttp-seyes-range-row b{min-width:48px;text-align:right}
+.ttp-seyes-ruling-grid{display:grid;grid-template-columns:repeat(5,minmax(70px,1fr));gap:7px}.ttp-seyes-ruling-tile{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.055);color:#fff;padding:6px;display:flex;flex-direction:column;gap:5px;align-items:stretch;font:inherit;font-size:10px;font-weight:700;cursor:pointer}.ttp-seyes-ruling-tile.is-selected{border-color:#7c98ff;background:rgba(84,112,220,.26)}.ttp-seyes-ruling-preview{height:34px;border-radius:5px;background-color:#fff}
+.ttp-seyes-popover-anchor{position:relative}.ttp-seyes-mini-popover{position:absolute;z-index:20;left:0;bottom:calc(100% + 7px);top:auto;min-width:250px;padding:10px;border:1px solid rgba(255,255,255,.14);border-radius:11px;background:#101827;box-shadow:0 12px 30px rgba(0,0,0,.32);display:flex;align-items:center;gap:10px}.ttp-seyes-mini-popover input{flex:1}.ttp-seyes-mini-popover b{min-width:44px;text-align:right}
+.ttp-seyes-format-actions>button{min-width:48px}.ttp-seyes-swatches{display:flex;flex-wrap:wrap;gap:7px;padding:8px;border-radius:11px;background:rgba(255,255,255,.045)}.ttp-seyes-swatches.is-inline{padding:0;background:transparent}.ttp-seyes-swatch{width:34px;height:34px;border:2px solid rgba(255,255,255,.72);border-radius:50%;background:var(--seyes-swatch);cursor:pointer}.ttp-seyes-swatch.is-selected{outline:3px solid #86efac;outline-offset:1px}.ttp-seyes-format-settings{display:grid;grid-template-columns:auto minmax(220px,1fr) minmax(160px,.7fr);gap:10px;align-items:center;color:rgba(255,255,255,.7)}.ttp-seyes-format-settings>label{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px}.ttp-seyes-format-settings input[type="range"]{min-width:90px}
 
-/* ========================================
-   WIDGET TABLEAU — SEYÈS
-======================================== */
+/* === Dialogues partagés Seyès === */
+.tt-seyes-dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none;color:#0f172a}.tt-seyes-dialog::backdrop{background:rgba(4,8,16,.62);backdrop-filter:blur(4px)}
+.tt-seyes-dialog-card{width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;border:1px solid rgba(15,23,42,.12);border-radius:18px;background:#fff;padding:16px;box-shadow:0 28px 80px rgba(0,0,0,.32);display:flex;flex-direction:column;gap:14px;font-family:Andika,system-ui,sans-serif}
+.tt-seyes-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.tt-seyes-dialog-head strong{font-size:20px}.tt-seyes-dialog-head button,.tt-seyes-dialog-close{width:42px;height:42px;border:0;border-radius:10px;background:#edf1f7;color:#172033;font-size:24px;cursor:pointer}
+.tt-seyes-paste-text{width:100%;min-height:240px;resize:vertical;border:1px solid #cbd5e1;border-radius:12px;padding:12px;font:16px Andika,sans-serif}
+.tt-seyes-dialog-actions{display:flex;justify-content:flex-end;gap:9px}.tt-seyes-dialog-actions button{min-height:44px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;color:#172033;padding:0 15px;font:inherit;font-weight:700;cursor:pointer}.tt-seyes-dialog-actions button.is-primary{border-color:#1f7a4a;background:#1f7a4a;color:#fff}
+.tt-seyes-resource-list{display:flex;flex-direction:column;gap:8px;max-height:430px;overflow:auto}.tt-seyes-resource-list>button{min-height:58px;border:1px solid #d8dee8;border-radius:12px;background:#fff;color:#172033;padding:8px 12px;display:flex;align-items:center;gap:11px;text-align:left;cursor:pointer}.tt-seyes-resource-list>button:hover{background:#f4f7fb}.tt-seyes-resource-list>button>span:last-child{display:flex;flex-direction:column}.tt-seyes-resource-list small{color:#64748b}.tt-seyes-empty{padding:26px;text-align:center;color:#64748b}
+.tt-seyes-pdf-dialog .tt-seyes-dialog-card{width:min(1040px,calc(100vw - 32px))}.tt-seyes-pdf-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,.85fr);gap:18px}.tt-seyes-pdf-preview{border-radius:14px;background:#e5e7eb;padding:18px;display:grid;place-items:center;min-height:460px}.tt-seyes-pdf-preview>div{width:min(82%,380px);aspect-ratio:210/297;background-color:#fff;background-size:auto;box-shadow:0 6px 18px rgba(0,0,0,.22);padding:22px;color:#427ebe;font:16px "SeyesBelleAllureGS",Andika,sans-serif}.tt-seyes-pdf-fields{display:flex;flex-direction:column;gap:11px}.tt-seyes-pdf-fields label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:700}.tt-seyes-pdf-fields select,.tt-seyes-pdf-fields input{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:0 10px;font:inherit}
 
-.tt-seyes-control{
-  min-width:0;
-}
-
-.tt-seyes-control .tt-control-panel-head p{
-  margin:5px 0 0;
-  color:rgba(255,255,255,.62);
-  font-size:13px;
-  line-height:1.35;
-}
-
-.tt-seyes-settings-grid{
-  display:grid;
-  grid-template-columns:minmax(190px, .65fr) minmax(260px, 1.35fr);
-  gap:14px;
-}
-
-.tt-seyes-settings-section{
-  min-width:0;
-  padding:12px;
-  border:1px solid rgba(255,255,255,.09);
-  background:rgba(255,255,255,.045);
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-.tt-seyes-section-title{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  color:#eef3ff;
-  font-size:13px;
-  font-weight:900;
-}
-
-.tt-seyes-section-title strong{
-  color:#fff;
-  font-size:13px;
-}
-
-.tt-seyes-font-buttons .tt-widget-action-btn{
-  min-width:62px;
-}
-
-.tt-seyes-zoom-range{
-  width:100%;
-  accent-color:#7c98ff;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"]{
-  background:#fff;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-body{
-  position:absolute;
-  inset:0;
-  z-index:0;
-  height:auto;
-  min-height:0;
-  padding:0;
-  overflow:hidden;
-  background:#fff;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-chrome,
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-bottom-chrome{
-  position:absolute;
-  left:0;
-  right:0;
-  z-index:20;
-  background:transparent;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-chrome{
-  top:0;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-bottom-chrome{
-  bottom:0;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"] .ttp-widget-resize{
-  z-index:30;
-}
-
-.ttp-seyes-root{
-  --ttp-seyes-line:60.472440945px;
-  --ttp-seyes-subline:15.118110236px;
-  --ttp-seyes-margin:60.472440945px;
-  --ttp-seyes-first-fine:55.559055118px;
-  --ttp-seyes-first-main:100.913385827px;
-  --ttp-seyes-font-size:38px;
-  --ttp-seyes-safe-left:16px;
-  --ttp-seyes-safe-top:58px;
-  --ttp-seyes-safe-bottom:58px;
-  --ttp-seyes-editor-left:76.472440945px;
-  --ttp-seyes-editor-top:86px;
-  --ttp-seyes-editor-bottom:118.472440945px;
-  --ttp-seyes-font-family:"SeyesBelleAllureGS";
-  position:relative;
-  width:100%;
-  height:100%;
-  min-width:0;
-  min-height:0;
-  overflow:hidden;
-  background:#fff;
-  color:#111827;
-  font-synthesis:style;
-}
-
-.ttp-seyes-viewport{
-  position:absolute;
-  inset:0;
-  overflow:auto;
-  overscroll-behavior:contain;
-  scrollbar-gutter:stable;
-  background:#fff;
-}
-
-.ttp-seyes-sheet{
-  position:relative;
-  min-width:100%;
-  min-height:100%;
-  background:#fff;
-  isolation:isolate;
-}
-
-.ttp-seyes-grid{
-  position:absolute;
-  inset:0;
-  z-index:0;
-  width:100%;
-  height:100%;
-  min-height:100%;
-  overflow:visible;
-  pointer-events:none;
-  shape-rendering:geometricPrecision;
-}
-
-.ttp-seyes-paper-line{
-  fill:none;
-  stroke-linecap:square;
-  stroke-linejoin:miter;
-  vector-effect:non-scaling-stroke;
-}
-
-.ttp-seyes-paper-line.is-minor{
-  stroke:rgb(171,207,255);
-  stroke-width:1;
-}
-
-.ttp-seyes-paper-line.is-major{
-  stroke:rgb(118,178,255);
-  stroke-width:1.6;
-}
-
-.ttp-seyes-paper-line.is-margin{
-  stroke:rgb(255,96,96);
-  stroke-width:1.5;
-}
-
-.ttp-seyes-editor{
-  position:relative;
-  z-index:2;
-  box-sizing:border-box;
-  width:100%;
-  min-height:100%;
-  margin:0;
-  border:0;
-  outline:0;
-  padding:
-    var(--ttp-seyes-editor-top)
-    calc(var(--ttp-seyes-line) * .5)
-    var(--ttp-seyes-editor-bottom)
-    var(--ttp-seyes-editor-left);
-  background:transparent;
-  color:#427ebe;
-  caret-color:#111827;
-  font-family:var(--ttp-seyes-font-family);
-  font-size:var(--ttp-seyes-font-size);
-  font-weight:400;
-  font-style:normal;
-  line-height:var(--ttp-seyes-line);
-  white-space:pre-wrap;
-  overflow-wrap:break-word;
-  word-break:normal;
-  text-align:left;
-  cursor:text;
-  tab-size:4;
-}
-
-.ttp-seyes-editor:empty::before{
-  content:"Écrire ici…";
-  color:rgba(66,126,190,.30);
-  pointer-events:none;
-}
-
-.ttp-seyes-editor div,
-.ttp-seyes-editor p{
-  min-height:var(--ttp-seyes-line);
-  margin:0;
-  padding:0;
-  line-height:var(--ttp-seyes-line);
-}
-
-.ttp-seyes-editor b,
-.ttp-seyes-editor strong{
-  font-weight:700;
-}
-
-.ttp-seyes-editor i,
-.ttp-seyes-editor em{
-  font-style:italic;
-}
-
-.ttp-seyes-baseline-probe{
-  position:absolute;
-  z-index:-1;
-  top:0;
-  left:0;
-  visibility:hidden;
-  pointer-events:none;
-  white-space:nowrap;
-  font-family:var(--ttp-seyes-font-family);
-  font-size:var(--ttp-seyes-font-size);
-  font-weight:400;
-  font-style:normal;
-  line-height:var(--ttp-seyes-line);
-}
-
-.ttp-seyes-baseline-probe [data-seyes-baseline-marker]{
-  display:inline-block;
-  width:0;
-  height:0;
-  padding:0;
-  margin:0;
-  vertical-align:baseline;
-}
-
-.ttp-seyes-font-status{
-  position:absolute;
-  z-index:5;
-  inset:0;
-  display:none;
-  align-items:center;
-  justify-content:center;
-  padding:20px;
-  background:rgba(255,255,255,.96);
-  color:#475569;
-  font-family:Andika, sans-serif;
-  font-size:15px;
-  font-weight:800;
-  text-align:center;
-}
-
-.ttp-seyes-root.is-font-loading .ttp-seyes-font-status{
-  display:flex;
-}
-
-.ttp-seyes-root.is-font-error .ttp-seyes-font-status{
-  display:flex;
-  color:#b91c1c;
-}
-
-.ttp-seyes-root.is-font-error .ttp-seyes-font-status::before{
-  content:"Belle Allure n’a pas pu être chargée.";
-}
-
-.ttp-seyes-root.is-font-error .ttp-seyes-font-status{
-  font-size:0;
-}
-
-.ttp-seyes-root.is-font-error .ttp-seyes-font-status::before{
-  font-size:15px;
-}
-
-.ttp-seyes-toolbar{
-  position:absolute;
-  z-index:10;
-  left:50%;
-  top:calc(var(--ttp-widget-chrome-height) + 10px);
-  transform:translateX(-50%);
-  max-width:calc(100% - 24px);
-  min-height:42px;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:6px 8px;
-  border:1px solid rgba(15,23,42,.18);
-  border-radius:10px;
-  background:rgba(15,23,42,.90);
-  box-shadow:0 7px 18px rgba(15,23,42,.18);
-  overflow-x:auto;
-  overflow-y:hidden;
-  scrollbar-width:thin;
-  color:#fff;
-}
-
-.ttp-seyes-tool-group{
-  flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  gap:5px;
-}
-
-.ttp-seyes-tool-group + .ttp-seyes-tool-group{
-  padding-left:8px;
-  border-left:1px solid rgba(255,255,255,.16);
-}
-
-.ttp-seyes-tool-btn{
-  flex:0 0 auto;
-  min-width:32px;
-  height:30px;
-  padding:0 8px;
-  border:1px solid rgba(255,255,255,.16);
-  border-radius:6px;
-  background:rgba(255,255,255,.07);
-  color:#fff;
-  font:inherit;
-  font-size:13px;
-  font-weight:800;
-  line-height:1;
-  cursor:pointer;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.ttp-seyes-tool-btn:hover:not(:disabled),
-.ttp-seyes-tool-btn[aria-pressed="true"]{
-  background:rgba(124,152,255,.28);
-  border-color:rgba(164,181,255,.62);
-}
-
-.ttp-seyes-tool-btn:disabled{
-  opacity:.35;
-  cursor:default;
-}
-
-.ttp-seyes-tool-btn.is-format{
-  font-family:Georgia, "Times New Roman", serif;
-  font-size:18px;
-}
-
-.ttp-seyes-color-swatch{
-  width:23px;
-  height:23px;
-  flex:0 0 23px;
-  padding:0;
-  border:1px solid rgba(255,255,255,.78);
-  border-radius:4px;
-  background:var(--ttp-seyes-swatch);
-  cursor:pointer;
-}
-
-.ttp-seyes-color-swatch:hover{
-  outline:2px solid rgba(255,255,255,.72);
-  outline-offset:1px;
-}
-
-.ttp-seyes-custom-color{
-  position:relative;
-  width:28px;
-  height:28px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  border:1px solid rgba(255,255,255,.16);
-  border-radius:6px;
-  background:rgba(255,255,255,.07);
-  cursor:pointer;
-  overflow:hidden;
-}
-
-.ttp-seyes-custom-color input{
-  position:absolute;
-  inset:-8px;
-  width:calc(100% + 16px);
-  height:calc(100% + 16px);
-  opacity:0;
-  cursor:pointer;
-}
-
-.ttp-seyes-custom-color .ttp-material-icon{
-  font-size:18px;
-  pointer-events:none;
-}
-
-.ttp-seyes-zoom-value{
-  min-width:46px;
-  color:#fff;
-  font-size:12px;
-  font-weight:900;
-  text-align:center;
-  white-space:nowrap;
-}
-
-.ttp-widget-frame[data-tool-id="seyes"].is-collapsed .ttp-seyes-toolbar{
-  display:none;
-}
-
-.ttp-stage[data-background="seyes"] .ttp-widget-frame[data-tool-id="seyes"]{
-  border-color:rgba(15,23,42,.16);
-}
-
-@media (max-width:760px){
-  .tt-seyes-settings-grid{
-    grid-template-columns:1fr;
-  }
-
-  .ttp-seyes-toolbar{
-    left:8px;
-    right:8px;
-    max-width:none;
-    transform:none;
-  }
-}
+@media(max-width:1000px){.tt-seyes-main-grid{grid-template-columns:1fr}.tt-seyes-ruling-grid,.ttp-seyes-ruling-grid{grid-template-columns:repeat(3,1fr)}.tt-seyes-pdf-layout{grid-template-columns:1fr}.tt-seyes-pdf-preview{min-height:300px}}

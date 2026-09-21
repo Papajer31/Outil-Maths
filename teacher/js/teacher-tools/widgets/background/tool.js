@@ -192,14 +192,14 @@ function isBlob(value){
   return typeof Blob !== "undefined" && value instanceof Blob;
 }
 
-function createBackgroundObjectUrl(blob){
+export function createBackgroundObjectUrl(blob){
   if (!isBlob(blob) || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return "";
   const source = URL.createObjectURL(blob);
   ownedBackgroundObjectUrls.set(source, 1);
   return source;
 }
 
-function releaseBackgroundObjectUrl(source){
+export function releaseBackgroundObjectUrl(source){
   if (!source || !ownedBackgroundObjectUrls.has(source)) return;
   const nextCount = Math.max(0, ownedBackgroundObjectUrls.get(source) - 1);
   if (nextCount > 0) {
@@ -310,7 +310,7 @@ function applyBackgroundSwatchSources(host){
   });
 }
 
-function renderBackgroundControl(host, currentBackground, setSceneBackground, showToast){
+export function renderBackgroundControl(host, currentBackground, setSceneBackground, showToast){
   if (!host) return;
   const state = normalizeSceneBackgroundState(currentBackground);
   const hasImage = Boolean(state.backgroundImageSource);

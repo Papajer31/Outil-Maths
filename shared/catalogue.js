@@ -498,7 +498,7 @@ export const EXPLORATION_DEFAULTS = Object.freeze({
 });
 
 export const CATALOG_TEST_OVERRIDES = Object.freeze({
-  questionCount: 3,
+  questionCount: 5,
   answerTime: 5,
   infiniteAnswerTime: true,
   questionTransitionSec: 0,

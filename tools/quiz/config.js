@@ -19,7 +19,9 @@ import {
   getQuizQuestionSelectionKey,
   getQuizSelectionItems,
   getWidgetView,
+  isQuizPresentationVariantRunnable,
   materializeQuizQuestionVariant,
+  normalizeQuizQuestionResponseMode,
   normalizeQuizSelectionForSnapshot,
   normalizeQuizSnapshot,
   normalizeSettings
@@ -133,7 +135,7 @@ export function readToolSettings(container, settings = {}){
     const question = selectedQuestions[incompleteIndex];
     const isVariant = Number.isFinite(Number(question.sourceVariantIndex));
     const displayIndex = isVariant ? Number(question.sourceVariantIndex) + 1 : incompleteIndex + 1;
-    throw new Error(`La ${isVariant ? "variante" : "question"} ${displayIndex} doit contenir un unique widget de réponse exécutable (« Réponse de l’élève », « Réponse texte vérifiée », « J’ai terminé », « QCM », « Sélection de mots » ou « Catégories »).`);
+    throw new Error(`La ${isVariant ? "variante" : "question"} ${displayIndex} doit soit contenir un unique widget de réponse exécutable, soit être explicitement réglée « Sans réponse attendue » sans aucun widget de réponse.`);
   }
 
   return normalizeSettings({
@@ -192,13 +194,14 @@ async function setupQuizPicker(container, {
   const folders = normalizeAvailableFolders(rawFolders);
   const selectedQuiz = findQuizById(quizzes, selectedQuizId);
 
+  const lockQuizSource = context?.lockQuizSource === true;
   renderQuizPickerInto(container, {
     quizzes,
     value: selectedQuiz?.id || selectedQuizId,
     count: selectedQuiz && String(selectedQuiz.id || "") === String(selectedQuizId || "")
       ? getQuizSelectionItemCount(cfg.quizSnapshot || {})
       : null,
-    disabled: quizzes.length === 0
+    disabled: quizzes.length === 0 || lockQuizSource
   });
 
   const input = container.querySelector("#quiz_quizSelect");
@@ -206,7 +209,7 @@ async function setupQuizPicker(container, {
   if (!input || !openButton) return;
   input.dataset.quizTitle = String(selectedQuiz?.title || selectedQuizTitle || "").trim();
 
-  openButton.addEventListener("click", () => {
+  if (!lockQuizSource) openButton.addEventListener("click", () => {
     openQuizPickerOverlay({
       quizzes,
       folders,
@@ -563,6 +566,7 @@ function getQuestionPromptPreview(question, index, quizInstruction = ""){
 
 function getQuestionAnswerPreview(question){
   const variant = materializeQuizQuestionVariant(question, 0);
+  if (normalizeQuizQuestionResponseMode(variant.responseMode) === "none") return "Sans réponse attendue";
   const answer = String(variant.expectedAnswerLabel || "").trim();
   if (variant.responseType === "qcm-text") {
     const qcm = (variant.widgets || []).find((widget) => widget?.type === "qcm-text");
@@ -588,6 +592,8 @@ function getQuestionAnswerPreview(question){
 function isQuestionRunnable(question){
   const variantCount = Math.max(1, Array.isArray(question?.variants) ? question.variants.length : 0);
   return Array.from({ length:variantCount }, (_, index) => materializeQuizQuestionVariant(question, index)).every((variant) => {
+    const responseMode = normalizeQuizQuestionResponseMode(variant.responseMode);
+    if (responseMode === "none") return isQuizPresentationVariantRunnable(variant);
     if (variant.responseWidgetCount !== 1) return false;
     if (variant.responseType === "qcm-text") {
       const qcm = variant.widgets.find((widget) => widget.type === "qcm-text");

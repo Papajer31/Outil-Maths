@@ -1,4 +1,5 @@
 import { studentState } from "../../student/student-state.js";
+import { renderSessionStartView } from "../../student/views/sessionstart-view.js";
 import { renderSessionView } from "../../student/views/session-view.js";
 import { buildCatalogActivityConfig, buildMissionRuntimeConfig, normalizeCatalogDifficultyLevel } from "../../shared/catalogue.js";
 import { renderMaterialIcon, setMaterialIcon } from "../../shared/material-icons-svg.js";
@@ -113,8 +114,29 @@ async function mountPayload(payload) {
   root.replaceChildren();
 
   try {
-    cleanupSession = renderSessionView(root);
-    decorateTeacherDock({ showLevelSelector });
+    let startCleanup = null;
+    const launchRuntime = () => {
+      if (typeof startCleanup === "function") {
+        try {
+          startCleanup();
+        } catch {}
+      }
+      startCleanup = null;
+      root.replaceChildren();
+      cleanupSession = renderSessionView(root);
+      decorateTeacherDock({ showLevelSelector });
+      window.setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    };
+
+    startCleanup = renderSessionStartView(root, { onStart: launchRuntime });
+    cleanupSession = () => {
+      if (typeof startCleanup === "function") {
+        try {
+          startCleanup();
+        } catch {}
+      }
+      startCleanup = null;
+    };
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
   } catch (error) {
     console.error(error);

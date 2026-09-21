@@ -1,0 +1,214 @@
+.iv-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.iv-config-counts{
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.iv-config-counts > .tv-group-title{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+.iv-config-count-row{
+  display:flex;
+  flex:0 0 auto;
+  flex-wrap:nowrap;
+  gap:24px;
+  align-items:center;
+}
+
+.iv-config-count-row .tv-stepper-field{
+  flex:0 0 auto;
+  flex-direction:row;
+  align-items:center;
+  gap:10px;
+}
+
+.iv-config-count-row .tv-stepper-field-label{
+  white-space:nowrap;
+  font-size:20px;
+}
+
+.iv-config-root .tv-radio-options{
+  flex-wrap:wrap;
+}
+
+.iv-conjugation-panel[hidden]{
+  display:none !important;
+}
+
+.iv-conjugation-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:16px;
+  align-items:start;
+}
+
+.iv-verb-settings-row{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+  gap:16px;
+  align-items:stretch;
+}
+
+.iv-verb-settings-row > .tv-group{
+  min-width:0;
+}
+
+.iv-lexical-distractor-row{
+  display:grid;
+  grid-template-columns:minmax(0, .75fr) minmax(0, 1.25fr);
+  gap:16px;
+  align-items:stretch;
+}
+
+.iv-lexical-distractor-row > .tv-group{
+  min-width:0;
+}
+
+.iv-checkbox-group{
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+
+.iv-checkbox-group-title{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:38px;
+  margin:0;
+  display:flex;
+  align-items:center;
+  text-align:left;
+}
+
+.iv-checkbox-grid{
+  flex:0 1 auto;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:8px;
+  align-items:center;
+  min-width:0;
+  min-height:38px;
+}
+
+.iv-checkbox-row{
+  position:relative;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+  min-width:42px;
+  min-height:38px;
+  padding:0 14px;
+  border-radius:999px;
+  background:rgba(255,255,255,.055);
+  color:var(--text,#f5f7fb);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);
+  font-size:18px;
+  font-weight:600;
+  line-height:1;
+  text-align:center;
+  white-space:nowrap;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  transition:background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+
+.iv-checkbox-row:hover{
+  background:rgba(255,255,255,.1);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.iv-checkbox-row:has(.iv-checkbox:checked){
+  background:rgba(255,216,94,.16);
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.72);
+}
+
+.iv-checkbox-row:has(.iv-checkbox:focus-visible){
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.82), 0 0 0 3px rgba(255,216,94,.12);
+}
+
+.iv-checkbox-row:has(.iv-checkbox:disabled){
+  opacity:.42;
+  cursor:not-allowed;
+}
+
+.iv-checkbox-row .iv-checkbox{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:pointer;
+}
+
+.iv-checkbox-row > span{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+}
+
+.iv-config-bank-status{
+  min-height:24px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(15,23,42,.05);
+  color:var(--muted,#667085);
+  font-weight:650;
+  line-height:1.35;
+}
+
+.iv-config-bank-status.is-ready{
+  background:rgba(22,163,74,.10);
+  color:#166534;
+}
+
+.iv-config-bank-status.is-warning{
+  background:rgba(217,119,6,.12);
+  color:#92400e;
+}
+
+.iv-config-bank-status.is-error{
+  background:rgba(220,38,38,.10);
+  color:#991b1b;
+}
+
+@media (max-width:900px){
+  .iv-config-counts{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .iv-config-count-row{
+    width:100%;
+    flex-wrap:wrap;
+  }
+  .iv-conjugation-row{
+    grid-template-columns:1fr;
+  }
+  .iv-verb-settings-row{
+    grid-template-columns:1fr;
+  }
+  .iv-lexical-distractor-row{
+    grid-template-columns:1fr;
+  }
+  .iv-checkbox-group{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .iv-checkbox-grid{
+    justify-content:flex-start;
+  }
+}

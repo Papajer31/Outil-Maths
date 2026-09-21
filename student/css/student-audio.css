@@ -61,23 +61,39 @@
 }
 
 /*
-  Premier écran élève : il existe dans le HTML initial, avant l'application.
-  Le clic sur la fusée déverrouille l'audio puis révèle seulement ensuite le site.
+  Premier écran élève : décor fixe + fusée indépendante.
+  Les valeurs ci-dessous reprennent les réglages validés dans le prototype local.
 */
+:root{
+  --welcome-bg:#10151e;
+  --launchpad-min-width:2048px;
+  --rocket-width:600px;
+  --rocket-bottom:84px;
+  --rocket-x:50%;
+  --shake-duration:500ms;
+  --launch-duration:700ms;
+  --exhaust-smoke-duration:var(--launch-duration);
+}
+
 .student-audio-welcome-screen{
   position:fixed;
   inset:0;
   z-index:4000;
-  display:flex;
-  align-items:flex-end;
-  justify-content:center;
   overflow:hidden;
-  background:var(--bg, #10151e);
+  background:transparent;
   color:#fff;
+  transition:opacity .18s ease, visibility .18s ease;
+}
+
+.student-audio-welcome-screen.is-finished{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
 }
 
 .student-audio-welcome-start{
-  position:relative;
+  position:absolute;
+  inset:0;
   width:100%;
   height:100%;
   margin:0;
@@ -94,50 +110,50 @@
   outline:none;
 }
 
-.student-audio-welcome-play{
+.student-launchpad-stage{
   position:absolute;
   left:50%;
-  top:22%;
-  z-index:2;
-  width:96px;
-  height:96px;
-  display:grid;
-  place-items:center;
-  border:3px solid rgba(255,255,255,.92);
-  border-radius:50%;
-  background:rgba(18,25,48,.72);
-  color:#fff;
-  box-shadow:0 10px 30px rgba(0,0,0,.24);
+  bottom:0;
+  width:max(100vw, var(--launchpad-min-width));
+  aspect-ratio:2048 / 295;
   transform:translateX(-50%);
-  transition:background-color .14s ease, border-color .14s ease, opacity .16s ease;
+  pointer-events:none;
 }
 
-@media (hover:hover) and (pointer:fine){
-  .student-audio-welcome-start:hover .student-audio-welcome-play{
-    background:rgba(31,43,76,.9);
-    border-color:#fff;
-  }
+.student-audio-welcome-screen.is-launching .student-launchpad-stage{
+  z-index:21;
 }
 
-.student-audio-welcome-start:active .student-audio-welcome-play{
-  background:rgba(48,66,108,.96);
+.student-launchpad-image{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  max-width:none;
+  object-fit:contain;
+  object-position:center bottom;
+  user-select:none;
+  -webkit-user-drag:none;
+  pointer-events:none;
 }
 
 .student-audio-welcome-rocket-stage{
   position:absolute;
-  left:50%;
-  bottom:0;
-  width:min(440px, 88vw);
-  height:min(430px, 62vh);
+  left:var(--rocket-x);
+  bottom:var(--rocket-bottom);
+  width:var(--rocket-width);
+  height:320px;
   transform:translateX(-50%);
+  transform-origin:50% 100%;
+  z-index:3;
   will-change:transform;
 }
 
 .student-audio-welcome-rocket-visual{
   position:absolute;
   left:50%;
-  bottom:42px;
-  width:min(360px, 74vw);
+  bottom:0;
+  width:400px;
   aspect-ratio:229.45718 / 115.59426;
   transform:translateX(-50%) rotate(-90deg);
   transform-origin:center;
@@ -153,21 +169,25 @@
   user-select:none;
   -webkit-user-drag:none;
   pointer-events:none;
-  filter:drop-shadow(0 24px 30px rgba(0,0,0,.28));
-  transition:opacity .12s ease;
+  filter:drop-shadow(0 18px 24px rgba(0,0,0,.24));
+  transition:opacity .1s ease;
 }
 
 .student-audio-welcome-rocket-on{
   opacity:0;
 }
 
-.student-audio-welcome-screen.is-launching{
-  pointer-events:none;
-  animation:student-audio-welcome-fade 1.08s ease-in forwards;
+.student-audio-welcome-screen.is-shaking .student-audio-welcome-rocket-stage{
+  animation:studentRocketShake .04s linear infinite alternate;
 }
 
-.student-audio-welcome-screen.is-launching .student-audio-welcome-play{
-  opacity:0;
+@keyframes studentRocketShake{
+  from{ transform:translateX(-50%) translate3d(-1px,1px,0) rotate(-.16deg); }
+  to{ transform:translateX(-50%) translate3d(1px,-1px,0) rotate(.16deg); }
+}
+
+.student-audio-welcome-screen.is-launching{
+  pointer-events:none;
 }
 
 .student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-off{
@@ -179,19 +199,127 @@
 }
 
 .student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-stage{
-  animation:student-audio-welcome-launch 1.02s cubic-bezier(.22,.68,.2,1) forwards;
+  animation:studentWelcomeLaunch var(--launch-duration) cubic-bezier(.4,0,1,1) forwards;
 }
 
-@keyframes student-audio-welcome-launch{
-  0%{ transform:translate3d(-50%, 0, 0); }
-  16%{ transform:translate3d(-50%, 8px, 0); }
-  48%{ transform:translate3d(-50%, -34vh, 0); }
-  100%{ transform:translate3d(-50%, -145vh, 0); }
+@keyframes studentWelcomeLaunch{
+  0%{ transform:translate3d(-50%,0,0); }
+  12%{ transform:translate3d(-50%,7px,0); }
+  100%{ transform:translate3d(-50%,-145vh,0); }
 }
 
-@keyframes student-audio-welcome-fade{
-  0%,58%{ background:var(--bg, #10151e); }
-  100%{ background:rgba(16,21,30,0); }
+/* Fumée d'échappement : trois plans opaques, comme dans le prototype validé. */
+.student-launch-smoke-puffs{
+  position:absolute;
+  left:50%;
+  bottom:35px;
+  width:1px;
+  height:1px;
+  z-index:21;
+  pointer-events:none;
+}
+
+.student-launch-smoke-layer{
+  position:absolute;
+  inset:0;
+}
+
+.student-launch-smoke-layer-back{ z-index:1; }
+.student-launch-smoke-layer-middle{ z-index:2; }
+.student-launch-smoke-layer-front{ z-index:3; }
+
+.student-launch-smoke-layer i{
+  position:absolute;
+  left:0;
+  top:0;
+  width:var(--puff-size);
+  height:var(--puff-size);
+  margin-left:calc(var(--puff-size) * -.5);
+  margin-top:calc(var(--puff-size) * -.5);
+  border-radius:50%;
+  transform:scale(0);
+  will-change:transform;
+}
+
+.student-launch-smoke-layer-back i{ background:#8d99a5; }
+.student-launch-smoke-layer-middle i{ background:#bec7ce; }
+.student-launch-smoke-layer-front i{ background:#f1f4f6; }
+
+.student-audio-welcome-screen.is-launching .student-launch-smoke-layer i{
+  animation:studentExhaustCloud calc(var(--exhaust-smoke-duration) - var(--puff-delay, 0s)) cubic-bezier(.16,.66,.26,1) var(--puff-delay, 0s) both;
+}
+
+.student-launch-smoke-layer-back i:nth-child(1){ --puff-size:84px; --x:-48vw; --y:-350px; --puff-scale:5.0; --puff-delay:.02s; }
+.student-launch-smoke-layer-back i:nth-child(2){ --puff-size:92px; --x:-40vw; --y:-300px; --puff-scale:4.9; --puff-delay:.07s; }
+.student-launch-smoke-layer-back i:nth-child(3){ --puff-size:78px; --x:-31vw; --y:-245px; --puff-scale:5.4; --puff-delay:.04s; }
+.student-launch-smoke-layer-back i:nth-child(4){ --puff-size:102px; --x:-21vw; --y:-185px; --puff-scale:4.6; --puff-delay:.09s; }
+.student-launch-smoke-layer-back i:nth-child(5){ --puff-size:82px; --x:-10vw; --y:-85px; --puff-scale:5.1; --puff-delay:.03s; }
+.student-launch-smoke-layer-back i:nth-child(6){ --puff-size:112px; --x:0; --y:78px; --puff-scale:4.5; --puff-delay:.06s; }
+.student-launch-smoke-layer-back i:nth-child(7){ --puff-size:84px; --x:10vw; --y:-85px; --puff-scale:5.1; --puff-delay:.05s; }
+.student-launch-smoke-layer-back i:nth-child(8){ --puff-size:98px; --x:21vw; --y:-185px; --puff-scale:4.7; --puff-delay:.10s; }
+.student-launch-smoke-layer-back i:nth-child(9){ --puff-size:80px; --x:31vw; --y:-245px; --puff-scale:5.3; --puff-delay:.04s; }
+.student-launch-smoke-layer-back i:nth-child(10){ --puff-size:94px; --x:40vw; --y:-300px; --puff-scale:4.8; --puff-delay:.08s; }
+.student-launch-smoke-layer-back i:nth-child(11){ --puff-size:86px; --x:48vw; --y:-350px; --puff-scale:5.0; --puff-delay:.02s; }
+.student-launch-smoke-layer-back i:nth-child(12){ --puff-size:72px; --x:0; --y:-35px; --puff-scale:5.5; --puff-delay:.11s; }
+
+.student-launch-smoke-layer-middle i:nth-child(1){ --puff-size:90px; --x:-47vw; --y:-275px; --puff-scale:4.8; --puff-delay:.05s; }
+.student-launch-smoke-layer-middle i:nth-child(2){ --puff-size:76px; --x:-38vw; --y:-230px; --puff-scale:5.3; --puff-delay:.01s; }
+.student-launch-smoke-layer-middle i:nth-child(3){ --puff-size:104px; --x:-28vw; --y:-170px; --puff-scale:4.5; --puff-delay:.08s; }
+.student-launch-smoke-layer-middle i:nth-child(4){ --puff-size:82px; --x:-18vw; --y:-105px; --puff-scale:5.1; --puff-delay:.03s; }
+.student-launch-smoke-layer-middle i:nth-child(5){ --puff-size:98px; --x:-8vw; --y:5px; --puff-scale:4.7; --puff-delay:.09s; }
+.student-launch-smoke-layer-middle i:nth-child(6){ --puff-size:116px; --x:0; --y:92px; --puff-scale:4.3; --puff-delay:.06s; }
+.student-launch-smoke-layer-middle i:nth-child(7){ --puff-size:96px; --x:8vw; --y:5px; --puff-scale:4.8; --puff-delay:.04s; }
+.student-launch-smoke-layer-middle i:nth-child(8){ --puff-size:84px; --x:18vw; --y:-105px; --puff-scale:5.1; --puff-delay:.10s; }
+.student-launch-smoke-layer-middle i:nth-child(9){ --puff-size:102px; --x:28vw; --y:-170px; --puff-scale:4.5; --puff-delay:.07s; }
+.student-launch-smoke-layer-middle i:nth-child(10){ --puff-size:78px; --x:38vw; --y:-230px; --puff-scale:5.3; --puff-delay:.02s; }
+.student-launch-smoke-layer-middle i:nth-child(11){ --puff-size:92px; --x:47vw; --y:-275px; --puff-scale:4.8; --puff-delay:.05s; }
+.student-launch-smoke-layer-middle i:nth-child(12){ --puff-size:70px; --x:0; --y:-65px; --puff-scale:5.5; --puff-delay:.12s; }
+
+.student-launch-smoke-layer-front i:nth-child(1){ --puff-size:88px; --x:-54vw; --y:-96px; --puff-scale:8.0; --puff-delay:.03s; }
+.student-launch-smoke-layer-front i:nth-child(2){ --puff-size:74px; --x:-43vw; --y:-52px; --puff-scale:9.0; --puff-delay:.07s; }
+.student-launch-smoke-layer-front i:nth-child(3){ --puff-size:108px; --x:-32vw; --y:30px; --puff-scale:7.5; --puff-delay:.01s; }
+.student-launch-smoke-layer-front i:nth-child(4){ --puff-size:86px; --x:-21vw; --y:78px; --puff-scale:8.5; --puff-delay:.09s; }
+.student-launch-smoke-layer-front i:nth-child(5){ --puff-size:100px; --x:-10vw; --y:176px; --puff-scale:7.8; --puff-delay:.04s; }
+.student-launch-smoke-layer-front i:nth-child(6){ --puff-size:120px; --x:0; --y:240px; --puff-scale:7.1; --puff-delay:.06s; }
+.student-launch-smoke-layer-front i:nth-child(7){ --puff-size:98px; --x:10vw; --y:176px; --puff-scale:8.0; --puff-delay:.02s; }
+.student-launch-smoke-layer-front i:nth-child(8){ --puff-size:88px; --x:21vw; --y:81px; --puff-scale:8.5; --puff-delay:.10s; }
+.student-launch-smoke-layer-front i:nth-child(9){ --puff-size:106px; --x:32vw; --y:27px; --puff-scale:7.5; --puff-delay:.05s; }
+.student-launch-smoke-layer-front i:nth-child(10){ --puff-size:76px; --x:43vw; --y:-49px; --puff-scale:9.0; --puff-delay:.08s; }
+.student-launch-smoke-layer-front i:nth-child(11){ --puff-size:90px; --x:54vw; --y:-94px; --puff-scale:8.0; --puff-delay:.03s; }
+.student-launch-smoke-layer-front i:nth-child(12){ --puff-size:74px; --x:0; --y:113px; --puff-scale:9.2; --puff-delay:.11s; }
+
+@keyframes studentExhaustCloud{
+  0%{ transform:translate(0,0) scale(0); }
+  100%{ transform:translate(var(--x),var(--y)) scale(calc(var(--puff-scale) * .75)); }
+}
+
+.student-home-teacher-link{
+  position:absolute;
+  right:max(16px, env(safe-area-inset-right));
+  bottom:max(90px, env(safe-area-inset-bottom));
+  z-index:20;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-family:"Segoe UI", system-ui, sans-serif;
+  font-size:14px;
+  font-weight:600;
+  color:#a5b5d4;
+  opacity:.8;
+  transition:opacity .12s ease, color .12s ease;
+}
+
+.student-home-teacher-link-icon{
+  width:1.5em;
+  height:1.5em;
+  flex:none;
+  fill:currentColor;
+}
+
+.student-home-teacher-link:hover,
+.student-home-teacher-link:focus-visible{
+  color:#ffffff;
+  outline:none;
 }
 
 @media (max-width:700px){
@@ -202,41 +330,21 @@
     right:max(10px, env(safe-area-inset-right));
   }
 
-  .student-audio-welcome-play{
-    top:18%;
-    width:84px;
-    height:84px;
+  :root{
+    --launchpad-min-width:1750px;
+    --rocket-width:190px;
+    --rocket-bottom:57px;
   }
 
-  .student-audio-welcome-play svg{
-    width:54px;
-    height:54px;
-  }
-
-  .student-audio-welcome-rocket-stage{
-    height:min(390px, 58vh);
-  }
-
-  .student-audio-welcome-rocket-visual{
-    bottom:30px;
-    width:min(330px, 78vw);
+  .student-home-teacher-link{
+    right:12px;
+    bottom:10px;
+    font-size:12px;
   }
 }
 
 @media (prefers-reduced-motion:reduce){
   .student-audio-help-btn.is-playing .student-audio-wave{
     animation:none;
-  }
-
-  .student-audio-welcome-screen.is-launching{
-    animation:student-audio-welcome-fade .28s linear forwards;
-  }
-
-  .student-audio-welcome-screen.is-launching .student-audio-welcome-rocket-stage{
-    animation:student-audio-welcome-launch-reduced .28s ease-out forwards;
-  }
-
-  @keyframes student-audio-welcome-launch-reduced{
-    to{ transform:translate3d(-50%, -110vh, 0); }
   }
 }

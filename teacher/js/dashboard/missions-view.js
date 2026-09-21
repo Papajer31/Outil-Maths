@@ -1,5 +1,6 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { openDashboardNameDialog } from "./name-overlay.js";
 import { openMissionProjectionRunner } from "./catalog-test-runner.js";
 import { isIntrinsicCatalogActivity } from "../../../shared/catalogue.js";
 import { normalizeConfigName } from "../../../shared/api-common.js";
@@ -526,15 +527,20 @@ export function createMissionsViewController({
     });
   }
 
-  async function createFolder(){
+  function createFolder(){
     const space = getCurrentTeacherSpace?.();
     if (!space?.id) return;
-    const name = prompt("Nom du dossier");
-    if (!String(name || "").trim()) return;
-    await createMissionFolderForSpace?.(space.id, { name, parent_id: currentFolderId });
-    await refreshData();
-    renderHeader();
-    renderExplorer();
+    openDashboardNameDialog({
+      title:"Créer un dossier",
+      placeholder:"Nom du dossier",
+      confirmLabel:"Créer",
+      onConfirm:async (name) => {
+        await createMissionFolderForSpace?.(space.id, { name, parent_id: currentFolderId });
+        await refreshData();
+        renderHeader();
+        renderExplorer();
+      }
+    });
   }
 
   async function openEditor(missionId = "", { quiz = null } = {}){

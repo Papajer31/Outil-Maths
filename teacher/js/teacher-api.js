@@ -927,6 +927,468 @@ export async function setCatalogActivityVisibility(teacherSpaceId, catalogActivi
   return await listCatalogActivitiesForTeacherSpace(teacherSpaceId);
 }
 
+
+/* =========================
+   ACTIVITÉS PERSONNELLES
+   ========================= */
+
+const TEACHER_ACTIVITY_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, display_order, created_at, updated_at";
+const TEACHER_ACTIVITY_FIELDS = "id, teacher_space_id, folder_id, title, title_normalized, activity_type, difficulty_mode, source_quiz_id, config_json, levels_json, display_order, created_at, updated_at";
+
+export async function listTeacherActivityFoldersForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data, error } = await supabase
+    .from("teacher_activity_folders")
+    .select(TEACHER_ACTIVITY_FOLDER_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .order("display_order", { ascending:true })
+    .order("name", { ascending:true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function createTeacherActivityFolderForSpace(teacherSpaceId, { name, parent_id = null } = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const cleanName = cleanDisplayName(name);
+  if (!cleanName) throw new Error("Nom de dossier vide.");
+  const safeParentId = normalizeNullableUuid(parent_id);
+  const folders = await listTeacherActivityFoldersForSpace(spaceId);
+  const nextOrder = folders
+    .filter((folder) => String(folder.parent_id || "") === String(safeParentId || ""))
+    .reduce((max, folder) => Math.max(max, Number(folder.display_order) || 0), -1) + 1;
+  const { data, error } = await supabase
+    .from("teacher_activity_folders")
+    .insert({
+      teacher_space_id:spaceId,
+      parent_id:safeParentId,
+      name:cleanName,
+      display_order:nextOrder
+    })
+    .select(TEACHER_ACTIVITY_FOLDER_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTeacherActivityFolder(folderId, updates = {}) {
+  const id = normalizeUuid(folderId);
+  if (!id) throw new Error("Dossier d’activités invalide.");
+  const payload = {};
+  if ("name" in updates) {
+    payload.name = cleanDisplayName(updates.name);
+    if (!payload.name) throw new Error("Nom de dossier vide.");
+  }
+  if ("parent_id" in updates) payload.parent_id = normalizeNullableUuid(updates.parent_id);
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  if (!Object.keys(payload).length) throw new Error("Aucune modification de dossier à enregistrer.");
+  const { data, error } = await supabase
+    .from("teacher_activity_folders")
+    .update(payload)
+    .eq("id", id)
+    .select(TEACHER_ACTIVITY_FOLDER_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTeacherActivityFolder(folderId) {
+  const id = normalizeUuid(folderId);
+  if (!id) throw new Error("Dossier d’activités invalide.");
+  const { error } = await supabase.from("teacher_activity_folders").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listTeacherActivitiesForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data, error } = await supabase
+    .from("teacher_activities")
+    .select(TEACHER_ACTIVITY_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .order("display_order", { ascending:true })
+    .order("title", { ascending:true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function saveTeacherActivityForSpace(teacherSpaceId, activity = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const title = cleanDisplayName(activity.title);
+  if (!title) throw new Error("Titre d’activité vide.");
+  const activityType = ["quiz", "series", "tool"].includes(String(activity.activity_type || "").trim())
+    ? String(activity.activity_type || "").trim()
+    : "quiz";
+  const difficultyMode = String(activity.difficulty_mode || "single").trim() === "adaptive" ? "adaptive" : "single";
+  const sourceQuizId = normalizeNullableUuid(activity.source_quiz_id);
+  if (["quiz", "series"].includes(activityType) && !sourceQuizId) {
+    throw new Error("Quiz source introuvable pour cette activité.");
+  }
+  const payload = {
+    teacher_space_id:spaceId,
+    folder_id:normalizeNullableUuid(activity.folder_id),
+    title,
+    title_normalized:normalizeConfigName(title),
+    activity_type:activityType,
+    difficulty_mode:difficultyMode,
+    source_quiz_id:sourceQuizId,
+    config_json:activity.config_json && typeof activity.config_json === "object" && !Array.isArray(activity.config_json)
+      ? cloneJsonValue(activity.config_json)
+      : {},
+    levels_json:activity.levels_json && typeof activity.levels_json === "object" && !Array.isArray(activity.levels_json)
+      ? cloneJsonValue(activity.levels_json)
+      : {},
+    display_order:Math.max(0, Math.trunc(Number(activity.display_order) || 0))
+  };
+
+  const existingId = normalizeUuid(activity.id);
+  let query;
+  if (existingId) {
+    query = supabase
+      .from("teacher_activities")
+      .update(payload)
+      .eq("id", existingId)
+      .eq("teacher_space_id", spaceId);
+  } else {
+    const existing = await listTeacherActivitiesForSpace(spaceId);
+    payload.display_order = existing
+      .filter((item) => String(item.folder_id || "") === String(payload.folder_id || ""))
+      .reduce((max, item) => Math.max(max, Number(item.display_order) || 0), -1) + 1;
+    query = supabase.from("teacher_activities").insert(payload);
+  }
+
+  const { data, error } = await query.select(TEACHER_ACTIVITY_FIELDS).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTeacherActivityPlacement(activityId, updates = {}) {
+  const id = normalizeUuid(activityId);
+  if (!id) throw new Error("Activité invalide.");
+  const payload = {};
+  if ("folder_id" in updates) payload.folder_id = normalizeNullableUuid(updates.folder_id);
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  if (!Object.keys(payload).length) throw new Error("Aucun déplacement d’activité à enregistrer.");
+  const { data, error } = await supabase
+    .from("teacher_activities")
+    .update(payload)
+    .eq("id", id)
+    .select(TEACHER_ACTIVITY_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTeacherActivity(activityId) {
+  const id = normalizeUuid(activityId);
+  if (!id) throw new Error("Activité invalide.");
+  const { error } = await supabase.from("teacher_activities").delete().eq("id", id);
+  if (error) throw error;
+}
+
+
+/* =========================
+   SÉQUENCES D’ACTIVITÉS
+   ========================= */
+
+const TEACHER_SEQUENCE_FIELDS = "id, teacher_space_id, title, title_normalized, created_at, updated_at";
+const TEACHER_SEQUENCE_ITEM_FIELDS = "id, sequence_id, position, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, created_at, updated_at";
+
+export async function listTeacherSequencesForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data: sequences, error: sequenceError } = await supabase
+    .from("teacher_sequences")
+    .select(TEACHER_SEQUENCE_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .order("updated_at", { ascending:false })
+    .order("title", { ascending:true });
+  if (sequenceError) throw sequenceError;
+
+  const ids = (Array.isArray(sequences) ? sequences : []).map((item) => String(item.id || "")).filter(Boolean);
+  if (!ids.length) return [];
+
+  const { data: items, error: itemError } = await supabase
+    .from("teacher_sequence_items")
+    .select(TEACHER_SEQUENCE_ITEM_FIELDS)
+    .in("sequence_id", ids)
+    .order("position", { ascending:true })
+    .order("created_at", { ascending:true });
+  if (itemError) throw itemError;
+
+  const bySequence = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = String(item.sequence_id || "");
+    if (!bySequence.has(key)) bySequence.set(key, []);
+    bySequence.get(key).push(item);
+  });
+
+  return (sequences || []).map((sequence) => ({
+    ...sequence,
+    items:bySequence.get(String(sequence.id || "")) || []
+  }));
+}
+
+export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const title = cleanDisplayName(sequence.title);
+  if (!title) throw new Error("Titre de séquence vide.");
+
+  const cleanItems = (Array.isArray(sequence.items) ? sequence.items : []).map((item, index) => {
+    const sourceType = String(item?.source_type || "").trim();
+    if (!["catalog_activity", "teacher_activity"].includes(sourceType)) {
+      throw new Error(`Source invalide pour l’activité ${index + 1}.`);
+    }
+    const sourceId = String(item?.source_id || "").trim();
+    if (!sourceId) throw new Error(`Activité ${index + 1} introuvable.`);
+    const itemTitle = cleanDisplayName(item?.title_snapshot || item?.title) || `Activité ${index + 1}`;
+    const difficultyMode = String(item?.difficulty_mode || "fixed") === "adaptive" ? "adaptive" : "fixed";
+    const difficultyLevel = difficultyMode === "adaptive"
+      ? null
+      : Math.max(1, Math.min(5, Math.trunc(Number(item?.difficulty_level) || 3)));
+    const executionModeCandidate = String(item?.execution_limit_mode || "questions").trim();
+    const executionMode = ["questions", "time", "intrinsic"].includes(executionModeCandidate)
+      ? executionModeCandidate
+      : "questions";
+    const executionValue = executionMode === "intrinsic"
+      ? null
+      : Math.max(1, Math.trunc(Number(item?.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+    return {
+      position:index,
+      source_type:sourceType,
+      source_id:sourceId,
+      title_snapshot:itemTitle,
+      difficulty_mode:difficultyMode,
+      difficulty_level:difficultyLevel,
+      execution_limit_mode:executionMode,
+      execution_limit_value:executionValue
+    };
+  });
+
+  if (!cleanItems.length) throw new Error("Ajoutez au moins une activité à la séquence.");
+
+  const existingId = normalizeUuid(sequence.id);
+  let savedSequence = null;
+  if (existingId) {
+    const { data, error } = await supabase
+      .from("teacher_sequences")
+      .update({ title, title_normalized:normalizeConfigName(title) })
+      .eq("id", existingId)
+      .eq("teacher_space_id", spaceId)
+      .select(TEACHER_SEQUENCE_FIELDS)
+      .single();
+    if (error) throw error;
+    savedSequence = data;
+  } else {
+    const { data, error } = await supabase
+      .from("teacher_sequences")
+      .insert({ teacher_space_id:spaceId, title, title_normalized:normalizeConfigName(title) })
+      .select(TEACHER_SEQUENCE_FIELDS)
+      .single();
+    if (error) throw error;
+    savedSequence = data;
+  }
+
+  const sequenceId = String(savedSequence?.id || "");
+  if (!sequenceId) throw new Error("Séquence introuvable après enregistrement.");
+
+  const { error: deleteError } = await supabase
+    .from("teacher_sequence_items")
+    .delete()
+    .eq("sequence_id", sequenceId);
+  if (deleteError) throw deleteError;
+
+  const { data: savedItems, error: itemsError } = await supabase
+    .from("teacher_sequence_items")
+    .insert(cleanItems.map((item) => ({ sequence_id:sequenceId, ...item })))
+    .select(TEACHER_SEQUENCE_ITEM_FIELDS);
+  if (itemsError) throw itemsError;
+
+  const orderedItems = Array.isArray(savedItems)
+    ? [...savedItems].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+    : [];
+  return { ...savedSequence, items:orderedItems };
+}
+
+export async function deleteTeacherSequence(sequenceId) {
+  const id = normalizeUuid(sequenceId);
+  if (!id) throw new Error("Séquence invalide.");
+  const { data: usage, error: usageError } = await supabase
+    .from("activity_assignments")
+    .select("id")
+    .eq("source_type", "sequence")
+    .eq("source_id", id)
+    .limit(1);
+  if (usageError) throw usageError;
+  if (Array.isArray(usage) && usage.length) {
+    throw new Error("Cette séquence est encore attribuée. Retire d’abord son attribution.");
+  }
+  const { error } = await supabase.from("teacher_sequences").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* =========================
+   ATTRIBUTION DIRECTE D’ACTIVITÉS
+   ========================= */
+
+const ACTIVITY_ASSIGNMENT_FIELDS = "id, teacher_space_id, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, created_at, updated_at";
+const ACTIVITY_ASSIGNMENT_TARGET_FIELDS = "id, assignment_id, target_type, teacher_class_id, student_id, created_at";
+
+export async function listActivityAssignmentsForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data: assignments, error: assignmentError } = await supabase
+    .from("activity_assignments")
+    .select(ACTIVITY_ASSIGNMENT_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .order("created_at", { ascending:false });
+  if (assignmentError) throw assignmentError;
+
+  const ids = (Array.isArray(assignments) ? assignments : []).map((item) => String(item.id || "")).filter(Boolean);
+  if (!ids.length) return [];
+
+  const { data: targets, error: targetError } = await supabase
+    .from("activity_assignment_targets")
+    .select(ACTIVITY_ASSIGNMENT_TARGET_FIELDS)
+    .in("assignment_id", ids)
+    .order("created_at", { ascending:true });
+  if (targetError) throw targetError;
+
+  const byAssignment = new Map();
+  (Array.isArray(targets) ? targets : []).forEach((target) => {
+    const key = String(target.assignment_id || "");
+    if (!byAssignment.has(key)) byAssignment.set(key, []);
+    byAssignment.get(key).push(target);
+  });
+
+  return (assignments || []).map((assignment) => ({
+    ...assignment,
+    targets:byAssignment.get(String(assignment.id || "")) || []
+  }));
+}
+
+export async function saveActivityAssignmentForSpace(teacherSpaceId, assignment = {}, targets = []) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const sourceType = String(assignment.source_type || "").trim();
+  if (!["catalog_activity", "teacher_activity", "sequence"].includes(sourceType)) {
+    throw new Error("Source d’attribution invalide.");
+  }
+  const sourceId = String(assignment.source_id || "").trim();
+  if (!sourceId) throw new Error("Activité à attribuer introuvable.");
+  const title = cleanDisplayName(assignment.title_snapshot || assignment.title);
+  if (!title) throw new Error("Titre d’activité vide.");
+
+  const difficultyMode = String(assignment.difficulty_mode || "fixed").trim() === "adaptive" ? "adaptive" : "fixed";
+  const difficultyLevel = difficultyMode === "adaptive"
+    ? null
+    : Math.max(1, Math.min(5, Math.trunc(Number(assignment.difficulty_level) || 3)));
+  const executionModeCandidate = String(assignment.execution_limit_mode || "questions").trim();
+  const executionMode = ["questions", "time", "intrinsic"].includes(executionModeCandidate)
+    ? executionModeCandidate
+    : "questions";
+  const executionValue = executionMode === "intrinsic"
+    ? null
+    : Math.max(1, Math.trunc(Number(assignment.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+
+  const cleanTargets = (Array.isArray(targets) ? targets : []).map((target) => {
+    const type = String(target?.target_type || "").trim();
+    if (type === "class") {
+      const classId = Number(target?.teacher_class_id);
+      return Number.isFinite(classId) && classId > 0
+        ? { target_type:"class", teacher_class_id:classId, student_id:null }
+        : null;
+    }
+    if (type === "student") {
+      const studentId = Number(target?.student_id);
+      return Number.isFinite(studentId) && studentId > 0
+        ? { target_type:"student", teacher_class_id:null, student_id:studentId }
+        : null;
+    }
+    return null;
+  }).filter(Boolean);
+
+  if (!cleanTargets.length) throw new Error("Choisissez au moins un destinataire.");
+
+  const { data, error } = await supabase
+    .from("activity_assignments")
+    .insert({
+      teacher_space_id:spaceId,
+      source_type:sourceType,
+      source_id:sourceId,
+      title_snapshot:title,
+      difficulty_mode:difficultyMode,
+      difficulty_level:difficultyLevel,
+      execution_limit_mode:executionMode,
+      execution_limit_value:executionValue
+    })
+    .select(ACTIVITY_ASSIGNMENT_FIELDS)
+    .single();
+  if (error) throw error;
+
+  const assignmentId = String(data?.id || "");
+  try {
+    const { error: targetsError } = await supabase
+      .from("activity_assignment_targets")
+      .insert(cleanTargets.map((target) => ({ assignment_id:assignmentId, ...target })));
+    if (targetsError) throw targetsError;
+  } catch (error) {
+    await supabase.from("activity_assignments").delete().eq("id", assignmentId);
+    throw error;
+  }
+
+  return {
+    ...data,
+    targets:cleanTargets.map((target) => ({ assignment_id:assignmentId, ...target }))
+  };
+}
+
+const DIRECT_LAUNCH_LINK_FIELDS = "id, teacher_space_id, token, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, is_active, created_at, updated_at";
+
+export async function saveDirectLaunchLinkForSpace(teacherSpaceId, link = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const sourceType = String(link.source_type || "").trim();
+  if (!["catalog_activity", "teacher_activity", "sequence"].includes(sourceType)) {
+    throw new Error("Source de lien direct invalide.");
+  }
+  const sourceId = String(link.source_id || "").trim();
+  if (!sourceId) throw new Error("Ressource à partager introuvable.");
+  const title = cleanDisplayName(link.title_snapshot || link.title);
+  if (!title) throw new Error("Titre de ressource vide.");
+
+  const difficultyMode = String(link.difficulty_mode || "fixed").trim() === "adaptive" ? "adaptive" : "fixed";
+  const difficultyLevel = difficultyMode === "adaptive"
+    ? null
+    : Math.max(1, Math.min(5, Math.trunc(Number(link.difficulty_level) || 3)));
+  const executionCandidate = String(link.execution_limit_mode || "questions").trim();
+  const executionMode = ["questions", "time", "intrinsic"].includes(executionCandidate) ? executionCandidate : "questions";
+  const executionValue = executionMode === "intrinsic"
+    ? null
+    : Math.max(1, Math.trunc(Number(link.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+
+  const payload = {
+    teacher_space_id:spaceId,
+    source_type:sourceType,
+    source_id:sourceId,
+    title_snapshot:title,
+    difficulty_mode:difficultyMode,
+    difficulty_level:difficultyLevel,
+    execution_limit_mode:executionMode,
+    execution_limit_value:executionValue,
+    is_active:true
+  };
+
+  const { data, error } = await supabase
+    .from("direct_launch_links")
+    .upsert(payload, { onConflict:"teacher_space_id,source_type,source_id" })
+    .select(DIRECT_LAUNCH_LINK_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteActivityAssignment(assignmentId) {
+  const id = normalizeUuid(assignmentId);
+  if (!id) throw new Error("Attribution invalide.");
+  const { error } = await supabase.from("activity_assignments").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function listMissionFoldersForSpace(teacherSpaceId) {
   const { data, error } = await supabase
     .from("mission_folders")
@@ -1127,12 +1589,15 @@ export async function isCurrentUserSuperAdmin() {
   return data === true;
 }
 
-export async function listCatalogActivitiesForAdmin() {
-  const { data, error } = await supabase
+export async function listCatalogActivitiesForAdmin({ includeArchived = false } = {}) {
+  let query = supabase
     .from("catalog_activities")
     .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
-    .neq("status", "archived")
-    .neq("id", "system.quiz.direct")
+    .neq("id", "system.quiz.direct");
+
+  if (!includeArchived) query = query.neq("status", "archived");
+
+  const { data, error } = await query
     .order("pedagogical_node_id", { ascending: true })
     .order("adventure_tier", { ascending: true })
     .order("display_order", { ascending: true })
@@ -1420,7 +1885,9 @@ export async function saveCatalogActivityAsAdmin(activity = {}) {
     description: String(activity.description || "").trim(),
     adventure_tier: Math.max(1, Math.trunc(Number(activity.adventure_tier) || 1)),
     display_order: Math.max(0, Math.trunc(Number(activity.display_order) || 0)),
-    status: String(activity.status || "draft").trim() === "published" ? "published" : "draft",
+    status: ["draft", "published", "archived"].includes(String(activity.status || "draft").trim())
+      ? String(activity.status || "draft").trim()
+      : "draft",
     default_visible: activity.default_visible !== false,
     levels_json: activity.levels_json && typeof activity.levels_json === "object" && !Array.isArray(activity.levels_json)
       ? activity.levels_json
@@ -1912,7 +2379,9 @@ function normalizeResourceRecord(row = {}, index = 0) {
     teacher_space_id: row.teacher_space_id == null ? null : Number(row.teacher_space_id),
     folder_id: row.folder_id ? String(row.folder_id) : null,
     title: cleanDisplayName(row.title) || "Ressource sans nom",
-    type: String(row.resource_type || "image") === "audio" ? "audio" : "image",
+    type: ["image", "audio", "seyes"].includes(String(row.resource_type || "image"))
+      ? String(row.resource_type || "image")
+      : "image",
     storage_bucket: String(row.storage_bucket || TEACHER_RESOURCE_BUCKET),
     storage_path: String(row.storage_path || ""),
     path: String(row.storage_path || ""),
@@ -2091,17 +2560,28 @@ function sanitizeStorageFileName(value, fallback = "resource") {
 export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
   if (!(file instanceof Blob)) throw new Error("Fichier de ressource invalide.");
-  const mimeType = String(file.type || resource.mime_type || "").trim().toLowerCase();
-  const resourceType = mimeType.startsWith("audio/") || resource.type === "audio" ? "audio" : "image";
-  if (!mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) {
-    throw new Error("Seules les images et les pistes audio sont acceptées.");
+  const declaredType = String(resource.type || "").trim().toLowerCase();
+  const fileNameLower = String(file.name || "").trim().toLowerCase();
+  const rawMimeType = String(file.type || resource.mime_type || "").trim().toLowerCase();
+  const isSeyes = declaredType === "seyes"
+    || rawMimeType === "application/vnd.site-outils.seyes+json"
+    || fileNameLower.endsWith(".seyes");
+  const mimeType = isSeyes
+    ? "application/vnd.site-outils.seyes+json"
+    : rawMimeType;
+  const resourceType = isSeyes
+    ? "seyes"
+    : (mimeType.startsWith("audio/") || declaredType === "audio" ? "audio" : "image");
+  if (!isSeyes && !mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) {
+    throw new Error("Seules les images, les pistes audio et les documents .seyes sont acceptés.");
   }
 
   const user = await getCurrentUser();
   if (!user?.id) throw new Error("Utilisateur non connecté.");
   const resourceId = globalThis.crypto?.randomUUID?.();
   if (!resourceId) throw new Error("Impossible de générer l’identifiant de la ressource.");
-  const fileName = sanitizeStorageFileName(resource.name || file.name, resourceType === "audio" ? "audio" : "image");
+  const fallbackFileName = resourceType === "audio" ? "audio" : (resourceType === "seyes" ? "document.seyes" : "image");
+  const fileName = sanitizeStorageFileName(resource.name || file.name, fallbackFileName);
   const storagePath = `${user.id}/${resourceId}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
@@ -2117,7 +2597,7 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
     id: resourceId,
     teacher_space_id: spaceId,
     folder_id: normalizeNullableUuid(resource.folder_id),
-    title: cleanDisplayName(resource.title || file.name) || (resourceType === "audio" ? "Audio" : "Image"),
+    title: cleanDisplayName(resource.title || file.name) || (resourceType === "audio" ? "Audio" : (resourceType === "seyes" ? "Document Seyès" : "Image")),
     resource_type: resourceType,
     storage_bucket: TEACHER_RESOURCE_BUCKET,
     storage_path: storagePath,

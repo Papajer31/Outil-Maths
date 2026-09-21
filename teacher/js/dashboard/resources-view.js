@@ -5,6 +5,7 @@ import {
 } from "./activity-tree.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { openDashboardNameDialog } from "./name-overlay.js";
 import { resolveQuizImageSourceUrl } from "../../../shared/quiz-local-image-store.js";
 import { invalidateQuizAudioResourceUrl, resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
 import { openAudioRecorderDialog } from "./audio-recorder-dialog.js";
@@ -626,16 +627,22 @@ export function createResourcesViewController({
 
   function renderResourceTile(resource){
     const resourceId = String(resource.id || "");
-    const isImage = resource.type !== "audio";
-    const typeLabel = isImage ? "Image" : "Audio";
+    const isAudio = resource.type === "audio";
+    const isSeyes = resource.type === "seyes";
+    const isImage = !isAudio && !isSeyes;
+    const typeLabel = isAudio ? "Audio" : (isSeyes ? "Seyès" : "Image");
     const isManageable = canManageResource(resource);
     const preview = isImage
       ? `<img class="dashboard-resource-preview-image" src="${escapeAttr(resource.url || "")}" alt="${escapeAttr(resource.alt || resource.title || "Image")}" loading="lazy">`
-      : `
+      : (isAudio ? `
         <span class="dashboard-resource-audio-preview" aria-hidden="true">
           <span class="dashboard-material-icon">play_arrow</span>
         </span>
-      `;
+      ` : `
+        <span class="dashboard-resource-document-preview" aria-hidden="true">
+          <span class="dashboard-material-icon">edit_note</span>
+        </span>
+      `);
     const actions = !isManageable
       ? ""
       : `
@@ -643,7 +650,7 @@ export function createResourcesViewController({
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rename-resource" data-resource-id="${escapeAttr(resourceId)}" title="Renommer la ressource" aria-label="Renommer la ressource">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
           </button>
-          ${!isImage && resource.is_system !== true ? `
+          ${isAudio && resource.is_system !== true ? `
             <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="rerecord-resource-audio" data-resource-id="${escapeAttr(resourceId)}" title="Réenregistrer l’audio" aria-label="Réenregistrer l’audio">
               <span class="dashboard-material-icon" aria-hidden="true">mic</span>
             </button>
@@ -655,7 +662,7 @@ export function createResourcesViewController({
       `;
 
     return `
-      <article class="dashboard-resource-tile ${isImage ? "is-image" : "is-audio"}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${isManageable ? 'draggable="true"' : ""}>
+      <article class="dashboard-resource-tile ${isImage ? "is-image" : (isAudio ? "is-audio" : "is-document")}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-resource-tile-surface" type="button" data-action="open-resource" data-resource-id="${escapeAttr(resourceId)}">
           <span class="dashboard-resource-preview">
             <span class="dashboard-resource-type-pill">${typeLabel}</span>
@@ -686,7 +693,7 @@ export function createResourcesViewController({
     if (!manageableResources.length && !canImportSystemImages) return "";
 
     const label = manageableResources.length
-      ? (manageableResources.every((resource) => resource?.type !== "audio")
+      ? (manageableResources.every((resource) => resource?.type === "image")
           ? `${manageableResources.length} image${manageableResources.length > 1 ? "s" : ""}`
           : `${manageableResources.length} ressource${manageableResources.length > 1 ? "s" : ""}`)
       : "Dossier vide";
@@ -1151,55 +1158,9 @@ export function createResourcesViewController({
     });
   }
 
-  function openNameOverlay({ title, initialValue = "", placeholder = "", confirmLabel = "Enregistrer", onConfirm } = {}){
-    const overlay = document.createElement("div");
-    overlay.className = "modal";
-    overlay.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-title">${escapeHtml(title || "Nom")}</div>
-        <input class="modal-text-input" type="text" value="${escapeAttr(initialValue)}" placeholder="${escapeAttr(placeholder)}">
-        <div class="modal-actions">
-          <div class="modal-message"></div>
-          <button class="btn" type="button" data-action="cancel">Annuler</button>
-          <button class="btn primary" type="button" data-action="confirm">${escapeHtml(confirmLabel)}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const input = overlay.querySelector("input");
-    const message = overlay.querySelector(".modal-message");
-    const close = () => overlay.remove();
-    const submit = async () => {
-      const value = String(input?.value || "").trim();
-      if (!value) {
-        message.textContent = "Entre un nom.";
-        message.classList.add("is-error");
-        input?.focus();
-        return;
-      }
-      try {
-        await onConfirm?.(value);
-        close();
-      } catch (error) {
-        message.textContent = error?.message || "Enregistrement impossible.";
-        message.classList.add("is-error");
-      }
-    };
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay || event.target.closest('[data-action="cancel"]')) close();
-      if (event.target.closest('[data-action="confirm"]')) void submit();
-    });
-    overlay.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close();
-      else if (event.key === "Enter") void submit();
-    });
-    input?.focus();
-    input?.select();
-  }
-
   function inferMimeType(file){
     const declared = String(file?.type || "").trim().toLowerCase();
-    if (declared.startsWith("image/") || declared.startsWith("audio/")) return declared;
+    if (declared.startsWith("image/") || declared.startsWith("audio/") || declared === "application/vnd.site-outils.seyes+json") return declared;
     const extension = String(file?.name || "").split(".").pop()?.toLowerCase() || "";
     const byExtension = {
       png: "image/png",
@@ -1218,7 +1179,8 @@ export function createResourcesViewController({
       mp4: "audio/mp4",
       aac: "audio/aac",
       flac: "audio/flac",
-      webm: "audio/webm"
+      webm: "audio/webm",
+      seyes: "application/vnd.site-outils.seyes+json"
     };
     return byExtension[extension] || "";
   }
@@ -1298,7 +1260,7 @@ export function createResourcesViewController({
     files.forEach((file) => {
       const mimeType = inferMimeType(file);
       const fileSize = Math.max(0, Number(file?.size) || 0);
-      const isSupported = mimeType.startsWith("image/") || mimeType.startsWith("audio/");
+      const isSupported = mimeType.startsWith("image/") || mimeType.startsWith("audio/") || mimeType === "application/vnd.site-outils.seyes+json";
       const isWithinSizeLimit = fileSize <= MAX_RESOURCE_FILE_SIZE;
       if (!isSupported || !isWithinSizeLimit) {
         rejected.push(file.name || "Fichier inconnu");
@@ -1315,7 +1277,7 @@ export function createResourcesViewController({
     if (!accepted.length) {
       const message = quotaRejected.length
         ? `Quota insuffisant : ${formatQuotaBytes(getPersonalStorageUsage())} utilisés sur ${formatQuotaBytes(RESOURCE_STORAGE_QUOTA_BYTES)}.`
-        : "Aucun fichier compatible : image ou audio, 25 Mo maximum.";
+        : "Aucun fichier compatible : image, audio ou document .seyes, 25 Mo maximum.";
       showToast?.(message, { isError: true });
       return;
     }
@@ -1481,7 +1443,7 @@ export function createResourcesViewController({
     if (!location) return;
     const isSystem = location.scope === "system-image";
     const parentId = location.folderId;
-    openNameOverlay({
+    openDashboardNameDialog({
       title:isSystem ? "Créer un dossier d’images système" : "Créer un dossier personnel",
       placeholder:"Nom du dossier",
       confirmLabel:"Créer",
@@ -1517,7 +1479,7 @@ export function createResourcesViewController({
     const folder = personalFolder || systemFolder;
     const isSystem = Boolean(systemFolder);
     if (!folder || !canManageFolder(folder)) return;
-    openNameOverlay({
+    openDashboardNameDialog({
       title:"Renommer le dossier",
       initialValue:folder.name || "",
       placeholder:"Nom du dossier",
@@ -1568,7 +1530,7 @@ export function createResourcesViewController({
     const resource = personalResource || systemResource;
     const isSystem = Boolean(systemResource);
     if (!resource || !canManageResource(resource) || typeof updateResource !== "function") return;
-    openNameOverlay({
+    openDashboardNameDialog({
       title:"Renommer la ressource",
       initialValue:resource.title || "",
       placeholder:"Nom de la ressource",
@@ -1595,7 +1557,7 @@ export function createResourcesViewController({
     const resources = (Array.isArray(childResources) ? childResources : []).filter(canManageResource);
     if (!resources.length) return;
 
-    const imageOnly = resources.every((resource) => resource?.type !== "audio");
+    const imageOnly = resources.every((resource) => resource?.type === "image");
     const itemLabel = imageOnly
       ? `${resources.length} image${resources.length > 1 ? "s" : ""}`
       : `${resources.length} ressource${resources.length > 1 ? "s" : ""}`;
@@ -1701,7 +1663,9 @@ export function createResourcesViewController({
     const canEditTags = canManageResource(detailResource) && typeof updateResource === "function";
     const showTechnicalProperties = detailResource.is_system !== true || detailResource.managed_system_image === true;
     const url = await resolveResourceUrl(resource).catch(() => "");
-    const preview = resource.type === "audio"
+    const isAudio = detailResource.type === "audio";
+    const isSeyes = detailResource.type === "seyes";
+    const preview = isAudio
       ? (url
         ? `
           <div class="dashboard-resource-detail-audio-player">
@@ -1713,9 +1677,11 @@ export function createResourcesViewController({
             <audio preload="metadata" src="${escapeAttr(url)}" data-resource-audio-player></audio>
           </div>`
         : `<div class="dashboard-resource-detail-unavailable">Audio indisponible.</div>`)
-      : (url
-        ? `<img class="dashboard-resource-detail-image" src="${escapeAttr(url)}" alt="${escapeAttr(resource.alt || resource.title || "Image")}">`
-        : `<div class="dashboard-resource-detail-unavailable">Image indisponible.</div>`);
+      : (isSeyes
+        ? `<div class="dashboard-resource-detail-document"><span class="dashboard-material-icon" aria-hidden="true">edit_note</span><strong>Document Seyès</strong><span>Ouvre-le depuis la mini-app Seyès du Tableau.</span></div>`
+        : (url
+          ? `<img class="dashboard-resource-detail-image" src="${escapeAttr(url)}" alt="${escapeAttr(resource.alt || resource.title || "Image")}">`
+          : `<div class="dashboard-resource-detail-unavailable">Image indisponible.</div>`));
     const dimensions = detailResource.width && detailResource.height
       ? `${detailResource.width} × ${detailResource.height} pixels`
       : "Dimensions indisponibles";
@@ -1753,11 +1719,11 @@ export function createResourcesViewController({
             <span class="dashboard-material-icon" aria-hidden="true">close</span>
           </button>
         </div>
-        <div class="dashboard-resource-detail-preview${detailResource.type === "audio" ? " is-audio" : ""}">${preview}</div>
+        <div class="dashboard-resource-detail-preview${isAudio ? " is-audio" : (isSeyes ? " is-document" : "")}">${preview}</div>
         <dl class="dashboard-resource-detail-properties${showTechnicalProperties ? "" : " is-system"}">
-          <div><dt>Type</dt><dd>${detailResource.type === "audio" ? "Audio" : "Image"}</dd></div>
-          ${showTechnicalProperties ? `
-            <div><dt>${detailResource.type === "audio" ? "Durée" : "Dimensions"}</dt><dd>${escapeHtml(detailResource.type === "audio" ? duration : dimensions)}</dd></div>
+          <div><dt>Type</dt><dd>${isAudio ? "Audio" : (isSeyes ? "Document Seyès" : "Image")}</dd></div>
+          ${showTechnicalProperties && !isSeyes ? `
+            <div><dt>${isAudio ? "Durée" : "Dimensions"}</dt><dd>${escapeHtml(isAudio ? duration : dimensions)}</dd></div>
             <div><dt>Poids</dt><dd>${escapeHtml(size)}</dd></div>
           ` : ""}
         </dl>

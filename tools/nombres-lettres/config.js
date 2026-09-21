@@ -11,6 +11,7 @@ import {
   getDefaultSettings,
   normalizeSettings,
   QUESTION_DIRECTIONS,
+  LETTER_STYLES,
   NUMBER_LIMITS
 } from "./model.js";
 
@@ -42,6 +43,15 @@ export function renderToolSettings(container, settings) {
         { value: QUESTION_DIRECTIONS.WORDS_TO_NUMBER, label: "Écriture → Nombre" },
         { value: QUESTION_DIRECTIONS.MIXED, label: "Les deux" }
       ]
+    }),
+    renderRadioGroup({
+      title: "Écriture en lettres",
+      id: "nl_letter_style",
+      value: cfg.letterStyle,
+      options: [
+        { value: LETTER_STYLES.SCRIPT, label: "Script" },
+        { value: LETTER_STYLES.CURSIVE, label: "Cursif" }
+      ]
     })
   );
 
@@ -50,6 +60,7 @@ export function renderToolSettings(container, settings) {
     inputMax: NUMBER_LIMITS.max
   });
   bindRadio(container, "nl_direction");
+  bindRadio(container, "nl_letter_style");
 }
 
 export function readToolSettings(container, settings = {}) {
@@ -60,13 +71,15 @@ export function readToolSettings(container, settings = {}) {
   });
 
   const direction = readRadio(container, "nl_direction", QUESTION_DIRECTIONS.NUMBER_TO_WORDS);
+  const letterStyle = readRadio(container, "nl_letter_style", LETTER_STYLES.CURSIVE);
 
   return normalizeSettings({
     ...getDefaultSettings(),
     ...(settings ?? {}),
     min: range.min,
     max: range.max,
-    direction
+    direction,
+    letterStyle
   });
 }
 

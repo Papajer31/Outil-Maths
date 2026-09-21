@@ -14,9 +14,10 @@ import { closeProjectedWindow } from "../projected-session.js";
 const rocketOffUrl = new URL("../../shared/ui-assets/rocket-off.svg", import.meta.url).href;
 const rocketOnUrl = new URL("../../shared/ui-assets/rocket-on.svg", import.meta.url).href;
 
-export function renderSessionStartView(root){
+export function renderSessionStartView(root, options = {}){
   const isProjectedTeacherMode = studentState.sessionMode === "projected-teacher";
   const isSharedSessionEntry = studentState.sharedSessionEntry === true;
+  const isDirectLaunchMode = studentState.selectedConfig?.direct_launch === true;
   const isCatalogTestMode = normalizeCatalogRuntimeContext(
     studentState.selectedConfig?.catalog_context
       ?? studentState.selectedConfig?.catalogContext
@@ -101,13 +102,20 @@ export function renderSessionStartView(root){
 
     window.clearTimeout(launchTimer);
     launchTimer = window.setTimeout(() => {
-      startSelectedActivity();
+      const onStart = typeof options.onStart === "function" ? options.onStart : startSelectedActivity;
+      try {
+        const result = onStart();
+        if (result && typeof result.catch === "function") {
+          result.catch((error) => console.warn("Impossible de démarrer l’activité.", error));
+        }
+      } catch (error) {
+        console.warn("Impossible de démarrer l’activité.", error);
+      }
     }, 360);
   }, { signal });
 
   els.shell?.addEventListener("click", (event) => {
     if (event.target.closest("[data-skip-autofs='true']")) return;
-    if (isCatalogTestMode) return;
     requestAppFullscreen();
   }, { signal });
 
@@ -135,7 +143,7 @@ export function renderSessionStartView(root){
       requiresStudent = !!meta.requiresStudent;
       blockingMessage = String(meta.blockingMessage || "").trim();
 
-      if (requiresStudent && !isProjectedTeacherMode && !isCatalogTestMode) {
+      if (requiresStudent && !isProjectedTeacherMode && !isCatalogTestMode && !isDirectLaunchMode) {
         const selectionIssue = getSelectedParticipantsValidationIssue(meta);
         if (selectionIssue) {
           blockingMessage = selectionIssue;
@@ -160,7 +168,7 @@ export function renderSessionStartView(root){
   }
 
   function syncStartButton(){
-    const selectionIssue = requiresStudent && !isCatalogTestMode ? getSelectedParticipantsValidationIssue() : "";
+    const selectionIssue = requiresStudent && !isCatalogTestMode && !isDirectLaunchMode ? getSelectedParticipantsValidationIssue() : "";
     const missingStudent = requiresStudent && !isCatalogTestMode && !!selectionIssue;
     const mustDisable = missingStudent || !!blockingMessage;
 

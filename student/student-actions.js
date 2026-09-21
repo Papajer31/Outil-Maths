@@ -11,7 +11,9 @@ import {
   getPublicStudentActivityProgress,
   openPublicStudentAdventureDay,
   listPublicMissionsForSpace,
-  loadPublicMissionSteps
+  loadPublicMissionSteps,
+  listPublicActivityAssignmentsForSpace,
+  resolvePublicDirectLaunch
 } from "./student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../shared/activity-modes.js";
 import { clearSelectedActivityMeta } from "./student-activity-meta.js";
@@ -20,6 +22,7 @@ import {
   buildCatalogActivityConfig,
   buildMissionRuntimeConfig,
   getCatalogActivityById,
+  normalizeCatalogActivity,
   normalizeCatalogRuntimeContext,
   normalizeCatalogDifficultyLevel
 } from "../shared/catalogue.js";
@@ -29,6 +32,55 @@ let classDataLoadAccessCode = "";
 let loadedClassDataAccessCode = "";
 const HOME_LAUNCH_FALLBACK_MS = 1900;
 const HOME_LAUNCH_FADE_MS = 260;
+
+export async function hydrateDirectLaunch(token) {
+  const safeToken = String(token || "").trim();
+  if (!safeToken) return false;
+
+  const payload = await resolvePublicDirectLaunch(safeToken);
+  const rawSource = payload?.activity_json && typeof payload.activity_json === "object"
+    ? payload.activity_json
+    : null;
+  if (!payload || !rawSource) return false;
+
+  const sourceType = String(payload.source_type || "");
+  let configJson = sourceType === "sequence"
+    ? buildAssignedSequenceRuntimeConfig(payload, rawSource, "individual")
+    : buildAssignedSingleActivityRuntimeConfig(payload, rawSource, "individual");
+  if (!configJson || !Array.isArray(configJson.sequence) || !configJson.sequence.length) return false;
+
+  if (sourceType === "sequence") {
+    configJson = { ...configJson, type:"direct_sequence_runtime" };
+    delete configJson.activity_assignment_id;
+  }
+
+  const accessCode = normalizeAccessCode(payload.access_code || "");
+  studentState.accessCode = accessCode || "DIRECT";
+  studentState.homeCode = studentState.accessCode;
+  studentState.homeMessage = "";
+  studentState.activityEntry = "direct";
+  studentState.activitiesMode = "individual";
+  studentState.hasChosenActivitiesMode = true;
+  studentState.selectedStudent = null;
+  studentState.selectedStudents = [];
+  studentState.selectedMission = null;
+  studentState.selectedConfigMeta = null;
+  studentState.selectedConfig = {
+    id:`direct:${safeToken}`,
+    config_name:String(payload.title || rawSource.title || "Activité"),
+    catalog_context:"exploration",
+    module_key:"tools",
+    skip_detailed_history:true,
+    direct_launch:true,
+    direct_launch_token:safeToken,
+    config_json:configJson
+  };
+  studentState.sharedSessionEntry = true;
+  studentState.sessionMode = "student";
+  studentState.projectedSession = null;
+  clearSelectedActivityMeta();
+  return true;
+}
 
 export async function submitAccessCode(rawValue){
   if (studentState.isCheckingAccessCode || studentState.isLoadingActivities || studentState.homeLaunchPhase) return;
@@ -519,7 +571,28 @@ export async function refreshMissionsForCurrentSelection(){
   try {
     const isGroup = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) === "group";
     const missions = await listPublicMissionsForSpace(studentState.accessCode, ids, isGroup);
-    studentState.missions = Array.isArray(missions) ? missions : [];
+    let assignments = [];
+    try {
+      assignments = await listPublicActivityAssignmentsForSpace(studentState.accessCode, ids, isGroup);
+    } catch (assignmentError) {
+      // Compatibilité pendant la migration : l'absence du patch SQL 49 ne doit
+      // jamais empêcher les anciennes Missions de continuer à fonctionner.
+      console.warn("Attributions directes indisponibles.", assignmentError);
+    }
+    const assignmentMissions = (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
+      ...assignment,
+      _kind:"activity_assignment",
+      total_steps:String(assignment?.source_type || "") === "sequence"
+        ? Math.max(1, Array.isArray(assignment?.activity_json?.items) ? assignment.activity_json.items.length : 1)
+        : 1,
+      completed_steps:0,
+      intent_mode:"practice",
+      answer_mode:"student_input"
+    }));
+    studentState.missions = [
+      ...assignmentMissions,
+      ...(Array.isArray(missions) ? missions : [])
+    ];
     studentState.missionsMessage = "";
     emitRefresh();
     return studentState.missions;
@@ -534,6 +607,10 @@ export async function refreshMissionsForCurrentSelection(){
 export async function selectMission(missionId){
   const mission = (studentState.missions || []).find((item) => String(item.id) === String(missionId));
   if (!mission) return;
+  if (mission?._kind === "activity_assignment") {
+    await selectActivityAssignment(mission);
+    return;
+  }
 
   const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
   const participant = currentMode === "individual"
@@ -606,6 +683,149 @@ export async function selectMission(missionId){
   window.location.hash = "#/sessionstart";
 }
 
+
+async function selectActivityAssignment(assignment) {
+  const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
+  const rawSource = assignment?.activity_json && typeof assignment.activity_json === "object"
+    ? assignment.activity_json
+    : null;
+  if (!rawSource) return;
+
+  const sourceType = String(assignment?.source_type || "");
+  const configJson = sourceType === "sequence"
+    ? buildAssignedSequenceRuntimeConfig(assignment, rawSource, currentMode)
+    : buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode);
+  if (!configJson || !Array.isArray(configJson.sequence) || !configJson.sequence.length) return;
+
+  studentState.selectedMission = { ...assignment, _kind:"activity_assignment" };
+  studentState.selectedConfig = {
+    id:assignment.id,
+    activity_assignment_id:assignment.id,
+    config_name:assignment.title || rawSource.title || "Mission",
+    catalog_context:"mission",
+    module_key:"tools",
+    skip_detailed_history:true,
+    progression_context:{
+      context:"mission",
+      activityAssignmentId:assignment.id
+    },
+    config_json:configJson
+  };
+  studentState.sharedSessionEntry = false;
+  clearSelectedActivityMeta();
+  window.location.hash = "#/sessionstart";
+}
+
+function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode) {
+  const sourceType = String(assignment?.source_type || "");
+  const runtimeActivity = sourceType === "teacher_activity"
+    ? buildTeacherActivityRuntimeShape(rawSource)
+    : normalizeCatalogActivity(rawSource);
+  if (!runtimeActivity?.tool_id) return null;
+
+  const adaptive = String(assignment?.difficulty_mode || "fixed") === "adaptive";
+  const difficultyLevel = adaptive
+    ? 1
+    : normalizeCatalogDifficultyLevel(assignment?.difficulty_level ?? 3);
+  const executionLimit = normalizeAssignedExecutionLimit(assignment);
+
+  return buildCatalogActivityConfig(runtimeActivity, {
+    activityMode:currentMode,
+    difficultyLevel,
+    context:"mission",
+    adaptive,
+    executionLimit,
+    catalogActivities:[runtimeActivity]
+  });
+}
+
+function buildAssignedSequenceRuntimeConfig(assignment, rawSequence, currentMode) {
+  const items = Array.isArray(rawSequence?.items) ? rawSequence.items : [];
+  const sequence = [];
+
+  items.forEach((item, index) => {
+    const source = item?.activity_json && typeof item.activity_json === "object" ? item.activity_json : null;
+    if (!source) return;
+    const itemSourceType = String(item?.source_type || "");
+    const runtimeActivity = itemSourceType === "teacher_activity"
+      ? buildTeacherActivityRuntimeShape(source)
+      : normalizeCatalogActivity(source);
+    if (!runtimeActivity?.tool_id) return;
+
+    const adaptive = String(item?.difficulty_mode || "fixed") === "adaptive";
+    const difficultyLevel = adaptive
+      ? 1
+      : normalizeCatalogDifficultyLevel(item?.difficulty_level ?? 3);
+    const executionLimit = normalizeAssignedExecutionLimit(item);
+    const itemConfig = buildCatalogActivityConfig(runtimeActivity, {
+      activityMode:currentMode,
+      difficultyLevel,
+      context:"mission",
+      adaptive,
+      executionLimit,
+      catalogActivities:[runtimeActivity]
+    });
+    const runtimeItem = Array.isArray(itemConfig?.sequence) ? itemConfig.sequence[0] : null;
+    if (!runtimeItem) return;
+    sequence.push({
+      ...runtimeItem,
+      instanceId:`assigned-sequence-${String(assignment?.id || "assignment")}-${index + 1}-${runtimeItem.instanceId || runtimeActivity.tool_id}`,
+      auto_exit_session_on_complete:false
+    });
+  });
+
+  if (!sequence.length) return null;
+  return {
+    version:1,
+    type:"assigned_sequence_runtime",
+    activity_assignment_id:String(assignment?.id || ""),
+    activity_mode:currentMode,
+    response_ui:currentMode === "group" ? "free" : "boxed",
+    progress_mode:"practice",
+    globals:{
+      activityTotalTimeEnabled:false,
+      activityTotalTimeSec:900
+    },
+    sequence
+  };
+}
+
+function normalizeAssignedExecutionLimit(source = {}) {
+  const mode = String(source?.execution_limit_mode || "questions");
+  if (mode === "intrinsic") return { mode:"intrinsic", value:null };
+  return {
+    mode:mode === "time" ? "time" : "questions",
+    value:Math.max(1, Math.trunc(Number(source?.execution_limit_value) || (mode === "time" ? 300 : 5)))
+  };
+}
+
+function buildTeacherActivityRuntimeShape(activity = {}) {
+  const config = activity?.config_json && typeof activity.config_json === "object" && !Array.isArray(activity.config_json)
+    ? activity.config_json
+    : {};
+  const adaptive = String(activity?.difficulty_mode || "single") === "adaptive";
+  const singleLevel = config?.level && typeof config.level === "object" && !Array.isArray(config.level)
+    ? config.level
+    : {};
+  const rawLevels = adaptive && activity?.levels_json && typeof activity.levels_json === "object" && !Array.isArray(activity.levels_json)
+    ? activity.levels_json
+    : Object.fromEntries([1, 2, 3, 4, 5].map((level) => [String(level), cloneActivityData(singleLevel)]));
+
+  return normalizeCatalogActivity({
+    id:`teacher-activity.${String(activity?.id || "")}`,
+    config_name:String(activity?.title || "Activité"),
+    title:String(activity?.title || "Activité"),
+    tool_id:String(config?.tool_id || "").trim(),
+    levels_json:rawLevels,
+    status:"published",
+    default_visible:true
+  });
+}
+
+function cloneActivityData(value) {
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
 
 export function goBackToActivities(){
   const returningContext = String(

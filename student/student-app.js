@@ -1,7 +1,7 @@
 import { readAdminDraftRuntimePayload } from "../shared/admin-draft-runtime-storage.js";
 import { studentState } from "./student-state.js";
 import { startStudentRouter } from "./student-router.js";
-import { hydrateActivitiesRoute, submitAccessCode } from "./student-actions.js";
+import { hydrateActivitiesRoute, hydrateDirectLaunch, submitAccessCode } from "./student-actions.js";
 import { mountPersistentStudentStarfield } from "./student-stars.js";
 import {
   bindStudentFullscreenRetry,
@@ -21,7 +21,7 @@ import { initializeStudentAudioEngine } from "./student-audio.js";
 
 boot();
 
-function boot(){
+async function boot(){
   installResponsiveRuntime();
 
   if (isDevViewportMode()) {
@@ -32,7 +32,8 @@ function boot(){
 
   hydrateInitialState();
   if (!hydrateAdminDraftSessionFromUrl()) {
-    hydrateSessionFromUrl();
+    const directHandled = await hydrateDirectLaunchFromUrl();
+    if (!directHandled) hydrateSessionFromUrl();
   }
   bindStaticHomeForm();
   mountPersistentStudentStarfield();
@@ -118,6 +119,29 @@ function syncStaticHome(){
     button.textContent = "Connexion";
   }
 }
+async function hydrateDirectLaunchFromUrl(){
+  const route = parseHashRoute(window.location.hash);
+  if (route.name !== "launch") return false;
+  const token = String(route.params.get("token") || "").trim();
+  if (!token) return false;
+
+  try {
+    const hydrated = await hydrateDirectLaunch(token);
+    if (!hydrated) {
+      studentState.homeMessage = "Ce lien direct n’est plus disponible.";
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/home`);
+      return true;
+    }
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/sessionstart?shared=1&direct=1`);
+    return true;
+  } catch (error) {
+    console.warn("Impossible de charger le lien direct.", error);
+    studentState.homeMessage = "Ce lien direct n’est plus disponible.";
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/home`);
+    return false;
+  }
+}
+
 function hydrateAdminDraftSessionFromUrl(){
   const route = parseHashRoute(window.location.hash);
   const token = String(route.params.get("adminDraftToken") || "").trim();
@@ -147,7 +171,7 @@ function hydrateAdminDraftSessionFromUrl(){
     const accessCode = String(payload.accessCode || route.params.get("classCode") || "ADMINTEST").trim().toUpperCase();
     const configName = String(draftActivity.id || "__admin_draft_test__").trim();
 
-    setStudentFullscreenSuppressed(true);
+    setStudentFullscreenSuppressed(isDevViewportMode());
     studentState.accessCode = accessCode;
     studentState.homeCode = accessCode;
     studentState.homeMessage = "";
@@ -210,7 +234,7 @@ function hydrateSessionFromUrl(){
     return;
   }
 
-  setStudentFullscreenSuppressed(isDevViewportMode() || catalogRuntimeContext === "test");
+  setStudentFullscreenSuppressed(isDevViewportMode());
 
   studentState.accessCode = accessCode;
   studentState.homeCode = accessCode;

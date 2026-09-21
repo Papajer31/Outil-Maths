@@ -1,12 +1,7 @@
-@import url("../js/teacher-tools/widgets/activity/activity.css");
-@import url("../js/teacher-tools/widgets/random-student/random-student.css");
-@import url("../js/teacher-tools/widgets/image/image.css");
-@import url("../js/teacher-tools/widgets/multi-images/multi-images.css");
-@import url("../js/teacher-tools/widgets/clock/clock.css");
-@import url("../js/teacher-tools/widgets/geometry-instruments/geometry-instruments.css");
-@import url("../js/teacher-tools/widgets/grid/grid.css");
-@import url("../js/teacher-tools/widgets/seyes/seyes.css");
-@import url("../js/teacher-tools/widgets/labels/labels.css");
+@import url("../js/teacher-tools/apps/image/image.css");
+@import url("../js/teacher-tools/apps/pdf/pdf.css");
+@import url("../js/teacher-tools/apps/random-student/random-student.css");
+@import url("../js/teacher-tools/apps/seyes/seyes.css");
 
 /* ========================================
    OUTILS PROF - DASHBOARD
@@ -1351,4 +1346,592 @@
     flex-basis:auto;
     min-width:0;
   }
+}
+
+/* ========================================
+   TABLEAU 2026 — CENTRE DE CONTRÔLE DES MINI-APPS
+======================================== */
+.tt-app-header-subtitle{
+  margin-top:3px;
+  color:rgba(255,255,255,.58);
+  font-size:12px;
+  font-weight:700;
+}
+
+.tt-app-explorer.dashboard-activities-explorer{
+  --dashboard-tree-pane-width:32%;
+  grid-template-columns:clamp(300px, var(--dashboard-tree-pane-width), 460px) 4px minmax(0, 1fr);
+}
+
+.tt-pages-pane-head{
+  flex:0 0 auto;
+  min-height:88px;
+  padding:14px 14px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+
+.tt-pages-pane-head > div:first-child{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+
+.tt-pages-pane-head strong{
+  color:#fff;
+  font-size:15px;
+  font-weight:900;
+}
+
+.tt-pages-pane-head span{
+  color:rgba(255,255,255,.55);
+  font-size:11px;
+  font-weight:700;
+}
+
+.tt-add-app-btn{
+  flex:0 0 auto;
+  width:auto !important;
+  min-height:44px;
+  padding:0 14px !important;
+  border-radius:12px !important;
+  white-space:nowrap;
+}
+
+.tt-page-list{
+  padding:10px !important;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.tt-page-row.tt-widget-row{
+  min-height:68px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  background:rgba(255,255,255,.035);
+  overflow:hidden;
+}
+
+.tt-page-row.tt-widget-row.is-selected{
+  border-color:rgba(245,158,11,.34);
+  background:rgba(245,158,11,.10);
+  box-shadow:inset 4px 0 0 rgba(245,158,11,.88);
+}
+
+.tt-page-select.tt-widget-select{
+  min-height:66px;
+  padding:10px 10px 10px 14px;
+}
+
+.tt-page-row .tt-widget-row-main small{
+  color:rgba(255,255,255,.48);
+}
+
+.tt-page-row.is-selected .tt-widget-row-main small{
+  color:rgba(255,220,160,.86);
+}
+
+.tt-page-close{
+  width:46px !important;
+  height:46px !important;
+  margin-right:8px;
+  border-radius:12px !important;
+}
+
+.tt-page-list-empty-state{
+  min-height:220px;
+  padding:28px 18px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:rgba(255,255,255,.58);
+  text-align:center;
+}
+
+.tt-page-list-empty-state .dashboard-material-icon{
+  margin-bottom:4px;
+  font-size:38px;
+  color:rgba(255,255,255,.40);
+}
+
+.tt-page-list-empty-state strong{
+  color:rgba(255,255,255,.86);
+  font-size:15px;
+}
+
+.tt-page-list-empty-state span{
+  font-size:12px;
+}
+
+.tt-app-control-header{
+  min-height:64px !important;
+}
+
+.tt-app-control-pane .tt-board-actions{
+  gap:6px;
+}
+
+@media (max-width:900px){
+  .tt-app-explorer.dashboard-activities-explorer{
+    --dashboard-tree-pane-width:38%;
+    grid-template-columns:clamp(250px, var(--dashboard-tree-pane-width), 360px) 4px minmax(0, 1fr);
+  }
+
+  .tt-pages-pane-head{
+    align-items:stretch;
+    flex-direction:column;
+  }
+
+  .tt-add-app-btn{
+    width:100% !important;
+  }
+}
+
+/* ========================================
+   TABLEAU V3 — SURFACE COMMUNE
+======================================== */
+.tt-tool-panel-host > [data-app-control] + [data-surface-control]:not(:empty){
+  display:block;
+  margin-top:18px;
+  padding-top:18px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+
+.tt-surface-control{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.tt-surface-control-head{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+}
+
+.tt-surface-control-head > .dashboard-material-icon{
+  flex:0 0 auto;
+  margin-top:2px;
+  opacity:.78;
+}
+
+.tt-surface-control-head h3{
+  margin:0;
+  color:#fff;
+  font-size:17px;
+  font-weight:900;
+}
+
+.tt-surface-control-head p{
+  margin:3px 0 0;
+  color:rgba(255,255,255,.58);
+  font-size:13px;
+  font-weight:700;
+}
+
+.tt-surface-control [data-surface-background] .tt-control-panel{
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+.tt-surface-control [data-surface-background] .tt-control-panel-head{
+  display:none;
+}
+
+.tt-surface-section{
+  min-width:0;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.035);
+  padding:13px;
+}
+
+.tt-surface-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.tt-surface-section-head > div:first-child{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.tt-surface-section-head strong{
+  color:#fff;
+  font-size:14px;
+  font-weight:900;
+}
+
+.tt-surface-section-head span{
+  color:rgba(255,255,255,.58);
+  font-size:12px;
+  font-weight:700;
+}
+
+.tt-surface-note-actions{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:12px;
+}
+
+.tt-surface-note-actions.is-disabled{
+  opacity:.46;
+}
+
+.tt-surface-colors{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding-right:4px;
+}
+
+.tt-surface-color{
+  width:42px;
+  height:42px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.05);
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+
+.tt-surface-color span{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:var(--tt-note-color);
+  border:2px solid rgba(255,255,255,.86);
+}
+
+.tt-surface-color.is-selected{
+  border-color:rgba(93,226,148,.85);
+  box-shadow:0 0 0 2px rgba(49,171,101,.20);
+}
+
+.tt-surface-color:disabled{
+  cursor:default;
+}
+
+/* ========================================
+   TABLEAU V4 — UI COMMUNE + PANNEAU FOND
+======================================== */
+.tt-app-control-pane{
+  position:relative;
+}
+
+.tt-background-panel-toggle.is-active{
+  border-color:rgba(245,158,11,.55) !important;
+  background:rgba(245,158,11,.16) !important;
+  color:#fff7e8 !important;
+}
+
+.tt-surface-popover{
+  position:absolute;
+  z-index:40;
+  top:74px;
+  right:14px;
+  width:min(390px, calc(100% - 28px));
+  max-height:calc(100% - 90px);
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:18px;
+  background:rgba(16,22,34,.98);
+  box-shadow:0 18px 54px rgba(0,0,0,.38);
+  backdrop-filter:blur(14px);
+}
+
+.tt-surface-popover[hidden]{
+  display:none;
+}
+
+.tt-surface-popover-head{
+  position:sticky;
+  z-index:2;
+  top:0;
+  min-height:62px;
+  padding:10px 12px 10px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background:rgba(16,22,34,.98);
+}
+
+.tt-surface-popover-head > div:first-child{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#fff;
+}
+
+.tt-surface-popover-head strong{
+  font-size:16px;
+  font-weight:900;
+}
+
+.tt-surface-popover-body{
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.tt-ui-field{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  color:#eef3ff;
+}
+
+.tt-ui-field-label{
+  color:rgba(255,255,255,.72);
+  font-size:12px;
+  font-weight:850;
+}
+
+.tt-ui-field-hint{
+  color:rgba(255,255,255,.48);
+  font-size:11px;
+  font-weight:650;
+  line-height:1.35;
+}
+
+.tt-ui-select,
+.tt-ui-input{
+  width:100%;
+  min-height:44px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:11px;
+  background:#202838;
+  color:#f8fafc;
+  padding:0 12px;
+  font:inherit;
+  font-size:13px;
+  font-weight:750;
+  outline:none;
+}
+
+.tt-ui-select:focus,
+.tt-ui-input:focus{
+  border-color:rgba(245,158,11,.65);
+  box-shadow:0 0 0 3px rgba(245,158,11,.12);
+}
+
+.tt-ui-select:disabled,
+.tt-ui-input:disabled{
+  opacity:.46;
+}
+
+.tt-ui-button,
+.tt-ui-icon-button{
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.055);
+  color:#eef3ff;
+  cursor:pointer;
+  font:inherit;
+  font-weight:850;
+}
+
+.tt-ui-button{
+  min-height:44px;
+  border-radius:11px;
+  padding:0 13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+
+.tt-ui-icon-button{
+  width:42px;
+  height:42px;
+  border-radius:11px;
+  display:grid;
+  place-items:center;
+}
+
+.tt-ui-button.is-primary{
+  border-color:rgba(245,158,11,.35);
+  background:rgba(245,158,11,.14);
+  color:#fff6df;
+}
+
+.tt-ui-button.is-danger{
+  border-color:rgba(248,113,113,.24);
+  background:rgba(127,29,29,.20);
+  color:#fecaca;
+}
+
+.tt-ui-button:hover:not(:disabled),
+.tt-ui-icon-button:hover:not(:disabled){
+  background:rgba(255,255,255,.10);
+}
+
+.tt-ui-button:disabled,
+.tt-ui-icon-button:disabled{
+  opacity:.42;
+  cursor:default;
+}
+
+.tt-ui-range-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+}
+
+.tt-ui-range-row input[type="range"]{
+  min-width:0;
+  width:100%;
+}
+
+.tt-ui-range-row strong{
+  min-width:52px;
+  text-align:right;
+  color:#fff;
+  font-size:12px;
+}
+
+.tt-surface-paper-options,
+.tt-surface-image-options{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding-top:2px;
+}
+
+.tt-surface-color-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.tt-surface-color-picker{
+  min-height:44px;
+}
+
+.tt-surface-image-actions{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+
+.tt-surface-url-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;
+}
+
+.tt-surface-image-summary{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+}
+
+.tt-surface-image-summary > div:first-child{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.tt-surface-image-summary strong,
+.tt-surface-image-summary span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.tt-surface-image-summary strong{
+  color:#fff;
+  font-size:12px;
+}
+
+.tt-surface-image-summary span{
+  color:rgba(255,255,255,.50);
+  font-size:11px;
+}
+
+.tt-ui-toggle-row{
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:10px 12px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+  color:#fff;
+}
+
+.tt-ui-toggle-row > span{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.tt-ui-toggle-row strong{
+  font-size:13px;
+  font-weight:900;
+}
+
+.tt-ui-toggle-row small{
+  color:rgba(255,255,255,.50);
+  font-size:11px;
+  font-weight:650;
+}
+
+.tt-ui-toggle-row input[type="checkbox"]{
+  width:22px;
+  height:22px;
+  flex:0 0 auto;
+  accent-color:#d99a27;
+}
+
+@media (max-width:760px){
+  .tt-surface-popover{
+    right:8px;
+    width:calc(100% - 16px);
+  }
+  .tt-surface-color-row{
+    grid-template-columns:1fr;
+  }
+  .tt-surface-url-row{
+    grid-template-columns:1fr;
+  }
+}
+
+/* TABLEAU V9 — respiration du panneau de configuration */
+.tt-board-control-pane .tt-tool-panel-host{
+  padding:16px 18px 18px;
+}
+.tt-board-control-pane .tt-control-panel{
+  padding:0;
 }

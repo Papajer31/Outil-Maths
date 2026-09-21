@@ -1,333 +1,136 @@
 import {
-  SEYES_DEFAULT_COLOR,
-  SEYES_FONT_CM,
-  SEYES_FONT_GS,
-  SEYES_ZOOM_MAX,
-  SEYES_ZOOM_MIN,
-  SEYES_ZOOM_STEP,
+  SEYES_ALIGNMENTS,
+  SEYES_DEFAULT_TEXT_COLOR,
+  SEYES_FONTS,
+  SEYES_RULINGS,
+  SEYES_SCALE_MAX,
+  SEYES_SCALE_MIN,
+  SEYES_SCALE_STEP,
+  getSeyesFont,
   normalizeSeyesState
 } from "./model.js";
+import {
+  downloadSeyesDocument,
+  plainTextToSeyesHtml,
+  readSeyesDocumentFile
+} from "./document.js";
+import { openSeyesPdfExportDialog, SEYES_FORMAT_PALETTE } from "./pdf-export.js";
 
-const MM_TO_PX = 96 / 25.4;
-const LINE_MM = 16;
-const SUBLINE_MM = 4;
-const MARGIN_MM = 16;
-const GRID_TOP_OFFSET_MM = 14.7;
-const FONT_SIZE_PX = 38;
-const CONTENT_SYNC_DELAY_MS = 220;
-const PALETTE = Object.freeze([
-  ["#427ebe", "Bleu"],
-  ["#c00000", "Rouge"],
-  ["#70ad47", "Vert"],
-  ["#ed7d31", "Orange"],
-  ["#ffc000", "Jaune"],
-  ["#7030a0", "Violet"],
-  ["#ff66cc", "Rose"],
-  ["#000000", "Noir"]
-]);
-
-const pendingContentTimers = new WeakMap();
+const BASE_LINE_PX = 62;
+const BASE_FONT_PX = 38;
+const SAFE_TOP_PX = 34;
+const SAFE_LEFT_PX = 22;
+const CONTENT_SYNC_DELAY_MS = 180;
+const pendingTimers = new WeakMap();
 const savedSelections = new WeakMap();
+const localUiState = new WeakMap();
 
-function clamp(value, min, max){
-  const number = Number(value);
-  if (!Number.isFinite(number)) return min;
-  return Math.max(min, Math.min(max, number));
+function escapeHtml(value){
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
-
-function formatZoom(value){
-  return `${Math.round((Number(value) || 1) * 100)} %`;
+function escapeAttr(value){ return escapeHtml(value); }
+function clamp(value, min, max){ const number = Number(value); return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : min; }
+function formatScale(value){ return `${Math.round((Number(value) || 1) * 100)} %`; }
+function alignmentMeta(value){
+  const safe = SEYES_ALIGNMENTS.includes(value) ? value : "left";
+  if (safe === "center") return { id: safe, icon: "format_align_center", label: "Centré", next: "right" };
+  if (safe === "right") return { id: safe, icon: "format_align_right", label: "À droite", next: "left" };
+  return { id: "left", icon: "format_align_left", label: "À gauche", next: "center" };
 }
-
-function getFontFamily(fontSet){
-  return fontSet === SEYES_FONT_CM ? "SeyesBelleAllureCM" : "SeyesBelleAllureGS";
+function isSafeColor(value){
+  const safe = String(value || "").trim();
+  try { return Boolean(safe && CSS.supports("color", safe)); } catch { return /^#[0-9a-f]{3,8}$/i.test(safe); }
 }
-
-function isSafeCssColor(value){
-  const safeValue = String(value || "").trim();
-  if (!safeValue || safeValue.length > 48) return false;
-  try {
-    return CSS.supports("color", safeValue);
-  } catch {
-    return /^#[0-9a-f]{3,8}$/i.test(safeValue) || /^rgba?\([^)]+\)$/i.test(safeValue);
-  }
-}
-
 function sanitizeStyle(source){
   if (!source) return "";
   const styles = [];
   const color = String(source.color || "").trim();
-  const fontWeight = String(source.fontWeight || "").trim();
-  const fontStyle = String(source.fontStyle || "").trim();
-
-  if (isSafeCssColor(color)) styles.push(`color:${color}`);
-  if (fontWeight === "bold" || Number(fontWeight) >= 600) styles.push("font-weight:700");
-  if (fontStyle === "italic" || fontStyle === "oblique") styles.push("font-style:italic");
+  const background = String(source.backgroundColor || "").trim();
+  const decorationLine = String(source.textDecorationLine || "").trim();
+  const decorationColor = String(source.textDecorationColor || "").trim();
+  const decorationThickness = String(source.textDecorationThickness || "").trim();
+  const borderColor = String(source.borderColor || "").trim();
+  const borderWidth = String(source.borderWidth || "").trim();
+  const borderStyle = String(source.borderStyle || "").trim();
+  const borderRadius = String(source.borderRadius || "").trim();
+  const padding = String(source.padding || "").trim();
+  if (isSafeColor(color)) styles.push(`color:${color}`);
+  if (isSafeColor(background)) styles.push(`background-color:${background}`);
+  if (/^(underline|line-through|underline line-through|line-through underline)$/.test(decorationLine)) styles.push(`text-decoration-line:${decorationLine}`);
+  if (isSafeColor(decorationColor)) styles.push(`text-decoration-color:${decorationColor}`);
+  if (/^\d+(\.\d+)?px$/.test(decorationThickness)) styles.push(`text-decoration-thickness:${decorationThickness}`);
+  if (isSafeColor(borderColor)) styles.push(`border-color:${borderColor}`);
+  if (/^\d+(\.\d+)?px$/.test(borderWidth)) styles.push(`border-width:${borderWidth}`);
+  if (borderStyle === "solid") styles.push("border-style:solid");
+  if (/^\d+(\.\d+)?(px|em|%)$/.test(borderRadius)) styles.push(`border-radius:${borderRadius}`);
+  if (/^0\s+\.\d+em$/.test(padding)) styles.push(`padding:${padding}`);
   return styles.join(";");
 }
-
 function sanitizeContentHtml(rawHtml){
   const template = document.createElement("template");
-  template.innerHTML = String(rawHtml ?? "");
+  template.innerHTML = String(rawHtml || "");
   const output = document.createElement("div");
-
-  const appendNode = (sourceNode, targetParent) => {
-    if (sourceNode.nodeType === Node.TEXT_NODE) {
-      targetParent.appendChild(document.createTextNode(sourceNode.nodeValue || ""));
-      return;
-    }
+  const walk = (sourceNode, targetParent) => {
+    if (sourceNode.nodeType === Node.TEXT_NODE) { targetParent.appendChild(document.createTextNode(sourceNode.nodeValue || "")); return; }
     if (sourceNode.nodeType !== Node.ELEMENT_NODE) return;
-
     const tag = sourceNode.tagName.toUpperCase();
-    if (tag === "BR") {
-      targetParent.appendChild(document.createElement("br"));
-      return;
-    }
-
-    let target = targetParent;
+    if (tag === "BR") { targetParent.appendChild(document.createElement("br")); return; }
     let wrapper = null;
-
-    if (tag === "DIV" || tag === "P") {
-      wrapper = document.createElement("div");
-    } else if (tag === "B" || tag === "STRONG") {
-      wrapper = document.createElement("b");
-    } else if (tag === "I" || tag === "EM") {
-      wrapper = document.createElement("i");
-    } else if (tag === "FONT") {
-      wrapper = document.createElement("span");
-      const color = String(sourceNode.getAttribute("color") || "").trim();
-      if (isSafeCssColor(color)) wrapper.style.color = color;
-    } else if (tag === "SPAN") {
-      wrapper = document.createElement("span");
+    if (tag === "DIV" || tag === "P") wrapper = document.createElement("div");
+    else if (["SPAN","B","STRONG","I","EM","U","S","STRIKE"].includes(tag)) wrapper = document.createElement("span");
+    const target = wrapper || targetParent;
+    if (wrapper) {
+      if (tag === "B" || tag === "STRONG") wrapper.style.fontWeight = "700";
+      if (tag === "I" || tag === "EM") wrapper.style.fontStyle = "italic";
+      if (tag === "U") wrapper.style.textDecorationLine = "underline";
+      if (tag === "S" || tag === "STRIKE") wrapper.style.textDecorationLine = "line-through";
       const safeStyle = sanitizeStyle(sourceNode.style);
       if (safeStyle) wrapper.setAttribute("style", safeStyle);
-    }
-
-    if (wrapper) {
+      if (sourceNode.dataset?.seyesCircle === "true") wrapper.dataset.seyesCircle = "true";
       targetParent.appendChild(wrapper);
-      target = wrapper;
     }
-
-    Array.from(sourceNode.childNodes).forEach((child) => appendNode(child, target));
+    Array.from(sourceNode.childNodes).forEach((child) => walk(child, target));
   };
-
-  Array.from(template.content.childNodes).forEach((node) => appendNode(node, output));
+  Array.from(template.content.childNodes).forEach((node) => walk(node, output));
   return output.innerHTML;
 }
 
-function normalizeEditorMarkup(editor){
-  const safeHtml = sanitizeContentHtml(editor?.innerHTML || "");
-  if (editor && editor.innerHTML !== safeHtml) editor.innerHTML = safeHtml;
-  return safeHtml;
+function renderPaperSvg(){
+  const uid = `seyes-${Math.random().toString(36).slice(2,8)}`;
+  return `<svg class="ttp-seyes-paper-svg" data-seyes-paper aria-hidden="true" focusable="false"><defs><pattern id="${uid}" data-paper-pattern width="60" height="60" patternUnits="userSpaceOnUse"></pattern></defs><rect data-paper-fill width="100%" height="100%" fill="url(#${uid})"></rect><line data-paper-margin class="ttp-seyes-margin-line" x1="0" x2="0" y1="0" y2="100%"></line></svg>`;
 }
 
-function renderPalette(){
-  return PALETTE.map(([color, label]) => `
-    <button
-      class="ttp-seyes-color-swatch"
-      type="button"
-      data-widget-action
-      data-seyes-color="${color}"
-      style="--ttp-seyes-swatch:${color}"
-      aria-label="Texte ${label.toLowerCase()}"
-      title="${label}"
-    ></button>
-  `).join("");
-}
-
-function renderSeyesGridSvg(){
-  const uid = `ttpSeyesGrid-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const verticalId = `${uid}-vertical`;
-  const horizontalId = `${uid}-horizontal`;
-  return `
-    <svg class="ttp-seyes-grid" data-seyes-grid-svg aria-hidden="true" focusable="false">
-      <defs>
-        <pattern id="${verticalId}" data-seyes-vertical-pattern width="1" height="1" patternUnits="userSpaceOnUse" overflow="visible">
-          <line class="ttp-seyes-paper-line is-minor" x1="0" y1="0" x2="0" y2="1"></line>
-        </pattern>
-        <pattern id="${horizontalId}" data-seyes-horizontal-pattern width="1" height="1" patternUnits="userSpaceOnUse" overflow="visible">
-          <line class="ttp-seyes-paper-line is-minor" data-seyes-horizontal-line="0" x1="0" y1="0" x2="1" y2="0"></line>
-          <line class="ttp-seyes-paper-line is-minor" data-seyes-horizontal-line="1" x1="0" y1="0" x2="1" y2="0"></line>
-          <line class="ttp-seyes-paper-line is-minor" data-seyes-horizontal-line="2" x1="0" y1="0" x2="1" y2="0"></line>
-          <line class="ttp-seyes-paper-line is-major" data-seyes-horizontal-line="3" x1="0" y1="0" x2="1" y2="0"></line>
-        </pattern>
-      </defs>
-      <rect data-seyes-vertical-fill x="0" y="0" width="100%" height="100%" fill="url(#${verticalId})"></rect>
-      <g data-seyes-horizontal-group>
-        <rect x="0" y="0" width="100%" height="100%" fill="url(#${horizontalId})"></rect>
-      </g>
-      <line class="ttp-seyes-paper-line is-margin" data-seyes-margin-line x1="0" y1="0" x2="0" y2="100%"></line>
-    </svg>
-  `;
-}
-
-function renderShell(state){
-  return `
-    <div class="ttp-seyes-root" data-seyes-font-set="${state.fontSet}">
-      <div class="ttp-seyes-viewport" data-no-widget-drag>
-        <div class="ttp-seyes-sheet">
-          ${renderSeyesGridSvg()}
-          <div class="ttp-seyes-font-status" data-seyes-font-status aria-live="polite">Chargement de Belle Allure…</div>
-          <div
-            class="ttp-seyes-editor"
-            data-seyes-editor
-            data-widget-action
-            data-no-widget-drag
-            contenteditable="true"
-            role="textbox"
-            aria-multiline="true"
-            aria-label="Texte sur cahier Seyès"
-            spellcheck="false"
-          ></div>
-          <div class="ttp-seyes-baseline-probe" data-seyes-baseline-probe aria-hidden="true">Hg<span data-seyes-baseline-marker></span></div>
-        </div>
-      </div>
-
-      <div class="ttp-seyes-toolbar" data-widget-action data-no-widget-drag aria-label="Mise en forme du cahier Seyès">
-        <div class="ttp-seyes-tool-group ttp-seyes-font-group" aria-label="Police Belle Allure">
-          <button class="ttp-seyes-tool-btn" type="button" data-widget-action data-seyes-font="${SEYES_FONT_GS}" aria-pressed="${state.fontSet === SEYES_FONT_GS}">GS</button>
-          <button class="ttp-seyes-tool-btn" type="button" data-widget-action data-seyes-font="${SEYES_FONT_CM}" aria-pressed="${state.fontSet === SEYES_FONT_CM}">CM</button>
-        </div>
-
-        <div class="ttp-seyes-tool-group ttp-seyes-format-group" aria-label="Style du texte">
-          <button class="ttp-seyes-tool-btn is-format" type="button" data-widget-action data-seyes-command="bold" aria-pressed="false" title="Gras"><strong>B</strong></button>
-          <button class="ttp-seyes-tool-btn is-format" type="button" data-widget-action data-seyes-command="italic" aria-pressed="false" title="Italique"><em>I</em></button>
-        </div>
-
-        <div class="ttp-seyes-tool-group ttp-seyes-colors" aria-label="Couleur du texte">
-          ${renderPalette()}
-          <label class="ttp-seyes-custom-color" data-widget-action title="Couleur personnalisée">
-            <input type="color" value="${SEYES_DEFAULT_COLOR}" data-seyes-custom-color aria-label="Couleur personnalisée du texte">
-            <span class="ttp-material-icon" aria-hidden="true">palette</span>
-          </label>
-        </div>
-
-        <div class="ttp-seyes-tool-group ttp-seyes-zoom" aria-label="Zoom">
-          <button class="ttp-seyes-tool-btn ttp-material-icon" type="button" data-widget-action data-seyes-zoom="-1" aria-label="Dézoomer">remove</button>
-          <span class="ttp-seyes-zoom-value" data-seyes-zoom-value>${formatZoom(state.zoom)}</span>
-          <button class="ttp-seyes-tool-btn ttp-material-icon" type="button" data-widget-action data-seyes-zoom="1" aria-label="Zoomer">add</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function applyScaleVariables(root, state){
-  if (!root) return;
-  const zoom = state.zoom;
-  const line = LINE_MM * MM_TO_PX * zoom;
-  const subline = SUBLINE_MM * MM_TO_PX * zoom;
-  const margin = MARGIN_MM * MM_TO_PX * zoom;
-  const firstFine = GRID_TOP_OFFSET_MM * MM_TO_PX * zoom;
-  const firstMain = (GRID_TOP_OFFSET_MM + (3 * SUBLINE_MM)) * MM_TO_PX * zoom;
-  const fontSize = FONT_SIZE_PX * zoom;
-
-  root.style.setProperty("--ttp-seyes-line", `${line}px`);
-  root.style.setProperty("--ttp-seyes-subline", `${subline}px`);
-  root.style.setProperty("--ttp-seyes-margin", `${margin}px`);
-  root.style.setProperty("--ttp-seyes-first-fine", `${firstFine}px`);
-  root.style.setProperty("--ttp-seyes-first-main", `${firstMain}px`);
-  root.style.setProperty("--ttp-seyes-font-size", `${fontSize}px`);
-  const safeLeft = 16;
-  const safeTop = 58;
-  const safeBottom = 58;
-
-  root.style.setProperty("--ttp-seyes-safe-left", `${safeLeft}px`);
-  root.style.setProperty("--ttp-seyes-safe-top", `${safeTop}px`);
-  root.style.setProperty("--ttp-seyes-safe-bottom", `${safeBottom}px`);
-  root.style.setProperty("--ttp-seyes-editor-left", `${safeLeft + margin}px`);
-  root.style.setProperty("--ttp-seyes-editor-bottom", `${safeBottom + Math.max(line, 74)}px`);
-  root.style.setProperty("--ttp-seyes-font-family", `"${getFontFamily(state.fontSet)}"`);
-  root.dataset.seyesFontSet = state.fontSet;
-
-  const verticalPattern = root.querySelector("[data-seyes-vertical-pattern]");
-  const horizontalPattern = root.querySelector("[data-seyes-horizontal-pattern]");
-  const horizontalGroup = root.querySelector("[data-seyes-horizontal-group]");
-  const marginLine = root.querySelector("[data-seyes-margin-line]");
-
-  if (verticalPattern) {
-    verticalPattern.setAttribute("x", String(safeLeft));
-    verticalPattern.setAttribute("width", String(line));
-    verticalPattern.setAttribute("height", "1");
+function updatePaper(root, state){
+  const svg = root.querySelector("[data-seyes-paper]");
+  const pattern = root.querySelector("[data-paper-pattern]");
+  const margin = root.querySelector("[data-paper-margin]");
+  if (!svg || !pattern || !margin) return;
+  const line = BASE_LINE_PX * state.scale;
+  const quarter = line / 4;
+  const origin = SAFE_TOP_PX + line;
+  pattern.setAttribute("width", String(line));
+  pattern.setAttribute("height", String(line));
+  pattern.setAttribute("x", String(SAFE_LEFT_PX));
+  pattern.setAttribute("y", String(origin - line));
+  let markup = `<rect width="${line}" height="${line}" fill="#fff"></rect>`;
+  if (state.ruling === "single") {
+    markup += `<line class="ttp-seyes-grid-major" x1="0" x2="${line}" y1="${line - .5}" y2="${line - .5}"></line>`;
+  } else if (state.ruling === "double") {
+    markup += `<line class="ttp-seyes-grid-minor" x1="0" x2="${line}" y1="${line * .45}" y2="${line * .45}"></line><line class="ttp-seyes-grid-major" x1="0" x2="${line}" y1="${line - .5}" y2="${line - .5}"></line>`;
+  } else if (state.ruling === "large") {
+    markup += [1/3,2/3].map((part) => `<line class="ttp-seyes-grid-minor" x1="0" x2="${line}" y1="${line*part}" y2="${line*part}"></line>`).join("");
+    markup += `<line class="ttp-seyes-grid-major" x1="0" x2="${line}" y1="${line - .5}" y2="${line - .5}"></line>`;
+  } else if (state.ruling === "earth") {
+    markup += `<rect x="0" y="0" width="${line}" height="${line/3}" fill="rgba(125,205,255,.20)"></rect><rect x="0" y="${line/3}" width="${line}" height="${line/3}" fill="rgba(122,210,115,.20)"></rect><rect x="0" y="${line*2/3}" width="${line}" height="${line/3}" fill="rgba(239,183,103,.23)"></rect><line class="ttp-seyes-grid-major" x1="0" x2="${line}" y1="${line*2/3}" y2="${line*2/3}"></line>`;
+  } else {
+    for (let y = quarter; y < line; y += quarter) markup += `<line class="${Math.abs(y-line)<1 ? "ttp-seyes-grid-major" : "ttp-seyes-grid-minor"}" x1="0" x2="${line}" y1="${y}" y2="${y}"></line>`;
+    markup += `<line class="ttp-seyes-grid-major" x1="0" x2="${line}" y1="${line - .5}" y2="${line - .5}"></line><line class="ttp-seyes-grid-vertical" x1="0" x2="0" y1="0" y2="${line}"></line>`;
   }
-  if (horizontalPattern) {
-    horizontalPattern.setAttribute("y", String(safeTop + firstFine));
-    horizontalPattern.setAttribute("width", "1");
-    horizontalPattern.setAttribute("height", String(line));
-  }
-  root.querySelectorAll("[data-seyes-horizontal-line]").forEach((gridLine) => {
-    const index = Number(gridLine.dataset.seyesHorizontalLine) || 0;
-    const y = index * subline;
-    gridLine.setAttribute("y1", String(y));
-    gridLine.setAttribute("y2", String(y));
-  });
-  horizontalGroup?.removeAttribute("transform");
-  if (marginLine) {
-    marginLine.setAttribute("x1", String(safeLeft + margin));
-    marginLine.setAttribute("x2", String(safeLeft + margin));
-  }
-}
-
-function getLocalTransformScale(element){
-  const rect = element?.getBoundingClientRect?.();
-  const width = Number(element?.offsetWidth) || 0;
-  if (!rect?.width || !width) return 1;
-  return rect.width / width;
-}
-
-function calibrateBaseline(root){
-  const probe = root?.querySelector?.("[data-seyes-baseline-probe]");
-  const marker = root?.querySelector?.("[data-seyes-baseline-marker]");
-  if (!probe || !marker) return;
-
-  const probeRect = probe.getBoundingClientRect();
-  const markerRect = marker.getBoundingClientRect();
-  const outerScale = Math.max(0.01, getLocalTransformScale(root));
-  const baselineOffset = (markerRect.top - probeRect.top) / outerScale;
-  const styles = getComputedStyle(root);
-  const firstMain = Number.parseFloat(styles.getPropertyValue("--ttp-seyes-first-main")) || 0;
-  const safeTop = Number.parseFloat(styles.getPropertyValue("--ttp-seyes-safe-top")) || 0;
-  const topPadding = Math.max(0, safeTop + firstMain - baselineOffset);
-  root.style.setProperty("--ttp-seyes-editor-top", `${topPadding}px`);
-}
-
-async function ensureFontsAndCalibration(root, state){
-  if (!root || !document.fonts) {
-    root?.classList?.add("is-font-ready");
-    calibrateBaseline(root);
-    return;
-  }
-
-  const family = getFontFamily(state.fontSet);
-  if (root.dataset.seyesLoadedFontFamily === family && root.classList.contains("is-font-ready")) {
-    requestAnimationFrame(() => calibrateBaseline(root));
-    return;
-  }
-
-  const token = `${family}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  root.dataset.seyesFontLoadToken = token;
-  root.classList.remove("is-font-ready", "is-font-error");
-  root.classList.add("is-font-loading");
-
-  try {
-    const size = Math.max(12, FONT_SIZE_PX * state.zoom);
-    const [regularFaces, boldFaces] = await Promise.all([
-      document.fonts.load(`400 ${size}px "${family}"`),
-      document.fonts.load(`700 ${size}px "${family}"`)
-    ]);
-    if (root.dataset.seyesFontLoadToken !== token) return;
-    const loaded = (regularFaces?.length || 0) > 0 && (boldFaces?.length || 0) > 0;
-    root.classList.toggle("is-font-error", !loaded);
-    root.classList.toggle("is-font-ready", loaded);
-    root.classList.remove("is-font-loading");
-    if (!loaded) return;
-    root.dataset.seyesLoadedFontFamily = family;
-    requestAnimationFrame(() => calibrateBaseline(root));
-  } catch {
-    if (root.dataset.seyesFontLoadToken !== token) return;
-    root.classList.remove("is-font-loading", "is-font-ready");
-    root.classList.add("is-font-error");
-  }
+  pattern.innerHTML = markup;
+  const showMargin = state.ruling === "seyes";
+  margin.hidden = !showMargin;
+  const x = SAFE_LEFT_PX + line;
+  margin.setAttribute("x1", String(x)); margin.setAttribute("x2", String(x));
 }
 
 function saveSelection(editor){
@@ -337,216 +140,233 @@ function saveSelection(editor){
   if (!editor.contains(range.commonAncestorContainer)) return;
   savedSelections.set(editor, range.cloneRange());
 }
-
 function restoreSelection(editor){
-  const range = savedSelections.get(editor);
-  if (!range) return false;
-  const selection = window.getSelection?.();
-  if (!selection) return false;
-  try {
-    selection.removeAllRanges();
-    selection.addRange(range);
-    editor.focus({ preventScroll: true });
-    return true;
-  } catch {
-    return false;
-  }
+  const range = savedSelections.get(editor); if (!range) return false;
+  const selection = window.getSelection?.(); if (!selection) return false;
+  try { selection.removeAllRanges(); selection.addRange(range); editor.focus({ preventScroll:true }); return true; } catch { return false; }
+}
+function syncEditor(editor, sendAction){
+  const contentHtml = sanitizeContentHtml(editor.innerHTML);
+  editor.dataset.lastSentHtml = contentHtml;
+  sendAction?.("set-content", { contentHtml });
+}
+function scheduleSync(editor, sendAction){
+  const previous = pendingTimers.get(editor); if (previous) clearTimeout(previous);
+  pendingTimers.set(editor, window.setTimeout(() => { pendingTimers.delete(editor); syncEditor(editor, sendAction); }, CONTENT_SYNC_DELAY_MS));
 }
 
-function updateFormatButtonStates(root, editor){
-  if (!root || !editor) return;
-  const activeElement = document.activeElement;
-  if (activeElement !== editor && !editor.contains(activeElement)) return;
-
-  root.querySelectorAll("[data-seyes-command]").forEach((button) => {
-    const command = String(button.dataset.seyesCommand || "");
-    let active = false;
-    try { active = document.queryCommandState(command); } catch {}
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-  });
-}
-
-function execFormattingCommand(root, editor, command, value = null){
-  if (!editor) return;
+function wrapSelection(editor, style = {}, dataset = {}){
   restoreSelection(editor);
-  editor.focus({ preventScroll: true });
-  try {
-    document.execCommand(command, false, value);
-  } catch {}
-  saveSelection(editor);
-  updateFormatButtonStates(root, editor);
-  editor.dispatchEvent(new Event("input", { bubbles: true }));
+  const selection = window.getSelection?.();
+  if (!selection?.rangeCount) return false;
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer) || range.collapsed) return false;
+  const wrapper = document.createElement("span");
+  Object.assign(wrapper.style, style);
+  Object.entries(dataset).forEach(([key,value]) => { wrapper.dataset[key] = value; });
+  const fragment = range.extractContents(); wrapper.appendChild(fragment); range.insertNode(wrapper);
+  range.selectNodeContents(wrapper); selection.removeAllRanges(); selection.addRange(range); saveSelection(editor);
+  editor.dispatchEvent(new Event("input", { bubbles:true }));
+  return true;
 }
-
-function scheduleContentSync(editor, sendAction){
-  const previous = pendingContentTimers.get(editor);
-  if (previous) clearTimeout(previous);
-  const timer = window.setTimeout(() => {
-    pendingContentTimers.delete(editor);
-    const contentHtml = normalizeEditorMarkup(editor);
-    editor.dataset.seyesLastSentHtml = contentHtml;
-    sendAction?.("set-content", { contentHtml });
-  }, CONTENT_SYNC_DELAY_MS);
-  pendingContentTimers.set(editor, timer);
+function execCommand(editor, command, value = null){
+  restoreSelection(editor) || editor.focus({ preventScroll:true });
+  try { document.execCommand(command, false, value); } catch {}
+  saveSelection(editor); editor.dispatchEvent(new Event("input", { bubbles:true }));
 }
-
-function bindEditorEvents(root, editor, sendAction){
-  if (!root || !editor || editor.dataset.seyesBound === "true") return;
-  editor.dataset.seyesBound = "true";
-
-  editor.addEventListener("input", () => {
-    saveSelection(editor);
-    scheduleContentSync(editor, sendAction);
-    updateFormatButtonStates(root, editor);
-  });
-  editor.addEventListener("keyup", () => {
-    saveSelection(editor);
-    updateFormatButtonStates(root, editor);
-  });
-  editor.addEventListener("pointerup", () => {
-    saveSelection(editor);
-    updateFormatButtonStates(root, editor);
-  });
-  editor.addEventListener("focus", () => {
-    saveSelection(editor);
-    updateFormatButtonStates(root, editor);
-  });
-  editor.addEventListener("blur", () => {
-    const timer = pendingContentTimers.get(editor);
-    if (timer) clearTimeout(timer);
-    pendingContentTimers.delete(editor);
-    const contentHtml = normalizeEditorMarkup(editor);
-    editor.dataset.seyesLastSentHtml = contentHtml;
-    sendAction?.("set-content", { contentHtml });
-  });
-  editor.addEventListener("paste", (event) => {
-    event.preventDefault();
-    const text = event.clipboardData?.getData("text/plain") || "";
-    restoreSelection(editor);
-    try {
-      document.execCommand("insertText", false, text);
-    } catch {
-      const selection = window.getSelection?.();
-      if (selection?.rangeCount) {
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(document.createTextNode(text));
-        range.collapse(false);
-      }
-    }
-    editor.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function bindToolbarEvents(root, editor, sendAction, getState){
-  if (!root || root.dataset.seyesToolbarBound === "true") return;
-  root.dataset.seyesToolbarBound = "true";
-
-  root.querySelectorAll(".ttp-seyes-toolbar button, .ttp-seyes-toolbar label").forEach((control) => {
-    control.addEventListener("pointerdown", (event) => {
-      saveSelection(editor);
-      // Un bouton de mise en forme ne doit jamais devenir l'élément actif :
-      // la frappe peut ainsi reprendre immédiatement dans l'éditeur.
-      if (control.tagName === "BUTTON") event.preventDefault();
+function clearSelectionFormatting(editor){
+  restoreSelection(editor) || editor.focus({ preventScroll:true });
+  try { document.execCommand("removeFormat", false, null); } catch {}
+  const selection = window.getSelection?.();
+  if (selection?.rangeCount) {
+    const range = selection.getRangeAt(0);
+    editor.querySelectorAll("span").forEach((span) => {
+      let intersects = false;
+      try { intersects = range.intersectsNode(span); } catch {}
+      if (!intersects) return;
+      span.removeAttribute("data-seyes-circle");
+      [
+        "color", "background-color", "text-decoration-line", "text-decoration-color",
+        "text-decoration-thickness", "border-color", "border-width", "border-style",
+        "border-radius", "padding", "font-weight", "font-style"
+      ].forEach((property) => span.style.removeProperty(property));
+      if (!String(span.getAttribute("style") || "").trim()) span.removeAttribute("style");
     });
-  });
-
-  root.querySelectorAll("[data-seyes-font]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const fontSet = button.dataset.seyesFont === SEYES_FONT_CM ? SEYES_FONT_CM : SEYES_FONT_GS;
-      sendAction?.("set-settings", { fontSet });
-      restoreSelection(editor) || editor.focus({ preventScroll: true });
-    });
-  });
-
-  root.querySelectorAll("[data-seyes-command]").forEach((button) => {
-    button.addEventListener("click", () => {
-      execFormattingCommand(root, editor, button.dataset.seyesCommand);
-    });
-  });
-
-  root.querySelectorAll("[data-seyes-color]").forEach((button) => {
-    button.addEventListener("click", () => {
-      execFormattingCommand(root, editor, "foreColor", button.dataset.seyesColor);
-    });
-  });
-
-  const customColor = root.querySelector("[data-seyes-custom-color]");
-  customColor?.addEventListener("pointerdown", () => saveSelection(editor));
-  customColor?.addEventListener("change", () => {
-    execFormattingCommand(root, editor, "foreColor", customColor.value);
-    requestAnimationFrame(() => {
-      restoreSelection(editor) || editor.focus({ preventScroll: true });
-    });
-  });
-
-  root.querySelectorAll("[data-seyes-zoom]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const delta = Number(button.dataset.seyesZoom) || 0;
-      const state = normalizeSeyesState(getState?.());
-      const nextZoom = clamp(
-        Math.round((state.zoom + (delta * SEYES_ZOOM_STEP)) * 10) / 10,
-        SEYES_ZOOM_MIN,
-        SEYES_ZOOM_MAX
-      );
-      sendAction?.("set-settings", { zoom: nextZoom });
-      restoreSelection(editor) || editor.focus({ preventScroll: true });
-    });
-  });
-}
-
-function syncRootFromState(root, state){
-  const editor = root?.querySelector?.("[data-seyes-editor]");
-  if (!root || !editor) return;
-
-  applyScaleVariables(root, state);
-
-  const safeStateHtml = sanitizeContentHtml(state.contentHtml);
-  const focused = document.activeElement === editor || editor.contains(document.activeElement);
-  const localHtml = sanitizeContentHtml(editor.innerHTML);
-  if (!focused && safeStateHtml !== localHtml) {
-    editor.innerHTML = safeStateHtml;
   }
-
-  root.querySelectorAll("[data-seyes-font]").forEach((button) => {
-    const active = button.dataset.seyesFont === state.fontSet;
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-  });
-  const zoomValue = root.querySelector("[data-seyes-zoom-value]");
-  if (zoomValue) zoomValue.textContent = formatZoom(state.zoom);
-  root.querySelector('[data-seyes-zoom="-1"]')?.toggleAttribute("disabled", state.zoom <= SEYES_ZOOM_MIN + 0.001);
-  root.querySelector('[data-seyes-zoom="1"]')?.toggleAttribute("disabled", state.zoom >= SEYES_ZOOM_MAX - 0.001);
-
-  ensureFontsAndCalibration(root, state);
+  saveSelection(editor);
+  editor.dispatchEvent(new Event("input", { bubbles:true }));
+}
+function applyDecoration(editor, state, kind){
+  const color = state.formatColor;
+  const thickness = `${state.formatThickness}px`;
+  if (kind === "underline") {
+    if (!wrapSelection(editor, { textDecorationLine:"underline", textDecorationColor:color, textDecorationThickness:thickness })) execCommand(editor, "underline");
+  } else if (kind === "strike") {
+    if (!wrapSelection(editor, { textDecorationLine:"line-through", textDecorationColor:color, textDecorationThickness:thickness })) execCommand(editor, "strikeThrough");
+  } else if (kind === "circle") {
+    wrapSelection(editor, { border:`${state.formatThickness}px solid ${color}`, borderRadius:"999px", padding:"0 .12em" }, { seyesCircle:"true" });
+  }
 }
 
-export function renderSeyesProjector({ host, widgetInfoHost, state, sendAction } = {}){
+function openPasteDialog(sendAction){
+  const dialog = document.createElement("dialog");
+  dialog.className = "tt-seyes-dialog";
+  dialog.innerHTML = `<form method="dialog" class="tt-seyes-dialog-card"><div class="tt-seyes-dialog-head"><strong>Coller du texte brut</strong><button type="button" data-close>×</button></div><textarea class="tt-seyes-paste-text" rows="11" spellcheck="false" placeholder="Colle le texte ici…"></textarea><div class="tt-seyes-dialog-actions"><button type="button" data-close>Annuler</button><button type="button" class="is-primary" data-insert>Insérer</button></div></form>`;
+  document.body.appendChild(dialog);
+  dialog.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
+  dialog.querySelector("[data-insert]")?.addEventListener("click", () => { const text = dialog.querySelector("textarea")?.value || ""; sendAction?.("set-content", { contentHtml: plainTextToSeyesHtml(text) }); dialog.close(); });
+  dialog.addEventListener("close", () => dialog.remove(), { once:true });
+  dialog.showModal?.(); dialog.querySelector("textarea")?.focus();
+}
+
+function renderRulingTiles(state){
+  return SEYES_RULINGS.map((item) => `<button class="ttp-seyes-ruling-tile${state.ruling === item.id ? " is-selected" : ""}" type="button" data-seyes-ruling="${item.id}" aria-pressed="${state.ruling === item.id}"><span class="ttp-seyes-ruling-preview is-${item.id}" aria-hidden="true"></span><span>${escapeHtml(item.label)}</span></button>`).join("");
+}
+function renderColors(attribute, current){
+  return SEYES_FORMAT_PALETTE.map((color) => `<button class="ttp-seyes-swatch${String(current).toLowerCase() === color.toLowerCase() ? " is-selected" : ""}" type="button" ${attribute}="${color}" style="--seyes-swatch:${color}" aria-label="Couleur ${color}"></button>`).join("");
+}
+
+function renderChrome(chromeHost, state){
+  if (!chromeHost) return;
+  const ui = localUiState.get(chromeHost) || { letterOpen:false, wordOpen:false, formatColorOpen:false, textColorOpen:false, highlightOpen:false, resetArmed:false };
+  localUiState.set(chromeHost, ui);
+  const align = alignmentMeta(state.alignment);
+  chromeHost.innerHTML = `
+    <div class="ttp-seyes-chrome">
+      <section class="ttp-seyes-chrome-section"><strong>Document</strong><div class="ttp-seyes-action-row">
+        <button type="button" data-seyes-reset class="${ui.resetArmed ? "is-danger" : ""}"><span class="ttp-material-icon">restart_alt</span><span>${ui.resetArmed ? "Confirmer" : "Nouveau"}</span></button>
+        <button type="button" data-seyes-save-local><span class="ttp-material-icon">download</span><span>.seyes</span></button>
+        <label class="ttp-seyes-file-button"><span class="ttp-material-icon">folder_open</span><span>Ouvrir</span><input type="file" data-seyes-open accept=".seyes,.txt,text/plain,application/vnd.site-outils.seyes+json"></label>
+        <button type="button" data-seyes-paste><span class="ttp-material-icon">content_paste</span><span>Coller</span></button>
+        <button type="button" data-seyes-pdf><span class="ttp-material-icon">text_snippet</span><span>PDF</span></button>
+      </div></section>
+      <section class="ttp-seyes-chrome-section"><strong>Écriture</strong>
+        <label class="ttp-seyes-field"><span>Police</span><select data-seyes-font>${SEYES_FONTS.map((font) => `<option value="${font.id}" ${font.id === state.fontId ? "selected" : ""}>${escapeHtml(font.label)}</option>`).join("")}</select></label>
+        <label class="ttp-seyes-field"><span>Échelle</span><div class="ttp-seyes-range-row"><input type="range" data-seyes-scale min="${SEYES_SCALE_MIN}" max="${SEYES_SCALE_MAX}" step="${SEYES_SCALE_STEP}" value="${state.scale}"><b>${formatScale(state.scale)}</b></div></label>
+        <div class="ttp-seyes-ruling-grid">${renderRulingTiles(state)}</div>
+        <div class="ttp-seyes-action-row">
+          <button type="button" data-seyes-align title="Alignement : ${align.label}"><span class="ttp-material-icon">${align.icon}</span><span>${align.label}</span></button>
+          <div class="ttp-seyes-popover-anchor"><button type="button" data-toggle-letter class="${ui.letterOpen ? "is-active" : ""}">Espacement lettres</button>${ui.letterOpen ? `<div class="ttp-seyes-mini-popover"><input type="range" data-letter-spacing min="-0.04" max="0.24" step="0.01" value="${state.letterSpacing}"><b>${Math.round(state.letterSpacing*100)} %</b></div>` : ""}</div>
+          <div class="ttp-seyes-popover-anchor"><button type="button" data-toggle-word class="${ui.wordOpen ? "is-active" : ""}">Espacement mots</button>${ui.wordOpen ? `<div class="ttp-seyes-mini-popover"><input type="range" data-word-spacing min="-0.04" max="0.7" step="0.02" value="${state.wordSpacing}"><b>${Math.round(state.wordSpacing*100)} %</b></div>` : ""}</div>
+        </div>
+      </section>
+      <section class="ttp-seyes-chrome-section"><strong>Mise en forme de la sélection</strong>
+        <div class="ttp-seyes-action-row ttp-seyes-format-actions">
+          <button type="button" data-format="underline" title="Souligner"><span class="ttp-material-icon">format_underlined</span></button>
+          <button type="button" data-format="strike" title="Barrer"><span class="ttp-material-icon">horizontal_rule</span></button>
+          <button type="button" data-format="circle" title="Entourer"><span class="ttp-material-icon">radio_button_unchecked</span></button>
+          <button type="button" data-toggle-text-color title="Couleur du texte"><span class="ttp-material-icon">palette</span><span>Texte</span></button>
+          <button type="button" data-toggle-highlight title="Surligner"><span class="ttp-material-icon">border_color</span><span>Surligner</span></button>
+          <button type="button" data-format="clear" title="Supprimer le formatage"><span class="ttp-material-icon">ink_eraser</span></button>
+        </div>
+        ${ui.textColorOpen ? `<div class="ttp-seyes-swatches">${renderColors("data-text-color", state.formatColor)}</div>` : ""}
+        ${ui.highlightOpen ? `<div class="ttp-seyes-swatches">${renderColors("data-highlight-color", state.highlightColor)}</div>` : ""}
+        <div class="ttp-seyes-format-settings"><span>Trait</span><div class="ttp-seyes-swatches is-inline">${renderColors("data-format-color", state.formatColor)}</div><label><span>Épaisseur</span><input type="range" data-format-thickness min="1" max="5" step="1" value="${state.formatThickness}"><b>${state.formatThickness}</b></label></div>
+      </section>
+    </div>`;
+}
+
+function bindChrome({ root, editor, chromeHost, state, sendAction, showToast } = {}){
+  if (!chromeHost) return;
+  const ui = localUiState.get(chromeHost) || {};
+  chromeHost.querySelectorAll("button,label,select,input").forEach((control) => control.addEventListener("pointerdown", (event) => { saveSelection(editor); if (control.tagName === "BUTTON") event.preventDefault(); }, { passive:false }));
+  const rerenderChrome = () => { renderChrome(chromeHost, root.__seyesState); bindChrome({ root, editor, chromeHost, state:root.__seyesState, sendAction, showToast }); };
+
+  chromeHost.querySelector("[data-seyes-reset]")?.addEventListener("click", () => {
+    if (!ui.resetArmed) { ui.resetArmed = true; rerenderChrome(); window.setTimeout(() => { if (ui.resetArmed) { ui.resetArmed = false; rerenderChrome(); } }, 3500); return; }
+    ui.resetArmed = false; sendAction?.("reset-document");
+  });
+  chromeHost.querySelector("[data-seyes-save-local]")?.addEventListener("click", () => downloadSeyesDocument(root.__seyesState));
+  chromeHost.querySelector("[data-seyes-open]")?.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0]; if (!file) return;
+    try { sendAction?.("load-document", { state: await readSeyesDocumentFile(file) }); }
+    catch (error) { showToast?.(error?.message || "Ouverture impossible.", { isError:true }); }
+    event.currentTarget.value = "";
+  });
+  chromeHost.querySelector("[data-seyes-paste]")?.addEventListener("click", () => openPasteDialog(sendAction));
+  chromeHost.querySelector("[data-seyes-pdf]")?.addEventListener("click", () => openSeyesPdfExportDialog({ state:root.__seyesState, showToast }));
+  chromeHost.querySelector("[data-seyes-font]")?.addEventListener("change", (event) => sendAction?.("set-settings", { fontId:event.currentTarget.value }));
+  const scale = chromeHost.querySelector("[data-seyes-scale]");
+  scale?.addEventListener("input", () => { const b = scale.parentElement?.querySelector("b"); if (b) b.textContent = formatScale(scale.value); });
+  scale?.addEventListener("change", () => sendAction?.("set-settings", { scale:Number(scale.value) }));
+  chromeHost.querySelectorAll("[data-seyes-ruling]").forEach((button) => button.addEventListener("click", () => sendAction?.("set-settings", { ruling:button.dataset.seyesRuling })));
+  chromeHost.querySelector("[data-seyes-align]")?.addEventListener("click", () => sendAction?.("set-settings", { alignment:alignmentMeta(root.__seyesState.alignment).next }));
+  chromeHost.querySelector("[data-toggle-letter]")?.addEventListener("click", () => { ui.letterOpen = !ui.letterOpen; ui.wordOpen = false; rerenderChrome(); });
+  chromeHost.querySelector("[data-toggle-word]")?.addEventListener("click", () => { ui.wordOpen = !ui.wordOpen; ui.letterOpen = false; rerenderChrome(); });
+  const letter = chromeHost.querySelector("[data-letter-spacing]");
+  letter?.addEventListener("input", () => { const b = letter.parentElement?.querySelector("b"); if (b) b.textContent = `${Math.round(Number(letter.value)*100)} %`; });
+  letter?.addEventListener("change", () => sendAction?.("set-settings", { letterSpacing:Number(letter.value) }));
+  const word = chromeHost.querySelector("[data-word-spacing]");
+  word?.addEventListener("input", () => { const b = word.parentElement?.querySelector("b"); if (b) b.textContent = `${Math.round(Number(word.value)*100)} %`; });
+  word?.addEventListener("change", () => sendAction?.("set-settings", { wordSpacing:Number(word.value) }));
+  chromeHost.querySelectorAll("[data-format]").forEach((button) => button.addEventListener("click", () => {
+    const kind = button.dataset.format;
+    if (kind === "clear") clearSelectionFormatting(editor); else applyDecoration(editor, root.__seyesState, kind);
+  }));
+  chromeHost.querySelector("[data-toggle-text-color]")?.addEventListener("click", () => { ui.textColorOpen = !ui.textColorOpen; ui.highlightOpen = false; rerenderChrome(); });
+  chromeHost.querySelector("[data-toggle-highlight]")?.addEventListener("click", () => { ui.highlightOpen = !ui.highlightOpen; ui.textColorOpen = false; rerenderChrome(); });
+  chromeHost.querySelectorAll("[data-text-color]").forEach((button) => button.addEventListener("click", () => { sendAction?.("set-settings", { formatColor:button.dataset.textColor }); execCommand(editor, "foreColor", button.dataset.textColor); ui.textColorOpen=false; }));
+  chromeHost.querySelectorAll("[data-highlight-color]").forEach((button) => button.addEventListener("click", () => { sendAction?.("set-settings", { highlightColor:button.dataset.highlightColor }); execCommand(editor, "hiliteColor", button.dataset.highlightColor); ui.highlightOpen=false; }));
+  chromeHost.querySelectorAll("[data-format-color]").forEach((button) => button.addEventListener("click", () => sendAction?.("set-settings", { formatColor:button.dataset.formatColor })));
+  const thickness = chromeHost.querySelector("[data-format-thickness]");
+  thickness?.addEventListener("input", () => { const b = thickness.parentElement?.querySelector("b"); if (b) b.textContent = thickness.value; });
+  thickness?.addEventListener("change", () => sendAction?.("set-settings", { formatThickness:Number(thickness.value) }));
+}
+
+function bindEditor(editor, sendAction){
+  if (!editor || editor.dataset.seyesBound === "true") return;
+  editor.dataset.seyesBound = "true";
+  editor.addEventListener("input", () => { saveSelection(editor); scheduleSync(editor, sendAction); });
+  ["keyup","pointerup","focus"].forEach((type) => editor.addEventListener(type, () => saveSelection(editor)));
+  editor.addEventListener("blur", () => { const timer = pendingTimers.get(editor); if (timer) clearTimeout(timer); pendingTimers.delete(editor); syncEditor(editor, sendAction); });
+  editor.addEventListener("paste", (event) => {
+    event.preventDefault(); const text = event.clipboardData?.getData("text/plain") || "";
+    restoreSelection(editor) || editor.focus({ preventScroll:true });
+    try { document.execCommand("insertText", false, text); } catch {}
+    editor.dispatchEvent(new Event("input", { bubbles:true }));
+  });
+}
+
+function applyState(root, state){
+  root.__seyesState = state;
+  const editor = root.querySelector("[data-seyes-editor]");
+  const line = BASE_LINE_PX * state.scale;
+  const fontSize = BASE_FONT_PX * state.scale;
+  const family = getSeyesFont(state.fontId).family;
+  root.style.setProperty("--seyes-line", `${line}px`);
+  root.style.setProperty("--seyes-font-size", `${fontSize}px`);
+  root.style.setProperty("--seyes-font-family", `"${family}"`);
+  root.style.setProperty("--seyes-letter-spacing", `${state.letterSpacing}em`);
+  root.style.setProperty("--seyes-word-spacing", `${state.wordSpacing}em`);
+  root.style.setProperty("--seyes-editor-left", `${SAFE_LEFT_PX + (state.ruling === "seyes" ? line + 10 : 22)}px`);
+  root.style.setProperty("--seyes-editor-top", `${SAFE_TOP_PX + line * 0.18}px`);
+  root.dataset.ruling = state.ruling;
+  editor.style.textAlign = state.alignment;
+  const safeHtml = sanitizeContentHtml(state.contentHtml);
+  const focused = document.activeElement === editor || editor.contains(document.activeElement);
+  if (!focused && sanitizeContentHtml(editor.innerHTML) !== safeHtml) editor.innerHTML = safeHtml;
+  updatePaper(root, state);
+  try { document.fonts?.load?.(`400 ${Math.max(12,fontSize)}px "${family}"`).then(() => root.classList.add("is-font-ready")); } catch { root.classList.add("is-font-ready"); }
+}
+
+export function renderSeyesProjector({ host, chromeHost, state, sendAction } = {}){
   if (!host) return;
   const safeState = normalizeSeyesState(state);
-
-  if (widgetInfoHost) {
-    widgetInfoHost.textContent = `Belle Allure ${safeState.fontSet} · ${formatZoom(safeState.zoom)}`;
-  }
-
-  let root = host.querySelector(":scope > .ttp-seyes-root");
+  let root = host.querySelector(":scope > .ttp-seyes-app");
   if (!root) {
-    host.innerHTML = renderShell(safeState);
-    root = host.querySelector(":scope > .ttp-seyes-root");
-    const editor = root?.querySelector?.("[data-seyes-editor]");
-    if (editor) {
-      editor.innerHTML = sanitizeContentHtml(safeState.contentHtml);
-      editor.dataset.seyesLastSentHtml = sanitizeContentHtml(safeState.contentHtml);
-      root.__seyesCurrentState = safeState;
-      bindEditorEvents(root, editor, sendAction);
-      bindToolbarEvents(root, editor, sendAction, () => root?.__seyesCurrentState || safeState);
-    }
+    host.innerHTML = `<div class="ttp-seyes-app" data-ruling="${safeState.ruling}"><div class="ttp-seyes-sheet">${renderPaperSvg()}<div class="ttp-seyes-editor" data-seyes-editor contenteditable="true" role="textbox" aria-multiline="true" aria-label="Document Seyès" spellcheck="false"></div></div></div>`;
+    root = host.querySelector(":scope > .ttp-seyes-app");
+    const editor = root.querySelector("[data-seyes-editor]");
+    editor.innerHTML = sanitizeContentHtml(safeState.contentHtml);
+    bindEditor(editor, sendAction);
   }
-
-  const editor = root?.querySelector?.("[data-seyes-editor]");
-  if (root) root.__seyesCurrentState = safeState;
-  if (editor) {
-    bindEditorEvents(root, editor, sendAction);
-    bindToolbarEvents(root, editor, sendAction, () => root?.__seyesCurrentState || safeState);
+  const editor = root.querySelector("[data-seyes-editor]");
+  bindEditor(editor, sendAction);
+  applyState(root, safeState);
+  if (chromeHost) {
+    renderChrome(chromeHost, safeState);
+    bindChrome({ root, editor, chromeHost, state:safeState, sendAction, showToast:(message, options={}) => {
+      const event = new CustomEvent("ttp-toast", { detail:{ message, ...options } }); window.dispatchEvent(event);
+    }});
   }
-  syncRootFromState(root, safeState);
 }

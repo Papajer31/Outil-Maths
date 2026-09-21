@@ -69,13 +69,13 @@
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
-                <button id="btnNavAdventure" class="dashboard-nav-main dashboard-nav-main--header" type="button">
-                  <span class="dashboard-nav-label">Aventure</span>
+                <button id="btnNavActivityHub" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Activités</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
-                <button id="btnNavActivities" class="dashboard-nav-main dashboard-nav-main--header is-active" type="button">
-                  <span class="dashboard-nav-label">Exploration</span>
+                <button id="btnNavAdventure" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Aventure</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
@@ -163,6 +163,22 @@
               </div>
             </div>
 
+            <div id="activityHubView" class="dashboard-content-view dashboard-explorer-view"></div>
+
+            <div id="myActivitiesView" class="dashboard-content-view dashboard-explorer-view hidden">
+              <div id="myActivitiesHeader" class="dashboard-config-header"></div>
+              <div id="myActivitiesList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host">
+                <div class="dashboard-activity-empty-state">Chargement…</div>
+              </div>
+            </div>
+
+            <div id="personalActivityEditorView" class="dashboard-content-view dashboard-explorer-view hidden">
+              <div id="personalActivityEditorHeader" class="dashboard-config-header dashboard-explorer-header"></div>
+              <div id="personalActivityEditorBody" class="dashboard-content-scroll dashboard-config-list"></div>
+            </div>
+
+            <div id="activityAssignmentView" class="dashboard-content-view hidden"></div>
+
             <div id="adventureView" class="dashboard-content-view hidden">
               <div id="adventureHeader" class="dashboard-config-header"></div>
 
@@ -171,7 +187,7 @@
               </div>
             </div>
 
-            <div id="activitiesView" class="dashboard-content-view">
+            <div id="activitiesView" class="dashboard-content-view hidden">
               <div id="configHeader" class="dashboard-config-header"></div>
 
               <div id="configsList" class="dashboard-content-scroll dashboard-config-list">
@@ -233,7 +249,7 @@
                     <div class="quiz-workshop-heading-row">
                       <button
                         id="btnBackQuizExplorer"
-                        class="quiz-workshop-back-btn dashboard-material-icon-btn"
+                        class="dashboard-back-btn dashboard-material-icon-btn"
                         type="button"
                         aria-label="Retour aux quiz"
                         title="Retour aux quiz"
@@ -440,6 +456,15 @@
                             </button>
                           </div>
                           <button
+                            class="quiz-workshop-quick-entry-btn"
+                            type="button"
+                            data-quiz-no-response-toggle
+                            aria-pressed="false"
+                            title="Question avec réponse attendue"
+                          >
+                            <span>Sans réponse</span>
+                          </button>
+                          <button
                             class="quiz-workshop-quick-entry-btn quiz-workshop-question-timer-btn"
                             type="button"
                             data-quiz-question-timer-toggle
@@ -568,7 +593,7 @@
                   <div class="quiz-series-heading">
                     <button
                       id="btnBackQuizSeries"
-                      class="quiz-workshop-back-btn dashboard-material-icon-btn"
+                      class="dashboard-back-btn dashboard-material-icon-btn"
                       type="button"
                       aria-label="Retour aux quiz"
                       title="Retour aux quiz"
@@ -702,8 +727,8 @@
                     id="btnImportResources"
                     class="btn"
                     type="button"
-                    title="Importer des images ou des fichiers audio"
-                    aria-label="Importer des images ou des fichiers audio"
+                    title="Importer des images, des fichiers audio ou des documents Seyès"
+                    aria-label="Importer des images, des fichiers audio ou des documents Seyès"
                     disabled
                   >
                     <span class="dashboard-material-icon" aria-hidden="true">upload_file</span>
@@ -712,7 +737,7 @@
                   <input
                     id="resourceFileInput"
                     type="file"
-                    accept="image/*,audio/*"
+                    accept="image/*,audio/*,.seyes,application/vnd.site-outils.seyes+json"
                     multiple
                     hidden
                   >

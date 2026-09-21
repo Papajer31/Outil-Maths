@@ -243,7 +243,7 @@ function handleWelcomeStart(event) {
 
   welcomeLaunching = true;
   audioUnlocked = true;
-  welcomeOverlay?.classList.add("is-launching");
+  welcomeOverlay?.classList.add("is-shaking");
 
   // La lecture est déclenchée directement par le geste utilisateur : elle
   // bénéficie ainsi du déverrouillage audio imposé par les navigateurs mobiles.
@@ -254,14 +254,21 @@ function handleWelcomeStart(event) {
     void playResolvedContext(firstContext);
   }
 
-  const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
-  const revealDelayMs = reducedMotion ? 150 : 620;
-  const finishDelayMs = reducedMotion ? 280 : 1080;
+  const shakeDelayMs = readCssDurationMs("--shake-duration", 500);
+  const launchDelayMs = readCssDurationMs("--launch-duration", 700);
+  const revealDelayMs = shakeDelayMs + launchDelayMs;
+  const finishDelayMs = revealDelayMs + 200;
 
-  // L'application existe derrière l'écran de départ, mais reste invisible
-  // jusqu'au lancement. On ne peut donc plus apercevoir la connexion avant la fusée.
+  window.setTimeout(() => {
+    welcomeOverlay?.classList.remove("is-shaking");
+    welcomeOverlay?.classList.add("is-launching");
+  }, shakeDelayMs);
+
+  // Le formulaire reste totalement masqué jusqu'à la fin du décollage. La
+  // fumée est alors au maximum et sert de transition entre les deux écrans.
   window.setTimeout(() => {
     document.body?.classList.remove("student-welcome-pending");
+    welcomeOverlay?.classList.add("is-finished");
   }, revealDelayMs);
 
   window.setTimeout(() => {
@@ -270,6 +277,15 @@ function handleWelcomeStart(event) {
     removeWelcomeOverlay();
     syncButtonState();
   }, finishDelayMs);
+}
+
+function readCssDurationMs(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const duration = Number.parseFloat(value);
+  if (!Number.isFinite(duration)) return fallback;
+  if (value.endsWith("ms")) return duration;
+  if (value.endsWith("s")) return duration * 1000;
+  return fallback;
 }
 
 function removeWelcomeOverlay() {

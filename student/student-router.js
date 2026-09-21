@@ -6,6 +6,7 @@ import { renderActivitiesView } from "./views/activities-view.js";
 import { renderSessionStartView } from "./views/sessionstart-view.js";
 import { renderSessionChoiceView } from "./views/sessionchoice-view.js";
 import { renderSessionView } from "./views/session-view.js";
+import { renderDirectDoneView } from "./views/directdone-view.js";
 import { syncPersistentStudentStarfield } from "./student-stars.js";
 import { syncStudentAudioForRoute } from "./student-audio.js";
 
@@ -16,7 +17,8 @@ const ROUTES = {
   activities: renderActivitiesView,
   sessionchoice: renderSessionChoiceView,
   sessionstart: renderSessionStartView,
-  session: renderSessionView
+  session: renderSessionView,
+  directdone: renderDirectDoneView
 };
 
 let appRoot = null;
@@ -180,7 +182,8 @@ function applyBodyRouteClass(routeName){
     "student-route-activities",
     "student-route-sessionchoice",
     "student-route-sessionstart",
-    "student-route-session"
+    "student-route-session",
+    "student-route-directdone"
   );
 
   document.body.classList.add(`student-route-${routeName}`);

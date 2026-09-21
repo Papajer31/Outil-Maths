@@ -4,7 +4,9 @@ import {
   filterQuizSnapshotBySelection,
   getQuestionSelectionSignature,
   getWidgetView,
+  isQuizPresentationVariantRunnable,
   materializeQuizQuestionVariant,
+  normalizeQuizQuestionResponseMode,
   normalizeQuizSnapshot,
   normalizeSettings
 } from "./model.js";
@@ -64,7 +66,7 @@ export function createActivity(initialContext = {}){
     },
 
     supportsShellValidation(context = state.latestContext){
-      return getResponseUi(context) === "boxed" && !isAutoValidationQuestion(state) && !isDoneQuestion(state);
+      return getResponseUi(context) === "boxed" && !isAutoValidationQuestion(state) && !isDoneQuestion(state) && !isPresentationQuestion(state);
     },
 
     canValidate(){
@@ -72,7 +74,7 @@ export function createActivity(initialContext = {}){
     },
 
     shouldHideShellRevealAction(){
-      return isDoneQuestion(state);
+      return isDoneQuestion(state) || isPresentationQuestion(state);
     },
 
     validate(){
@@ -84,6 +86,7 @@ export function createActivity(initialContext = {}){
 
     handleQuestionTimeout(){
       if (isDoneQuestion(state)) return handleDoneQuestionTimeout(state);
+      if (isPresentationQuestion(state)) return requestPresentationCompletion(state, { timedOut:true });
       return handleAutoQuestionTimeout(state);
     },
 
@@ -214,6 +217,7 @@ function loadNextQuestion(state, context = {}){
   state.flashTextQuestionStartedAt = performance.now();
 
   renderCurrentView(state);
+  syncPresentationCompletionAction(state);
   syncValidateState(state);
   focusPrimaryInput(state);
 }
@@ -248,7 +252,28 @@ function buildRunnableQuestion(question){
     const selectionWidgets = widgets.filter((widget) => widget?.type === "selection-words");
     const categoriesWidgets = widgets.filter((widget) => widget?.type === "categories");
     const doneWidgets = widgets.filter((widget) => widget?.type === "done");
-    if (answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length + doneWidgets.length !== 1) return null;
+    const responseWidgetCount = answerWidgets.length + qcmWidgets.length + selectionWidgets.length + categoriesWidgets.length + doneWidgets.length;
+    const responseMode = normalizeQuizQuestionResponseMode(variant.responseMode);
+
+    if (responseMode === "none") {
+      if (!isQuizPresentationVariantRunnable({ ...variant, widgets, responseWidgetCount })) return null;
+      return {
+        ...variant,
+        widgets,
+        responseMode:"none",
+        responseType:"presentation",
+        responseWidgetCount:0,
+        answerWidgetCount:0,
+        qcmWidgetCount:0,
+        selectionWidgetCount:0,
+        categoriesWidgetCount:0,
+        doneWidgetCount:0,
+        expectedAnswer:"",
+        expectedAnswerLabel:""
+      };
+    }
+
+    if (responseWidgetCount !== 1) return null;
 
     if (doneWidgets.length === 1) {
       const doneWidget = doneWidgets[0];
@@ -1574,6 +1599,21 @@ function isDoneQuestion(state){
   return state.currentQuestion?.responseType === "done";
 }
 
+function isPresentationQuestion(state){
+  return state.currentQuestion?.responseType === "presentation";
+}
+
+function syncPresentationCompletionAction(state){
+  state.latestContext?.services?.setQuestionCompletionAction?.(isPresentationQuestion(state));
+}
+
+function requestPresentationCompletion(state, { timedOut = false } = {}){
+  if (!isPresentationQuestion(state) || state.answerRevealed) return false;
+  const directCompletion = state.latestContext?.services?.requestQuestionCompletion;
+  if (typeof directCompletion !== "function") return false;
+  return directCompletion({ outcome:"completed", timedOut:timedOut === true }) === true;
+}
+
 function requestDoneCompletion(state, { timedOut = false } = {}){
   if (!isDoneQuestion(state) || state.answerRevealed || state.doneCompleted || state.doneTimedOut) return false;
   state.doneTimedOut = timedOut === true;
@@ -2077,6 +2117,8 @@ function getQuizHistorySnapshot(state, stage = "question"){
       completionType:"done",
       completed:state.doneCompleted === true,
       completionTimedOut:state.doneTimedOut === true
+    } : isPresentationQuestion(state) ? {
+      completionType:"presentation"
     } : {})
   };
   if (String(stage || "").toLowerCase() === "correction") {
@@ -2892,7 +2934,7 @@ function requestReveal(state){
 function canSubmitAnswer(state){
   if (getResponseUi(state.latestContext) !== "boxed") return false;
   if (state.answerRevealed || !state.currentQuestion) return false;
-  if (state.currentQuestion.responseType === "done") return false;
+  if (state.currentQuestion.responseType === "done" || state.currentQuestion.responseType === "presentation") return false;
   if (state.currentQuestion.responseType === "qcm-text") return Boolean(state.selectedChoiceId);
   if (state.currentQuestion.responseType === "selection-words") return state.selectedTokenIndexes.length > 0;
   if (state.currentQuestion.responseType === "categories") {
@@ -2905,7 +2947,7 @@ function canSubmitAnswer(state){
 
 function getCurrentResponseValue(state){
   if (state.answerRevealed) return String(state.submittedAnswer || "").trim();
-  if (state.currentQuestion?.responseType === "done") return "";
+  if (state.currentQuestion?.responseType === "done" || state.currentQuestion?.responseType === "presentation") return "";
   if (state.currentQuestion?.responseType === "qcm-text") return String(state.selectedChoiceId || "").trim();
   if (state.currentQuestion?.responseType === "selection-words") {
     const indexes = state.answerRevealed ? state.submittedTokenIndexes : state.selectedTokenIndexes;
@@ -3008,7 +3050,7 @@ function normalizeAnswerDisplayMode(value){
 }
 
 function focusPrimaryInput(state){
-  if (["qcm-text", "selection-words", "categories", "done"].includes(state.currentQuestion?.responseType)) return;
+  if (["qcm-text", "selection-words", "categories", "done", "presentation"].includes(state.currentQuestion?.responseType)) return;
   if (!state.answerInputEl) return;
   queueMicrotask(() => {
     try {

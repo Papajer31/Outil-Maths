@@ -35,6 +35,11 @@ const QCM_MAX_CHOICES = 6;
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
 const RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
 const RESPONSE_WIDGET_TYPES = new Set(["answer", "verified-answer", "qcm-text", "selection-words", "categories", "done"]);
+const QUESTION_RESPONSE_MODES = new Set(["required", "none"]);
+
+function normalizeQuestionResponseMode(value){
+  return QUESTION_RESPONSE_MODES.has(String(value || "").trim()) ? String(value).trim() : "required";
+}
 const CORRECTION_VISIBILITY_STATES = ["visible", "correct", "incorrect", "hidden"];
 const QUESTION_ELEMENT_GROUPS = [
   { id:"content", title:"Contenu" },
@@ -329,14 +334,22 @@ function getVisibilityControlPresentation(visibilityMode, mode = "question"){
   return { icon:"visibility", label:"Visible", action:"Modifier la visibilité" };
 }
 
-function getQuestionCompositionIssues(widgets = []){
+function getQuestionCompositionIssues(widgets = [], responseMode = "required"){
   const safeWidgets = Array.isArray(widgets) ? widgets : [];
+  const normalizedResponseMode = normalizeQuestionResponseMode(responseMode);
   const responseCount = safeWidgets.filter(isResponseWidget).length;
   const hasNumericKeypad = safeWidgets.some((widget) => widget.type === "numeric-keypad");
   const hasAnswerReceiver = safeWidgets.some((widget) => widget.type === "answer");
   const issues = [];
 
-  if (responseCount === 0) {
+  if (normalizedResponseMode === "none") {
+    if (responseCount > 0) {
+      issues.push({
+        code:"response-forbidden",
+        label:"Mode sans réponse : supprimez le widget de réponse"
+      });
+    }
+  } else if (responseCount === 0) {
     issues.push({
       code:"missing-response",
       label:"Aucune réponse élève"
@@ -1647,6 +1660,7 @@ export function createQuizWorkshopViewController({
   const colorMenu = textToolbar?.querySelector("[data-quiz-color-menu]") || null;
   const colorToggle = textToolbar?.querySelector("[data-quiz-color-toggle]") || null;
   const quickEntryButton = drawer?.querySelector("[data-quiz-quick-entry]") || null;
+  const noResponseToggle = drawer?.querySelector("[data-quiz-no-response-toggle]") || null;
   const questionTimerToggle = drawer?.querySelector("[data-quiz-question-timer-toggle]") || null;
   const questionTimerNavigation = drawer?.querySelector("[data-quiz-question-timer-navigation]") || null;
   const variantOrderToggle = drawer?.querySelector("[data-quiz-variant-order-toggle]") || null;
@@ -1664,6 +1678,7 @@ export function createQuizWorkshopViewController({
   let draftWidgets = [];
   let draftVariants = [];
   let activeVariantIndex = 0;
+  let draftResponseMode = "required";
   let draftQuestionTimerEnabled = false;
   let draftQuestionTimerSeconds = DEFAULT_QUESTION_TIMER_SECONDS;
   let draftVariantDrawMode = DEFAULT_VARIANT_DRAW_MODE;
@@ -1727,6 +1742,7 @@ export function createQuizWorkshopViewController({
       id: String(source.id || `question-${index + 1}`),
       modelId: String(source.modelId || "free-layout"),
       title: String(source.title || "Disposition personnalisée"),
+      responseMode:normalizeQuestionResponseMode(source.responseMode ?? source.response_mode),
       timerSeconds,
       variantDrawMode,
       widgets,
@@ -1847,6 +1863,16 @@ export function createQuizWorkshopViewController({
     if (!variant.widgetContents || typeof variant.widgetContents !== "object") variant.widgetContents = {};
     variant.widgetContents[widget.id] = captureWidgetVariantContent(widget);
     renderQuestionWarnings();
+  }
+
+  function renderResponseModeControls(){
+    if (!noResponseToggle) return;
+    const noResponse = draftResponseMode === "none";
+    noResponseToggle.classList.toggle("is-active", noResponse);
+    noResponseToggle.setAttribute("aria-pressed", noResponse ? "true" : "false");
+    noResponseToggle.title = noResponse
+      ? "Question sans réponse attendue — cliquer pour exiger une réponse"
+      : "Question avec réponse attendue — cliquer pour créer une question de présentation";
   }
 
   function renderQuestionTimerControls(){
@@ -1971,6 +1997,7 @@ export function createQuizWorkshopViewController({
     editingQuestionId = "";
     previewMode = "question";
     activeLibraryTab = "models";
+    draftResponseMode = "required";
     draftQuestionTimerEnabled = false;
     draftQuestionTimerSeconds = DEFAULT_QUESTION_TIMER_SECONDS;
     draftVariantDrawMode = DEFAULT_VARIANT_DRAW_MODE;
@@ -2024,22 +2051,32 @@ export function createQuizWorkshopViewController({
 
     const hasNumericKeypad = draftWidgets.some((widget) => widget.type === "numeric-keypad");
     const hasResponseWidget = draftWidgets.some(isResponseWidget);
+    const noResponse = draftResponseMode === "none";
 
     elementGrid.innerHTML = QUESTION_ELEMENT_GROUPS.map((group, groupIndex) => {
       const groupElements = QUESTION_ELEMENTS.filter((element) => element.group === group.id);
-      const responseMessage = group.id === "response" && hasResponseWidget
-        ? `<span class="quiz-workshop-element-group-note">Un élément de réponse est déjà présent.</span>`
+      const responseMessage = group.id === "response"
+        ? noResponse
+          ? `<span class="quiz-workshop-element-group-note">Mode sans réponse : éléments de réponse désactivés.</span>`
+          : hasResponseWidget
+            ? `<span class="quiz-workshop-element-group-note">Un élément de réponse est déjà présent.</span>`
+            : ""
         : "";
 
       const tiles = groupElements.map((element) => {
         const isResponseElement = RESPONSE_WIDGET_TYPES.has(element.id);
-        const isDuplicateKeypad = element.id === "numeric-keypad" && hasNumericKeypad;
-        const isDisabled = isDuplicateKeypad || (isResponseElement && hasResponseWidget);
-        const disabledTitle = isDuplicateKeypad
-          ? "Un clavier numérique est déjà présent dans cette question"
-          : isResponseElement && hasResponseWidget
-            ? "Un élément de réponse est déjà présent dans cette question"
-            : "";
+        const isInputOnlyElement = element.id === "numeric-keypad";
+        const isDuplicateKeypad = isInputOnlyElement && hasNumericKeypad;
+        const isDisabled = noResponse && (isResponseElement || isInputOnlyElement)
+          || isDuplicateKeypad
+          || (isResponseElement && hasResponseWidget);
+        const disabledTitle = noResponse && (isResponseElement || isInputOnlyElement)
+          ? "Cette question est configurée sans réponse attendue"
+          : isDuplicateKeypad
+            ? "Un clavier numérique est déjà présent dans cette question"
+            : isResponseElement && hasResponseWidget
+              ? "Un élément de réponse est déjà présent dans cette question"
+              : "";
 
         return `
           <div class="quiz-workshop-element-tile-shell" data-quiz-element-shell="${escapeHtml(element.id)}">
@@ -3307,7 +3344,7 @@ export function createQuizWorkshopViewController({
 
   function renderQuestionWarnings(){
     if (!questionWarnings) return;
-    const issues = getQuestionCompositionIssues(draftWidgets);
+    const issues = getQuestionCompositionIssues(draftWidgets, draftResponseMode);
     questionWarnings.hidden = issues.length === 0;
     questionWarnings.innerHTML = issues.map((issue) => `
       <span class="quiz-workshop-question-warning-pill" data-quiz-question-warning="${escapeHtml(issue.code)}">
@@ -3322,6 +3359,7 @@ export function createQuizWorkshopViewController({
     renderElements();
     renderLibrary();
     renderCanvas();
+    renderResponseModeControls();
     renderQuestionTimerControls();
     renderVariantOrderControls();
     renderVariantNavigation();
@@ -3355,7 +3393,7 @@ export function createQuizWorkshopViewController({
     if (!questionsHost) return;
 
     questionsHost.innerHTML = questions.map((question, index) => {
-      const compositionIssues = getQuestionCompositionIssues(question.widgets);
+      const compositionIssues = getQuestionCompositionIssues(question.widgets, question.responseMode);
       const warningLabel = compositionIssues.map((issue) => issue.label).join(" · ");
       return `
       <article class="quiz-workshop-question-card${compositionIssues.length ? " is-incomplete" : ""}">
@@ -3363,7 +3401,7 @@ export function createQuizWorkshopViewController({
         ${getQuestionPreviewMarkup(question)}
         <div class="quiz-workshop-question-main">
           <div class="quiz-workshop-question-meta">
-            ${question.widgets.length} élément${question.widgets.length > 1 ? "s" : ""} · ${Math.max(1, question.variants?.length || 1)} variante${Math.max(1, question.variants?.length || 1) > 1 ? "s" : ""}${Number(question.timerSeconds) > 0 ? ` · ⏱ ${Math.trunc(Number(question.timerSeconds))} s` : ""}${Math.max(1, question.variants?.length || 1) > 1 && question.variantDrawMode === "random" ? " · variantes aléatoires" : ""}
+            ${question.widgets.length} élément${question.widgets.length > 1 ? "s" : ""} · ${Math.max(1, question.variants?.length || 1)} variante${Math.max(1, question.variants?.length || 1) > 1 ? "s" : ""}${normalizeQuestionResponseMode(question.responseMode) === "none" ? " · sans réponse" : ""}${Number(question.timerSeconds) > 0 ? ` · ⏱ ${Math.trunc(Number(question.timerSeconds))} s` : ""}${Math.max(1, question.variants?.length || 1) > 1 && question.variantDrawMode === "random" ? " · variantes aléatoires" : ""}
             ${compositionIssues.length ? `
               <span class="quiz-workshop-question-incomplete" role="img" aria-label="Question incomplète : ${escapeHtml(warningLabel)}" title="Question incomplète : ${escapeHtml(warningLabel)}">
                 <span class="dashboard-material-icon" aria-hidden="true">warning</span>
@@ -3399,6 +3437,7 @@ export function createQuizWorkshopViewController({
       draftVariants = normalizeQuestionVariants(question.variants, draftWidgets);
       activeVariantIndex = 0;
       loadVariantContent(activeVariantIndex);
+      draftResponseMode = normalizeQuestionResponseMode(question.responseMode ?? question.response_mode);
       const storedTimerSeconds = clamp(
         Math.trunc(Number(question.timerSeconds ?? question.timer_seconds) || 0),
         0,
@@ -3492,6 +3531,7 @@ export function createQuizWorkshopViewController({
       id: editingQuestionId || createId("question"),
       modelId: selectedModelId,
       title: draftTitle || getSelectedModel()?.title || "Disposition personnalisée",
+      responseMode:draftResponseMode,
       timerSeconds: draftQuestionTimerEnabled ? draftQuestionTimerSeconds : 0,
       variantDrawMode:draftVariantDrawMode,
       widgets,
@@ -4808,6 +4848,15 @@ export function createQuizWorkshopViewController({
     if (tab) {
       activeLibraryTab = String(tab.dataset.quizLibraryTab || "models");
       renderLibrary();
+      return;
+    }
+
+    const noResponseAction = event.target.closest("[data-quiz-no-response-toggle]");
+    if (noResponseAction) {
+      draftResponseMode = draftResponseMode === "none" ? "required" : "none";
+      renderResponseModeControls();
+      renderElements();
+      renderQuestionWarnings();
       return;
     }
 

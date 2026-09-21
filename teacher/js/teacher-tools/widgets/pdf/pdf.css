@@ -1,0 +1,50 @@
+/* ========================================
+   MINI-APP TABLEAU — PDF
+======================================== */
+
+.tt-pdf-control{min-width:0;display:flex;flex-direction:column;gap:14px}
+.tt-pdf-file-btn{cursor:pointer}.tt-pdf-file-btn input{display:none}
+.tt-pdf-source-grid{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.tt-pdf-url-row{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.tt-pdf-url-row input{min-width:0;min-height:42px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:#fff;padding:0 12px;font:inherit;font-size:14px}
+.tt-pdf-control .tt-widget-action-btn.is-danger{color:#ffb8b8;border-color:rgba(255,110,110,.25);background:rgba(120,26,26,.18)}
+.tt-pdf-page-control{min-height:42px;display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);padding:0 10px;color:rgba(255,255,255,.78);font-size:13px;font-weight:800}
+.tt-pdf-page-control input{width:64px;min-height:32px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.20);color:#fff;text-align:center;font:inherit;font-weight:900}
+.tt-pdf-preview-card,.tt-pdf-empty-card{min-width:0;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.045);display:flex;align-items:center;gap:12px;padding:12px}
+.tt-pdf-empty-card{flex-direction:column;align-items:flex-start;color:rgba(255,255,255,.68)}.tt-pdf-empty-card strong{color:#fff}
+.tt-pdf-preview-icon{font-size:38px;color:#ffb4b4}
+.tt-pdf-preview-meta{min-width:0;display:flex;flex-direction:column;gap:4px}.tt-pdf-preview-meta strong,.tt-pdf-preview-meta span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tt-pdf-preview-meta strong{color:#fff;font-size:15px;font-weight:900}.tt-pdf-preview-meta span{color:rgba(255,255,255,.62);font-size:13px;font-weight:700}
+.tt-pdf-error{color:#ffd6d6;font-weight:800}
+
+.ttp-app-host>.ttp-pdf-viewer,.ttp-app-host>.ttp-pdf-empty{position:absolute;inset:0}
+.ttp-pdf-viewer{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:default}
+.ttp-pdf-stage{position:absolute;display:block;transform:translate(-50%,-50%);transform-origin:center center;will-change:left,top,width,height;touch-action:none;background:#fff;box-shadow:0 16px 38px rgba(0,0,0,.24)}
+.ttp-pdf-viewer.is-movable .ttp-pdf-stage{cursor:grab}.ttp-pdf-viewer.is-movable .ttp-pdf-stage:active{cursor:grabbing}
+.ttp-pdf-canvas{display:block;width:100%;height:100%;background:#fff;user-select:none;-webkit-user-drag:none}
+.ttp-pdf-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(255,255,255,.86);color:#334155;font-weight:900}.ttp-pdf-loading[hidden]{display:none}
+.ttp-pdf-load-warning{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:3;max-width:calc(100% - 32px);border-radius:999px;background:rgba(120,26,26,.86);color:#ffd6d6;padding:8px 12px;font-size:13px;font-weight:900;text-align:center}.ttp-pdf-load-warning[hidden]{display:none}
+.ttp-pdf-empty{display:flex;align-items:center;justify-content:center;padding:32px;color:#fff;touch-action:auto}
+.ttp-pdf-empty-card{width:min(600px,calc(100vw - 64px));border:1px solid rgba(255,255,255,.16);border-radius:18px;background:rgba(10,14,24,.76);box-shadow:0 22px 70px rgba(0,0,0,.30);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:22px;text-align:center}
+.ttp-pdf-empty-card>.ttp-material-icon{font-size:44px;opacity:.76}.ttp-pdf-empty-card strong{font-size:24px;line-height:1.1}.ttp-pdf-empty-card p{margin:0;color:rgba(255,255,255,.68);font-size:14px;line-height:1.35}
+.ttp-pdf-empty-actions{width:100%;min-width:0;display:flex;flex-direction:column;gap:10px;margin-top:6px}.ttp-pdf-file-btn{min-height:42px;border:1px solid rgba(61,195,118,.50);background:rgba(23,119,65,.30);color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 14px;cursor:pointer;font:inherit;font-size:14px;font-weight:900}.ttp-pdf-file-btn input{display:none}
+.ttp-pdf-url-row{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.ttp-pdf-url-row input{min-width:0;min-height:38px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.22);color:#fff;padding:0 10px;font:inherit;font-size:14px}.ttp-pdf-error{color:#ffd6d6!important}
+.ttp-pdf-page-jump{min-height:54px;border:1px solid rgba(255,255,255,.12);border-radius:13px;background:rgba(255,255,255,.08);color:#fff;display:inline-flex;align-items:center;gap:7px;padding:0 10px;font-size:13px;font-weight:800}.ttp-pdf-page-jump input{width:58px;min-height:34px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(0,0,0,.24);color:#fff;text-align:center;font:inherit;font-weight:900}
+
+@media (max-width:700px){.ttp-pdf-empty{padding:16px}.ttp-pdf-empty-card{width:min(100%,calc(100vw - 32px))}.ttp-pdf-page-jump{min-height:50px}}
+.ttp-pdf-loading .ttp-material-icon{animation:ttpPdfSpin 1s linear infinite}
+@keyframes ttpPdfSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ttp-pdf-loading .ttp-material-icon{animation:none}}
+
+/* V9 — champ de page sans spin buttons natifs (dashboard + popup) */
+.tt-pdf-page-control input[type="number"],
+.ttp-pdf-page-jump input[type="number"]{
+  -moz-appearance:textfield;
+  appearance:textfield;
+}
+.tt-pdf-page-control input[type="number"]::-webkit-outer-spin-button,
+.tt-pdf-page-control input[type="number"]::-webkit-inner-spin-button,
+.ttp-pdf-page-jump input[type="number"]::-webkit-outer-spin-button,
+.ttp-pdf-page-jump input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}

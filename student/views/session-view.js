@@ -10,7 +10,8 @@ import {
   loadPublicActivityConfig,
   startPublicStudentActivityAttempt,
   recordPublicStudentActivityAttemptQuestion,
-  finishPublicStudentActivityAttempt
+  finishPublicStudentActivityAttempt,
+  completePublicActivityAssignment
 } from "../student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../../shared/activity-modes.js";
 import { normalizePassationProfile } from "../../shared/activity-config.js";
@@ -155,10 +156,11 @@ export function renderSessionView(root){
       ?? 3
   );
   const isCatalogTestMode = catalogRuntimeContext === "test";
+  const isDirectLaunchMode = studentState.selectedConfig?.direct_launch === true;
   const catalogTestCloseHandler = typeof studentState.selectedConfig?.catalogTestClose === "function"
     ? studentState.selectedConfig.catalogTestClose
     : null;
-  const hasIndividualSidebar = !isProjectedTeacherMode && !isCatalogTestMode && currentMode === "individual";
+  const hasIndividualSidebar = !isProjectedTeacherMode && !isCatalogTestMode && !isDirectLaunchMode && currentMode === "individual";
 
   const { els } = createSessionShell(root, {
     currentMode,
@@ -177,6 +179,7 @@ export function renderSessionView(root){
   let allowProjectedUnload = false;
   let projectedControlsVisible = true;
   let projectedSessionLink = null;
+  let pendingActivityAssignmentCompletion = Promise.resolve(null);
   let fitResizeObserver = null;
   let toolCountdownTicker = null;
   let attemptStopStatus = "interrupted";
@@ -305,6 +308,10 @@ export function renderSessionView(root){
         },
         onSessionFinished: (summary) => {
           syncFinishedExplorationLevel(summary);
+          pendingActivityAssignmentCompletion = completeSelectedActivityAssignment().catch((error) => {
+            console.warn("Impossible de finaliser l’attribution de l’activité.", error);
+            return false;
+          });
         },
         onActivityAttemptStarted: shouldRecordDetailedHistory()
           ? (payload) => startDetailedActivityAttempt(payload)
@@ -722,6 +729,7 @@ export function renderSessionView(root){
   }
 
   function shouldRecordDetailedHistory(){
+    if (studentState.selectedConfig?.skip_detailed_history === true) return false;
     if (isProjectedTeacherMode || isCatalogTestMode || isSharedSessionEntry) return false;
     if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return false;
     const participant = getSelectedParticipantsForCurrentMode()[0] || null;
@@ -844,6 +852,23 @@ export function renderSessionView(root){
     }
   }
 
+  async function completeSelectedActivityAssignment(){
+    const assignmentId = String(studentState.selectedConfig?.activity_assignment_id || "").trim();
+    if (!assignmentId) return false;
+    if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return false;
+    const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+    const studentId = Number(participant?.id);
+    const studentCode = String(studentState.studentCode || "").trim();
+    if (!Number.isFinite(studentId) || studentId <= 0 || !studentCode) return false;
+
+    return await completePublicActivityAssignment({
+      accessCode:String(studentState.accessCode || ""),
+      assignmentId,
+      studentId,
+      studentCode
+    });
+  }
+
   function isAdventureSessionContext(){
     return String(
       studentState.selectedConfig?.progression_context?.context
@@ -855,6 +880,14 @@ export function renderSessionView(root){
   async function exitToActivitiesAfterAttemptFinalization(){
     if (isAdventureSessionContext()) {
       await pendingAdventureAttemptFinalize.catch(() => null);
+    }
+    if (studentState.selectedConfig?.activity_assignment_id) {
+      await pendingActivityAssignmentCompletion.catch(() => null);
+    }
+
+    if (isDirectLaunchMode) {
+      window.location.hash = "#/directdone";
+      return;
     }
 
     goBackToActivities();
@@ -1083,6 +1116,11 @@ export function renderSessionView(root){
 
     if (isCatalogTestMode && catalogTestCloseHandler) {
       catalogTestCloseHandler();
+      return;
+    }
+
+    if (isDirectLaunchMode) {
+      window.location.hash = "#/directdone";
       return;
     }
 

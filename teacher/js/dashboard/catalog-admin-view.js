@@ -65,7 +65,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
   {
     id: "conjugaison",
     label: "Conjugaison",
-    toolIds: ["conjugaison"]
+    toolIds: ["conjugaison", "identifier-verbe"]
   },
   {
     id: "lexique",
@@ -126,7 +126,9 @@ export function createCatalogAdminViewController({
   updatePedagogicalNodeAsAdmin,
   deletePedagogicalNodeAsAdmin,
   showToast,
-  onReturnToCatalogue
+  onReturnToCatalogue,
+  onCreateSystemActivity,
+  onEditSystemActivity
 } = {}) {
   let folders = [];
   const tools = getActiveToolsRegistry();
@@ -146,7 +148,7 @@ export function createCatalogAdminViewController({
   const toolCollapsibleStateByTool = new Map();
 
   function setCatalogueState({ activities: nextActivities = [], folders: nextFolders = [], currentFolderId = null } = {}) {
-    activities = sortAdminActivities(nextActivities);
+    activities = sortAdminActivities((Array.isArray(nextActivities) ? nextActivities : []).filter((activity) => String(activity?.status || "draft") !== "archived"));
     folders = (Array.isArray(nextFolders) ? nextFolders : []).map(normalizePedagogicalNode);
     adminCatalogueFolderId = String(currentFolderId || "").trim() || null;
   }
@@ -154,11 +156,11 @@ export function createCatalogAdminViewController({
   function renderHeaderActions() {
     const canStartCreation = canCreateActivityInFolder(adminCatalogueFolderId);
     return `
-      <button id="btnAdminCatalogTree" class="btn dashboard-btn-with-icon" type="button" title="Créer, déplacer et régler les nœuds pédagogiques">
+      <button id="btnAdminCatalogTree" class="btn dashboard-btn-with-icon dashboard-header-action-btn" type="button" title="Créer, déplacer et régler les nœuds pédagogiques">
         <span class="dashboard-material-icon" aria-hidden="true">account_tree</span>
         <span>Arborescence</span>
       </button>
-      <button id="btnAdminNewCatalogActivity" class="btn primary dashboard-btn-with-icon" type="button" ${canStartCreation ? "" : "disabled"} title="${canStartCreation ? "Créer une activité dans cette partie d’Exploration" : "Sélectionne d’abord un dossier de niveau dans l’arborescence."}">
+      <button id="btnAdminNewCatalogActivity" class="btn primary dashboard-btn-with-icon dashboard-header-action-btn" type="button" ${canStartCreation ? "" : "disabled"} title="${canStartCreation ? "Créer une activité dans cette partie d’Exploration" : "Sélectionne d’abord un dossier de niveau dans l’arborescence."}">
         <span class="dashboard-material-icon" aria-hidden="true">add</span>
         <span>Créer une activité</span>
       </button>
@@ -180,6 +182,10 @@ export function createCatalogAdminViewController({
     });
     header?.querySelector("#btnAdminNewCatalogActivity")?.addEventListener("click", () => {
       if (!getAdminFolderById(adminCatalogueFolderId)) return;
+      if (typeof onCreateSystemActivity === "function") {
+        onCreateSystemActivity({ pedagogicalNodeId:adminCatalogueFolderId });
+        return;
+      }
       openEditor();
     });
   }
@@ -230,7 +236,12 @@ export function createCatalogAdminViewController({
     root?.querySelectorAll("[data-action='edit-admin-activity']").forEach((btn) => btn.addEventListener("click", (event) => {
       event.stopPropagation();
       const activity = activities.find((item) => String(item.id) === String(btn.dataset.activityId || ""));
-      if (activity) openEditor(activity);
+      if (!activity) return;
+      if (typeof onEditSystemActivity === "function") {
+        onEditSystemActivity(activity);
+        return;
+      }
+      openEditor(activity);
     }));
     root?.querySelectorAll("[data-action='duplicate-admin-activity']").forEach((btn) => btn.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -527,7 +538,7 @@ export function createCatalogAdminViewController({
     const isPublished = String(editingActivity?.status || "draft") === "published";
     return `
         <div class="dashboard-config-header-main super-admin-editor-header-main cfg-header-left">
-          <button class="btn cfg-back-btn super-admin-editor-back dashboard-btn-with-icon" type="button" data-action="back-admin-list" aria-label="Retour à Exploration" title="Retour à Exploration"><span class="dashboard-material-icon" aria-hidden="true">arrow_back</span></button>
+          <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-admin-list" aria-label="Retour à Exploration" title="Retour à Exploration"><span class="dashboard-material-icon" aria-hidden="true">arrow_back</span></button>
           <div class="cfg-header-identity super-admin-editor-identity">
             <span class="cfg-field-label">Titre de l'activité :</span>
             <span class="cfg-config-name-display${title ? "" : " is-empty"}" title="${escapeAttr(safeTitle)}">${escapeHtml(safeTitle)}</span>

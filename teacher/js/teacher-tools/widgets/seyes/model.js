@@ -1,10 +1,27 @@
-export const SEYES_FONT_GS = "GS";
-export const SEYES_FONT_CM = "CM";
-export const SEYES_ZOOM_MIN = 0.5;
-export const SEYES_ZOOM_MAX = 2;
-export const SEYES_ZOOM_STEP = 0.1;
-export const SEYES_DEFAULT_COLOR = "#427ebe";
-export const SEYES_CONTENT_MAX_LENGTH = 120000;
+export const SEYES_SCALE_MIN = 0.65;
+export const SEYES_SCALE_MAX = 1.65;
+export const SEYES_SCALE_STEP = 0.05;
+export const SEYES_CONTENT_MAX_LENGTH = 180000;
+
+export const SEYES_DEFAULT_TEXT_COLOR = "#427ebe";
+export const SEYES_DEFAULT_HIGHLIGHT_COLOR = "#fff2a8";
+
+export const SEYES_FONTS = Object.freeze([
+  { id: "belle-gs", label: "Belle Allure GS", family: "SeyesBelleAllureGS" },
+  { id: "belle-c", label: "Belle Allure C", family: "SeyesBelleAllureC" },
+  { id: "andika", label: "Andika", family: "Andika" },
+  { id: "segoe", label: "Segoe UI", family: "Segoe UI" }
+]);
+
+export const SEYES_RULINGS = Object.freeze([
+  { id: "seyes", label: "Seyès" },
+  { id: "double", label: "Double ligne" },
+  { id: "single", label: "Ligne simple" },
+  { id: "large", label: "Grand lignage" },
+  { id: "earth", label: "Terre / herbe / ciel" }
+]);
+
+export const SEYES_ALIGNMENTS = Object.freeze(["left", "center", "right"]);
 
 function clamp(value, min, max){
   const number = Number(value);
@@ -17,15 +34,14 @@ function round(value, digits = 2){
   return Math.round((Number(value) || 0) * factor) / factor;
 }
 
-function normalizeFontSet(value){
-  return String(value || "").trim().toUpperCase() === SEYES_FONT_CM
-    ? SEYES_FONT_CM
-    : SEYES_FONT_GS;
+function normalizeOneOf(value, items, fallback){
+  const safe = String(value || "").trim();
+  return items.some((item) => (typeof item === "string" ? item : item.id) === safe) ? safe : fallback;
 }
 
-function normalizeZoom(value){
-  const safe = clamp(value, SEYES_ZOOM_MIN, SEYES_ZOOM_MAX);
-  return round(Math.round(safe / SEYES_ZOOM_STEP) * SEYES_ZOOM_STEP, 1);
+function normalizeColor(value, fallback){
+  const safe = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(safe) ? safe.toLowerCase() : fallback;
 }
 
 function normalizeContentHtml(value){
@@ -34,10 +50,18 @@ function normalizeContentHtml(value){
 
 export function normalizeSeyesState(rawState = {}){
   return {
-    version: 1,
+    version: 2,
+    title: String(rawState.title || "Document Seyès").trim().slice(0, 120) || "Document Seyès",
     contentHtml: normalizeContentHtml(rawState.contentHtml),
-    fontSet: normalizeFontSet(rawState.fontSet),
-    zoom: normalizeZoom(rawState.zoom ?? 1)
+    fontId: normalizeOneOf(rawState.fontId, SEYES_FONTS, "belle-gs"),
+    ruling: normalizeOneOf(rawState.ruling, SEYES_RULINGS, "seyes"),
+    scale: round(clamp(rawState.scale ?? 1, SEYES_SCALE_MIN, SEYES_SCALE_MAX), 2),
+    alignment: normalizeOneOf(rawState.alignment, SEYES_ALIGNMENTS, "left"),
+    letterSpacing: round(clamp(rawState.letterSpacing ?? 0, -0.04, 0.24), 3),
+    wordSpacing: round(clamp(rawState.wordSpacing ?? 0, -0.04, 0.7), 3),
+    formatColor: normalizeColor(rawState.formatColor, SEYES_DEFAULT_TEXT_COLOR),
+    highlightColor: normalizeColor(rawState.highlightColor, SEYES_DEFAULT_HIGHLIGHT_COLOR),
+    formatThickness: Math.round(clamp(rawState.formatThickness ?? 2, 1, 5))
   };
 }
 
@@ -54,31 +78,42 @@ export function cloneSeyesState(rawState = {}){
 }
 
 export function applySeyesAction({ action, payload = {}, state } = {}){
+  const current = normalizeSeyesState(state);
   const safeAction = String(action || "").trim();
-  const currentState = normalizeSeyesState(state);
 
   if (safeAction === "set-content") {
-    return {
-      patch: {
-        state: normalizeSeyesState({
-          ...currentState,
-          contentHtml: payload?.contentHtml
-        })
-      }
-    };
+    return { patch: { state: normalizeSeyesState({ ...current, contentHtml: payload.contentHtml }) } };
   }
 
   if (safeAction === "set-settings") {
+    return { patch: { state: normalizeSeyesState({ ...current, ...(payload || {}) }) } };
+  }
+
+  if (safeAction === "load-document") {
+    return { patch: { state: normalizeSeyesState(payload?.state || payload || {}) } };
+  }
+
+  if (safeAction === "reset-document") {
     return {
       patch: {
         state: normalizeSeyesState({
-          ...currentState,
-          fontSet: payload?.fontSet ?? currentState.fontSet,
-          zoom: payload?.zoom ?? currentState.zoom
+          ...current,
+          contentHtml: "",
+          alignment: "left",
+          letterSpacing: 0,
+          wordSpacing: 0,
+          formatColor: SEYES_DEFAULT_TEXT_COLOR,
+          highlightColor: SEYES_DEFAULT_HIGHLIGHT_COLOR,
+          formatThickness: 2
         })
-      }
+      },
+      message: "Document Seyès réinitialisé."
     };
   }
 
   return null;
+}
+
+export function getSeyesFont(fontId){
+  return SEYES_FONTS.find((item) => item.id === String(fontId || "")) || SEYES_FONTS[0];
 }

@@ -262,6 +262,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["maths", "nombres", "ecriture", "seyes", "projection"]
   },
   {
+    id: "identifier-verbe",
+    label: "Identifier le verbe",
+    entry: "../tools/identifier-verbe/tool.js",
+    description: "Identifier des verbes à l’infinitif ou conjugués parmi des mots de la banque lexicale.",
+    tags: ["français", "grammaire", "verbe", "conjugaison", "mots", "sélection", "projection"]
+  },
+  {
     id: "conjugaison",
     label: "Conjugaison",
     entry: "../tools/conjugaison/tool.js",

@@ -25,6 +25,37 @@ const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
 const QCM_MAX_CHOICES = 6;
 const CORRECTION_VISIBILITY_MODES = new Set(["visible", "correct", "incorrect", "hidden"]);
+const QUESTION_RESPONSE_MODES = new Set(["required", "none"]);
+const PRESENTATION_WIDGET_TYPES = new Set(["text", "masked-text", "flash-text", "image", "flash-image", "audio"]);
+
+export function normalizeQuizQuestionResponseMode(value){
+  const safe = String(value || "").trim();
+  return QUESTION_RESPONSE_MODES.has(safe) ? safe : "required";
+}
+
+function hasNonEmptyResourceSource(source){
+  if (!source || typeof source !== "object" || Array.isArray(source)) return false;
+  return Object.values(source).some((value) => {
+    if (typeof value === "string") return Boolean(value.trim());
+    return value != null && value !== false;
+  });
+}
+
+export function isQuizPresentationVariantRunnable(variant = {}){
+  if (normalizeQuizQuestionResponseMode(variant?.responseMode ?? variant?.response_mode) !== "none") return false;
+  if (Number(variant?.responseWidgetCount) !== 0) return false;
+  return (Array.isArray(variant?.widgets) ? variant.widgets : []).some((widget) => {
+    if (!PRESENTATION_WIDGET_TYPES.has(String(widget?.type || ""))) return false;
+    const view = getWidgetView(widget, "question");
+    if (!view?.visible) return false;
+    if (["text", "masked-text", "flash-text"].includes(widget.type)) {
+      return Boolean(String(view.text || "").trim());
+    }
+    if (widget.type === "image" || widget.type === "flash-image") return hasNonEmptyResourceSource(view.imageSource);
+    if (widget.type === "audio") return hasNonEmptyResourceSource(view.audioSource);
+    return false;
+  });
+}
 const normalizedQuizSnapshots = new WeakSet();
 
 function normalizeFlashDelaySeconds(value){
@@ -253,6 +284,7 @@ export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = 
     id: String(safe.id || `question-${index + 1}`).trim() || `question-${index + 1}`,
     title: String(safe.title || `Question ${index + 1}`).trim() || `Question ${index + 1}`,
     modelId: String(safe.modelId || safe.model_id || "").trim(),
+    responseMode:normalizeQuizQuestionResponseMode(safe.responseMode ?? safe.response_mode),
     widgets,
     variants
   }, 0);
@@ -261,6 +293,7 @@ export function normalizeQuizQuestion(question = {}, index = 0, sourceColumns = 
     id: sample.id,
     title: sample.title,
     modelId: sample.modelId,
+    responseMode:normalizeQuizQuestionResponseMode(sample.responseMode),
     timerSeconds,
     variantDrawMode,
     widgets,
@@ -1118,7 +1151,14 @@ export function getQuizTestIssues(snapshot = {}){
     ));
     variants.forEach((variant, variantIndex) => {
       const suffix = variants.length > 1 ? `, variante ${variantIndex + 1}` : "";
-      if (variant.responseWidgetCount !== 1) {
+      const responseMode = normalizeQuizQuestionResponseMode(variant.responseMode);
+      if (responseMode === "none") {
+        if (variant.responseWidgetCount !== 0) {
+          issues.push(`La question ${index + 1}${suffix} est définie « Sans réponse attendue » : supprimez tout widget de réponse exécutable.`);
+        } else if (!isQuizPresentationVariantRunnable(variant)) {
+          issues.push(`La question ${index + 1}${suffix} sans réponse doit afficher au moins un contenu réel dans la vue Question (texte, image ou audio).`);
+        }
+      } else if (variant.responseWidgetCount !== 1) {
         issues.push(`La question ${index + 1}${suffix} doit contenir exactement un widget de réponse (« Réponse de l’élève », « Réponse texte vérifiée », « J’ai terminé », « QCM », « Sélection de mots » ou « Catégories »).`);
       } else if ((variant.responseType === "answer" || variant.responseType === "verified-answer") && !variant.primaryAnswerVisibleInQuestion) {
         issues.push(`Affichez la zone « Réponse de l’élève » de la question ${index + 1}${suffix} dans la vue Question.`);

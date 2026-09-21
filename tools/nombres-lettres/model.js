@@ -9,6 +9,11 @@ export const QUESTION_DIRECTIONS = Object.freeze({
   MIXED: "mixed"
 });
 
+export const LETTER_STYLES = Object.freeze({
+  SCRIPT: "script",
+  CURSIVE: "cursive"
+});
+
 const SIMPLE_NUMBERS = Object.freeze([
   "zéro",
   "un",
@@ -44,7 +49,8 @@ export function getDefaultSettings() {
   return {
     min: NUMBER_LIMITS.min,
     max: NUMBER_LIMITS.max,
-    direction: QUESTION_DIRECTIONS.NUMBER_TO_WORDS
+    direction: QUESTION_DIRECTIONS.NUMBER_TO_WORDS,
+    letterStyle: LETTER_STYLES.CURSIVE
   };
 }
 
@@ -63,6 +69,7 @@ export function normalizeSettings(settings = {}) {
   }
 
   const direction = normalizeDirection(base.direction);
+  const letterStyle = normalizeLetterStyle(base.letterStyle);
   const allowedValues = [];
   for (let value = min; value <= max; value += 1) {
     allowedValues.push(value);
@@ -72,6 +79,7 @@ export function normalizeSettings(settings = {}) {
     min,
     max,
     direction,
+    letterStyle,
     allowedValues
   };
 }
@@ -225,6 +233,14 @@ function normalizeDirection(value) {
     return safeValue;
   }
   return QUESTION_DIRECTIONS.NUMBER_TO_WORDS;
+}
+
+function normalizeLetterStyle(value) {
+  const safeValue = String(value ?? "").trim().toLowerCase();
+  if (safeValue === LETTER_STYLES.SCRIPT || safeValue === LETTER_STYLES.CURSIVE) {
+    return safeValue;
+  }
+  return LETTER_STYLES.CURSIVE;
 }
 
 function clampInt(value, min, max) {

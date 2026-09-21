@@ -627,6 +627,54 @@ export async function loadPublicMissionSteps(accessCode, missionId, studentId = 
   return Array.isArray(data) ? data : [];
 }
 
+export async function resolvePublicDirectLaunch(token) {
+  const safeToken = String(token || "").trim();
+  if (!safeToken) return null;
+  const { data, error } = await supabase.rpc("resolve_direct_launch", { p_token:safeToken });
+  if (error) throw error;
+  return data && typeof data === "object" ? data : null;
+}
+
+export async function listPublicActivityAssignmentsForSpace(accessCode, studentIds = [], isGroup = false) {
+  const code = normalizeAccessCode(accessCode);
+  if (!code) return [];
+  const ids = (Array.isArray(studentIds) ? studentIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  if (!ids.length) return [];
+
+  const { data, error } = await supabase.rpc("get_space_activity_assignments", {
+    p_access_code: code,
+    p_student_ids: ids,
+    p_is_group: isGroup === true
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function completePublicActivityAssignment({
+  accessCode,
+  assignmentId,
+  studentId,
+  studentCode
+} = {}) {
+  const code = normalizeAccessCode(accessCode);
+  const id = String(assignmentId || "").trim();
+  const numericStudentId = Number(studentId);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  if (!code || !id || !Number.isFinite(numericStudentId) || numericStudentId <= 0 || !cleanStudentCode) return false;
+
+  const { data, error } = await supabase.rpc("complete_space_activity_assignment", {
+    p_access_code: code,
+    p_assignment_id: id,
+    p_student_id: numericStudentId,
+    p_student_code: cleanStudentCode
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 async function hydratePublicConjugationPersonalLists(accessCode, configJson = {}) {
   const safeConfig = configJson && typeof configJson === "object" && !Array.isArray(configJson)
     ? { ...configJson }

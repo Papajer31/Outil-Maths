@@ -1399,6 +1399,7 @@ export function createSessionEngine({
 
 
     if (generateQuestion) {
+      item.manualQuestionCompletionAction = false;
       beginHistoryQuestion(item);
       const runProfile = getToolRunProfile(activeTool, item);
       if (runProfile.blockingMessage) {
@@ -2829,10 +2830,17 @@ export function createSessionEngine({
   function applyCatalogTestRuntimeSettings(item) {
     if (!item || String(item.catalogContext || "").trim().toLowerCase() !== "test") return;
 
-    item.draftQuestionFlowMode = "unlimited";
+    // En mode Test, les contenus génératifs restent volontairement sans fin
+    // tant qu'aucune limite ergonomique n'est proposée dans l'interface.
+    // Seuls les contenus intrinsèquement finis (notamment les quiz classiques)
+    // doivent respecter leur longueur réelle. Les séries Quiz sont génératives :
+    // tools/quiz/tool.js ne leur fournit donc pas de limite intrinsèque.
+    if (item.executionLimit?.mode === "intrinsic") {
+      item.questionFlowMode = "fixed";
+      return;
+    }
+
     item.questionFlowMode = "unlimited";
-    item.draftToolMaxTimeInfinite = true;
-    item.toolMaxTimeInfinite = true;
   }
 
 
@@ -2923,6 +2931,7 @@ export function createSessionEngine({
           requestAnswerPhase: sessionControls.requestAnswerPhase,
           requestNextQuestion: sessionControls.requestNextQuestion,
           requestQuestionCompletion: sessionControls.requestQuestionCompletion,
+          setQuestionCompletionAction: sessionControls.setQuestionCompletionAction,
           requestValidationFeedback: sessionControls.requestValidationFeedback,
           getPhaseKind: sessionControls.getPhaseKind
         },
@@ -2968,6 +2977,7 @@ export function createSessionEngine({
         requestAnswerPhase: sessionControls.requestAnswerPhase,
         requestNextQuestion: sessionControls.requestNextQuestion,
         requestQuestionCompletion: sessionControls.requestQuestionCompletion,
+        setQuestionCompletionAction: sessionControls.setQuestionCompletionAction,
         requestValidationFeedback: sessionControls.requestValidationFeedback,
         getPhaseKind: sessionControls.getPhaseKind,
         notifyValidationStateChanged: sessionControls.notifyValidationStateChanged
@@ -3046,6 +3056,16 @@ export function createSessionEngine({
 
         hideManualAction();
         void advanceToNextQuestion(item);
+        return true;
+      },
+
+      setQuestionCompletionAction(enabled = true) {
+        if (!item) return false;
+        item.manualQuestionCompletionAction = enabled === true;
+        if (session[currentToolIndex] === item && phase.kind === "QUESTION") {
+          refreshShellManualAction(item);
+          emitStateChange();
+        }
         return true;
       },
 
@@ -3458,6 +3478,17 @@ export function createSessionEngine({
 
     if (!item || !isSessionRunning || paused || isToolMaxTimeExpiredOrAdvancing(item)) {
       hideManualAction();
+      return;
+    }
+
+    if (phase.kind === "QUESTION" && item.manualQuestionCompletionAction === true) {
+      const isLastFixedQuestion = item.questionFlowMode === "fixed"
+        && Number.isFinite(Number(item.questionCount))
+        && currentQuestionIndex + 1 >= Number(item.questionCount);
+      showManualAction(isLastFixedQuestion ? "Activité terminée" : "Question suivante", () => {
+        const controls = createToolSessionControls(item);
+        controls.requestQuestionCompletion({ outcome:"completed" });
+      });
       return;
     }
 

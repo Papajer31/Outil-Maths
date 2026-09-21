@@ -376,6 +376,13 @@ function renderMissionTile(mission){
 }
 
 function formatMissionSubtitle(mission){
+  if (mission?._kind === "activity_assignment") {
+    if (String(mission?.source_type || "") === "sequence") {
+      const total = Math.max(1, Math.trunc(Number(mission?.total_steps) || 1));
+      return `Séquence · ${total} activité${total > 1 ? "s" : ""}`;
+    }
+    return "Activité attribuée";
+  }
   const intent = String(mission?.intent_mode || "practice") === "evaluation" ? "Évaluation" : "Entrainement";
   const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
   const totalSteps = Math.max(0, Math.trunc(Number(mission?.total_steps) || 0));
