@@ -2773,8 +2773,21 @@ export function createSessionEngine({
 
   function recordCatalogProgressQuestionOutcome(item, isCorrect) {
     const levelBefore = normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3);
-    if (!item || runMode === "projected-teacher" || !item.catalogActivityId) {
+    if (!item || !item.catalogActivityId) {
       return { levelBefore, levelAfter: levelBefore };
+    }
+
+    // En projection enseignant, on ne persiste aucune progression élève,
+    // mais une étape de mission adaptative doit quand même évoluer localement
+    // pour que la question suivante utilise immédiatement le niveau obtenu.
+    if (runMode === "projected-teacher") {
+      if (item.catalogAdaptive === true) {
+        applyCatalogAdaptiveLevelAfterOutcome(item, isCorrect);
+      }
+      return {
+        levelBefore,
+        levelAfter: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? levelBefore)
+      };
     }
 
     const stats = item.progressSessionStats || { questions: 0, correct: 0 };

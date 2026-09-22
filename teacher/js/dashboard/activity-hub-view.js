@@ -32,8 +32,8 @@ export function createActivityHubViewController({
           ${renderHubCard({
             action: "open-assigned",
             icon: "assignment_ind",
-            title: "Attribuer des activités",
-            text: "Donner une activité ou une séquence d’activités à la classe ou à certains élèves."
+            title: "Activités attribuées",
+            text: "Voir les activités et séquences actuellement proposées aux élèves, puis en attribuer de nouvelles."
           })}
         </div>
 

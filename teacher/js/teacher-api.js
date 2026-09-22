@@ -1089,7 +1089,7 @@ export async function deleteTeacherActivity(activityId) {
    SÉQUENCES D’ACTIVITÉS
    ========================= */
 
-const TEACHER_SEQUENCE_FIELDS = "id, teacher_space_id, title, title_normalized, created_at, updated_at";
+const TEACHER_SEQUENCE_FIELDS = "id, teacher_space_id, folder_id, title, title_normalized, display_order, created_at, updated_at";
 const TEACHER_SEQUENCE_ITEM_FIELDS = "id, sequence_id, position, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, created_at, updated_at";
 
 export async function listTeacherSequencesForSpace(teacherSpaceId) {
@@ -1098,7 +1098,7 @@ export async function listTeacherSequencesForSpace(teacherSpaceId) {
     .from("teacher_sequences")
     .select(TEACHER_SEQUENCE_FIELDS)
     .eq("teacher_space_id", spaceId)
-    .order("updated_at", { ascending:false })
+    .order("display_order", { ascending:true })
     .order("title", { ascending:true });
   if (sequenceError) throw sequenceError;
 
@@ -1164,12 +1164,18 @@ export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {})
 
   if (!cleanItems.length) throw new Error("Ajoutez au moins une activité à la séquence.");
 
+  const folderId = normalizeNullableUuid(sequence.folder_id);
   const existingId = normalizeUuid(sequence.id);
   let savedSequence = null;
   if (existingId) {
     const { data, error } = await supabase
       .from("teacher_sequences")
-      .update({ title, title_normalized:normalizeConfigName(title) })
+      .update({
+        title,
+        title_normalized:normalizeConfigName(title),
+        folder_id:folderId,
+        display_order:Math.max(0, Math.trunc(Number(sequence.display_order) || 0))
+      })
       .eq("id", existingId)
       .eq("teacher_space_id", spaceId)
       .select(TEACHER_SEQUENCE_FIELDS)
@@ -1177,9 +1183,19 @@ export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {})
     if (error) throw error;
     savedSequence = data;
   } else {
+    const existingSequences = await listTeacherSequencesForSpace(spaceId);
+    const displayOrder = existingSequences
+      .filter((item) => String(item.folder_id || "") === String(folderId || ""))
+      .reduce((maximum, item) => Math.max(maximum, Number(item.display_order) || 0), -1) + 1;
     const { data, error } = await supabase
       .from("teacher_sequences")
-      .insert({ teacher_space_id:spaceId, title, title_normalized:normalizeConfigName(title) })
+      .insert({
+        teacher_space_id:spaceId,
+        folder_id:folderId,
+        title,
+        title_normalized:normalizeConfigName(title),
+        display_order:displayOrder
+      })
       .select(TEACHER_SEQUENCE_FIELDS)
       .single();
     if (error) throw error;
@@ -1205,6 +1221,23 @@ export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {})
     ? [...savedItems].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
     : [];
   return { ...savedSequence, items:orderedItems };
+}
+
+export async function updateTeacherSequencePlacement(sequenceId, updates = {}) {
+  const id = normalizeUuid(sequenceId);
+  if (!id) throw new Error("Séquence invalide.");
+  const payload = {};
+  if ("folder_id" in updates) payload.folder_id = normalizeNullableUuid(updates.folder_id);
+  if ("display_order" in updates) payload.display_order = Math.max(0, Math.trunc(Number(updates.display_order) || 0));
+  if (!Object.keys(payload).length) throw new Error("Aucun déplacement de séquence à enregistrer.");
+  const { data, error } = await supabase
+    .from("teacher_sequences")
+    .update(payload)
+    .eq("id", id)
+    .select(TEACHER_SEQUENCE_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteTeacherSequence(sequenceId) {

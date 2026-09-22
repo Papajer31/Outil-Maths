@@ -163,6 +163,9 @@ export function createPersonalActivityEditorController({
     const typeMeta = getTypeMeta(editingActivity.activity_type);
     const tool = findTool(getToolId());
     const toolLabel = tool?.label || typeMeta.label;
+    const hasEditableContent = ["quiz", "series"].includes(editingActivity.activity_type);
+    const sourceTitle = String(sourceQuiz?.title || editingActivity.title || "Contenu à créer").trim() || "Contenu à créer";
+    const centerLabel = hasEditableContent ? sourceTitle : toolLabel;
     const backLabel = editorOrigin === "activities" ? "Retour à Exploration" : "Retour à Mes activités";
     header.innerHTML = `
       <div class="dashboard-config-header-main personal-activity-editor-header-main">
@@ -175,8 +178,12 @@ export function createPersonalActivityEditorController({
         </div>
       </div>
       <div class="dashboard-config-header-center personal-activity-editor-header-center">
-        <span class="personal-activity-editor-tool-name">${escapeHtml(toolLabel)}</span>
-        ${editingActivity.activity_type === "tool" ? `
+        <span class="personal-activity-editor-tool-name">${escapeHtml(centerLabel)}</span>
+        ${hasEditableContent ? `
+          <button class="personal-activity-tool-picker-btn" type="button" data-action="edit-personal-content" title="Modifier le contenu" aria-label="Modifier le contenu">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
+        ` : editingActivity.activity_type === "tool" ? `
           <button class="personal-activity-tool-picker-btn" type="button" data-action="choose-personal-tool" title="Changer d’outil" aria-label="Changer d’outil">
             <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="#e3e3e3" aria-hidden="true"><path d="m680-80-12-60q-12-5-22.5-10.5T624-164l-58 18-40-68 46-40q-2-12-2-26t2-26l-46-40 40-68 58 18q11-8 21.5-13.5T668-420l12-60h80l12 60q12 5 22.5 10.5T816-396l58-18 40 68-46 40q2 12 2 26t-2 26l46 40-40 68-58-18q-11 8-21.5 13.5T772-140l-12 60h-80Zm96.5-143.5Q800-247 800-280t-23.5-56.5Q753-360 720-360t-56.5 23.5Q640-313 640-280t23.5 56.5Q687-200 720-200t56.5-23.5ZM160-240v-480 172-12 320Zm0 80q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v131q-18-13-38-22.5T800-548v-92H447l-80-80H160v480h283q3 21 9.5 41t15.5 39H160Z"/></svg>
           </button>
@@ -199,6 +206,7 @@ export function createPersonalActivityEditorController({
 
     header.querySelector("[data-action='back-personal-activity']")?.addEventListener("click", () => onBack?.({ origin:editorOrigin, activity:clone(editingActivity) }));
     header.querySelector("[data-action='choose-personal-tool']")?.addEventListener("click", openToolPicker);
+    header.querySelector("[data-action='edit-personal-content']")?.addEventListener("click", () => void editPersonalContent());
     header.querySelector(".personal-activity-title-input")?.addEventListener("input", (event) => {
       editingActivity.title = String(event.target?.value || "");
       markDirty();
@@ -211,15 +219,11 @@ export function createPersonalActivityEditorController({
   function renderBody() {
     if (!body || !editingActivity) return;
     const isAdaptive = editingActivity.difficulty_mode === "adaptive";
-    const typeMeta = getTypeMeta(editingActivity.activity_type);
+    const isQuizActivity = editingActivity.activity_type === "quiz";
     const toolId = getToolId();
-    const sourceStrip = ["quiz", "series"].includes(editingActivity.activity_type)
-      ? renderQuizSourceStrip(typeMeta)
-      : "";
 
     body.innerHTML = `
-      <div class="personal-activity-editor-shell${isAdaptive ? " is-adaptive" : " is-single"}">
-        ${sourceStrip ? `<div class="personal-activity-source-strip-wrap">${sourceStrip}</div>` : ""}
+      <div class="personal-activity-editor-shell${isAdaptive ? " is-adaptive" : " is-single"}${isQuizActivity ? " is-quiz" : ""}">
         <section class="personal-activity-editor-main">
           <div class="personal-activity-config-heading">
             <div class="personal-activity-config-controls">
@@ -254,17 +258,12 @@ export function createPersonalActivityEditorController({
     if (toolId) void renderCurrentToolSettings();
   }
 
-  function renderQuizSourceStrip(typeMeta) {
-    const title = String(sourceQuiz?.title || editingActivity.title || "Contenu à créer").trim() || "Contenu à créer";
-    const count = getQuizSourceCount(sourceQuiz);
-    return `
-      <div class="personal-activity-source-strip">
-        <span class="dashboard-material-icon" aria-hidden="true">${typeMeta.icon}</span>
-        <strong>${escapeHtml(title)}</strong>
-        <span class="personal-activity-source-meta">${count == null ? typeMeta.label : `${count} ${editingActivity.activity_type === "series" ? "variante" : "question"}${count > 1 ? "s" : ""}`}</span>
-        <button class="btn personal-activity-source-action" type="button" data-action="edit-personal-content">Modifier le contenu</button>
-      </div>
-    `;
+  async function editPersonalContent() {
+    const ok = await persistVisibleLevel({ silent:true });
+    if (!ok) return;
+    const saved = await save({ quiet:true });
+    if (!saved) return;
+    onEditContent?.(clone(saved), { origin:editorOrigin, systemPublication:clone(systemPublication) });
   }
 
   function renderSystemPublicationForm() {
@@ -412,13 +411,6 @@ export function createPersonalActivityEditorController({
   }
 
   function bindBodyEvents() {
-    body.querySelector("[data-action='edit-personal-content']")?.addEventListener("click", async () => {
-      const ok = await persistVisibleLevel({ silent:true });
-      if (!ok) return;
-      const saved = await save({ quiet:true });
-      if (!saved) return;
-      onEditContent?.(clone(saved), { origin:editorOrigin, systemPublication:clone(systemPublication) });
-    });
     body.querySelectorAll("[data-difficulty-mode]").forEach((button) => {
       button.addEventListener("click", async () => {
         const mode = String(button.dataset.difficultyMode || "single") === "adaptive" ? "adaptive" : "single";
@@ -464,17 +456,22 @@ export function createPersonalActivityEditorController({
       const tool = mod.default || {};
       const draft = getCurrentDraft(tool);
       const settings = ensureToolSettings(draft.settings, tool);
+      const hideCommonQuizControls = toolId === "quiz";
       host.innerHTML = `
         <div class="cfg-tool-settings-stack personal-activity-tool-settings-stack">
-          <div class="super-admin-level-common-row personal-activity-common-row">
-            ${renderLevelTimingBlock(draft)}
-            ${renderLevelInstructionBlock(draft, tool)}
-          </div>
+          ${hideCommonQuizControls ? "" : `
+            <div class="super-admin-level-common-row personal-activity-common-row">
+              ${renderLevelTimingBlock(draft)}
+              ${renderLevelInstructionBlock(draft, tool)}
+            </div>
+          `}
           <div id="personalActivitySpecificSettings"></div>
         </div>
       `;
-      bindLevelTimingBlock(host);
-      bindLevelInstructionBlock(host);
+      if (!hideCommonQuizControls) {
+        bindLevelTimingBlock(host);
+        bindLevelInstructionBlock(host);
+      }
       const settingsHost = host.querySelector("#personalActivitySpecificSettings");
       if (typeof tool.renderToolSettings === "function") {
         tool.renderToolSettings(settingsHost, clone(settings), getToolContext());
@@ -1203,14 +1200,6 @@ function getTypeMeta(type) {
   if (type === "series") return { label:"Série", icon:"view_list" };
   if (type === "quiz") return { label:"Quiz", icon:"quiz" };
   return { label:"Outil", icon:"extension" };
-}
-
-function getQuizSourceCount(quiz) {
-  if (!quiz || !Array.isArray(quiz.questions)) return null;
-  if (String(quiz.editorMode || "") === "series" || quiz.seriesModelId) {
-    return quiz.questions.reduce((sum, question) => sum + Math.max(1, Array.isArray(question?.variants) ? question.variants.length : 1), 0);
-  }
-  return quiz.questions.length;
 }
 
 function isPlainObject(value) {

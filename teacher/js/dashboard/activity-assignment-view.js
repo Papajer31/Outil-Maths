@@ -10,14 +10,11 @@ export function createActivityAssignmentViewController({
   listCatalogActivitiesForTeacherSpace,
   listTeacherActivitiesForSpace,
   listTeacherSequencesForSpace,
-  saveTeacherSequenceForSpace,
-  deleteTeacherSequence,
   listTeacherClasses,
   listStudentsForTeacherSpace,
   listActivityAssignmentsForSpace,
   saveActivityAssignmentForSpace,
   deleteActivityAssignment,
-  onDirectLaunchSequence,
   onBack,
   showToast
 } = {}) {
@@ -27,18 +24,17 @@ export function createActivityAssignmentViewController({
   let classes = [];
   let students = [];
   let assignments = [];
-  let panelMode = "activity";
-  let sourceType = "catalog_activity";
+  let loadedSpaceId = "";
+  let loadError = "";
+
+  let drawerOpen = false;
+  let sourceTab = "catalog"; // catalog | personal
+  let selectedSourceType = ""; // catalog_activity | teacher_activity | sequence
   let selectedSourceId = "";
   let selectedDifficulty = "adaptive";
   let executionMode = "questions";
   let executionValue = 5;
   let selectedTargets = new Map();
-  let loadedSpaceId = "";
-  let loadError = "";
-
-  let sequenceDraft = null;
-  let sequenceAddSourceType = "catalog_activity";
 
   async function render({ forceRefresh = false, preselect = null } = {}) {
     const space = getCurrentTeacherSpace?.();
@@ -50,17 +46,15 @@ export function createActivityAssignmentViewController({
     }
 
     if (forceRefresh || loadedSpaceId !== spaceId) {
-      view.innerHTML = `<div class="dashboard-activity-empty-state">Chargement des activités et des élèves…</div>`;
+      view.innerHTML = `<div class="dashboard-activity-empty-state">Chargement des activités attribuées…</div>`;
       await refreshData();
       loadedSpaceId = spaceId;
     }
 
     if (preselect?.sourceType && preselect?.sourceId) {
-      panelMode = "activity";
-      sourceType = preselect.sourceType === "teacher_activity" ? "teacher_activity" : "catalog_activity";
-      selectedSourceId = String(preselect.sourceId || "").trim();
-      selectedTargets.clear();
-      syncDefaultsFromSelectedSource();
+      openAssignmentDrawer(preselect);
+    } else if (!preselect) {
+      drawerOpen = false;
     }
 
     renderView();
@@ -87,7 +81,7 @@ export function createActivityAssignmentViewController({
       assignments = Array.isArray(results[5]) ? results[5] : [];
     } catch (error) {
       console.error(error);
-      loadError = error?.message || "Impossible de charger l’attribution des activités.";
+      loadError = error?.message || "Impossible de charger les activités attribuées.";
       assignments = [];
     }
   }
@@ -99,98 +93,161 @@ export function createActivityAssignmentViewController({
           <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back" title="Retour aux activités" aria-label="Retour aux activités">
             <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
           </button>
-          <div class="dashboard-section-title">Attribuer des activités</div>
-          <div class="activity-assignment-tabs" role="tablist" aria-label="Type de travail">
-            <button class="btn${panelMode === "activity" ? " primary" : ""}" type="button" data-panel-mode="activity">Attribuer une activité</button>
-            <button class="btn${panelMode === "sequences" ? " primary" : ""}" type="button" data-panel-mode="sequences">Mes séquences</button>
-          </div>
+          <div class="dashboard-section-title">Activités attribuées</div>
+          <div class="activity-assignment-header-spacer"></div>
+          <button class="btn primary dashboard-btn-with-icon" type="button" data-action="open-assignment-drawer">
+            <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
+            <span>Attribuer des activités</span>
+          </button>
         </div>
 
         ${loadError ? `<div class="modal-message error">${escapeHtml(loadError)}<br><small>Vérifie que les migrations SQL 49 et 50 ont bien été appliquées.</small></div>` : ""}
 
-        ${panelMode === "sequences" ? renderSequencesPanel() : renderActivityPanel()}
-
-        <section class="activity-assignment-current">
-          <div class="dashboard-section-title">Attributions</div>
+        <section class="activity-assignment-overview">
           ${renderCurrentAssignments()}
         </section>
+
+        ${drawerOpen ? renderAssignmentDrawer() : ""}
       </div>
     `;
-    bindCommonEvents();
-    if (panelMode === "sequences") bindSequenceEvents();
-    else bindActivityEvents();
+    bindEvents();
   }
 
-  function renderActivityPanel() {
+  function renderCurrentAssignments() {
+    if (!assignments.length) {
+      return `
+        <div class="activity-assignment-empty">
+          <div class="activity-assignment-empty-card panel">
+            <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
+            <strong>Aucune activité attribuée</strong>
+            <p>Les activités et séquences actuellement proposées aux élèves apparaîtront ici.</p>
+            <button class="btn primary dashboard-btn-with-icon" type="button" data-action="open-assignment-drawer">
+              <span class="dashboard-material-icon" aria-hidden="true">add</span>
+              <span>Attribuer des activités</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="activity-assignment-current-list activity-assignment-current-list--overview">
+        ${assignments.map((assignment) => {
+          const recipients = formatAssignmentRecipients(assignment);
+          const source = assignment.source_type === "sequence"
+            ? "Séquence"
+            : assignment.source_type === "teacher_activity" ? "Mes activités" : "Exploration";
+          return `
+            <div class="activity-assignment-current-row activity-assignment-current-row--overview">
+              <div class="activity-assignment-current-main">
+                <strong>${escapeHtml(assignment.title_snapshot || "Activité")}</strong>
+                <span>${escapeHtml(source)} · ${escapeHtml(recipients)}</span>
+              </div>
+              <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-assignment" data-assignment-id="${escapeAttr(assignment.id)}" title="Retirer cette attribution" aria-label="Retirer cette attribution">
+                <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+              </button>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderAssignmentDrawer() {
     const selected = getSelectedSource();
     return `
-      <div class="activity-assignment-workspace">
-        <section class="activity-assignment-source-column">
-          <div class="activity-assignment-tabs" role="tablist" aria-label="Origine de l’activité">
-            <button class="btn${sourceType === "catalog_activity" ? " primary" : ""}" type="button" data-source-tab="catalog_activity">Exploration</button>
-            <button class="btn${sourceType === "teacher_activity" ? " primary" : ""}" type="button" data-source-tab="teacher_activity">Mes activités</button>
+      <button class="activity-assignment-drawer-scrim" type="button" data-action="close-assignment-drawer" aria-label="Fermer le volet d’attribution"></button>
+      <aside class="activity-assignment-drawer" role="dialog" aria-modal="true" aria-labelledby="activityAssignmentDrawerTitle">
+        <header class="activity-assignment-drawer-header">
+          <div>
+            <div id="activityAssignmentDrawerTitle" class="dashboard-section-title">Attribuer des activités</div>
+            <div class="dashboard-muted-text">Choisis une activité ou une séquence, puis ses destinataires.</div>
           </div>
-          <div class="activity-assignment-source-list">${renderSourceList(sourceType, selectedSourceId)}</div>
-        </section>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="close-assignment-drawer" title="Fermer" aria-label="Fermer le volet">
+            <span class="dashboard-material-icon" aria-hidden="true">close</span>
+          </button>
+        </header>
 
-        <section class="activity-assignment-config-column">
-          ${selected ? renderAssignmentConfig(selected) : `<div class="dashboard-activity-empty-state">Choisissez une activité à attribuer.</div>`}
-        </section>
-      </div>
+        <div class="activity-assignment-drawer-body">
+          <section class="activity-assignment-source-column">
+            <div class="activity-assignment-tabs" role="tablist" aria-label="Origine de l’activité">
+              <button class="btn${sourceTab === "catalog" ? " primary" : ""}" type="button" data-source-tab="catalog">Exploration</button>
+              <button class="btn${sourceTab === "personal" ? " primary" : ""}" type="button" data-source-tab="personal">Mes activités</button>
+            </div>
+            <div class="activity-assignment-source-list">${renderSourceList()}</div>
+          </section>
+
+          <section class="activity-assignment-config-column">
+            ${selected ? renderAssignmentConfig(selected) : `<div class="dashboard-activity-empty-state">Choisis une activité ou une séquence à attribuer.</div>`}
+          </section>
+        </div>
+      </aside>
     `;
   }
 
-  function renderSequencesPanel() {
+  function renderSourceList() {
+    if (sourceTab === "catalog") {
+      if (!catalogActivities.length) return `<div class="dashboard-activity-empty-state">Aucune activité disponible.</div>`;
+      return catalogActivities.map((activity) => renderSourceButton({
+        sourceType:"catalog_activity",
+        sourceId:getSourceId(activity),
+        title:getSourceTitle(activity),
+        subtitle:"Activité du catalogue"
+      })).join("");
+    }
+
+    const personalRows = [
+      ...teacherActivities.map((activity) => ({
+        sourceType:"teacher_activity",
+        sourceId:getSourceId(activity),
+        title:getSourceTitle(activity),
+        subtitle:`${getPersonalTypeLabel(activity)} · ${String(activity?.difficulty_mode || "single") === "adaptive" ? "Adaptative" : "Difficulté unique"}`
+      })),
+      ...sequences.map((sequence) => ({
+        sourceType:"sequence",
+        sourceId:String(sequence?.id || ""),
+        title:String(sequence?.title || "Séquence"),
+        subtitle:`Séquence · ${Array.isArray(sequence?.items) ? sequence.items.length : 0} activité${Array.isArray(sequence?.items) && sequence.items.length === 1 ? "" : "s"}`
+      }))
+    ];
+
+    if (!personalRows.length) return `<div class="dashboard-activity-empty-state">Aucune activité ni séquence disponible.</div>`;
+    return personalRows.map(renderSourceButton).join("");
+  }
+
+  function renderSourceButton({ sourceType, sourceId, title, subtitle }) {
+    const selected = sourceType === selectedSourceType && String(sourceId) === String(selectedSourceId);
     return `
-      <div class="activity-assignment-workspace activity-sequence-workspace">
-        <section class="activity-assignment-source-column">
-          <div class="activity-assignment-tabs">
-            <button class="btn primary" type="button" data-action="new-sequence">+ Créer une séquence</button>
-          </div>
-          <div class="activity-assignment-source-list">
-            ${sequences.length ? sequences.map((sequence) => `
-              <div class="activity-assignment-source-item${String(sequenceDraft?.id || "") === String(sequence.id || "") ? " is-selected" : ""}">
-                <button type="button" class="activity-sequence-open-btn" data-action="edit-sequence" data-sequence-id="${escapeAttr(sequence.id)}">
-                  <span class="activity-assignment-source-title">${escapeHtml(sequence.title || "Séquence")}</span>
-                  <span class="activity-assignment-source-meta">${Array.isArray(sequence.items) ? sequence.items.length : 0} activité(s)</span>
-                </button>
-                <button class="dashboard-icon-btn" type="button" data-action="direct-launch-sequence" data-sequence-id="${escapeAttr(sequence.id)}" title="QR / lien direct" aria-label="QR / lien direct">QR</button>
-                <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-sequence" data-sequence-id="${escapeAttr(sequence.id)}" title="Supprimer la séquence" aria-label="Supprimer la séquence"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
-              </div>
-            `).join("") : `<div class="dashboard-activity-empty-state">Aucune séquence pour le moment.</div>`}
-          </div>
-        </section>
-
-        <section class="activity-assignment-config-column">
-          ${sequenceDraft ? renderSequenceEditor() : `<div class="dashboard-activity-empty-state">Créez une séquence ou ouvrez-en une.</div>`}
-        </section>
-      </div>
+      <button class="activity-assignment-source-item${selected ? " is-selected" : ""}" type="button" data-source-type="${escapeAttr(sourceType)}" data-source-id="${escapeAttr(sourceId)}">
+        <span class="activity-assignment-source-title">${escapeHtml(title)}</span>
+        <span class="activity-assignment-source-meta">${escapeHtml(subtitle)}</span>
+      </button>
     `;
-  }
-
-  function renderSourceList(type = sourceType, selectedId = selectedSourceId, { addToSequence = false } = {}) {
-    const source = type === "teacher_activity" ? teacherActivities : catalogActivities;
-    if (!source.length) return `<div class="dashboard-activity-empty-state">Aucune activité disponible.</div>`;
-    return source.map((activity) => {
-      const id = getSourceId(activity);
-      const active = !addToSequence && id === selectedId;
-      const title = getSourceTitle(activity);
-      const subtitle = type === "teacher_activity"
-        ? `${getPersonalTypeLabel(activity)} · ${String(activity?.difficulty_mode || "single") === "adaptive" ? "Adaptative" : "Difficulté unique"}`
-        : "Activité du catalogue";
-      return `
-        <button class="activity-assignment-source-item${active ? " is-selected" : ""}" type="button" ${addToSequence ? "data-sequence-add-source" : "data-source-id"}="${escapeAttr(id)}">
-          <span class="activity-assignment-source-title">${escapeHtml(title)}</span>
-          <span class="activity-assignment-source-meta">${escapeHtml(subtitle)}</span>
-          ${addToSequence ? `<span class="dashboard-material-icon" aria-hidden="true">add</span>` : ""}
-        </button>
-      `;
-    }).join("");
   }
 
   function renderAssignmentConfig(source) {
-    const intrinsic = isSourceIntrinsic(sourceType, source);
-    const adaptiveAvailable = isAdaptiveAvailableFor(sourceType, source);
+    const isSequence = selectedSourceType === "sequence";
+    const title = getSelectedSourceTitle(source);
+    const origin = selectedSourceType === "catalog_activity" ? "Exploration" : "Mes activités";
+
+    if (isSequence) {
+      const count = Array.isArray(source?.items) ? source.items.length : 0;
+      return `
+        <div class="activity-assignment-config-head">
+          <div>
+            <div class="dashboard-section-title">${escapeHtml(title)}</div>
+            <div class="dashboard-muted-text">Séquence · ${count} activité${count === 1 ? "" : "s"}</div>
+          </div>
+        </div>
+        <div class="activity-assignment-sequence-note">Les réglages de difficulté et de durée sont déjà définis activité par activité dans la séquence.</div>
+        <div class="dashboard-section-title activity-assignment-recipient-title">Destinataires</div>
+        ${renderRecipientsSection()}
+        ${renderSubmitButton("Attribuer la séquence")}
+      `;
+    }
+
+    const intrinsic = isSourceIntrinsic(selectedSourceType, source);
+    const adaptiveAvailable = isAdaptiveAvailableFor(selectedSourceType, source);
     if (intrinsic) executionMode = "intrinsic";
     else if (executionMode === "intrinsic") executionMode = "questions";
     if (!adaptiveAvailable && selectedDifficulty === "adaptive") selectedDifficulty = "3";
@@ -198,8 +255,8 @@ export function createActivityAssignmentViewController({
     return `
       <div class="activity-assignment-config-head">
         <div>
-          <div class="dashboard-section-title">${escapeHtml(getSourceTitle(source))}</div>
-          <div class="dashboard-muted-text">${sourceType === "catalog_activity" ? "Exploration" : "Mes activités"}</div>
+          <div class="dashboard-section-title">${escapeHtml(title)}</div>
+          <div class="dashboard-muted-text">${escapeHtml(origin)}</div>
         </div>
       </div>
 
@@ -212,90 +269,31 @@ export function createActivityAssignmentViewController({
         prefix:"activityAssignment"
       })}
 
+      <div class="dashboard-section-title activity-assignment-recipient-title">Destinataires</div>
       ${renderRecipientsSection()}
+      ${renderSubmitButton("Attribuer")}
+    `;
+  }
 
+  function renderSubmitButton(label) {
+    return `
       <div class="activity-assignment-submit-row">
         <button class="btn primary dashboard-btn-with-icon" type="button" data-action="assign-selected" ${selectedTargets.size ? "" : "disabled"}>
           <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
-          <span>Attribuer</span>
+          <span>${escapeHtml(label)}</span>
         </button>
       </div>
     `;
   }
 
-  function renderSequenceEditor() {
-    const items = Array.isArray(sequenceDraft.items) ? sequenceDraft.items : [];
-    return `
-      <div class="activity-sequence-editor">
-        <div class="activity-assignment-config-head">
-          <input id="sequenceTitle" class="modal-text-input" type="text" value="${escapeAttr(sequenceDraft.title || "")}" placeholder="Nom de la séquence">
-          <button class="btn primary" type="button" data-action="save-sequence">Enregistrer</button>
-        </div>
-
-        <div class="dashboard-section-title">Activités de la séquence</div>
-        <div class="activity-sequence-items">
-          ${items.length ? items.map((item, index) => renderSequenceItem(item, index)).join("") : `<div class="dashboard-activity-empty-state">Ajoutez au moins une activité.</div>`}
-        </div>
-
-        <div class="dashboard-section-title">Ajouter une activité</div>
-        <div class="activity-assignment-tabs" role="tablist" aria-label="Origine de l’activité à ajouter">
-          <button class="btn${sequenceAddSourceType === "catalog_activity" ? " primary" : ""}" type="button" data-sequence-source-tab="catalog_activity">Exploration</button>
-          <button class="btn${sequenceAddSourceType === "teacher_activity" ? " primary" : ""}" type="button" data-sequence-source-tab="teacher_activity">Mes activités</button>
-        </div>
-        <div class="activity-assignment-source-list activity-sequence-add-list">
-          ${renderSourceList(sequenceAddSourceType, "", { addToSequence:true })}
-        </div>
-
-        <div class="dashboard-section-title activity-assignment-recipient-title">Attribuer cette séquence</div>
-        ${renderRecipientsSection()}
-        <div class="activity-assignment-submit-row">
-          <button class="btn primary dashboard-btn-with-icon" type="button" data-action="assign-sequence" ${items.length && selectedTargets.size ? "" : "disabled"}>
-            <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
-            <span>Attribuer la séquence</span>
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderSequenceItem(item, index) {
-    const source = findSource(item.source_type, item.source_id);
-    const intrinsic = source ? isSourceIntrinsic(item.source_type, source) : item.execution_limit_mode === "intrinsic";
-    const adaptiveAvailable = source ? isAdaptiveAvailableFor(item.source_type, source) : item.difficulty_mode === "adaptive";
-    const difficulty = item.difficulty_mode === "adaptive" ? "adaptive" : String(item.difficulty_level || 3);
-    const itemExecutionMode = intrinsic ? "intrinsic" : String(item.execution_limit_mode || "questions");
-    const itemExecutionValue = Math.max(1, Number(item.execution_limit_value) || (itemExecutionMode === "time" ? 300 : 5));
-    return `
-      <div class="activity-sequence-item" data-sequence-item-index="${index}">
-        <div class="activity-sequence-item-head">
-          <strong>${index + 1}. ${escapeHtml(item.title_snapshot || getSourceTitle(source) || "Activité")}</strong>
-          <span>${item.source_type === "teacher_activity" ? "Mes activités" : "Exploration"}</span>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-sequence-item-up" data-index="${index}" ${index === 0 ? "disabled" : ""} title="Monter"><span class="dashboard-material-icon" aria-hidden="true">arrow_upward</span></button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="move-sequence-item-down" data-index="${index}" ${index === (sequenceDraft.items.length - 1) ? "disabled" : ""} title="Descendre"><span class="dashboard-material-icon" aria-hidden="true">arrow_downward</span></button>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="remove-sequence-item" data-index="${index}" title="Retirer"><span class="dashboard-material-icon" aria-hidden="true">delete</span></button>
-        </div>
-        ${renderDifficultyAndExecutionFields({
-          adaptiveAvailable,
-          selectedDifficulty:difficulty,
-          intrinsic,
-          executionMode:itemExecutionMode,
-          executionValue:itemExecutionValue,
-          prefix:`sequenceItem${index}`,
-          index
-        })}
-      </div>
-    `;
-  }
-
-  function renderDifficultyAndExecutionFields({ adaptiveAvailable, selectedDifficulty: difficulty, intrinsic, executionMode: mode, executionValue: value, prefix, index = null }) {
-    const dataIndex = index == null ? "" : ` data-sequence-config-index="${index}"`;
+  function renderDifficultyAndExecutionFields({ adaptiveAvailable, selectedDifficulty: difficulty, intrinsic, executionMode: mode, executionValue: value, prefix }) {
     const difficultyId = `${prefix}Difficulty`;
     const executionModeId = `${prefix}ExecutionMode`;
     const executionValueId = `${prefix}ExecutionValue`;
     return `
       <div class="activity-assignment-field-row">
         <label class="dashboard-field-label" for="${difficultyId}">Difficulté</label>
-        <select id="${difficultyId}" class="student-select" data-config-field="difficulty"${dataIndex}>
+        <select id="${difficultyId}" class="student-select" data-config-field="difficulty">
           ${adaptiveAvailable
             ? `<option value="adaptive"${difficulty === "adaptive" ? " selected" : ""}>Adaptative</option>${LEVELS.map((level) => `<option value="${level}"${String(difficulty) === String(level) ? " selected" : ""}>N${level}</option>`).join("")}`
             : `<option value="3" selected>Unique</option>`}
@@ -310,12 +308,12 @@ export function createActivityAssignmentViewController({
       ` : `
         <div class="activity-assignment-field-row">
           <label class="dashboard-field-label" for="${executionModeId}">Questions / Temps</label>
-          <select id="${executionModeId}" class="student-select" data-config-field="execution-mode"${dataIndex}>
+          <select id="${executionModeId}" class="student-select" data-config-field="execution-mode">
             <option value="questions"${mode === "questions" ? " selected" : ""}>Questions</option>
             <option value="time"${mode === "time" ? " selected" : ""}>Temps</option>
           </select>
-          <input id="${executionValueId}" class="modal-text-input activity-assignment-limit-value" type="number" min="1" max="${mode === "time" ? 120 : 200}" value="${escapeAttr(mode === "time" ? Math.max(1, Math.round(value / 60)) : value)}" data-config-field="execution-value"${dataIndex}>
-          <span>${mode === "time" ? "min" : "questions"}</span>
+          <input id="${executionValueId}" class="modal-text-input activity-assignment-limit-value" type="number" min="1" max="${mode === "time" ? 120 : 200}" value="${escapeAttr(mode === "time" ? Math.max(1, Math.round(value / 60)) : value)}" data-config-field="execution-value">
+          <span>${mode === "time" ? "min" : "question(s)"}</span>
         </div>
       `}
     `;
@@ -350,56 +348,33 @@ export function createActivityAssignmentViewController({
     `;
   }
 
-  function renderCurrentAssignments() {
-    if (!assignments.length) return `<div class="dashboard-activity-empty-state">Aucune attribution pour le moment.</div>`;
-    return `<div class="activity-assignment-current-list">${assignments.map((assignment) => {
-      const recipients = formatAssignmentRecipients(assignment);
-      const source = assignment.source_type === "sequence"
-        ? "Séquence"
-        : assignment.source_type === "teacher_activity" ? "Mes activités" : "Exploration";
-      return `
-        <div class="activity-assignment-current-row">
-          <div class="activity-assignment-current-main">
-            <strong>${escapeHtml(assignment.title_snapshot || "Activité")}</strong>
-            <span>${escapeHtml(source)} · ${escapeHtml(recipients)}</span>
-          </div>
-          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-assignment" data-assignment-id="${escapeAttr(assignment.id)}" title="Retirer cette attribution" aria-label="Retirer cette attribution">
-            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
-          </button>
-        </div>
-      `;
-    }).join("")}</div>`;
-  }
-
-  function bindCommonEvents() {
+  function bindEvents() {
     view.querySelector("[data-action='back']")?.addEventListener("click", () => onBack?.());
-    view.querySelectorAll("[data-panel-mode]").forEach((button) => button.addEventListener("click", () => {
-      panelMode = button.dataset.panelMode === "sequences" ? "sequences" : "activity";
-      selectedTargets.clear();
+    view.querySelectorAll("[data-action='open-assignment-drawer']").forEach((button) => button.addEventListener("click", () => {
+      openAssignmentDrawer();
       renderView();
     }));
-    bindRecipientEvents();
+    view.querySelectorAll("[data-action='close-assignment-drawer']").forEach((button) => button.addEventListener("click", () => {
+      closeAssignmentDrawer();
+      renderView();
+    }));
     view.querySelectorAll("[data-action='delete-assignment']").forEach((button) => button.addEventListener("click", () => removeAssignment(button.dataset.assignmentId)));
-  }
 
-  function bindRecipientEvents() {
-    view.querySelectorAll("[data-target-type][data-target-id]").forEach((input) => input.addEventListener("change", () => {
-      updateRecipientSelection(input);
-      renderView();
-    }));
-  }
+    if (!drawerOpen) return;
 
-  function bindActivityEvents() {
     view.querySelectorAll("[data-source-tab]").forEach((button) => button.addEventListener("click", () => {
-      sourceType = button.dataset.sourceTab === "teacher_activity" ? "teacher_activity" : "catalog_activity";
+      sourceTab = button.dataset.sourceTab === "personal" ? "personal" : "catalog";
+      selectedSourceType = "";
       selectedSourceId = "";
       selectedTargets.clear();
-      selectedDifficulty = sourceType === "catalog_activity" ? "adaptive" : "3";
+      selectedDifficulty = sourceTab === "catalog" ? "adaptive" : "3";
       executionMode = "questions";
       executionValue = 5;
       renderView();
     }));
-    view.querySelectorAll("[data-source-id]").forEach((button) => button.addEventListener("click", () => {
+
+    view.querySelectorAll("[data-source-type][data-source-id]").forEach((button) => button.addEventListener("click", () => {
+      selectedSourceType = normalizeSourceType(button.dataset.sourceType);
       selectedSourceId = String(button.dataset.sourceId || "");
       selectedTargets.clear();
       syncDefaultsFromSelectedSource();
@@ -420,50 +395,42 @@ export function createActivityAssignmentViewController({
       executionValue = executionMode === "time" ? raw * 60 : raw;
     });
 
+    view.querySelectorAll("[data-target-type][data-target-id]").forEach((input) => input.addEventListener("change", () => {
+      updateRecipientSelection(input);
+      renderView();
+    }));
+
     view.querySelector("[data-action='assign-selected']")?.addEventListener("click", () => saveAssignment());
+    view.querySelector(".activity-assignment-drawer")?.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      closeAssignmentDrawer();
+      renderView();
+    });
   }
 
-  function bindSequenceEvents() {
-    view.querySelector("[data-action='new-sequence']")?.addEventListener("click", () => {
-      sequenceDraft = { id:null, title:"Nouvelle séquence", items:[] };
-      selectedTargets.clear();
-      renderView();
-    });
-    view.querySelectorAll("[data-action='edit-sequence']").forEach((button) => button.addEventListener("click", () => {
-      const sequence = sequences.find((item) => String(item.id) === String(button.dataset.sequenceId));
-      if (!sequence) return;
-      sequenceDraft = clone(sequence);
-      selectedTargets.clear();
-      renderView();
-    }));
-    view.querySelectorAll("[data-action='direct-launch-sequence']").forEach((button) => button.addEventListener("click", () => {
-      const sequence = sequences.find((item) => String(item.id) === String(button.dataset.sequenceId));
-      if (sequence) onDirectLaunchSequence?.(sequence);
-    }));
-    view.querySelectorAll("[data-action='delete-sequence']").forEach((button) => button.addEventListener("click", () => removeSequence(button.dataset.sequenceId)));
-    view.querySelector("[data-action='save-sequence']")?.addEventListener("click", () => saveSequenceDraft({ quiet:false }));
-    view.querySelector("[data-action='assign-sequence']")?.addEventListener("click", () => assignSequenceDraft());
+  function openAssignmentDrawer(preselect = null) {
+    drawerOpen = true;
+    selectedTargets.clear();
 
-    view.querySelectorAll("[data-sequence-source-tab]").forEach((button) => button.addEventListener("click", () => {
-      sequenceAddSourceType = button.dataset.sequenceSourceTab === "teacher_activity" ? "teacher_activity" : "catalog_activity";
-      renderView();
-    }));
-    view.querySelectorAll("[data-sequence-add-source]").forEach((button) => button.addEventListener("click", () => addSourceToSequence(button.dataset.sequenceAddSource)));
+    if (preselect?.sourceType && preselect?.sourceId) {
+      selectedSourceType = normalizeSourceType(preselect.sourceType);
+      selectedSourceId = String(preselect.sourceId || "").trim();
+      sourceTab = selectedSourceType === "catalog_activity" ? "catalog" : "personal";
+      syncDefaultsFromSelectedSource();
+      return;
+    }
 
-    view.querySelector("#sequenceTitle")?.addEventListener("input", (event) => {
-      if (sequenceDraft) sequenceDraft.title = String(event.target?.value || "");
-    });
+    sourceTab = "catalog";
+    selectedSourceType = "";
+    selectedSourceId = "";
+    selectedDifficulty = "adaptive";
+    executionMode = "questions";
+    executionValue = 5;
+  }
 
-    view.querySelectorAll("[data-action='remove-sequence-item']").forEach((button) => button.addEventListener("click", () => {
-      const index = Number(button.dataset.index);
-      if (!sequenceDraft || !Number.isInteger(index)) return;
-      sequenceDraft.items.splice(index, 1);
-      renderView();
-    }));
-    view.querySelectorAll("[data-action='move-sequence-item-up']").forEach((button) => button.addEventListener("click", () => moveSequenceItem(Number(button.dataset.index), -1)));
-    view.querySelectorAll("[data-action='move-sequence-item-down']").forEach((button) => button.addEventListener("click", () => moveSequenceItem(Number(button.dataset.index), 1)));
-
-    view.querySelectorAll("[data-sequence-config-index][data-config-field]").forEach((control) => control.addEventListener("change", () => updateSequenceItemConfig(control)));
+  function closeAssignmentDrawer() {
+    drawerOpen = false;
+    selectedTargets.clear();
   }
 
   function updateRecipientSelection(input) {
@@ -491,131 +458,28 @@ export function createActivityAssignmentViewController({
       return;
     }
 
-    const intrinsic = isSourceIntrinsic(sourceType, source);
-    const adaptive = selectedDifficulty === "adaptive";
     const targets = buildSelectedTargetsPayload();
+    const isSequence = selectedSourceType === "sequence";
+    const intrinsic = isSequence ? true : isSourceIntrinsic(selectedSourceType, source);
+    const adaptive = !isSequence && selectedDifficulty === "adaptive";
 
     try {
       await saveActivityAssignmentForSpace?.(space.id, {
-        source_type:sourceType,
-        source_id:getSourceId(source),
-        title_snapshot:getSourceTitle(source),
+        source_type:selectedSourceType,
+        source_id:getSelectedSourceId(source),
+        title_snapshot:getSelectedSourceTitle(source),
         difficulty_mode:adaptive ? "adaptive" : "fixed",
-        difficulty_level:adaptive ? null : Math.max(1, Math.min(5, Number(selectedDifficulty) || 3)),
+        difficulty_level:adaptive ? null : (isSequence ? 3 : Math.max(1, Math.min(5, Number(selectedDifficulty) || 3))),
         execution_limit_mode:intrinsic ? "intrinsic" : executionMode,
         execution_limit_value:intrinsic ? null : executionValue
       }, targets);
-      showToast?.(`« ${getSourceTitle(source)} » attribuée.`);
+      showToast?.(`« ${getSelectedSourceTitle(source)} » attribuée.`);
       selectedTargets.clear();
+      drawerOpen = false;
       await refreshData();
       renderView();
     } catch (error) {
       showToast?.(error?.message || "Impossible d’attribuer cette activité.", { isError:true });
-    }
-  }
-
-  async function saveSequenceDraft({ quiet = false } = {}) {
-    const space = getCurrentTeacherSpace?.();
-    if (!space?.id || !sequenceDraft) return null;
-    const title = String(sequenceDraft.title || "").trim();
-    if (!title) {
-      showToast?.("Donnez un nom à la séquence.", { isError:true });
-      return null;
-    }
-    if (!Array.isArray(sequenceDraft.items) || !sequenceDraft.items.length) {
-      showToast?.("Ajoutez au moins une activité à la séquence.", { isError:true });
-      return null;
-    }
-    try {
-      const saved = await saveTeacherSequenceForSpace?.(space.id, sequenceDraft);
-      sequenceDraft = clone(saved);
-      await refreshData();
-      if (!quiet) showToast?.(`Séquence « ${saved.title} » enregistrée.`);
-      renderView();
-      return saved;
-    } catch (error) {
-      showToast?.(error?.message || "Impossible d’enregistrer la séquence.", { isError:true });
-      return null;
-    }
-  }
-
-  async function assignSequenceDraft() {
-    if (!sequenceDraft || !selectedTargets.size) {
-      showToast?.("Choisissez au moins un élève ou une classe.", { isError:true });
-      return;
-    }
-    const saved = await saveSequenceDraft({ quiet:true });
-    if (!saved) return;
-    const space = getCurrentTeacherSpace?.();
-    if (!space?.id) return;
-    try {
-      await saveActivityAssignmentForSpace?.(space.id, {
-        source_type:"sequence",
-        source_id:String(saved.id || ""),
-        title_snapshot:String(saved.title || "Séquence"),
-        difficulty_mode:"fixed",
-        difficulty_level:3,
-        execution_limit_mode:"intrinsic",
-        execution_limit_value:null
-      }, buildSelectedTargetsPayload());
-      showToast?.(`Séquence « ${saved.title} » attribuée.`);
-      selectedTargets.clear();
-      await refreshData();
-      sequenceDraft = clone(sequences.find((item) => String(item.id) === String(saved.id)) || saved);
-      renderView();
-    } catch (error) {
-      showToast?.(error?.message || "Impossible d’attribuer cette séquence.", { isError:true });
-    }
-  }
-
-  function addSourceToSequence(sourceId) {
-    if (!sequenceDraft) return;
-    const source = findSource(sequenceAddSourceType, sourceId);
-    if (!source) return;
-    const intrinsic = isSourceIntrinsic(sequenceAddSourceType, source);
-    const adaptiveAvailable = isAdaptiveAvailableFor(sequenceAddSourceType, source);
-    sequenceDraft.items.push({
-      source_type:sequenceAddSourceType,
-      source_id:getSourceId(source),
-      title_snapshot:getSourceTitle(source),
-      difficulty_mode:adaptiveAvailable ? "adaptive" : "fixed",
-      difficulty_level:adaptiveAvailable ? null : 3,
-      execution_limit_mode:intrinsic ? "intrinsic" : "questions",
-      execution_limit_value:intrinsic ? null : 5
-    });
-    renderView();
-  }
-
-  function moveSequenceItem(index, delta) {
-    if (!sequenceDraft || !Array.isArray(sequenceDraft.items)) return;
-    const target = index + delta;
-    if (index < 0 || target < 0 || index >= sequenceDraft.items.length || target >= sequenceDraft.items.length) return;
-    const [item] = sequenceDraft.items.splice(index, 1);
-    sequenceDraft.items.splice(target, 0, item);
-    renderView();
-  }
-
-  function updateSequenceItemConfig(control) {
-    const index = Number(control.dataset.sequenceConfigIndex);
-    const field = String(control.dataset.configField || "");
-    const item = sequenceDraft?.items?.[index];
-    if (!item) return;
-    if (field === "difficulty") {
-      const value = String(control.value || "3");
-      item.difficulty_mode = value === "adaptive" ? "adaptive" : "fixed";
-      item.difficulty_level = value === "adaptive" ? null : Math.max(1, Math.min(5, Number(value) || 3));
-      return;
-    }
-    if (field === "execution-mode") {
-      const nextMode = String(control.value || "questions") === "time" ? "time" : "questions";
-      item.execution_limit_mode = nextMode;
-      item.execution_limit_value = nextMode === "time" ? 300 : 5;
-      renderView();
-      return;
-    }
-    if (field === "execution-value") {
-      const raw = Math.max(1, Math.trunc(Number(control.value) || 1));
-      item.execution_limit_value = item.execution_limit_mode === "time" ? raw * 60 : raw;
     }
   }
 
@@ -639,27 +503,6 @@ export function createActivityAssignmentViewController({
     }
   }
 
-  async function removeSequence(sequenceId) {
-    const sequence = sequences.find((item) => String(item.id) === String(sequenceId));
-    if (!sequence) return;
-    const confirmed = await openDashboardConfirmDialog({
-      title:"Supprimer la séquence ?",
-      message:`« ${sequence.title || "Séquence"} » sera supprimée.`,
-      confirmLabel:"Supprimer",
-      danger:true
-    });
-    if (!confirmed) return;
-    try {
-      await deleteTeacherSequence?.(sequence.id);
-      if (String(sequenceDraft?.id || "") === String(sequence.id)) sequenceDraft = null;
-      await refreshData();
-      renderView();
-      showToast?.("Séquence supprimée.");
-    } catch (error) {
-      showToast?.(error?.message || "Impossible de supprimer cette séquence.", { isError:true });
-    }
-  }
-
   function buildSelectedTargetsPayload() {
     return Array.from(selectedTargets.values()).map((target) => target.type === "class"
       ? { target_type:"class", teacher_class_id:Number(target.id) }
@@ -667,12 +510,25 @@ export function createActivityAssignmentViewController({
   }
 
   function getSelectedSource() {
-    return findSource(sourceType, selectedSourceId);
+    if (selectedSourceType === "sequence") {
+      return sequences.find((item) => String(item?.id || "") === String(selectedSourceId || "")) || null;
+    }
+    return findActivitySource(selectedSourceType, selectedSourceId);
   }
 
-  function findSource(type, id) {
+  function findActivitySource(type, id) {
     const source = type === "teacher_activity" ? teacherActivities : catalogActivities;
     return source.find((item) => getSourceId(item) === String(id || "")) || null;
+  }
+
+  function getSelectedSourceId(source) {
+    if (selectedSourceType === "sequence") return String(source?.id || "").trim();
+    return getSourceId(source);
+  }
+
+  function getSelectedSourceTitle(source) {
+    if (selectedSourceType === "sequence") return String(source?.title || "Séquence").trim() || "Séquence";
+    return getSourceTitle(source);
   }
 
   function getSourceId(source) {
@@ -689,7 +545,7 @@ export function createActivityAssignmentViewController({
   }
 
   function isSourceIntrinsic(type, source) {
-    if (!source) return false;
+    if (!source || type === "sequence") return true;
     const runtimeSource = type === "teacher_activity" ? teacherActivityToCatalogShape(source) : normalizeCatalogActivity(source);
     return isIntrinsicCatalogActivity(runtimeSource);
   }
@@ -697,9 +553,21 @@ export function createActivityAssignmentViewController({
   function syncDefaultsFromSelectedSource() {
     const source = getSelectedSource();
     if (!source) return;
-    selectedDifficulty = isAdaptiveAvailableFor(sourceType, source) ? "adaptive" : "3";
-    executionMode = isSourceIntrinsic(sourceType, source) ? "intrinsic" : "questions";
+    if (selectedSourceType === "sequence") {
+      selectedDifficulty = "3";
+      executionMode = "intrinsic";
+      executionValue = 5;
+      return;
+    }
+    selectedDifficulty = isAdaptiveAvailableFor(selectedSourceType, source) ? "adaptive" : "3";
+    executionMode = isSourceIntrinsic(selectedSourceType, source) ? "intrinsic" : "questions";
     executionValue = executionMode === "time" ? 300 : 5;
+  }
+
+  function normalizeSourceType(value) {
+    if (value === "teacher_activity") return "teacher_activity";
+    if (value === "sequence") return "sequence";
+    return "catalog_activity";
   }
 
   function formatAssignmentRecipients(assignment) {

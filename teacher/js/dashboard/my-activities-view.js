@@ -1,6 +1,7 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
 import { openDashboardNameDialog } from "./name-overlay.js";
+import { createSequenceEditorController } from "./sequence-editor-view.js";
 
 export function createMyActivitiesViewController({
   view,
@@ -14,22 +15,44 @@ export function createMyActivitiesViewController({
   listTeacherActivitiesForSpace,
   updateTeacherActivityPlacement,
   deleteTeacherActivity,
+  listTeacherSequencesForSpace,
+  saveTeacherSequenceForSpace,
+  updateTeacherSequencePlacement,
+  deleteTeacherSequence,
+  listCatalogActivitiesForTeacherSpace,
   onBack,
   onCreateActivity,
   onOpenActivity,
   onTestActivity,
   onAssignActivity,
+  onAssignSequence,
   onDirectLaunch,
+  onDuplicateQuizActivity,
   showToast
 } = {}) {
   let currentFolderId = null;
   let folders = [];
   let activities = [];
+  let sequences = [];
   let isMovingExplorerNode = false;
   let draggedExplorerNode = null;
   let explorerDropTarget = null;
   let creationDialog = null;
   let creationDialogContext = null;
+
+  const sequenceEditor = createSequenceEditorController({
+    view,
+    getCurrentTeacherSpace,
+    listCatalogActivitiesForTeacherSpace,
+    listTeacherActivitiesForSpace,
+    saveTeacherSequenceForSpace,
+    showToast,
+    onSaved: async () => {
+      await refreshData();
+      renderHeader();
+      renderExplorer();
+    }
+  });
 
   async function render({ forceRefresh = false } = {}) {
     const space = getCurrentTeacherSpace?.();
@@ -39,7 +62,7 @@ export function createMyActivitiesViewController({
       list.innerHTML = `<div class="dashboard-activity-empty-state">Crée d’abord ton code de connexion.</div>`;
       return;
     }
-    if (forceRefresh || (!folders.length && !activities.length)) {
+    if (forceRefresh || (!folders.length && !activities.length && !sequences.length)) {
       list.innerHTML = `<div class="dashboard-activity-empty-state">Chargement de vos activités…</div>`;
       try {
         await refreshData();
@@ -47,7 +70,7 @@ export function createMyActivitiesViewController({
         list.innerHTML = `
           <div class="dashboard-activity-empty-state">
             Impossible de charger « Mes activités ».<br>
-            <span style="color:var(--muted);">${escapeHtml(error?.message || "Vérifie que la migration SQL 48_teacher_activities.sql a bien été appliquée.")}</span>
+            <span style="color:var(--muted);">${escapeHtml(error?.message || "Vérifie que les migrations SQL 48_teacher_activities.sql et 53_teacher_sequences_in_my_activities.sql ont bien été appliquées.")}</span>
           </div>
         `;
         return;
@@ -59,12 +82,14 @@ export function createMyActivitiesViewController({
   async function refreshData() {
     const space = getCurrentTeacherSpace?.();
     if (!space?.id) return;
-    const [nextFolders, nextActivities] = await Promise.all([
+    const [nextFolders, nextActivities, nextSequences] = await Promise.all([
       listTeacherActivityFoldersForSpace?.(space.id),
-      listTeacherActivitiesForSpace?.(space.id)
+      listTeacherActivitiesForSpace?.(space.id),
+      listTeacherSequencesForSpace?.(space.id)
     ]);
     folders = Array.isArray(nextFolders) ? nextFolders : [];
     activities = Array.isArray(nextActivities) ? nextActivities : [];
+    sequences = Array.isArray(nextSequences) ? nextSequences : [];
     if (currentFolderId && !folders.some((folder) => String(folder.id) === String(currentFolderId))) {
       currentFolderId = null;
     }
@@ -117,6 +142,10 @@ export function createMyActivitiesViewController({
           <span class="dashboard-material-icon" aria-hidden="true">add</span>
           <span>Créer une activité</span>
         </button>
+        <button class="btn primary dashboard-btn-with-icon dashboard-header-action-btn" type="button" data-action="create-sequence">
+          <span class="dashboard-material-icon" aria-hidden="true">view_list</span>
+          <span>Créer une séquence</span>
+        </button>
       </div>
     `;
 
@@ -124,6 +153,7 @@ export function createMyActivitiesViewController({
     header.querySelectorAll("[data-action='open-root']").forEach((button) => button.addEventListener("click", () => openFolder(null)));
     header.querySelectorAll("[data-action='open-folder']").forEach((button) => button.addEventListener("click", () => openFolder(button.dataset.folderId)));
     header.querySelector("[data-action='create-folder']")?.addEventListener("click", () => createFolder());
+    header.querySelector("[data-action='create-sequence']")?.addEventListener("click", () => sequenceEditor.open(null, { folderId:currentFolderId }));
     header.querySelector("[data-action='create-activity']")?.addEventListener("click", openCreationDialog);
   }
 
@@ -138,12 +168,16 @@ export function createMyActivitiesViewController({
     const childActivities = activities
       .filter((activity) => String(activity.folder_id || "") === selectedId)
       .sort(compareByOrderAndTitle);
+    const childSequences = sequences
+      .filter((sequence) => String(sequence.folder_id || "") === selectedId)
+      .sort(compareByOrderAndTitle);
     const rootFolders = folders.filter((folder) => !folder.parent_id).sort(compareByOrderAndName);
     const treeHtml = rootFolders.map((folder) => renderTreeFolder(folder, 0)).join("");
     const tilesHtml = [
       selectedFolder ? renderParentTile(selectedFolder) : "",
       ...childFolders.map(renderFolderTile),
-      ...childActivities.map(renderActivityTile)
+      ...childActivities.map(renderActivityTile),
+      ...childSequences.map(renderSequenceTile)
     ].filter(Boolean).join("");
 
     list.innerHTML = `
@@ -250,10 +284,41 @@ export function createMyActivitiesViewController({
             <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
           </button>
           <button class="dashboard-icon-btn" type="button" data-action="direct-launch-activity" data-activity-id="${escapeAttr(activity.id)}" title="QR / lien direct" aria-label="QR / lien direct">QR</button>
+          ${type === "quiz" ? `
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="duplicate-quiz-activity" data-activity-id="${escapeAttr(activity.id)}" title="Dupliquer le quiz" aria-label="Dupliquer le quiz">
+            <span class="dashboard-material-icon" aria-hidden="true">content_copy</span>
+          </button>` : ""}
           <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="open-activity" data-activity-id="${escapeAttr(activity.id)}" title="Modifier" aria-label="Modifier l’activité">
             <span class="dashboard-material-icon" aria-hidden="true">edit</span>
           </button>
           <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-activity" data-activity-id="${escapeAttr(activity.id)}" title="Retirer de Mes activités" aria-label="Retirer de Mes activités">
+            <span class="dashboard-material-icon" aria-hidden="true">delete</span>
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderSequenceTile(sequence) {
+    const count = Array.isArray(sequence.items) ? sequence.items.length : 0;
+    return `
+      <article class="dashboard-activity-tile dashboard-activity-tile--activity dashboard-activity-tile--sequence" data-node-type="sequence" data-node-id="${escapeAttr(sequence.id)}" draggable="true">
+        <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" type="button" data-action="open-sequence" data-sequence-id="${escapeAttr(sequence.id)}">
+          <span class="dashboard-activity-tile-topline">
+            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">view_list</span>
+            <span class="dashboard-activity-tile-subtitle dashboard-mini-pill">Séquence</span>
+          </span>
+          <span class="dashboard-activity-tile-title">${escapeHtml(sequence.title || "Séquence")}</span>
+          <span class="dashboard-activity-tile-subtitle">${count} activité${count === 1 ? "" : "s"}</span>
+        </button>
+        <div class="dashboard-activity-tile-actions dashboard-activity-tile-actions--activity">
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="assign-sequence" data-sequence-id="${escapeAttr(sequence.id)}" title="Attribuer" aria-label="Attribuer la séquence">
+            <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
+          </button>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-action="open-sequence" data-sequence-id="${escapeAttr(sequence.id)}" title="Modifier" aria-label="Modifier la séquence">
+            <span class="dashboard-material-icon" aria-hidden="true">edit</span>
+          </button>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn is-danger" type="button" data-action="delete-sequence" data-sequence-id="${escapeAttr(sequence.id)}" title="Supprimer la séquence" aria-label="Supprimer la séquence">
             <span class="dashboard-material-icon" aria-hidden="true">delete</span>
           </button>
         </div>
@@ -292,9 +357,38 @@ export function createMyActivitiesViewController({
       const activity = activities.find((item) => String(item.id) === String(button.dataset.activityId || ""));
       if (activity) onDirectLaunch?.(activity);
     }));
+    list?.querySelectorAll("[data-action='duplicate-quiz-activity']").forEach((button) => button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const activity = activities.find((item) => String(item.id) === String(button.dataset.activityId || ""));
+      if (!activity || typeof onDuplicateQuizActivity !== "function") return;
+      button.disabled = true;
+      try {
+        await onDuplicateQuizActivity(activity);
+        await refreshData();
+        renderExplorer();
+      } catch (error) {
+        showToast?.(error?.message || "Duplication du quiz impossible.", { isError:true });
+      } finally {
+        button.disabled = false;
+      }
+    }));
     list?.querySelectorAll("[data-action='delete-activity']").forEach((button) => button.addEventListener("click", async (event) => {
       event.stopPropagation();
       await removeActivity(button.dataset.activityId || "");
+    }));
+    list?.querySelectorAll("[data-action='assign-sequence']").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const sequence = sequences.find((item) => String(item.id) === String(button.dataset.sequenceId || ""));
+      if (sequence) onAssignSequence?.(sequence);
+    }));
+    list?.querySelectorAll("[data-action='open-sequence']").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const sequence = sequences.find((item) => String(item.id) === String(button.dataset.sequenceId || ""));
+      if (sequence) sequenceEditor.open(sequence, { folderId:sequence.folder_id || currentFolderId });
+    }));
+    list?.querySelectorAll("[data-action='delete-sequence']").forEach((button) => button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await removeSequence(button.dataset.sequenceId || "");
     }));
     list?.querySelectorAll('[draggable="true"][data-node-type][data-node-id]').forEach((element) => {
       element.addEventListener("dragstart", handleExplorerDragStart);
@@ -348,8 +442,8 @@ export function createMyActivitiesViewController({
     const confirmed = await openDashboardConfirmDialog({
       title: "Supprimer le dossier",
       message: hasChildren
-        ? `Supprimer « ${folder.name} » et tous ses sous-dossiers ? Les activités concernées seront conservées, mais déplacées à la racine.`
-        : `Supprimer le dossier « ${folder.name} » ? Les activités qu’il contient seront conservées, mais déplacées à la racine.`,
+        ? `Supprimer « ${folder.name} » et tous ses sous-dossiers ? Les activités et séquences concernées seront conservées, mais déplacées à la racine.`
+        : `Supprimer le dossier « ${folder.name} » ? Les activités et séquences qu’il contient seront conservées, mais déplacées à la racine.`,
       confirmLabel: "Supprimer",
       danger: true
     });
@@ -442,6 +536,26 @@ export function createMyActivitiesViewController({
     }
   }
 
+  async function removeSequence(sequenceId) {
+    const sequence = sequences.find((item) => String(item.id) === String(sequenceId || ""));
+    if (!sequence) return;
+    const confirmed = await openDashboardConfirmDialog({
+      title:"Supprimer la séquence",
+      message:`Supprimer « ${sequence.title || "Séquence"} » ?`,
+      confirmLabel:"Supprimer",
+      danger:true
+    });
+    if (!confirmed) return;
+    try {
+      await deleteTeacherSequence?.(sequence.id);
+      await refreshData();
+      renderExplorer();
+      showToast?.("Séquence supprimée.");
+    } catch (error) {
+      showToast?.(error?.message || "Impossible de supprimer la séquence.", { isError:true });
+    }
+  }
+
   function getDropTargetFromEvent(event) {
     const targetElement = event.target instanceof Element ? event.target : null;
     if (!targetElement || !list?.contains(targetElement)) return null;
@@ -474,7 +588,7 @@ export function createMyActivitiesViewController({
     const sourceElement = event.currentTarget;
     const type = String(sourceElement?.dataset?.nodeType || "");
     const id = String(sourceElement?.dataset?.nodeId || "");
-    if (!id || !["folder", "activity"].includes(type) || isMovingExplorerNode) {
+    if (!id || !["folder", "activity", "sequence"].includes(type) || isMovingExplorerNode) {
       event.preventDefault();
       return;
     }
@@ -547,6 +661,13 @@ export function createMyActivitiesViewController({
       .reduce((maximum, activity) => Math.max(maximum, Number(activity.display_order) || 0), -1) + 1;
   }
 
+  function getNextSequenceOrder(targetFolderId, sourceSequenceId) {
+    return sequences
+      .filter((sequence) => String(sequence.id) !== String(sourceSequenceId || ""))
+      .filter((sequence) => String(sequence.folder_id || "") === String(targetFolderId || ""))
+      .reduce((maximum, sequence) => Math.max(maximum, Number(sequence.display_order) || 0), -1) + 1;
+  }
+
   async function moveExplorerNodeToTarget(source, dropTarget) {
     if (!source?.id || !source?.type || !dropTarget || isMovingExplorerNode) return;
     const targetFolderId = String(dropTarget.folderId || "").trim() || null;
@@ -569,6 +690,12 @@ export function createMyActivitiesViewController({
         const displayOrder = getNextActivityOrder(targetFolderId, activity.id);
         await updateTeacherActivityPlacement?.(activity.id, { folder_id:targetFolderId, display_order:displayOrder });
         showToast?.("Activité déplacée.");
+      } else if (source.type === "sequence") {
+        const sequence = sequences.find((item) => String(item.id) === String(source.id));
+        if (!sequence || String(sequence.folder_id || "") === String(targetFolderId || "")) return;
+        const displayOrder = getNextSequenceOrder(targetFolderId, sequence.id);
+        await updateTeacherSequencePlacement?.(sequence.id, { folder_id:targetFolderId, display_order:displayOrder });
+        showToast?.("Séquence déplacée.");
       }
       await refreshData();
       renderHeader();

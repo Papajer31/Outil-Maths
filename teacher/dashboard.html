@@ -244,52 +244,54 @@
               </div>
 
                 <div id="quizWorkshopView" class="quiz-workshop-view hidden">
-                <header class="quiz-workshop-header">
-                  <div class="quiz-workshop-heading">
-                    <div class="quiz-workshop-heading-row">
-                      <button
-                        id="btnBackQuizExplorer"
-                        class="dashboard-back-btn dashboard-material-icon-btn"
-                        type="button"
-                        aria-label="Retour aux quiz"
-                        title="Retour aux quiz"
+                <header class="dashboard-config-header quiz-workshop-header">
+                  <div class="dashboard-config-header-main quiz-workshop-header-main">
+                    <button
+                      id="btnBackQuizExplorer"
+                      class="dashboard-back-btn dashboard-material-icon-btn"
+                      type="button"
+                      aria-label="Retour aux quiz"
+                      title="Retour aux quiz"
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+                    </button>
+                    <span class="dashboard-mini-pill">Quiz</span>
+                    <label class="quiz-workshop-title-field" for="quizWorkshopTitleInput">
+                      <input
+                        id="quizWorkshopTitleInput"
+                        class="quiz-workshop-title-input"
+                        type="text"
+                        value=""
+                        placeholder="Titre du quiz"
+                        aria-label="Titre du quiz"
+                        autocomplete="off"
+                        required
                       >
-                        <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
-                      </button>
-                      <h2 class="quiz-workshop-title">Atelier de quiz</h2>
-                    </div>
+                    </label>
                   </div>
-  
-                  <div class="quiz-workshop-header-actions">
+
+                  <div class="dashboard-config-header-center quiz-workshop-header-center">
+                    <span class="quiz-workshop-editor-name">Atelier de quiz</span>
+                  </div>
+
+                  <div class="dashboard-config-header-actions quiz-workshop-header-actions">
+                    <button
+                      id="btnQuizTest"
+                      class="btn dashboard-btn-with-icon quiz-workshop-test-btn"
+                      type="button"
+                      disabled
+                    >
+                      <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
+                      <span>Tester</span>
+                    </button>
                     <button
                       id="btnQuizSave"
-                      class="btn quiz-workshop-save-btn"
+                      class="btn primary dashboard-btn-with-icon quiz-workshop-save-btn"
                       type="button"
                       disabled
                     >
                       <span class="dashboard-material-icon" aria-hidden="true">save</span>
                       <span>Enregistrer</span>
-                    </button>
-                    <button
-                      id="btnQuizTest"
-                      class="btn quiz-workshop-test-btn"
-                      type="button"
-                      disabled
-                    >
-                      <span class="dashboard-material-icon" aria-hidden="true">play_arrow</span>
-                      <span>Tester le quiz</span>
-                    </button>
-                    <button
-                      id="btnQuizAddQuestion"
-                      class="btn primary quiz-workshop-add-btn"
-                      type="button"
-                      data-quiz-open-drawer
-                      aria-haspopup="dialog"
-                      aria-expanded="false"
-                      aria-controls="quizWorkshopDrawer"
-                    >
-                      <span class="dashboard-material-icon" aria-hidden="true">add</span>
-                      <span class="quiz-workshop-add-btn-label">Ajouter une question</span>
                     </button>
                   </div>
                 </header>
@@ -297,18 +299,19 @@
                 <div class="quiz-workshop-stage">
                   <section class="quiz-workshop-board" aria-label="Structure du quiz">
                     <div class="quiz-workshop-board-head">
-                      <label class="quiz-workshop-title-field" for="quizWorkshopTitleInput">
-                        <input
-                          id="quizWorkshopTitleInput"
-                          class="quiz-workshop-title-input"
-                          type="text"
-                          value=""
-                          placeholder="Donnez un titre au quiz"
-                          autocomplete="off"
-                          required
-                        >
-                      </label>
                       <div id="quizWorkshopQuestionCount" class="quiz-workshop-question-count">0 question</div>
+                      <button
+                        id="btnQuizAddQuestion"
+                        class="btn primary dashboard-btn-with-icon quiz-workshop-add-btn"
+                        type="button"
+                        data-quiz-open-drawer
+                        aria-haspopup="dialog"
+                        aria-expanded="false"
+                        aria-controls="quizWorkshopDrawer"
+                      >
+                        <span class="dashboard-material-icon" aria-hidden="true">add</span>
+                        <span class="quiz-workshop-add-btn-label">Ajouter une question</span>
+                      </button>
                     </div>
   
                     <div id="quizWorkshopEmptyState" class="quiz-workshop-empty-state">

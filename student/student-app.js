@@ -22,6 +22,7 @@ import { initializeStudentAudioEngine } from "./student-audio.js";
 boot();
 
 async function boot(){
+  suppressWelcomeScreenForDirectLaunch();
   installResponsiveRuntime();
 
   if (isDevViewportMode()) {
@@ -50,6 +51,18 @@ async function boot(){
 
   if (String(window.location.hash || "").startsWith("#/activities")){
     hydrateActivitiesRoute();
+  }
+}
+
+function suppressWelcomeScreenForDirectLaunch(){
+  const route = parseHashRoute(window.location.hash);
+  const token = String(route.params.get("token") || "").trim();
+  if (route.name !== "launch" || !token) return;
+
+  document.body?.classList.remove("student-welcome-pending");
+  const welcomeScreen = document.getElementById("studentWelcomeScreen");
+  if (welcomeScreen instanceof HTMLElement) {
+    welcomeScreen.remove();
   }
 }
 

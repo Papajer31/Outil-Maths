@@ -603,30 +603,36 @@ export function createMissionsViewController({
     missionEditorHost.setAttribute("aria-label", "Éditeur de mission");
     missionEditorHost.innerHTML = `
         <section class="panel dashboard-mission-editor">
-          <div class="dashboard-mission-editor-head">
-            <div>
-              <div class="dashboard-section-title">${editingMission.id ? "Modifier la mission" : "Créer une mission"}</div>
-              <div class="dashboard-mission-editor-hint">Compose une suite d’activités et de quiz, choisis ses destinataires, puis active-la quand elle est prête.</div>
+          <div class="dashboard-config-header dashboard-mission-editor-head">
+            <div class="dashboard-config-header-main dashboard-mission-editor-head-main">
+              <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-missions" title="Retour aux missions" aria-label="Retour aux missions">
+                <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+              </button>
+              <span class="dashboard-mini-pill">Mission</span>
+              <label class="dashboard-mission-title-field">
+                <input
+                  class="dashboard-mission-title-input"
+                  type="text"
+                  data-field="title"
+                  value="${escapeAttr(editingMission.title)}"
+                  placeholder="Titre de la mission"
+                  aria-label="Titre de la mission"
+                  autocomplete="off"
+                  required
+                >
+              </label>
             </div>
-            <div class="dashboard-mission-editor-head-actions">
+            <div class="dashboard-config-header-center dashboard-mission-editor-head-center">
+              <span class="dashboard-mission-editor-name">Éditeur de mission</span>
+            </div>
+            <div class="dashboard-config-header-actions dashboard-mission-editor-head-actions">
               <div id="missionEditorMessage" class="modal-message"></div>
               ${renderMissionEditorStatusControl(editingMission)}
-              <button class="btn primary" type="button" data-action="save-mission">Enregistrer</button>
-              <button class="btn" type="button" data-action="back-missions">Retour</button>
+              <button class="btn primary dashboard-btn-with-icon" type="button" data-action="save-mission">
+                <span class="dashboard-material-icon" aria-hidden="true">save</span>
+                <span>Enregistrer</span>
+              </button>
             </div>
-          </div>
-
-          <div class="dashboard-mission-title-field">
-            <input
-              class="dashboard-mission-title-input"
-              type="text"
-              data-field="title"
-              value="${escapeAttr(editingMission.title)}"
-              placeholder="Donnez un titre à cette mission"
-              aria-label="Titre de la mission"
-              autocomplete="off"
-              required
-            >
           </div>
 
           <section class="panel dashboard-mission-assignment-panel">

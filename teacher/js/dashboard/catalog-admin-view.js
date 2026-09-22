@@ -1029,18 +1029,23 @@ export function createCatalogAdminViewController({
       const settings = getSettingsForLevel(activeLevel, tool, { clone:false });
       const levelDraft = normalizeLevelDraft(levelDrafts[String(activeLevel)]);
 
+      const hideCommonQuizControls = toolId === "quiz";
       host.innerHTML = `
         <div class="cfg-tool-settings-stack super-admin-tool-settings-stack">
-          <div class="super-admin-level-common-row">
-            ${renderLevelTimingBlock(levelDraft)}
-            ${renderLevelInstructionBlock(levelDraft, tool)}
-          </div>
+          ${hideCommonQuizControls ? "" : `
+            <div class="super-admin-level-common-row">
+              ${renderLevelTimingBlock(levelDraft)}
+              ${renderLevelInstructionBlock(levelDraft, tool)}
+            </div>
+          `}
           <div id="adminLevelSpecificSettingsHost"></div>
         </div>
       `;
 
-      bindLevelTimingBlock(host);
-      bindLevelInstructionBlock(host);
+      if (!hideCommonQuizControls) {
+        bindLevelTimingBlock(host);
+        bindLevelInstructionBlock(host);
+      }
 
       const settingsHost = host.querySelector("#adminLevelSpecificSettingsHost");
       if (typeof tool.renderToolSettings === "function") {

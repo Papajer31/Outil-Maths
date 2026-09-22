@@ -42,18 +42,21 @@ export function renderToolSettings(container, settings, context = {}){
   const initialQuizTitle = String(cfg.quizTitle || initialSnapshot.title || "").trim();
   const initialSelection = cfg.questionSelection;
   const initialQuizzes = normalizeAvailableQuizzes([], cfg);
+  const lockQuizSource = context?.lockQuizSource === true;
 
   container.innerHTML = renderToolSettingsStack(
     `
-      <div id="quiz_pickerHost">
-        ${renderQuizPicker({
-          quizzes: initialQuizzes,
-          value: initialQuizId,
-          count: getQuizSelectionItemCount(initialSnapshot),
-          disabled: true,
-          emptyLabel: initialQuizId ? (initialQuizTitle || "Quiz sélectionné") : "Chargement des quiz…"
-        })}
-      </div>
+      ${lockQuizSource ? "" : `
+        <div id="quiz_pickerHost">
+          ${renderQuizPicker({
+            quizzes: initialQuizzes,
+            value: initialQuizId,
+            count: getQuizSelectionItemCount(initialSnapshot),
+            disabled: true,
+            emptyLabel: initialQuizId ? (initialQuizTitle || "Quiz sélectionné") : "Chargement des quiz…"
+          })}
+        </div>
+      `}
       <textarea id="quiz_snapshot" hidden>${escapeHtml(JSON.stringify(initialSnapshot))}</textarea>
       <div id="quiz_questionSelectionHost">
         ${renderQuestionSelectionWidget({
@@ -84,31 +87,33 @@ export function renderToolSettings(container, settings, context = {}){
   bindQuestionSelectionWidget(container, { idPrefix: "quiz" });
   updateQuestionSelectionUi(container, { idPrefix: "quiz" });
 
-  setupQuizPicker(container, {
-    cfg,
-    selectedQuizId: initialQuizId,
-    selectedQuizTitle: initialQuizTitle,
-    initialSelection,
-    context
-  }).catch((error) => {
-    setQuizPickerState(container, {
-      disabled: true,
-      title: "Impossible de charger les quiz",
-      value: initialQuizId,
-      count: getQuizSelectionItemCount(initialSnapshot)
+  if (!lockQuizSource) {
+    setupQuizPicker(container, {
+      cfg,
+      selectedQuizId: initialQuizId,
+      selectedQuizTitle: initialQuizTitle,
+      initialSelection,
+      context
+    }).catch((error) => {
+      setQuizPickerState(container, {
+        disabled: true,
+        title: "Impossible de charger les quiz",
+        value: initialQuizId,
+        count: getQuizSelectionItemCount(initialSnapshot)
+      });
+      setEditorStatus(context, error?.message || "Impossible de charger les quiz.", true);
     });
-    setEditorStatus(context, error?.message || "Impossible de charger les quiz.", true);
-  });
+  }
 }
 
 export function readToolSettings(container, settings = {}){
   const previous = normalizeSettings(settings);
   const input = container.querySelector("#quiz_quizSelect");
   const snapshotEl = container.querySelector("#quiz_snapshot");
-  const quizId = String(input?.value || "").trim();
-  const quizTitle = String(input?.dataset?.quizTitle || previous.quizTitle || "").trim();
-  const drawMode = readRadio(container, "quiz_drawMode", DEFAULT_DRAW_MODE);
   const quizSnapshot = readSnapshot(snapshotEl?.value || "{}");
+  const quizId = String(input?.value || previous.quizId || quizSnapshot.id || "").trim();
+  const quizTitle = String(input?.dataset?.quizTitle || previous.quizTitle || quizSnapshot.title || "").trim();
+  const drawMode = readRadio(container, "quiz_drawMode", DEFAULT_DRAW_MODE);
   const questionSelection = normalizeQuizSelectionForSnapshot(quizSnapshot, readQuestionSelection(container, {
     idPrefix: "quiz"
   }));

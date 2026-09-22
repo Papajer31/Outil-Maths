@@ -1,0 +1,514 @@
+.mm-root {
+  width: 100%;
+  min-width: 0;
+  --mm-line: #202124;
+  --mm-muted: #6b7280;
+  --mm-panel: #fff;
+  --mm-border: rgba(30, 41, 59, .18);
+  --mm-accent: #315d91;
+  --mm-correct: #2e8b57;
+  --mm-wrong: #b54848;
+}
+
+.mm-stage {
+  min-width: 0;
+  width: 100%;
+}
+
+.mm-root--read {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.8vh, 18px);
+  padding: 0;
+  overflow: visible;
+}
+
+.mm-root--read .mm-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* En mode Construire, la zone blanche est le viewport maître.
+   Le SVG ne doit jamais pouvoir imposer sa taille au layout. */
+.mm-root--build {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mm-root--build .mm-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mm-read-layout,
+.mm-build-layout {
+  min-width: 0;
+}
+
+.mm-read-layout {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.8vh, 18px);
+}
+
+.mm-build-layout {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  overflow: hidden;
+}
+
+.mm-drawing-panel {
+  position: relative;
+  min-width: 0;
+  background: var(--mm-panel);
+  border: 1px solid var(--mm-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.mm-read-panel {
+  flex: 1 1 auto;
+  min-height: 240px;
+  /* Le centre de la loupe peut atteindre n'importe quel bord, mais le disque
+     lui-même est rogné par la zone blanche sur les quatre côtés. */
+  overflow: hidden;
+}
+
+.mm-read-scroll {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: inherit;
+  scrollbar-width: thin;
+}
+
+.mm-read-svg {
+  display: block;
+  max-width: none;
+}
+
+.mm-read-lens-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(30, 41, 59, .22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .94);
+  color: #1f2937;
+  font-size: 1.35rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+
+.mm-read-lens-toggle.is-active {
+  border-color: rgba(49, 93, 145, .65);
+  box-shadow: 0 0 0 3px rgba(49, 93, 145, .12), 0 4px 14px rgba(15, 23, 42, .12);
+}
+
+.mm-read-lens {
+  position: absolute;
+  z-index: 7;
+  width: var(--mm-read-lens-size, 190px);
+  height: var(--mm-read-lens-size, 190px);
+  overflow: hidden;
+  border: 3px solid rgba(49, 93, 145, .72);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .2);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.mm-read-lens.is-dragging {
+  cursor: grabbing;
+}
+
+.mm-read-lens[hidden] {
+  display: none;
+}
+
+.mm-read-lens-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.mm-read-lens-bg {
+  fill: #fff;
+}
+
+.mm-segment-line,
+.mm-ticks {
+  stroke: var(--mm-line);
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mm-segment-line {
+  stroke-width: 1.8;
+}
+
+.mm-ticks {
+  stroke-width: 1.2;
+}
+
+.mm-segment--correct .mm-segment-line,
+.mm-segment--correct .mm-ticks,
+.mm-segment--correction-preserved .mm-segment-line,
+.mm-segment--correction-preserved .mm-ticks,
+.mm-segment--correction .mm-segment-line,
+.mm-segment--correction .mm-ticks {
+  stroke: var(--mm-correct);
+}
+
+.mm-segment--student-wrong .mm-segment-line,
+.mm-segment--student-wrong .mm-ticks {
+  stroke: var(--mm-wrong);
+}
+
+.mm-response-shell {
+  flex: 0 0 auto;
+  min-height: clamp(190px, 28vh, 260px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(6px, 1.2vh, 14px) 20px 0;
+}
+
+.mm-response-shell > * {
+  flex: none;
+  max-width: 100%;
+}
+
+.mm-number-response-stack {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(12px, 1.8vh, 20px);
+}
+
+.mm-number-answer-row {
+  --mm-answer-font-size: clamp(3.4rem, 7.2vw, 5.8rem);
+  min-height: clamp(82px, 11vh, 112px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.55rem, 1vw, .9rem);
+}
+
+.mm-number-answer-host {
+  display: grid;
+  place-items: center;
+}
+
+/* Même brique numérique commune que Nombres en lettres. */
+.mm-number-answer.tool-numeric-answer.tool-answer-box {
+  --tool-numeric-answer-display-shift-y: 0px;
+  /* Laisser la brique numérique commune dimensionner la boîte selon le
+     nombre de caractères : 4 chiffres + séparateur des milliers, avec la
+     marge d'erreur habituelle du contrôle commun. */
+  width: calc(var(--tool-numeric-answer-chars, 6) * 1ch);
+  min-width: calc(var(--tool-numeric-answer-chars, 6) * 1ch);
+  min-height: clamp(5.4rem, 11vh, 7.4rem);
+  padding: clamp(10px, 1.4vh, 16px) clamp(16px, 1.7vw, 24px);
+  border-radius: 1.25rem;
+  font-size: var(--mm-answer-font-size);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mm-number-keypad {
+  width: min(70rem, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: clamp(.28rem, .62vw, .55rem);
+}
+
+.mm-number-keypad.tool-numeric-keypad--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.mm-number-keypad-button {
+  width: clamp(3.4rem, 5.4vw, 4.8rem);
+  height: clamp(3.4rem, 5.4vw, 4.8rem);
+  border-radius: .85rem;
+  padding: .25rem;
+  font-size: clamp(1.55rem, 2.85vw, 2.3rem);
+  font-weight: 850;
+  display: grid;
+  place-items: center;
+}
+
+.mm-number-keypad-button--clear {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, .8);
+}
+
+.mm-number-keypad-button--clear svg {
+  width: 55%;
+  height: 55%;
+}
+
+.mm-number-keypad-button--clear:hover,
+.mm-number-keypad-button--clear:focus-visible {
+  border-color: rgba(239, 68, 68, 1);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .18);
+}
+
+.mm-unit-label {
+  color: var(--tool-answer-color);
+  font-family: var(--tool-font-family);
+  font-size: var(--mm-answer-font-size);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mm-free-answer span {
+  font-size: clamp(1.45rem, 2.2vw, 2rem);
+  font-weight: 700;
+  color: var(--tool-ui-muted-text, rgba(245, 247, 251, .64));
+}
+
+.mm-free-answer {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-weight: 700;
+}
+
+.mm-build-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mm-target-value {
+  --mm-target-value-font-size: clamp(2rem, 4.2vw, 3.6rem);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  font-family: var(--tool-font-family);
+}
+
+.mm-target-value strong {
+  font-family: inherit;
+  font-size: var(--mm-target-value-font-size);
+  line-height: 1;
+}
+
+.mm-target-value span {
+  font-family: inherit;
+  font-size: var(--mm-target-value-font-size);
+  line-height: 1;
+  color: var(--mm-muted);
+  font-weight: 650;
+}
+
+.mm-build-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mm-tool-button {
+  min-height: 44px;
+  border: 1px solid var(--mm-border);
+  background: #fff;
+  color: #1f2937;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mm-tool-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+}
+
+.mm-tool-button:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.mm-tool-button:focus-visible {
+  outline: 3px solid rgba(49, 93, 145, .28);
+  outline-offset: 2px;
+}
+
+.mm-build-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mm-build-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  touch-action: none;
+  cursor: crosshair;
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, .025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, .025) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.mm-build-svg.has-start-point {
+  cursor: grab;
+}
+
+.mm-build-svg.is-moving-trace {
+  cursor: grabbing;
+}
+
+.mm-build-svg.is-drawing-trace {
+  cursor: crosshair;
+}
+
+.mm-provisional-line {
+  stroke: rgba(49, 93, 145, .72);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 7 6;
+}
+
+.mm-current-point {
+  fill: var(--mm-accent);
+  stroke: #fff;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.mm-current-point-hit {
+  fill: rgba(49, 93, 145, .05);
+  stroke: rgba(49, 93, 145, .16);
+  stroke-width: 1;
+  pointer-events: all;
+  cursor: crosshair;
+}
+
+.mm-tool-button.is-active {
+  border-color: rgba(49, 93, 145, .65);
+  box-shadow: 0 0 0 3px rgba(49, 93, 145, .12);
+}
+
+.mm-magnifier {
+  position: absolute;
+  z-index: 6;
+  overflow: hidden;
+  border: 3px solid rgba(49, 93, 145, .72);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .2);
+  touch-action: none;
+  user-select: none;
+}
+
+.mm-magnifier[hidden] {
+  display: none;
+}
+
+.mm-magnifier-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.mm-magnifier-bg {
+  fill: #fff;
+}
+
+.mm-magnifier-zoomed-context {
+  pointer-events: none;
+}
+
+.mm-segment--magnifier-context .mm-segment-line,
+.mm-segment--magnifier-context .mm-ticks {
+  stroke: var(--mm-line);
+}
+
+.mm-magnifier-origin {
+  fill: var(--mm-accent);
+  stroke: #fff;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.mm-segment-line--magnified,
+.mm-ticks--magnified {
+  stroke: var(--mm-line);
+  fill: none;
+  stroke-linecap: round;
+}
+
+.mm-segment-line--magnified {
+  stroke-width: 2.2;
+}
+
+.mm-ticks--magnified {
+  stroke-width: 1.5;
+}
+
+.mm-magnifier-count {
+  font-family: var(--tool-font-family);
+  font-size: 20px;
+  font-weight: 800;
+  fill: #334155;
+  user-select: none;
+  pointer-events: none;
+}
+
+@media (max-width: 820px) {
+  .mm-read-panel,
+  .mm-read-scroll {
+    min-height: 350px;
+  }
+
+  .mm-build-panel {
+    min-height: 0;
+  }
+}

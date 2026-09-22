@@ -33,6 +33,7 @@ import {
   deleteTeacherActivity,
   listTeacherSequencesForSpace,
   saveTeacherSequenceForSpace,
+  updateTeacherSequencePlacement,
   deleteTeacherSequence,
   listActivityAssignmentsForSpace,
   saveActivityAssignmentForSpace,
@@ -369,11 +370,17 @@ myActivitiesViewController = createMyActivitiesViewController({
   listTeacherActivitiesForSpace,
   updateTeacherActivityPlacement,
   deleteTeacherActivity,
+  listTeacherSequencesForSpace,
+  saveTeacherSequenceForSpace,
+  updateTeacherSequencePlacement,
+  deleteTeacherSequence,
+  listCatalogActivitiesForTeacherSpace,
   onBack: () => openDashboardSection("activity-hub"),
   onCreateActivity: ({ type, folderId, difficultyMode } = {}) => openPersonalActivityCreator({ type, folderId, difficultyMode }),
   onOpenActivity: (activity) => openPersonalActivity(activity),
   onTestActivity: (activity) => testPersonalActivityFromTile(activity),
   onAssignActivity: (activity) => openActivityAssignment({ sourceType:"teacher_activity", sourceId:activity?.id }),
+  onAssignSequence: (sequence) => openActivityAssignment({ sourceType:"sequence", sourceId:sequence?.id }),
   onDirectLaunch: (activity) => openDirectLaunchDialog({
     teacherSpaceId:currentTeacherSpace?.id,
     sourceType:"teacher_activity",
@@ -381,6 +388,7 @@ myActivitiesViewController = createMyActivitiesViewController({
     saveDirectLaunchLinkForSpace,
     showToast:showDashboardShareToast
   }),
+  onDuplicateQuizActivity: duplicatePersonalQuizActivity,
   showToast: showDashboardShareToast
 });
 
@@ -451,20 +459,11 @@ activityAssignmentViewController = createActivityAssignmentViewController({
   listCatalogActivitiesForTeacherSpace,
   listTeacherActivitiesForSpace,
   listTeacherSequencesForSpace,
-  saveTeacherSequenceForSpace,
-  deleteTeacherSequence,
   listTeacherClasses: getMyTeacherClasses,
   listStudentsForTeacherSpace,
   listActivityAssignmentsForSpace,
   saveActivityAssignmentForSpace,
   deleteActivityAssignment,
-  onDirectLaunchSequence: (sequence) => openDirectLaunchDialog({
-    teacherSpaceId:currentTeacherSpace?.id,
-    sourceType:"sequence",
-    source:sequence,
-    saveDirectLaunchLinkForSpace,
-    showToast:showDashboardShareToast
-  }),
   onBack: () => openDashboardSection("activity-hub"),
   showToast: showDashboardShareToast
 });
@@ -569,6 +568,73 @@ async function openPersonalActivityCreator({ type = "quiz", folderId = null, dif
   personalActivityEditorContext = baseContext;
   await openDashboardSection("quiz");
   showQuizWorkshop();
+}
+
+async function duplicatePersonalQuizActivity(activity = {}) {
+  const spaceId = currentTeacherSpace?.id;
+  if (!spaceId) throw new Error("Espace enseignant introuvable.");
+  if (String(activity?.activity_type || "").trim() !== "quiz") {
+    throw new Error("Seuls les quiz peuvent être dupliqués ici.");
+  }
+  const sourceQuizId = String(activity?.source_quiz_id || "").trim();
+  if (!sourceQuizId) throw new Error("Quiz source introuvable.");
+
+  const [sourceQuiz, siblingActivities] = await Promise.all([
+    getQuizForSpace(spaceId, sourceQuizId),
+    listTeacherActivitiesForSpace(spaceId)
+  ]);
+
+  const baseTitle = String(activity?.title || sourceQuiz?.title || "Quiz sans titre").trim() || "Quiz sans titre";
+  const folderId = String(activity?.folder_id || "").trim();
+  const existingTitles = new Set(
+    (Array.isArray(siblingActivities) ? siblingActivities : [])
+      .filter((item) => String(item?.folder_id || "").trim() === folderId)
+      .map((item) => String(item?.title || "").trim().toLocaleLowerCase("fr"))
+      .filter(Boolean)
+  );
+  let copyTitle = `${baseTitle} (copie)`;
+  let copyIndex = 2;
+  while (existingTitles.has(copyTitle.toLocaleLowerCase("fr"))) {
+    copyTitle = `${baseTitle} (copie ${copyIndex})`;
+    copyIndex += 1;
+  }
+
+  const quizCopy = cloneDashboardJson(sourceQuiz) || {};
+  delete quizCopy.id;
+  delete quizCopy.teacher_space_id;
+  delete quizCopy.created_at;
+  delete quizCopy.updated_at;
+  quizCopy.title = copyTitle;
+  quizCopy.is_system = false;
+
+  let savedQuiz = null;
+  try {
+    savedQuiz = await saveQuizForSpace(spaceId, quizCopy);
+    const refreshed = refreshQuizActivityConfig({
+      difficulty_mode:activity?.difficulty_mode,
+      config_json:cloneDashboardJson(activity?.config_json || {}),
+      levels_json:cloneDashboardJson(activity?.levels_json || {})
+    }, savedQuiz);
+
+    const savedActivity = await saveTeacherActivityForSpace(spaceId, {
+      folder_id:activity?.folder_id || null,
+      title:copyTitle,
+      activity_type:"quiz",
+      difficulty_mode:String(activity?.difficulty_mode || "single") === "adaptive" ? "adaptive" : "single",
+      source_quiz_id:savedQuiz.id,
+      config_json:refreshed.config_json,
+      levels_json:refreshed.levels_json
+    });
+    hasMountedMyActivitiesView = false;
+    mountedMyActivitiesTeacherSpaceId = "";
+    showDashboardShareToast(`Quiz « ${copyTitle} » dupliqué.`);
+    return savedActivity;
+  } catch (error) {
+    if (savedQuiz?.id) {
+      try { await deleteQuiz(savedQuiz.id, { is_system:false }); } catch {}
+    }
+    throw error;
+  }
 }
 
 async function openPersonalActivity(activity = {}, { origin = "my-activities", systemPublication = null } = {}) {

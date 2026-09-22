@@ -1742,6 +1742,7 @@ export function createQuizWorkshopViewController({
       id: String(source.id || `question-${index + 1}`),
       modelId: String(source.modelId || "free-layout"),
       title: String(source.title || "Disposition personnalisée"),
+      internalNote:String(source.internalNote ?? source.internal_note ?? ""),
       responseMode:normalizeQuestionResponseMode(source.responseMode ?? source.response_mode),
       timerSeconds,
       variantDrawMode,
@@ -3409,6 +3410,17 @@ export function createQuizWorkshopViewController({
             ` : ""}
           </div>
           ${getQuestionWidgetSummaryMarkup(question)}
+          <label class="quiz-workshop-question-note">
+            <span class="dashboard-material-icon" aria-hidden="true">sticky_note_2</span>
+            <input
+              type="text"
+              value="${escapeHtml(question.internalNote || "")}"
+              data-question-internal-note="${escapeHtml(question.id)}"
+              aria-label="Note interne de la question ${index + 1}"
+              placeholder="Note interne…"
+              maxlength="180"
+            >
+          </label>
         </div>
         <div class="quiz-workshop-question-actions">
           <button class="quiz-workshop-question-action dashboard-material-icon-btn" type="button" data-edit-question="${escapeHtml(question.id)}" aria-label="Modifier cette question" title="Modifier">
@@ -5631,6 +5643,16 @@ export function createQuizWorkshopViewController({
     openDrawer({ currentTarget: trigger }, duplicate);
   }
 
+  function handleQuestionsInput(event){
+    const input = event.target instanceof Element ? event.target.closest("[data-question-internal-note]") : null;
+    if (!(input instanceof HTMLInputElement)) return;
+    const questionId = String(input.dataset.questionInternalNote || "");
+    const question = questions.find((entry) => entry.id === questionId);
+    if (!question) return;
+    question.internalNote = String(input.value || "");
+    markQuizDirty();
+  }
+
   function handleQuestionsClick(event){
     const editButton = event.target.closest("[data-edit-question]");
     if (editButton) {
@@ -5713,6 +5735,7 @@ export function createQuizWorkshopViewController({
       markQuizDirty();
     });
     questionsHost?.addEventListener("click", handleQuestionsClick);
+    questionsHost?.addEventListener("input", handleQuestionsInput);
     drawer?.addEventListener("click", handleDrawerClick);
     drawer?.addEventListener("input", handleDrawerInput);
     drawer?.addEventListener("focusin", handleDrawerFocusIn);

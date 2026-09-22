@@ -176,6 +176,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     description: "Lire ou composer une somme avec des pièces et billets manipulables.",
     tags: ["maths", "monnaie", "argent", "grandeurs", "mesures", "manipulation", "projection"]
   },
+  {
+    id: "m-millimetre",
+    label: "M. Millimètre",
+    entry: "../tools/m-millimetre/tool.js",
+    description: "Lire ou construire des longueurs exactes avec la ligne brisée graduée de M. Millimètre.",
+    tags: ["maths", "grandeurs", "mesures", "longueurs", "millimètres", "tracé", "projection"]
+  },
 
   {
     id: "encodage",
