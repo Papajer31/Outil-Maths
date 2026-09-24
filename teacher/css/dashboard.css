@@ -8661,23 +8661,236 @@ body.dashboard-catalog-test-fullscreen-lock{
 
 .dashboard-sequence-editor .dashboard-mission-compose-grid{
   grid-template-columns:minmax(320px, .9fr) minmax(420px, 1.1fr);
+  gap:0;
+  min-height:0;
+  align-items:stretch;
+  align-self:stretch;
+  overflow:hidden;
 }
 
-.dashboard-sequence-source-tabs{
+.dashboard-sequence-editor.dashboard-mission-editor{
+  grid-template-rows:auto minmax(0, 1fr);
+  gap:0;
+  padding-bottom:0;
+  overflow:hidden;
+}
+
+.dashboard-sequence-editor .dashboard-mission-catalog-panel,
+.dashboard-sequence-editor .dashboard-mission-sequence-panel{
+  min-width:0;
+  padding:0 1rem;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  display:grid;
+  min-height:0;
+  align-content:start;
+  overflow:hidden;
+}
+
+.dashboard-sequence-editor .dashboard-mission-catalog-panel{
+  grid-template-rows:80px auto 42px minmax(0, 1fr);
+}
+
+.dashboard-sequence-editor .dashboard-mission-sequence-panel{
+  grid-template-rows:80px minmax(0, 1fr);
+}
+
+.dashboard-sequence-editor .dashboard-mission-catalog-panel{
+  padding-left:0;
+  border-right:3px solid rgba(255,255,255,.18);
+}
+
+.dashboard-sequence-editor .dashboard-mission-sequence-panel{
+  padding-right:0;
+}
+
+.dashboard-sequence-panel-heading{
+  height:80px;
+  box-sizing:border-box;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:16px 0 0;
+  color:var(--text);
+  font-size:1.7rem;
+  font-weight:600;
+  letter-spacing:.08em;
+  line-height:1.15;
+  text-align:center;
+}
+
+.dashboard-sequence-picker-breadcrumb-slot{
+  min-width:0;
+  height:42px;
   display:flex;
   align-items:center;
-  gap:8px;
-  margin-bottom:.6rem;
-  flex-wrap:wrap;
+  justify-content:center;
+  overflow:visible;
+}
+
+.dashboard-sequence-picker-breadcrumb{
+  max-width:100%;
+  flex-wrap:nowrap;
+  gap:4px;
+  margin:0;
+}
+
+.dashboard-sequence-picker-breadcrumb > .dashboard-breadcrumb-btn{
+  min-width:0;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .dashboard-sequence-source-results,
 .dashboard-sequence-step-list{
+  min-height:0;
   max-height:none;
+  overflow:auto;
+  overflow-anchor:none;
+  align-content:start;
+  grid-auto-rows:max-content;
 }
 
 .dashboard-sequence-source-item .dashboard-material-icon{
   font-size:20px;
+}
+
+.dashboard-sequence-step-card[draggable="true"]{
+  cursor:grab;
+  user-select:none;
+  touch-action:pan-y;
+}
+
+.dashboard-sequence-step-card[draggable="true"]:active{
+  cursor:grabbing;
+}
+
+.dashboard-sequence-step-card :is(button, input, select, textarea, a, label){
+  cursor:auto;
+  user-select:auto;
+}
+
+.dashboard-sequence-step-card.is-dragging{
+  opacity:.34;
+  border-color:rgba(140,166,255,.72);
+  background:rgba(45,55,76,.72);
+}
+
+.dashboard-sequence-step-list.is-reordering{
+  cursor:grabbing;
+}
+
+.dashboard-sequence-step-card{
+  min-height:0;
+  gap:6px;
+}
+
+.dashboard-sequence-step-number{
+  flex:0 0 40px;
+  align-self:stretch;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-right:1px solid var(--border);
+  color:var(--text-muted,#6b7280);
+  font-size:1rem;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+
+.dashboard-sequence-step-card .dashboard-mission-step-main{
+  gap:3px;
+  padding:5px 8px;
+}
+
+.dashboard-sequence-step-card .dashboard-class-card-title{
+  color:#ffb020;
+  font-size:16px;
+  line-height:1.2;
+}
+
+.dashboard-sequence-step-card .dashboard-mini-pill{
+  padding:2px 7px;
+  font-size:10px;
+}
+
+.dashboard-sequence-step-card .dashboard-mission-step-settings,
+.activity-assignment-rules-block .dashboard-mission-step-settings{
+  gap:64px;
+  margin-top:6px;
+  margin-bottom: 6px;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+}
+
+.dashboard-sequence-step-card .dashboard-mission-step-difficulty,
+.dashboard-sequence-step-card .dashboard-mission-step-limit,
+.activity-assignment-rules-block .dashboard-mission-step-difficulty,
+.activity-assignment-rules-block .dashboard-mission-step-limit{
+  flex:0 0 auto;
+  flex-wrap:nowrap;
+  gap:12px;
+  font-size:1rem;
+}
+
+.dashboard-sequence-step-card .dashboard-mission-step-difficulty-select,
+.dashboard-sequence-step-card .dashboard-mission-step-limit-mode,
+.activity-assignment-rules-block .dashboard-mission-step-difficulty-select,
+.activity-assignment-rules-block .dashboard-mission-step-limit-mode{
+  height:42px;
+  min-width:96px;
+  padding:0 30px 0 9px;
+  border-radius:8px;
+  background-position:right 8px center;
+  font-size:1rem;
+}
+
+.dashboard-sequence-step-card .dashboard-mission-step-difficulty-select,
+.activity-assignment-rules-block .dashboard-mission-step-difficulty-select{
+  min-width:106px;
+}
+
+.dashboard-sequence-limit-stepper{
+  display:block;
+  gap:0;
+}
+
+.dashboard-sequence-limit-stepper .tv-stepper-field-label{
+  display:none;
+}
+
+.dashboard-sequence-limit-stepper .tv-stepper-field-control-row,
+.dashboard-sequence-limit-stepper .tv-stepper{
+  gap:4px;
+}
+
+.dashboard-sequence-limit-stepper .tv-input-stepper{
+  --tv-stepper-input-width:44px;
+  flex-basis:44px;
+  width:44px;
+  min-width:44px;
+  height:38px;
+  padding:0 4px;
+  border-radius:8px;
+  font-size:18px;
+  font-weight:650;
+}
+
+.dashboard-sequence-limit-stepper .tv-stepper-btn{
+  flex-basis:28px;
+  width:28px;
+  min-width:32px;
+  height:32px;
+}
+
+.dashboard-sequence-limit-stepper .tv-stepper-icon{
+  font-size:24px;
+}
+
+.dashboard-sequence-step-card .dashboard-class-card-actions{
+  padding-right:4px;
 }
 
 .dashboard-activity-tile--sequence .dashboard-activity-tile-icon{
@@ -8687,6 +8900,23 @@ body.dashboard-catalog-test-fullscreen-lock{
 @media (max-width: 980px){
   .dashboard-sequence-editor .dashboard-mission-compose-grid{
     grid-template-columns:1fr;
+    overflow:visible;
+  }
+
+  .dashboard-sequence-editor.dashboard-mission-editor{
+    overflow-y:auto;
+  }
+
+  .dashboard-sequence-editor .dashboard-mission-catalog-panel{
+    padding:0 0 1rem;
+    border-right:0;
+    border-bottom:1px solid rgba(255,255,255,.14);
+    overflow:visible;
+  }
+
+  .dashboard-sequence-editor .dashboard-mission-sequence-panel{
+    padding:1rem 0 0;
+    overflow:visible;
   }
 }
 
@@ -8710,43 +8940,155 @@ body.dashboard-catalog-test-fullscreen-lock{
 .activity-assignment-current-list--overview{
   width:min(980px, 100%);
   margin:0 auto;
-  border-top:1px solid var(--border);
+  gap:12px;
 }
 .activity-assignment-current-row--overview{
   min-height:62px;
-  padding:12px 4px;
+  padding:13px 14px;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:10px;
+  background:rgba(255,255,255,.065);
+  transition:background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
-.activity-assignment-drawer-scrim{
-  position:absolute;
-  z-index:30;
-  inset:0;
-  border:0;
+.activity-assignment-current-row--overview:hover{
+  border-color:rgba(255,255,255,.2);
+  background:rgba(255,255,255,.085);
+}
+.activity-assignment-current-row--overview.is-paused{
+  border-color:rgba(255,176,32,.28);
+  background:rgba(255,176,32,.055);
+}
+.activity-assignment-current-row--overview:has(.activity-assignment-edit-trigger:focus-visible){
+  outline:none;
+  box-shadow:inset 0 0 0 2px rgba(255,216,94,.72);
+}
+.activity-assignment-edit-trigger{
+  appearance:none;
+  flex:1 1 auto;
+  width:auto;
   padding:0;
-  background:rgba(0,0,0,.46);
-  cursor:default;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.activity-assignment-edit-trigger:focus-visible{
+  outline:none;
+}
+.activity-assignment-current-title{
+  color:#ffb020;
+  font-size:1rem;
+}
+.activity-assignment-current-title-row{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:9px;
+}
+.activity-assignment-current-main .activity-assignment-current-status{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:2px 7px;
+  border:1px solid rgba(255,176,32,.32);
+  border-radius:999px;
+  background:rgba(255,176,32,.1);
+  color:#ffc557;
+  font-size:.73rem;
+  font-weight:700;
+}
+.activity-assignment-current-main .activity-assignment-current-status .dashboard-material-icon{
+  color:inherit;
+  font-size:15px;
+}
+.activity-assignment-current-students{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:7px;
+  margin-top:7px;
+}
+.activity-assignment-current-student{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:30px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:999px;
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  font-size:.86rem;
+  font-weight:600;
+}
+.activity-assignment-current-student.is-completed{
+  border-color:rgba(72,199,116,.5);
+  background:rgba(72,199,116,.12);
+}
+.activity-assignment-current-main .activity-assignment-current-student > span:first-child{
+  color:inherit;
+  font-size:inherit;
+}
+.activity-assignment-current-main .activity-assignment-completion-icon{
+  color:#5ed58a;
+  font-size:18px;
+}
+.activity-assignment-current-actions{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+}
+.activity-assignment-current-actions > .dashboard-icon-btn{
+  flex:0 0 32px;
+  width:32px;
+  height:32px;
+  padding:0;
+  overflow:hidden;
+}
+.activity-assignment-current-actions > .dashboard-icon-btn .dashboard-material-icon{
+  width:22px;
+  max-width:22px;
+  height:22px;
+  overflow:hidden;
+  color:inherit;
+  font-size:20px;
+  pointer-events:none;
+}
+.activity-assignment-state-action.is-resume{
+  color:#65dc91;
+  border-color:rgba(72,199,116,.4);
+  background:rgba(72,199,116,.12);
 }
 .activity-assignment-drawer{
   position:absolute;
   z-index:31;
-  top:0;
-  right:0;
-  bottom:0;
-  width:min(980px, 94%);
+  inset:0;
+  width:100%;
   min-width:0;
   display:flex;
   flex-direction:column;
-  border-left:1px solid var(--border);
+  border:0;
   background:var(--bg);
-  box-shadow:-18px 0 42px rgba(0,0,0,.28);
-  animation:activity-assignment-drawer-in .18s ease-out both;
+  box-shadow:none;
+}
+.activity-assignment-drawer.is-opening{
+  animation:activity-assignment-drawer-in .45s cubic-bezier(.22,1,.36,1) both;
+}
+.activity-assignment-drawer.is-closing{
+  pointer-events:none;
 }
 @keyframes activity-assignment-drawer-in{
-  from{ transform:translateX(26px); opacity:.72; }
-  to{ transform:translateX(0); opacity:1; }
+  from{ transform:translate3d(0,112%,0); }
+  to{ transform:translate3d(0,0,0); }
 }
 .activity-assignment-drawer-header{
   flex:0 0 auto;
-  min-height:76px;
+  height:72px;
+  min-height:72px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -8758,12 +9100,123 @@ body.dashboard-catalog-test-fullscreen-lock{
   flex:1 1 auto;
   min-height:0;
   display:grid;
-  grid-template-columns:minmax(270px, 34%) minmax(0, 1fr);
+  grid-template-columns:minmax(320px, .9fr) minmax(420px, 1.1fr);
+  gap:0;
+  align-items:stretch;
+  overflow:hidden;
 }
 .activity-assignment-drawer-body .activity-assignment-source-column,
 .activity-assignment-drawer-body .activity-assignment-config-column{
+  min-width:0;
+  min-height:0;
+  padding:0 1rem;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  display:grid;
+  align-content:start;
+  overflow:hidden;
+}
+.activity-assignment-drawer-body .activity-assignment-source-column{
+  grid-template-rows:80px auto 42px minmax(0, 1fr);
+  padding-left:0;
+  border-right:3px solid rgba(255,255,255,.18);
+}
+.activity-assignment-drawer-body .activity-assignment-config-column{
+  grid-template-rows:80px minmax(0, 1fr);
+  padding-right:0;
+}
+.activity-assignment-source-list{
+  display:grid;
+  gap:.4rem;
+  padding-right:.15rem;
+}
+.activity-assignment-picker-item.is-selected{
+  border-color:rgba(255,176,32,.72);
+  background:rgba(255,176,32,.09);
+}
+.activity-assignment-config-content{
   min-height:0;
   overflow:auto;
+  overflow-anchor:none;
+  padding:16px 18px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:14px;
+}
+.activity-assignment-config-head{
+  padding:0 0 4px;
+  border-bottom:0;
+}
+.activity-assignment-config-head .activity-assignment-selected-title{
+  color:#ffb020;
+  font-size:1.22rem;
+  font-weight:700;
+}
+.activity-assignment-panel-block{
+  width:100%;
+  box-sizing:border-box;
+  padding:16px;
+  border:1px solid var(--border);
+  border-radius:0;
+  background:#151922;
+}
+.activity-assignment-rules-block{
+  padding-right:0;
+  padding-left:0;
+}
+.activity-assignment-rules-block > .activity-assignment-block-title,
+.activity-assignment-rules-block > .activity-assignment-sequence-note{
+  margin-right:16px;
+  margin-left:16px;
+}
+.activity-assignment-rules-block > .activity-assignment-rules-line{
+  margin-right:16px;
+  margin-left:16px;
+}
+.activity-assignment-block-title{
+  margin-bottom:14px;
+  color:var(--text);
+  font-size:1.3rem;
+  font-weight:700;
+}
+.activity-assignment-recipients{
+  gap:0;
+}
+.activity-assignment-class-group{
+  padding:0;
+  border-bottom:0;
+}
+.activity-assignment-class-group + .activity-assignment-class-group{
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px solid var(--border);
+}
+.activity-assignment-class-name{
+  margin-bottom:10px;
+  color:var(--muted);
+  font-size:.86rem;
+  font-weight:700;
+  text-align:center;
+}
+.activity-assignment-whole-class-row{
+  display:flex;
+  justify-content:center;
+}
+.activity-assignment-student-list{
+  display:flex;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:12px 0 0;
+}
+.activity-assignment-rules-block .activity-assignment-sequence-note{
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
 }
 .activity-assignment-sequence-note{
   margin:14px 0 4px;
@@ -8782,15 +9235,17 @@ body.dashboard-catalog-test-fullscreen-lock{
   .activity-assignment-header-spacer{
     display:none;
   }
-  .activity-assignment-drawer{
-    width:100%;
-  }
   .activity-assignment-drawer-body{
     grid-template-columns:1fr;
+    overflow:visible;
   }
   .activity-assignment-drawer-body .activity-assignment-source-column{
     max-height:42%;
     border-right:0;
     border-bottom:1px solid var(--border);
+    overflow:visible;
+  }
+  .activity-assignment-drawer-body .activity-assignment-config-column{
+    overflow:visible;
   }
 }

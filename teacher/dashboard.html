@@ -79,16 +79,6 @@
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
-                <button id="btnNavMissions" class="dashboard-nav-main dashboard-nav-main--header" type="button">
-                  <span class="dashboard-nav-label">Missions</span>
-                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
-                </button>
-
-                <button id="btnNavQuiz" class="dashboard-nav-main dashboard-nav-main--header" type="button">
-                  <span class="dashboard-nav-label">Quiz</span>
-                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
-                </button>
-
                 <button id="btnNavResources" class="dashboard-nav-main dashboard-nav-main--header" type="button">
                   <span class="dashboard-nav-label">Ressources</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
@@ -195,53 +185,8 @@
               </div>
             </div>
 
-
-
-            <div id="missionsView" class="dashboard-content-view hidden">
-              <div id="missionsHeader" class="dashboard-config-header"></div>
-
-              <div id="missionsList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host">
-                <div class="dashboard-activity-empty-state">Chargement…</div>
-              </div>
-            </div>
-
             <div id="quizView" class="dashboard-content-view dashboard-explorer-view hidden">
-              <div id="quizExplorerPane" class="dashboard-quiz-explorer-pane">
-                <div id="quizExplorerHeader" class="dashboard-config-header dashboard-explorer-header">
-                  <div class="dashboard-config-header-main">
-                    <div class="dashboard-section-title">Quiz</div>
-                  </div>
 
-                  <div class="dashboard-config-header-center" aria-hidden="true"></div>
-
-                  <div class="dashboard-config-header-actions dashboard-explorer-header-actions">
-                    <button
-                      id="btnCreateQuizFolder"
-                      class="btn"
-                      type="button"
-                      title="Créer un dossier"
-                      aria-label="Créer un dossier"
-                    >
-                      <span class="dashboard-material-icon" aria-hidden="true">create_new_folder</span>
-                      <span>Créer un dossier</span>
-                    </button>
-
-                    <button id="btnCreateQuizSeries" class="btn primary" type="button">
-                      <span class="dashboard-material-icon" aria-hidden="true">view_list</span>
-                      <span>Créer une série de questions</span>
-                    </button>
-
-                    <button id="btnCreateQuiz" class="btn primary" type="button">
-                      <span class="dashboard-material-icon" aria-hidden="true">add</span>
-                      <span>Créer un quiz</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div id="quizList" class="dashboard-content-scroll dashboard-config-list dashboard-explorer-host dashboard-explorer-list-host">
-                  <div class="dashboard-activity-empty-state">Chargement…</div>
-                </div>
-              </div>
 
                 <div id="quizWorkshopView" class="quiz-workshop-view hidden">
                 <header class="dashboard-config-header quiz-workshop-header">
@@ -250,8 +195,8 @@
                       id="btnBackQuizExplorer"
                       class="dashboard-back-btn dashboard-material-icon-btn"
                       type="button"
-                      aria-label="Retour aux quiz"
-                      title="Retour aux quiz"
+                      aria-label="Retour à l’activité"
+                      title="Retour à l’activité"
                     >
                       <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
                     </button>
@@ -598,8 +543,8 @@
                       id="btnBackQuizSeries"
                       class="dashboard-back-btn dashboard-material-icon-btn"
                       type="button"
-                      aria-label="Retour aux quiz"
-                      title="Retour aux quiz"
+                      aria-label="Retour à l’activité"
+                      title="Retour à l’activité"
                     >
                       <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
                     </button>
@@ -639,6 +584,10 @@
                       <button id="btnQuizSeriesImportQuestions" class="btn" type="button">
                         <span class="dashboard-material-icon" aria-hidden="true">add</span>
                         <span>Importer les questions</span>
+                      </button>
+                      <button id="btnQuizSeriesExportQuestions" class="btn" type="button">
+                        <span class="dashboard-material-icon" aria-hidden="true">download</span>
+                        <span>Exporter les questions</span>
                       </button>
                     </div>
                   </div>

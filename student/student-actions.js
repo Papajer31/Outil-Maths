@@ -10,8 +10,6 @@ import {
   getPublicStudentCodeKeypad,
   getPublicStudentActivityProgress,
   openPublicStudentAdventureDay,
-  listPublicMissionsForSpace,
-  loadPublicMissionSteps,
   listPublicActivityAssignmentsForSpace,
   resolvePublicDirectLaunch
 } from "./student-api.js";
@@ -20,7 +18,6 @@ import { clearSelectedActivityMeta } from "./student-activity-meta.js";
 import { markStudentFullscreenWantedAndWait } from "./student-fullscreen.js";
 import {
   buildCatalogActivityConfig,
-  buildMissionRuntimeConfig,
   getCatalogActivityById,
   normalizeCatalogActivity,
   normalizeCatalogRuntimeContext,
@@ -152,7 +149,7 @@ export async function submitAccessCode(rawValue){
     classDataLoadAccessCode = "";
     classDataLoadPromise = null;
 
-    persistAccessCode(code);
+    persistAccessCodeForSession(code);
 
     try {
       await ensureClassDataLoaded({ refreshOnComplete: false, refreshOnStart: false });
@@ -570,16 +567,8 @@ export async function refreshMissionsForCurrentSelection(){
   }
   try {
     const isGroup = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) === "group";
-    const missions = await listPublicMissionsForSpace(studentState.accessCode, ids, isGroup);
-    let assignments = [];
-    try {
-      assignments = await listPublicActivityAssignmentsForSpace(studentState.accessCode, ids, isGroup);
-    } catch (assignmentError) {
-      // Compatibilité pendant la migration : l'absence du patch SQL 49 ne doit
-      // jamais empêcher les anciennes Missions de continuer à fonctionner.
-      console.warn("Attributions directes indisponibles.", assignmentError);
-    }
-    const assignmentMissions = (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
+    const assignments = await listPublicActivityAssignmentsForSpace(studentState.accessCode, ids, isGroup);
+    studentState.missions = (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
       ...assignment,
       _kind:"activity_assignment",
       total_steps:String(assignment?.source_type || "") === "sequence"
@@ -589,10 +578,6 @@ export async function refreshMissionsForCurrentSelection(){
       intent_mode:"practice",
       answer_mode:"student_input"
     }));
-    studentState.missions = [
-      ...assignmentMissions,
-      ...(Array.isArray(missions) ? missions : [])
-    ];
     studentState.missionsMessage = "";
     emitRefresh();
     return studentState.missions;
@@ -607,80 +592,7 @@ export async function refreshMissionsForCurrentSelection(){
 export async function selectMission(missionId){
   const mission = (studentState.missions || []).find((item) => String(item.id) === String(missionId));
   if (!mission) return;
-  if (mission?._kind === "activity_assignment") {
-    await selectActivityAssignment(mission);
-    return;
-  }
-
-  const currentMode = normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE);
-  const participant = currentMode === "individual"
-    ? (getSelectedParticipantsForCurrentMode()[0] || null)
-    : null;
-  const studentId = Number(participant?.id);
-  const steps = await loadPublicMissionSteps(
-    studentState.accessCode,
-    mission.id,
-    currentMode === "individual" && Number.isFinite(studentId) && studentId > 0 ? studentId : null
-  );
-
-  // En individuel, les étapes déjà terminées sont persistantes : on ne rejoue
-  // que celles qui restent à faire. Une tentative interrompue n'est pas marquée
-  // terminée et revient donc naturellement en tête de la reprise.
-  const remainingSteps = currentMode === "individual"
-    ? steps.filter((step) => step?.is_completed !== true)
-    : steps;
-
-  if (!remainingSteps.length) {
-    await refreshMissionsForCurrentSelection();
-    return;
-  }
-
-  const catalogActivities = await listPublicCatalogActivities();
-
-  // Une étape adaptative reprend le dernier niveau mémorisé pour cette activité.
-  // Ce niveau est partagé avec l'Exploration ; les Missions fixes n'y touchent pas.
-  const resolvedRemainingSteps = await Promise.all(remainingSteps.map(async (step) => {
-    const mode = String(step?.difficulty_mode || "normal").trim().toLowerCase();
-    if (mode !== "adaptive" || currentMode !== "individual" || !participant?.id || !studentState.studentCode) {
-      return { ...step };
-    }
-
-    try {
-      const progress = await getPublicStudentActivityProgress(
-        studentState.accessCode,
-        participant.id,
-        studentState.studentCode,
-        step.catalog_activity_id
-      );
-      return {
-        ...step,
-        resolved_difficulty_level: normalizeCatalogDifficultyLevel(progress?.current_level ?? 1)
-      };
-    } catch (err) {
-      console.warn("Niveau adaptatif de Mission indisponible, démarrage au niveau 1.", err);
-      return {
-        ...step,
-        resolved_difficulty_level: normalizeCatalogDifficultyLevel(1)
-      };
-    }
-  }));
-
-  const configJson = buildMissionRuntimeConfig(mission, resolvedRemainingSteps, {
-    activityMode: currentMode,
-    catalogActivities
-  });
-  studentState.selectedMission = { ...mission, steps, remainingSteps: resolvedRemainingSteps };
-  studentState.selectedConfig = {
-    id: mission.id,
-    mission_id: mission.id,
-    config_name: mission.title,
-    catalog_context: "mission",
-    module_key: "tools",
-    config_json: configJson
-  };
-  studentState.sharedSessionEntry = false;
-  clearSelectedActivityMeta();
-  window.location.hash = "#/sessionstart";
+  await selectActivityAssignment(mission);
 }
 
 
@@ -901,6 +813,37 @@ export function goBackToSessionStart(){
   window.location.hash = buildStudentHash("sessionstart");
 }
 
+export async function refreshClassDataForRealtime(){
+  const accessCode = normalizeAccessCode(studentState.accessCode);
+  if (!accessCode) return false;
+
+  try {
+    const [activities, folders, students] = await Promise.all([
+      listPublicActivitiesForSpace(accessCode),
+      listPublicPedagogicalNodesForSpace(accessCode),
+      listPublicStudentsForSpace(accessCode)
+    ]);
+
+    studentState.activities = Array.isArray(activities) ? activities : [];
+    studentState.activityFolders = Array.isArray(folders) ? folders : [];
+    studentState.publicStudents = Array.isArray(students) ? students : [];
+    studentState.currentActivityFolderId = resolveCurrentFolderId();
+    studentState.activitiesMessage = (studentState.activities.length || studentState.activityFolders.length)
+      ? ""
+      : "Aucune activité disponible.";
+    studentState.publicStudentsMessage = studentState.publicStudents.length
+      ? ""
+      : "Aucun élève disponible dans cette classe.";
+    loadedClassDataAccessCode = accessCode;
+    emitRefresh();
+    return true;
+  } catch (error) {
+    // Une panne Realtime ne doit jamais effacer l'état déjà affiché.
+    console.warn("Actualisation temps réel des données de classe impossible.", error);
+    return false;
+  }
+}
+
 export async function ensureClassDataLoaded(options = {}){
   const {
     refreshOnComplete = true,
@@ -942,9 +885,10 @@ export async function ensureClassDataLoaded(options = {}){
   return classDataLoadPromise;
 }
 
-function persistAccessCode(code){
+
+function persistAccessCodeForSession(code){
   try {
-    localStorage.setItem("lastAccessCode", code);
+    sessionStorage.setItem("studentAccessCode", code);
   } catch {}
 }
 

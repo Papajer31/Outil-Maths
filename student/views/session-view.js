@@ -287,6 +287,7 @@ export function renderSessionView(root){
         moduleKey,
         globals: runtimeConfigJson.globals ?? {},
         sequence: runtimeConfigJson.sequence,
+        hideCorrections: isCatalogTestMode && runtimeConfigJson.catalog_test_show_corrections === false,
         activityMode: loadedPassationProfile.activityMode,
         responseUi: loadedPassationProfile.responseUi,
         progressMode: loadedPassationProfile.progressMode,

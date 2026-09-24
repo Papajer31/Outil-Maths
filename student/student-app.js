@@ -18,6 +18,7 @@ import { startMaterialIconHydration } from "../shared/material-icons-svg.js";
 import { isDevViewportMode } from "../shared/dom-helpers.js";
 import { installResponsiveRuntime } from "../shared/responsive-runtime.js";
 import { initializeStudentAudioEngine } from "./student-audio.js";
+import { startStudentRealtimeSync } from "./student-realtime.js";
 
 boot();
 
@@ -31,6 +32,7 @@ async function boot(){
     setStudentFullscreenSuppressed(true);
   }
 
+  clearLegacyRememberedAccessCode();
   hydrateInitialState();
   if (!hydrateAdminDraftSessionFromUrl()) {
     const directHandled = await hydrateDirectLaunchFromUrl();
@@ -43,6 +45,7 @@ async function boot(){
   installStudentInteractionGuards();
   startMaterialIconHydration();
   initializeStudentAudioEngine();
+  startStudentRealtimeSync();
 
   const appRoot = document.getElementById("studentApp");
   if (!appRoot) return;
@@ -66,11 +69,17 @@ function suppressWelcomeScreenForDirectLaunch(){
   }
 }
 
+function clearLegacyRememberedAccessCode(){
+  try {
+    localStorage.removeItem("lastAccessCode");
+  } catch {}
+}
+
 function hydrateInitialState(){
   try {
-    const lastAccessCode = localStorage.getItem("lastAccessCode");
-    if (lastAccessCode && !studentState.accessCode){
-      const code = String(lastAccessCode).trim().toUpperCase();
+    const sessionAccessCode = sessionStorage.getItem("studentAccessCode");
+    if (sessionAccessCode && !studentState.accessCode){
+      const code = String(sessionAccessCode).trim().toUpperCase();
       studentState.accessCode = code;
       studentState.homeCode = code;
     }

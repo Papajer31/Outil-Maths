@@ -232,10 +232,8 @@ export function createTeacherToolsViewController({
   function addPage(toolId){
     const tool = getTeacherTool(toolId);
     if (!tool) return;
-    if (tool.singleton && workspace.pages.some((page) => page.toolId === tool.id)) {
-      showToast?.(`${tool.label} est déjà ouverte.`, { isError: true });
-      return;
-    }
+    // Une page est une instance indépendante : un même type de mini-app peut
+    // donc être ajouté plusieurs fois au Tableau, avec son propre état.
     const page = createPage(tool);
     workspace = normalizeWorkspace({ ...workspace, selectedPageId: page.id, pages: [...workspace.pages, page] });
     render();

@@ -24,7 +24,6 @@ export function defineTeacherTool(definition = {}){
     label,
     icon: String(definition?.icon || "widgets").trim(),
     description: String(definition?.description || "Mini-application du Tableau.").trim(),
-    singleton: definition?.singleton === true,
     surface: normalizeSurfaceCapabilities(definition?.surface)
   });
 }

@@ -399,6 +399,7 @@ export async function mountStudentHistoryView({
   subtitle = "",
   loadHistory,
   deleteHistoryAttempt,
+  resetHistory,
   resetAttemptEffects,
   deleteAttemptTotally,
   showToast,
@@ -422,6 +423,10 @@ export async function mountStudentHistoryView({
             <h2 class="dashboard-history-title">Historique</h2>
             <div class="dashboard-history-count" data-history-count>Chargement…</div>
           </div>
+          <button class="btn danger dashboard-btn-with-icon" type="button" data-history-clear-all disabled>
+            <span class="dashboard-material-icon" aria-hidden="true">delete_sweep</span>
+            <span>Réinitialiser l’historique</span>
+          </button>
         </div>
 
         <div class="dashboard-history-filters" aria-label="Filtres de l’historique">
@@ -485,6 +490,11 @@ export async function mountStudentHistoryView({
 
   const filters = { period: "30d", mode: "all", discipline: "all", activity: "" };
   const expandedAttemptIds = new Set();
+  const clearAllButton = host.querySelector("[data-history-clear-all]");
+
+  const updateClearAllButton = () => {
+    if (clearAllButton) clearAllButton.disabled = !history.length;
+  };
 
   const reloadHistory = async () => {
     const loaded = await loadHistory?.(student.id);
@@ -575,7 +585,39 @@ export async function mountStudentHistoryView({
     }
   };
 
-  const rerender = () => renderHistoryList(host, history, filters, expandedAttemptIds, handleAttemptAction);
+  const rerender = () => {
+    updateClearAllButton();
+    renderHistoryList(host, history, filters, expandedAttemptIds, handleAttemptAction);
+  };
+
+  clearAllButton?.addEventListener("click", async () => {
+    const attemptCount = history.length;
+    if (!attemptCount || clearAllButton.disabled) return;
+    const confirmed = await openDashboardConfirmDialog({
+      title: "Réinitialiser tout l’historique ?",
+      message:`Toutes les tentatives de ${String(student.first_name || "cet élève")}, y compris celles qui ne sont pas visibles dans cette liste, seront supprimées définitivement. Les progrès Exploration, Aventure et Missions seront aussi remis à zéro. Cette action est irréversible.`,
+      confirmLabel: "Réinitialiser l’historique",
+      cancelLabel: "Annuler",
+      danger: true
+    });
+    if (!confirmed) return;
+
+    clearAllButton.disabled = true;
+    try {
+      if (typeof resetHistory !== "function") throw new Error("La réinitialisation de l’historique n’est pas disponible.");
+      const clearedCount = await resetHistory(student.id);
+      history = [];
+      expandedAttemptIds.clear();
+      rerender();
+      const returnedCount = Number(clearedCount);
+      const count = Number.isFinite(returnedCount) ? Math.max(0, Math.trunc(returnedCount)) : attemptCount;
+      showToast?.(`${count} tentative${count > 1 ? "s ont été supprimées" : " a été supprimée"} et les progrès associés ont été remis à zéro.`);
+    } catch (error) {
+      console.error("Réinitialisation complète de l’historique impossible.", error);
+      showToast?.(error?.message || "Impossible de réinitialiser l’historique.", { isError:true });
+      updateClearAllButton();
+    }
+  });
 
   host.querySelectorAll("[data-history-filter]").forEach((control) => {
     const key = String(control.dataset.historyFilter || "");

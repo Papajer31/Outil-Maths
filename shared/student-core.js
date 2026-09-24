@@ -44,6 +44,7 @@ export function createSessionEngine({
   onActivityQuestionRecorded,
   onActivityAttemptFinished,
   manualControlsEnabled = true,
+  hideCorrections = false,
   runMode = "student",
   activityMode = DEFAULT_ACTIVITY_MODE,
   responseUi = null,
@@ -103,6 +104,7 @@ export function createSessionEngine({
     ...normalizeActivityGlobals(globals)
   };
   const isCatalogTestSession = isCatalogTestSequence(sequence);
+  const suppressCorrectionPhase = isCatalogTestSession && hideCorrections === true;
   if (isCatalogTestSession) {
     activityGlobals.activityTotalTimeEnabled = false;
   }
@@ -482,12 +484,17 @@ export function createSessionEngine({
       return false;
     }
 
-    beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
-    emitStateChange();
+    if (suppressCorrectionPhase) {
+      void advanceToNextQuestion(item);
+    } else {
+      beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
+      emitStateChange();
+    }
     return true;
   }
 
   function canRevealCurrentAnswer(item) {
+    if (suppressCorrectionPhase) return false;
     if (!item || item.hasAnswerPhase === false) return false;
     if (!activeRuntime || session[currentToolIndex] !== item) return true;
     if (typeof activeRuntime.shouldHideShellRevealAction !== "function") return true;
@@ -1445,6 +1452,8 @@ export function createSessionEngine({
       remainingMs = resolveRuntimeQuestionDurationMs(runtimeForQuestion, item, ctx, remainingMs);
     }
 
+    els.workArea?.classList.remove("session-workarea--correction-suppressed");
+
     const questionIsInfinite = !Number.isFinite(remainingMs);
     engineState = "RUNNING_QUESTION";
     phase = createPhase("QUESTION", questionIsInfinite ? Number.POSITIVE_INFINITY : remainingMs);
@@ -1511,6 +1520,20 @@ export function createSessionEngine({
     stopAllTimers();
 
     if (!activeTool || !item) return;
+
+    if (suppressCorrectionPhase) {
+      cancelValidationReview();
+      clearSessionStage();
+      els.workArea?.classList.add("session-workarea--correction-suppressed");
+      hideManualAction();
+      hideTimer();
+      if (toolEndAfterAnswerPending && session[currentToolIndex] === item) {
+        void finishCurrentToolAfterTimeLimit(item);
+      } else {
+        void advanceToNextQuestion(item);
+      }
+      return;
+    }
 
     clearSessionStage();
     hideManualAction();
@@ -3086,7 +3109,9 @@ export function createSessionEngine({
         if (!item || !isSessionRunning || paused || validationReviewPending) return false;
         if (session[currentToolIndex] !== item) return false;
         if (phase.kind !== "QUESTION") return false;
-        flashValidationFeedback(wasCorrect === true);
+        if (!suppressCorrectionPhase) {
+          flashValidationFeedback(wasCorrect === true);
+        }
         return true;
       },
 
@@ -3516,15 +3541,16 @@ export function createSessionEngine({
     }
 
     if (phase.kind === "QUESTION" && item.infiniteTimePerQ && item.usesCustomQuestionFlow !== true) {
-      if (item.hasAnswerPhase !== false && !canRevealCurrentAnswer(item)) {
+      if (item.hasAnswerPhase !== false && !suppressCorrectionPhase && !canRevealCurrentAnswer(item)) {
         hideManualAction();
         return;
       }
 
-      showManualAction(item.hasAnswerPhase === false ? "Question suivante" : "Afficher la réponse", async () => {
+      const skipAnswerPhase = item.hasAnswerPhase === false || suppressCorrectionPhase;
+      showManualAction(skipAnswerPhase ? "Question suivante" : "Afficher la réponse", async () => {
         hideManualAction();
 
-        if (item.hasAnswerPhase === false) {
+        if (skipAnswerPhase) {
           await advanceToNextQuestion(item);
           return;
         }

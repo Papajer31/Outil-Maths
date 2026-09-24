@@ -14,6 +14,7 @@ import {
   saveStudentOrderForTeacherSpace,
   listStudentActivityHistory,
   deleteStudentActivityHistoryAttempt,
+  resetStudentActivityHistory,
   resetStudentActivityAttemptEffects,
   deleteStudentActivityAttemptTotally,
   listPedagogicalNodesForTeacher,
@@ -37,20 +38,10 @@ import {
   deleteTeacherSequence,
   listActivityAssignmentsForSpace,
   saveActivityAssignmentForSpace,
+  setActivityAssignmentActive,
+  reassignActivityAssignment,
   deleteActivityAssignment,
   saveDirectLaunchLinkForSpace,
-  listMissionFoldersForSpace,
-  createMissionFolderForSpace,
-  updateMissionFolder,
-  deleteMissionFolder,
-  listMissionsForSpace,
-  updateMissionPlacement,
-  listMissionSteps,
-  listMissionAssignments,
-  saveMissionForSpace,
-  setMissionInactive,
-  reactivateMission,
-  deleteMissionPermanently,
   isCurrentUserSuperAdmin,
   listCatalogActivitiesForAdmin,
   listAdventureDefaultMenuSlots,
@@ -64,13 +55,6 @@ import {
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
-  listQuizFoldersForSpace,
-  createQuizFolderForSpace,
-  updateQuizFolder,
-  deleteQuizFolder,
-  listQuizzesForSpace,
-  updateQuizPlacement,
-  listQuizSummariesForSpace,
   getQuizForSpace,
   saveQuizForSpace,
   deleteQuiz,
@@ -108,10 +92,8 @@ import { openDirectLaunchDialog } from "./dashboard/direct-launch-dialog.js";
 import { createPersonalActivityEditorController, buildDefaultQuizActivityConfig, refreshQuizActivityConfig } from "./dashboard/personal-activity-editor-view.js";
 import { createActivitiesViewController } from "./dashboard/activities-view.js";
 import { createAdventureRegistryViewController } from "./dashboard/adventure-registry-view.js";
-import { createMissionsViewController } from "./dashboard/missions-view.js";
 import { createTeacherToolsViewController } from "./dashboard/teacher-tools-view.js";
 import { createQuizWorkshopViewController } from "./dashboard/quiz-workshop-view.js";
-import { createQuizExplorerViewController } from "./dashboard/quiz-explorer-view.js";
 import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from "./dashboard/quiz-series-view.js";
 import { createResourcesViewController } from "./dashboard/resources-view.js";
 import { createLexicalBankViewController } from "./dashboard/lexical-bank-view.js";
@@ -151,8 +133,6 @@ const btnCloseProfileOverlay = document.getElementById("btnCloseProfileOverlay")
 const btnNavClass = document.getElementById("btnNavClass");
 const btnNavActivityHub = document.getElementById("btnNavActivityHub");
 const btnNavAdventure = document.getElementById("btnNavAdventure");
-const btnNavMissions = document.getElementById("btnNavMissions");
-const btnNavQuiz = document.getElementById("btnNavQuiz");
 const btnNavResources = document.getElementById("btnNavResources");
 const btnNavTeacherTools = document.getElementById("btnNavTeacherTools");
 const btnNavAdmin = document.getElementById("btnNavAdmin");
@@ -179,16 +159,7 @@ const adventureView = document.getElementById("adventureView");
 const adventureHeader = document.getElementById("adventureHeader");
 const adventureList = document.getElementById("adventureList");
 const activitiesView = document.getElementById("activitiesView");
-const missionsView = document.getElementById("missionsView");
-const missionsHeader = document.getElementById("missionsHeader");
-const missionsList = document.getElementById("missionsList");
 const quizView = document.getElementById("quizView");
-const quizExplorerPane = document.getElementById("quizExplorerPane");
-const quizExplorerHeader = document.getElementById("quizExplorerHeader");
-const quizList = document.getElementById("quizList");
-const btnCreateQuiz = document.getElementById("btnCreateQuiz");
-const btnCreateQuizSeries = document.getElementById("btnCreateQuizSeries");
-const btnCreateQuizFolder = document.getElementById("btnCreateQuizFolder");
 const btnBackQuizExplorer = document.getElementById("btnBackQuizExplorer");
 const quizWorkshopView = document.getElementById("quizWorkshopView");
 const quizSeriesView = document.getElementById("quizSeriesView");
@@ -251,7 +222,7 @@ let currentUser = null;
 let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
-let currentDashboardSection = "activity-hub"; // "activity-hub" | "my-activities" | "personal-activity-editor" | "activity-assignment" | "adventure" | "activities" | "missions" | "class" | "quiz" | "resources" | "teacher-tools" | "admin"
+let currentDashboardSection = "activity-hub"; // "activity-hub" | "my-activities" | "personal-activity-editor" | "activity-assignment" | "adventure" | "activities" | "quiz-editor" | "class" | "resources" | "teacher-tools" | "admin"
 let showDashboardHelpIcons = getContextualHelpEnabled();
 let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
@@ -259,8 +230,6 @@ let hasMountedClassView = false;
 let hasMountedAdventureView = false;
 let hasMountedMyActivitiesView = false;
 let hasMountedActivitiesView = false;
-let hasMountedMissionsView = false;
-let hasMountedQuizView = false;
 let hasMountedResourcesView = false;
 let hasMountedTeacherToolsView = false;
 let hasMountedAdminView = false;
@@ -269,8 +238,6 @@ let mountedClassTeacherSpaceId = "";
 let mountedAdventureTeacherSpaceId = "";
 let mountedMyActivitiesTeacherSpaceId = "";
 let mountedActivitiesTeacherSpaceId = "";
-let mountedMissionsTeacherSpaceId = "";
-let mountedQuizTeacherSpaceId = "";
 let mountedResourcesTeacherSpaceId = "";
 let mountedTeacherToolsTeacherSpaceId = "";
 let mountedAdminUserId = "";
@@ -284,8 +251,6 @@ let personalActivityEditorController = null;
 let personalActivityEditorContext = null;
 let adventureViewController = null;
 let activitiesViewController = null;
-let missionsViewController = null;
-let quizExplorerViewController = null;
 let quizWorkshopViewController = null;
 let quizSeriesViewController = null;
 let resourcesViewController = null;
@@ -345,6 +310,7 @@ studentController = createStudentDashboardController({
   saveStudentOrderForTeacherSpace,
   listStudentActivityHistory,
   deleteStudentActivityHistoryAttempt,
+  resetStudentActivityHistory,
   resetStudentActivityAttemptEffects,
   deleteStudentActivityAttemptTotally,
   showToast: showDashboardShareToast
@@ -375,6 +341,7 @@ myActivitiesViewController = createMyActivitiesViewController({
   updateTeacherSequencePlacement,
   deleteTeacherSequence,
   listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher,
   onBack: () => openDashboardSection("activity-hub"),
   onCreateActivity: ({ type, folderId, difficultyMode } = {}) => openPersonalActivityCreator({ type, folderId, difficultyMode }),
   onOpenActivity: (activity) => openPersonalActivity(activity),
@@ -457,39 +424,18 @@ activityAssignmentViewController = createActivityAssignmentViewController({
   view: activityAssignmentView,
   getCurrentTeacherSpace: () => currentTeacherSpace,
   listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher,
   listTeacherActivitiesForSpace,
+  listTeacherActivityFoldersForSpace,
   listTeacherSequencesForSpace,
   listTeacherClasses: getMyTeacherClasses,
   listStudentsForTeacherSpace,
   listActivityAssignmentsForSpace,
   saveActivityAssignmentForSpace,
+  setActivityAssignmentActive,
+  reassignActivityAssignment,
   deleteActivityAssignment,
   onBack: () => openDashboardSection("activity-hub"),
-  showToast: showDashboardShareToast
-});
-
-missionsViewController = createMissionsViewController({
-  missionsView,
-  missionsHeader,
-  missionsList,
-  getCurrentTeacherSpace: () => currentTeacherSpace,
-  getCurrentStudents: () => currentStudents,
-  listMissionFoldersForSpace,
-  createMissionFolderForSpace,
-  updateMissionFolder,
-  deleteMissionFolder,
-  listMissionsForSpace,
-  updateMissionPlacement,
-  listMissionSteps,
-  listMissionAssignments,
-  saveMissionForSpace,
-  setMissionInactive,
-  reactivateMission,
-  deleteMissionPermanently,
-  listCatalogActivitiesForTeacherSpace,
-  listPedagogicalNodesForTeacher,
-  listQuizSummariesForSpace,
-  getQuizForSpace,
   showToast: showDashboardShareToast
 });
 
@@ -553,8 +499,8 @@ async function openPersonalActivityCreator({ type = "quiz", folderId = null, dif
     openQuizSeriesCreationOverlay({
       onConfirm: async ({ modelId, title, instruction, action }) => {
         personalActivityEditorContext = baseContext;
-        await openDashboardSection("quiz");
-        showQuizSeries({ modelId, title, instruction });
+        await openDashboardSection("quiz-editor");
+        showQuizSeries({ modelId, title, instruction, isSystem: origin === "activities" && !!systemPublication });
         if (action === "import") {
           window.requestAnimationFrame(() => {
             quizSeriesViewController?.openImportDrawer?.({ source:"creation" });
@@ -566,8 +512,8 @@ async function openPersonalActivityCreator({ type = "quiz", folderId = null, dif
   }
 
   personalActivityEditorContext = baseContext;
-  await openDashboardSection("quiz");
-  showQuizWorkshop();
+  await openDashboardSection("quiz-editor");
+  showQuizWorkshop({ isSystem: origin === "activities" && !!systemPublication });
 }
 
 async function duplicatePersonalQuizActivity(activity = {}) {
@@ -665,21 +611,26 @@ async function openSystemCatalogActivity(activity = {}) {
     display_order:Math.max(0, Math.trunc(Number(catalogActivity.display_order) || 0))
   };
 
+  let draft = buildTeacherActivityDraftFromCatalog(catalogActivity);
   const linkedTeacherActivityId = getCatalogEditorSourceTeacherActivityId(activity, catalogActivity);
-  if (linkedTeacherActivityId && currentTeacherSpace?.id) {
+  if (linkedTeacherActivityId && currentTeacherSpace?.id && !draft.source_quiz_id) {
     try {
       const teacherActivities = await listTeacherActivitiesForSpace(currentTeacherSpace.id);
       const linkedActivity = (teacherActivities || []).find((item) => String(item?.id || "") === linkedTeacherActivityId) || null;
       if (linkedActivity) {
-        await openPersonalActivity(linkedActivity, { origin:"activities", systemPublication });
-        return;
+        draft = {
+          ...draft,
+          activity_type:["quiz", "series"].includes(String(linkedActivity.activity_type || ""))
+            ? String(linkedActivity.activity_type)
+            : draft.activity_type,
+          source_quiz_id:String(linkedActivity.source_quiz_id || "").trim() || draft.source_quiz_id
+        };
       }
     } catch (error) {
-      console.warn("Impossible de retrouver la source de l’activité système ; ouverture depuis la projection.", error);
+      console.warn("Impossible de retrouver l’ancienne source personnelle de l’activité système ; ouverture depuis la projection.", error);
     }
   }
 
-  const draft = buildTeacherActivityDraftFromCatalog(catalogActivity);
   await openPersonalActivity(draft, { origin:"activities", systemPublication });
 }
 
@@ -698,7 +649,11 @@ function getCatalogEditorSourceTeacherActivityId(rawActivity = {}, normalizedAct
 
 function buildTeacherActivityDraftFromCatalog(activity = {}) {
   const catalogActivity = normalizeCatalogActivity(activity);
+  const rawLevels = activity?.levels_json || activity?.difficulty_levels_json || activity?.difficulty_levels || {};
   let levels = cloneDashboardJson(catalogActivity.difficulty_levels || {});
+  const editorSource = rawLevels?.[CATALOG_EDITOR_SOURCE_META_KEY] && typeof rawLevels[CATALOG_EDITOR_SOURCE_META_KEY] === "object"
+    ? cloneDashboardJson(rawLevels[CATALOG_EDITOR_SOURCE_META_KEY])
+    : {};
   const hasLevelConfiguration = CATALOG_LEVEL_KEYS.some((key) => hasCatalogLevelConfiguration(levels[key]));
   const legacySettings = catalogActivity.settings && typeof catalogActivity.settings === "object" && !Array.isArray(catalogActivity.settings)
     ? cloneDashboardJson(catalogActivity.settings)
@@ -711,14 +666,19 @@ function buildTeacherActivityDraftFromCatalog(activity = {}) {
   const isSingleDifficulty = CATALOG_LEVEL_KEYS.every((key) => (
     stableDashboardJson(levels[key] || { settings:{} }) === stableDashboardJson(referenceLevel)
   ));
+  const storedActivityType = String(editorSource.activity_type || "").trim();
+  const sourceQuizId = String(editorSource.source_quiz_id || "").trim() || null;
+  const activityType = ["quiz", "series"].includes(storedActivityType)
+    ? storedActivityType
+    : (String(catalogActivity.tool_id || "") === "quiz" && sourceQuizId ? "quiz" : "tool");
 
   return {
     id:null,
     folder_id:null,
     title:String(catalogActivity.title || catalogActivity.config_name || "Activité"),
-    activity_type:"tool",
+    activity_type:activityType,
     difficulty_mode:isSingleDifficulty ? "single" : "adaptive",
-    source_quiz_id:null,
+    source_quiz_id:sourceQuizId,
     config_json:isSingleDifficulty
       ? { tool_id:String(catalogActivity.tool_id || ""), level:referenceLevel }
       : { tool_id:String(catalogActivity.tool_id || "") },
@@ -771,7 +731,7 @@ async function editPersonalActivityContent(activity = {}, { origin = "my-activit
       origin,
       systemPublication
     };
-    await openDashboardSection("quiz");
+    await openDashboardSection("quiz-editor");
     if (activityType === "series" || String(quiz?.editorMode || "") === "series") showQuizSeries({ quiz });
     else showQuizWorkshop({ quiz });
   } catch (error) {
@@ -792,10 +752,9 @@ async function syncPersonalActivityEnvelopeAfterQuizSave(savedQuiz) {
   const nextConfig = context.activityId
     ? refreshQuizActivityConfig(existingActivityShape, savedQuiz)
     : buildDefaultQuizActivityConfig(savedQuiz, { difficultyMode });
-
-  const savedActivity = await saveTeacherActivityForSpace(currentTeacherSpace.id, {
-    id:context.activityId || undefined,
-    folder_id:context.folderId,
+  const activityDraft = {
+    id:null,
+    folder_id:context.folderId || null,
     title:String(context.activityTitle || savedQuiz.title || "Activité").trim() || "Activité",
     activity_type:context.activityType === "series" ? "series" : "quiz",
     difficulty_mode:difficultyMode,
@@ -803,6 +762,22 @@ async function syncPersonalActivityEnvelopeAfterQuizSave(savedQuiz) {
     config_json:nextConfig.config_json,
     levels_json:nextConfig.levels_json,
     display_order:context.displayOrder || 0
+  };
+  const systemOnly = String(context.origin || "") === "activities" && !!context.systemPublication;
+  if (systemOnly) {
+    personalActivityEditorContext = {
+      ...context,
+      activityId:null,
+      configJson:nextConfig.config_json,
+      levelsJson:nextConfig.levels_json,
+      transientActivity:activityDraft
+    };
+    return null;
+  }
+
+  const savedActivity = await saveTeacherActivityForSpace(currentTeacherSpace.id, {
+    ...activityDraft,
+    id:context.activityId || undefined
   });
   personalActivityEditorContext = {
     ...context,
@@ -818,13 +793,20 @@ async function syncPersonalActivityEnvelopeAfterQuizSave(savedQuiz) {
 
 async function returnFromPersonalActivityEditor() {
   if (!personalActivityEditorContext) {
-    showQuizExplorer();
+    await openDashboardSection("activity-hub");
     return;
   }
   const returnContext = { ...personalActivityEditorContext };
   const activityId = String(returnContext.activityId || "").trim();
   personalActivityEditorContext = null;
-  showQuizExplorer();
+
+  if (returnContext.transientActivity && String(returnContext.origin || "") === "activities") {
+    await openPersonalActivity(returnContext.transientActivity, {
+      origin:"activities",
+      systemPublication:returnContext.systemPublication || null
+    });
+    return;
+  }
 
   if (activityId && currentTeacherSpace?.id) {
     try {
@@ -918,7 +900,7 @@ quizWorkshopViewController = createQuizWorkshopViewController({
   createResourceSignedUrl,
   showToast: showDashboardShareToast,
   onSaveQuiz: async (snapshot) => {
-    const saved = await quizExplorerViewController?.saveQuiz?.(snapshot);
+    const saved = await saveQuizDocument(snapshot);
     if (!saved) throw new Error("Enregistrement Supabase impossible.");
     const personalActivity = await syncPersonalActivityEnvelopeAfterQuizSave(saved);
     showDashboardShareToast(personalActivity
@@ -929,18 +911,7 @@ quizWorkshopViewController = createQuizWorkshopViewController({
   onTestQuiz: testQuizSnapshot
 });
 
-function showQuizExplorer(){
-  quizWorkshopViewController?.close?.();
-  quizSeriesViewController?.close?.();
-  quizWorkshopView?.classList.add("hidden");
-  quizSeriesView?.classList.add("hidden");
-  quizExplorerPane?.classList.remove("hidden");
-  quizView?.classList.remove("is-quiz-workshop-open", "is-quiz-series-open");
-  quizExplorerViewController?.render?.();
-}
-
 function showQuizWorkshop({ quiz = null, folderId = null, isSystem = false } = {}){
-  quizExplorerPane?.classList.add("hidden");
   quizSeriesView?.classList.add("hidden");
   quizWorkshopView?.classList.remove("hidden");
   quizView?.classList.remove("is-quiz-series-open");
@@ -951,7 +922,6 @@ function showQuizWorkshop({ quiz = null, folderId = null, isSystem = false } = {
 }
 
 function showQuizSeries({ quiz = null, folderId = null, modelId = "", instruction = "", title = "", isSystem = false } = {}){
-  quizExplorerPane?.classList.add("hidden");
   quizWorkshopView?.classList.add("hidden");
   quizSeriesView?.classList.remove("hidden");
   quizView?.classList.remove("is-quiz-workshop-open");
@@ -962,7 +932,7 @@ function showQuizSeries({ quiz = null, folderId = null, modelId = "", instructio
     else quizSeriesViewController?.resetSeries?.({ folderId, modelId, instruction, title, isSystem });
   } catch (error) {
     showDashboardShareToast(error?.message || "Impossible d’ouvrir cette série.", { isError:true });
-    showQuizExplorer();
+    void returnFromPersonalActivityEditor();
   }
 }
 
@@ -982,7 +952,7 @@ quizSeriesViewController = createQuizSeriesViewController({
   showToast: showDashboardShareToast,
   onBack: returnFromPersonalActivityEditor,
   onSaveQuiz: async (snapshot) => {
-    const saved = await quizExplorerViewController?.saveQuiz?.(snapshot);
+    const saved = await saveQuizDocument(snapshot);
     if (!saved) throw new Error("Enregistrement Supabase impossible.");
     const personalActivity = await syncPersonalActivityEnvelopeAfterQuizSave(saved);
     showDashboardShareToast(personalActivity
@@ -993,52 +963,20 @@ quizSeriesViewController = createQuizSeriesViewController({
   onTestQuiz: testQuizSnapshot
 });
 
-quizExplorerViewController = createQuizExplorerViewController({
-  view: quizView,
-  header: quizExplorerHeader,
-  list: quizList,
-  createQuizButton: btnCreateQuiz,
-  createSeriesButton: btnCreateQuizSeries,
-  createFolderButton: btnCreateQuizFolder,
-  onCreateQuiz: ({ folderId, isSystem = false } = {}) => showQuizWorkshop({ folderId, isSystem }),
-  onCreateSeries: ({ folderId, isSystem = false } = {}) => {
-    openQuizSeriesCreationOverlay({
-      onConfirm: ({ modelId, title, instruction, action }) => {
-        showQuizSeries({ folderId, modelId, title, instruction, isSystem });
-        if (action === "import") {
-          window.requestAnimationFrame(() => {
-            quizSeriesViewController?.openImportDrawer?.({ source:"creation" });
-          });
-        }
-      }
-    });
-  },
-  onOpenQuiz: (quiz) => {
-    if (quiz?.is_system === true && !currentUserIsSuperAdmin) {
-      testQuizSnapshot(quiz);
-      return;
-    }
-    if (String(quiz?.editorMode || "") === "series") showQuizSeries({ quiz });
-    else showQuizWorkshop({ quiz });
-  },
-  onAssignQuiz: async (quiz) => {
-    currentDashboardSection = "missions";
-    renderDashboardShellState();
-    await ensureMissionsViewMounted({ forceRefresh:true });
-    await missionsViewController?.createMissionFromQuiz?.(quiz);
-  },
-  getCurrentTeacherSpace: () => currentTeacherSpace,
-  getIsSuperAdmin: () => currentUserIsSuperAdmin,
-  listQuizFoldersForSpace,
-  createQuizFolderForSpace,
-  updateQuizFolder,
-  deleteQuizFolder,
-  listQuizzesForSpace,
-  updateQuizPlacement,
-  saveQuizForSpace,
-  deleteQuiz,
-  showToast: showDashboardShareToast
-});
+async function saveQuizDocument(snapshot = {}) {
+  if (!currentTeacherSpace?.id) throw new Error("Espace enseignant introuvable.");
+  const contextWantsSystem = String(personalActivityEditorContext?.origin || "") === "activities"
+    && !!personalActivityEditorContext?.systemPublication;
+  const isSystem = snapshot?.is_system === true || contextWantsSystem;
+  if (isSystem && currentUserIsSuperAdmin !== true) {
+    throw new Error("La modification des quiz système est réservée au super-admin.");
+  }
+  return saveQuizForSpace(currentTeacherSpace.id, {
+    ...snapshot,
+    folder_id:null,
+    is_system:isSystem
+  });
+}
 
 systemImagesImportDialog = createSystemImagesImportDialog({
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
@@ -1258,34 +1196,9 @@ async function ensureActivitiesViewMounted({ forceRefresh = false } = {}){
   mountedActivitiesTeacherSpaceId = teacherSpaceId;
 }
 
-async function ensureMissionsViewMounted({ forceRefresh = false } = {}){
-  const teacherSpaceId = String(currentTeacherSpace?.id || "");
-  if (!forceRefresh && hasMountedMissionsView && mountedMissionsTeacherSpaceId === teacherSpaceId) return;
-  hasMountedMissionsView = true;
-  mountedMissionsTeacherSpaceId = teacherSpaceId;
-  await missionsViewController?.renderMissionsView?.({ forceRefresh: true });
-}
-
-async function ensureQuizViewMounted(){
-  const teacherSpaceId = String(currentTeacherSpace?.id || "");
-  const isSameTeacherSpace = hasMountedQuizView && mountedQuizTeacherSpaceId === teacherSpaceId;
-  const isEditingQuiz = quizView?.classList.contains("is-quiz-workshop-open")
-    || quizView?.classList.contains("is-quiz-series-open");
-
-  if (!isSameTeacherSpace) {
-    await quizExplorerViewController?.refresh?.();
-    quizWorkshopViewController?.render?.();
-    hasMountedQuizView = true;
-    mountedQuizTeacherSpaceId = teacherSpaceId;
-    showQuizExplorer();
-    return;
-  }
-
-  // Une vue d’édition ouverte garde son DOM, son tiroir et ses brouillons
-  // lorsqu’on consulte temporairement un autre onglet.
-  if (isEditingQuiz) return;
-
-  await quizExplorerViewController?.refresh?.();
+async function ensureQuizEditorMounted(){
+  quizWorkshopViewController?.render?.();
+  quizSeriesViewController?.render?.();
 }
 
 async function ensureResourcesViewMounted({ forceRefresh = false } = {}){
@@ -1341,8 +1254,7 @@ async function openDashboardSection(section){
     restoreActivitiesScrollPosition();
     return;
   }
-  if (next === "missions") return ensureMissionsViewMounted();
-  if (next === "quiz") return ensureQuizViewMounted();
+  if (next === "quiz-editor") return ensureQuizEditorMounted();
   if (next === "resources") return ensureResourcesViewMounted();
   if (next === "teacher-tools") return ensureTeacherToolsViewMounted();
   if (next === "admin" && currentUserIsSuperAdmin === true) return ensureAdminViewMounted({ forceRefresh:true });
@@ -1378,14 +1290,12 @@ function syncDashboardUrl({ mode = "replace" } = {}){
 function renderDashboardShellState(){
   syncDashboardViewportSizing();
 
-  if (currentDashboardSection !== "quiz") personalActivityEditorContext = null;
+  if (currentDashboardSection !== "quiz-editor") personalActivityEditorContext = null;
 
   const isActivitiesSection = ["activity-hub", "my-activities", "personal-activity-editor", "activity-assignment", "activities"].includes(currentDashboardSection);
   btnNavActivityHub?.classList.toggle("is-active", isActivitiesSection);
   btnNavAdventure?.classList.toggle("is-active", currentDashboardSection === "adventure");
-  btnNavMissions?.classList.toggle("is-active", currentDashboardSection === "missions");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
-  btnNavQuiz?.classList.toggle("is-active", currentDashboardSection === "quiz");
   btnNavResources?.classList.toggle("is-active", currentDashboardSection === "resources");
   btnNavTeacherTools?.classList.toggle("is-active", currentDashboardSection === "teacher-tools");
   btnNavAdmin?.classList.toggle("is-active", currentDashboardSection === "admin");
@@ -1397,9 +1307,8 @@ function renderDashboardShellState(){
   activityAssignmentView?.classList.toggle("hidden", currentDashboardSection !== "activity-assignment");
   adventureView?.classList.toggle("hidden", currentDashboardSection !== "adventure");
   activitiesView?.classList.toggle("hidden", currentDashboardSection !== "activities");
-  missionsView?.classList.toggle("hidden", currentDashboardSection !== "missions");
   classView?.classList.toggle("hidden", currentDashboardSection !== "class");
-  quizView?.classList.toggle("hidden", currentDashboardSection !== "quiz");
+  quizView?.classList.toggle("hidden", currentDashboardSection !== "quiz-editor");
   resourcesView?.classList.toggle("hidden", currentDashboardSection !== "resources");
   teacherToolsView?.classList.toggle("hidden", currentDashboardSection !== "teacher-tools");
   adminView?.classList.toggle("hidden", currentDashboardSection !== "admin");
@@ -1449,28 +1358,10 @@ btnNavAdventure?.addEventListener("click", async () => {
   const preserveDraft = adventureViewController?.hasUnsavedChanges?.() === true;
   await ensureAdventureViewMounted({ forceRefresh: !preserveDraft });
 });
-btnNavMissions?.addEventListener("click", async () => {
-  currentDashboardSection = "missions";
-  renderDashboardShellState();
-  await ensureMissionsViewMounted();
-});
 btnNavClass?.addEventListener("click", async () => {
   currentDashboardSection = "class";
   renderDashboardShellState();
   await ensureClassViewMounted();
-});
-btnNavQuiz?.addEventListener("click", async () => {
-  if (currentDashboardSection === "quiz" && personalActivityEditorContext) {
-    personalActivityEditorContext = null;
-    showQuizExplorer();
-    return;
-  }
-  if (currentDashboardSection === "quiz") return;
-  personalActivityEditorContext = null;
-  currentDashboardSection = "quiz";
-  renderDashboardShellState();
-  await ensureQuizViewMounted();
-  showQuizExplorer();
 });
 btnBackQuizExplorer?.addEventListener("click", () => {
   void returnFromPersonalActivityEditor();

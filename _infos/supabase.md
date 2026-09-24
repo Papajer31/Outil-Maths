@@ -1,6 +1,6 @@
 # Supabase — état documentaire actuel
 
-Dernière mise à jour : 2026-09-13.
+Dernière mise à jour : 2026-09-23.
 
 ## Règle d’exécution
 
@@ -10,7 +10,7 @@ Dernière mise à jour : 2026-09-13.
 
 - espaces enseignants, classes et élèves ;
 - Exploration système et visibilité par enseignant ;
-- Missions ;
+- Missions élève via `activity_assignments` / `teacher_sequences` ;
 - progression et historique détaillé des activités ;
 - fondations Aventure ;
 - Quiz ;
@@ -22,12 +22,13 @@ Dernière mise à jour : 2026-09-13.
 - `catalog_activities`
 - `pedagogical_nodes`
 - `catalog_activity_visibility`
+- `activity_assignments`
+- `activity_assignment_targets`
+- `teacher_activities`
+- `teacher_sequences`
+- `teacher_sequence_items`
 - `image_assets`
 - `lexical_entries`
-- `mission_assignments`
-- `mission_folders`
-- `mission_steps`
-- `missions`
 - `quiz_folders`
 - `quiz_resources`
 - `quizzes`
@@ -54,8 +55,7 @@ Dernière mise à jour : 2026-09-13.
 - `get_catalog_visibility_for_space`
 - `get_conjugation_personal_list`
 - `get_space_classes`
-- `get_space_mission_steps`
-- `get_space_missions`
+- `get_space_activity_assignments`
 - `get_space_students`
 - `get_space_vocabulary_words`
 - `get_student_activity_progress`

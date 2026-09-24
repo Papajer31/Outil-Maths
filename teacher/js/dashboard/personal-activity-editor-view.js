@@ -456,7 +456,9 @@ export function createPersonalActivityEditorController({
       const tool = mod.default || {};
       const draft = getCurrentDraft(tool);
       const settings = ensureToolSettings(draft.settings, tool);
-      const hideCommonQuizControls = toolId === "quiz";
+      // Les quiz libres gèrent ces réglages dans leur propre interface. Une
+      // série utilise le même moteur, mais doit les proposer par niveau.
+      const hideCommonQuizControls = editingActivity?.activity_type === "quiz";
       host.innerHTML = `
         <div class="cfg-tool-settings-stack personal-activity-tool-settings-stack">
           ${hideCommonQuizControls ? "" : `
@@ -679,13 +681,13 @@ export function createPersonalActivityEditorController({
     return true;
   }
 
-  async function syncSystemCatalogProjection(savedActivity) {
+  async function syncSystemCatalogProjection(savedActivity, { includeTeacherSource = true, forceCatalogRecord = false } = {}) {
     if (!systemPublication || typeof saveCatalogActivityAsAdmin !== "function") return null;
     const catalogId = String(systemPublication.catalog_id || getSystemCatalogId(savedActivity?.id)).trim().toLowerCase();
     if (!catalogId) return null;
 
     const existing = adminCatalogActivities.find((item) => String(item?.id || "") === catalogId) || null;
-    if (!systemPublication.enabled && !existing) return null;
+    if (!systemPublication.enabled && !existing && !forceCatalogRecord) return null;
 
     const categoryId = String(systemPublication.pedagogical_node_id || existing?.pedagogical_node_id || existing?.folder_id || "").trim();
     if (!categoryId) return null;
@@ -698,13 +700,18 @@ export function createPersonalActivityEditorController({
     const levels = editingActivity.difficulty_mode === "adaptive"
       ? clone(levelDrafts)
       : Object.fromEntries(LEVEL_KEYS.map((key) => [key, clone(singleDraft)]));
+    const editorSource = {
+      type:includeTeacherSource ? "teacher_activity" : "system_activity",
+      activity_type:String(editingActivity?.activity_type || "tool"),
+      source_quiz_id:String(editingActivity?.source_quiz_id || "").trim() || null,
+      version:2
+    };
+    if (includeTeacherSource && String(savedActivity?.id || "").trim()) {
+      editorSource.teacher_activity_id = String(savedActivity.id).trim();
+    }
     const catalogLevels = {
       ...levels,
-      [CATALOG_EDITOR_SOURCE_META_KEY]: {
-        type:"teacher_activity",
-        teacher_activity_id:String(savedActivity?.id || "").trim(),
-        version:1
-      }
+      [CATALOG_EDITOR_SOURCE_META_KEY]: editorSource
     };
 
     const savedCatalog = await saveCatalogActivityAsAdmin({
@@ -742,6 +749,42 @@ export function createPersonalActivityEditorController({
       .reduce((max, item) => Math.max(max, Math.max(0, Math.trunc(Number(item?.display_order) || 0))), 0) + 10;
   }
 
+  function isSystemOnlyEditor() {
+    return editorOrigin === "activities" && !!systemPublication;
+  }
+
+  function ensureSystemCatalogId(title = editingActivity?.title) {
+    const existingId = String(systemPublication?.catalog_id || "").trim().toLowerCase();
+    if (existingId) return existingId;
+
+    const categoryId = String(systemPublication?.pedagogical_node_id || "catalogue").trim();
+    const categoryPart = slugifySystemId(categoryId, "catalogue").slice(0, 60);
+    const titlePart = slugifySystemId(title, "activite").slice(0, 80);
+    const baseId = `system.${categoryPart}.${titlePart}`.replace(/\.+/g, ".").slice(0, 155).replace(/[.-]+$/g, "");
+    const usedIds = new Set(adminCatalogActivities.map((item) => String(item?.id || "").trim().toLowerCase()).filter(Boolean));
+    let candidate = baseId;
+    let suffix = 2;
+    while (usedIds.has(candidate) && suffix < 1000) {
+      const suffixText = `-${suffix}`;
+      candidate = `${baseId.slice(0, 160 - suffixText.length)}${suffixText}`;
+      suffix += 1;
+    }
+    systemPublication.catalog_id = candidate;
+    return candidate;
+  }
+
+  function slugifySystemId(value, fallback) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/['’`]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "") || fallback;
+  }
+
   async function save({ quiet = false } = {}) {
     if (!editingActivity) return null;
     const title = String(editingActivity.title || "").trim();
@@ -761,8 +804,9 @@ export function createPersonalActivityEditorController({
     if (!ok) return null;
     if (!validateSystemPublication()) return null;
 
+    const systemOnly = isSystemOnlyEditor();
     const space = getCurrentTeacherSpace?.();
-    if (!space?.id) {
+    if (!systemOnly && !space?.id) {
       setMessage("Espace enseignant introuvable.", true);
       return null;
     }
@@ -779,13 +823,25 @@ export function createPersonalActivityEditorController({
     };
 
     try {
-      const saved = await saveTeacherActivityForSpace?.(space.id, payload);
-      editingActivity = normalizeActivity(saved || payload);
-      if (systemPublication && !systemPublication.catalog_id) {
-        systemPublication.catalog_id = getSystemCatalogId(editingActivity.id);
+      let savedCatalogProjection = null;
+      if (systemOnly) {
+        ensureSystemCatalogId(payload.title);
+        editingActivity = normalizeActivity(payload);
+        hydrateDraftsFromActivity();
+        savedCatalogProjection = await syncSystemCatalogProjection(editingActivity, { includeTeacherSource:false, forceCatalogRecord:true });
+        if (!savedCatalogProjection?.id) {
+          throw new Error("La publication dans Exploration a échoué.");
+        }
+        editingActivity = normalizeActivity({ ...editingActivity, id:savedCatalogProjection.id });
+      } else {
+        const saved = await saveTeacherActivityForSpace?.(space.id, payload);
+        editingActivity = normalizeActivity(saved || payload);
+        if (systemPublication && !systemPublication.catalog_id) {
+          systemPublication.catalog_id = getSystemCatalogId(editingActivity.id);
+        }
+        hydrateDraftsFromActivity();
+        savedCatalogProjection = await syncSystemCatalogProjection(editingActivity, { includeTeacherSource:true });
       }
-      hydrateDraftsFromActivity();
-      const savedCatalogProjection = await syncSystemCatalogProjection(editingActivity);
       if (systemPublication?.enabled) {
         if (!savedCatalogProjection?.id) {
           throw new Error("L’activité a été enregistrée, mais sa publication dans Exploration a échoué.");
@@ -800,7 +856,7 @@ export function createPersonalActivityEditorController({
       if (!quiet) {
         showToast?.(`Activité « ${editingActivity.title} » enregistrée.`);
       }
-      onSaved?.(clone(editingActivity));
+      onSaved?.(clone(editingActivity), { systemOnly });
       return editingActivity;
     } catch (error) {
       const message = error?.message || "Impossible d’enregistrer cette activité.";

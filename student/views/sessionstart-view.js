@@ -54,6 +54,16 @@ export function renderSessionStartView(root, options = {}){
         </div>
 
         <div class="sessionstart-aux">
+          ${isCatalogTestMode ? `
+            <label class="sessionstart-test-correction-toggle" data-skip-autofs="true">
+              <span class="sessionstart-test-correction-copy">
+                <strong>Afficher les corrections</strong>
+                <small>Après chaque réponse validée</small>
+              </span>
+              <input id="toggleTestCorrections" type="checkbox" checked>
+              <span class="sessionstart-test-correction-track" aria-hidden="true"></span>
+            </label>
+          ` : ""}
           <div class="sessionstart-message" id="sessionStartMessage"></div>
         </div>
       </div>
@@ -75,6 +85,7 @@ export function renderSessionStartView(root, options = {}){
     shell: root.querySelector("#sessionStartShell"),
     back: root.querySelector("#btnBackFromSessionStart"),
     start: root.querySelector("#btnStartSession"),
+    testCorrections: root.querySelector("#toggleTestCorrections"),
     message: root.querySelector("#sessionStartMessage")
   };
 
@@ -96,6 +107,10 @@ export function renderSessionStartView(root, options = {}){
   els.start?.addEventListener("click", () => {
     if (requiresStudent && !isCatalogTestMode && getSelectedParticipantsValidationIssue()) return;
     if (blockingMessage || isLaunching) return;
+
+    if (isCatalogTestMode) {
+      applyTestCorrectionPreference(els.testCorrections?.checked !== false);
+    }
 
     isLaunching = true;
     els.start?.classList.add("is-launching");
@@ -154,6 +169,18 @@ export function renderSessionStartView(root, options = {}){
     } catch (err) {
       if (disposed) return;
       els.start?.setAttribute("disabled", "disabled");
+    }
+  }
+
+  function applyTestCorrectionPreference(showCorrections = true){
+    if (!isCatalogTestMode || !studentState.selectedConfig) return;
+
+    const enabled = showCorrections !== false;
+    studentState.selectedConfig.catalog_test_show_corrections = enabled;
+
+    const configJson = studentState.selectedConfig.config_json;
+    if (configJson && typeof configJson === "object" && !Array.isArray(configJson)) {
+      configJson.catalog_test_show_corrections = enabled;
     }
   }
 

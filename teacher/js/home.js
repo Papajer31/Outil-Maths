@@ -37,7 +37,7 @@ const teacherSignupMessage = document.getElementById("teacherSignupMessage");
 boot();
 
 function boot(){
-  restoreTeacherEmail();
+  clearLegacyRememberedTeacherEmail();
   checkExistingSession();
 }
 
@@ -135,10 +135,6 @@ async function submitTeacherLogin(){
   try {
     await signInUser(email, password);
 
-    try {
-      localStorage.setItem("lastTeacherEmail", email);
-    } catch {}
-
     setTeacherMessage("Connexion réussie.");
     window.location.href = "dashboard.html";
   } catch (err) {
@@ -225,10 +221,6 @@ async function submitTeacherSignup(){
 
     await createMyTeacherSpace(accessCode);
 
-    try {
-      localStorage.setItem("lastTeacherEmail", email);
-    } catch {}
-
     setSignupMessage("Compte créé. Ouverture du tableau de bord…");
     window.location.href = "dashboard.html";
   } catch (err) {
@@ -237,12 +229,9 @@ async function submitTeacherSignup(){
   }
 }
 
-function restoreTeacherEmail(){
+function clearLegacyRememberedTeacherEmail(){
   try {
-    const last = localStorage.getItem("lastTeacherEmail");
-    if (last && teacherEmailInput){
-      teacherEmailInput.value = last;
-    }
+    localStorage.removeItem("lastTeacherEmail");
   } catch {}
 }
 

@@ -20,6 +20,7 @@ export function createMyActivitiesViewController({
   updateTeacherSequencePlacement,
   deleteTeacherSequence,
   listCatalogActivitiesForTeacherSpace,
+  listPedagogicalNodesForTeacher,
   onBack,
   onCreateActivity,
   onOpenActivity,
@@ -44,7 +45,9 @@ export function createMyActivitiesViewController({
     view,
     getCurrentTeacherSpace,
     listCatalogActivitiesForTeacherSpace,
+    listPedagogicalNodesForTeacher,
     listTeacherActivitiesForSpace,
+    listTeacherActivityFoldersForSpace,
     saveTeacherSequenceForSpace,
     showToast,
     onSaved: async () => {

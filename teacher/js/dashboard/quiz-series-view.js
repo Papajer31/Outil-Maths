@@ -619,6 +619,42 @@ function getLastRequiredFieldIndex(analysis){
   return lastRequiredIndex;
 }
 
+function serializeSelectionImportValue(text, formatting = [], expectedTokenIndexes = []){
+  const rawText = String(text ?? "");
+  const words = tokenizeQuizSelectionText(rawText).filter((token) => token.kind === "word");
+  const selectedIndexes = normalizeQuizSelectionIndexes(expectedTokenIndexes, words.length);
+  if (!selectedIndexes.length) return serializeMiniMarkup(rawText, formatting);
+
+  const markers = new Map();
+  const addMarker = (offset, marker) => {
+    const current = markers.get(offset) || "";
+    // When two selections meet at the same offset, close the preceding one
+    // before opening the next one so the import syntax remains well-formed.
+    markers.set(offset, marker === "]" ? `${marker}${current}` : `${current}${marker}`);
+  };
+  selectedIndexes.forEach((index) => {
+    const word = words[index];
+    if (!word) return;
+    addMarker(word.start, "[");
+    addMarker(word.end, "]");
+  });
+
+  const boundaries = Array.from(new Set([0, rawText.length, ...markers.keys()])).sort((first, second) => first - second);
+  return boundaries.map((start, index) => {
+    const end = boundaries[index + 1] ?? start;
+    const segmentFormatting = normalizeFormattingRuns(formatting, rawText.length)
+      .map((run) => ({
+        ...run,
+        start:Math.max(run.start, start) - start,
+        end:Math.min(run.end, end) - start
+      }))
+      .filter((run) => run.end > run.start);
+    // Serialize each text segment separately so selection brackets never sit
+    // inside a color marker such as \r[texte].
+    return `${markers.get(start) || ""}${serializeMiniMarkup(rawText.slice(start, end), segmentFormatting)}`;
+  }).join("");
+}
+
 
 function buildSeriesColumns(analysis, qcmChoiceCount = 4){
   const columns = [];
@@ -693,6 +729,7 @@ export function createQuizSeriesViewController({
   onBack,
   showToast
 } = {}){
+  const exportQuestionsButton = view?.querySelector("#btnQuizSeriesExportQuestions") || null;
   const titleDisplay = view?.querySelector("#quizSeriesTitleDisplay") || null;
   const renameTitleButton = view?.querySelector("#btnRenameQuizSeriesTitle") || null;
   const titleOverlay = view?.querySelector("#quizSeriesTitleOverlay") || null;
@@ -738,6 +775,7 @@ export function createQuizSeriesViewController({
     }
     if (saveButton) saveButton.disabled = !isDirty;
     if (testButton) testButton.disabled = rows.every((row) => isRowEmpty(row, getColumns()));
+    if (exportQuestionsButton) exportQuestionsButton.disabled = rows.every((row) => isRowEmpty(row, getColumns()));
   }
 
   function markDirty(){
@@ -906,6 +944,52 @@ export function createQuizSeriesViewController({
       row.values[`${base}-${field.kind}`] = String(value || "");
     });
     return row;
+  }
+
+  function getExportedFieldValue(row, field){
+    const base = `widget-${field.widgetIndex}`;
+    if (field.kind === "qcm") {
+      return getColumns()
+        .filter((column) => column.kind === "qcm-choice" && column.widgetIndex === field.widgetIndex)
+        .sort((first, second) => first.choiceIndex - second.choiceIndex)
+        .map((column) => getColumnValue(row, column).trim())
+        .filter(Boolean)
+        .join("; ");
+    }
+    if (field.kind === "selection") {
+      const parsed = parseMiniMarkup(row.values[`${base}-statement`] || "");
+      return serializeSelectionImportValue(
+        parsed.text,
+        parsed.formatting,
+        row.selections?.[field.widgetIndex] || []
+      );
+    }
+    return String(row.values[`${base}-${field.kind}`] || "").trim();
+  }
+
+  function exportQuestions(){
+    if (!currentAnalysis) return;
+    const activeRows = rows.filter((row) => !isRowEmpty(row, getColumns()));
+    if (!activeRows.length) return;
+    const fields = Array.isArray(currentAnalysis.fields) ? currentAnalysis.fields : [];
+    const text = activeRows
+      .map((row) => fields.map((field) => getExportedFieldValue(row, field)).join(" | "))
+      .join("\r\n");
+    const blob = new Blob([`\uFEFF${text}\r\n`], { type:"text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const title = String(titleInput?.value || "").trim()
+      .replace(/[\\/:*?\"<>|]/g, "-")
+      .replace(/\s+/g, " ")
+      .slice(0, 80);
+    link.href = url;
+    link.download = `${title || "serie"}-questions.txt`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setMessage(`${activeRows.length} question${activeRows.length > 1 ? "s ont été exportées" : " a été exportée"}.`);
   }
 
   function getImportSummaryMarkup(result, hasInput){
@@ -1715,6 +1799,7 @@ export function createQuizSeriesViewController({
     testButton?.addEventListener("click", handleTest);
     addRowButton?.addEventListener("click", () => addRow(rows.length - 1));
     importQuestionsButton?.addEventListener("click", () => openImportDrawer({ source:"editor" }));
+    exportQuestionsButton?.addEventListener("click", exportQuestions);
     importScrim?.addEventListener("click", () => closeImportDrawer());
     renameTitleButton?.addEventListener("click", openTitleOverlay);
     titleOverlay?.querySelectorAll("[data-close-quiz-series-title]").forEach((element) => element.addEventListener("click", closeTitleOverlay));

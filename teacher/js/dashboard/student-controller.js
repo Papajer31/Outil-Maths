@@ -51,6 +51,7 @@ export function createStudentDashboardController({
   saveStudentOrderForTeacherSpace,
   listStudentActivityHistory,
   deleteStudentActivityHistoryAttempt,
+  resetStudentActivityHistory,
   resetStudentActivityAttemptEffects,
   deleteStudentActivityAttemptTotally,
   showToast
@@ -774,6 +775,7 @@ export function createStudentDashboardController({
           subtitle,
           loadHistory: listStudentActivityHistory,
           deleteHistoryAttempt: deleteStudentActivityHistoryAttempt,
+          resetHistory: resetStudentActivityHistory,
           resetAttemptEffects: resetStudentActivityAttemptEffects,
           deleteAttemptTotally: deleteStudentActivityAttemptTotally,
           showToast,

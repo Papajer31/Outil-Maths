@@ -593,39 +593,6 @@ export async function finishPublicStudentActivityAttempt({
 }
 
 
-export async function listPublicMissionsForSpace(accessCode, studentIds = [], isGroup = false) {
-  const code = normalizeAccessCode(accessCode);
-  if (!code) return [];
-  const ids = (Array.isArray(studentIds) ? studentIds : [])
-    .map((id) => Number(id))
-    .filter((id) => Number.isFinite(id) && id > 0);
-  if (!ids.length) return [];
-
-  const { data, error } = await supabase.rpc("get_space_missions", {
-    p_access_code: code,
-    p_student_ids: ids,
-    p_is_group: isGroup === true
-  });
-
-  if (error) throw error;
-  return Array.isArray(data) ? data : [];
-}
-
-export async function loadPublicMissionSteps(accessCode, missionId, studentId = null) {
-  const code = normalizeAccessCode(accessCode);
-  const id = String(missionId || "").trim();
-  if (!code || !id) return [];
-
-  const numericStudentId = Number(studentId);
-  const { data, error } = await supabase.rpc("get_space_mission_steps", {
-    p_access_code: code,
-    p_mission_id: id,
-    p_student_id: Number.isFinite(numericStudentId) && numericStudentId > 0 ? numericStudentId : null
-  });
-
-  if (error) throw error;
-  return Array.isArray(data) ? data : [];
-}
 
 export async function resolvePublicDirectLaunch(token) {
   const safeToken = String(token || "").trim();

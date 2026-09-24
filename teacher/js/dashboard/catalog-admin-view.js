@@ -384,10 +384,10 @@ export function createCatalogAdminViewController({
 
   function openDeleteCatalogActivityDialog(activity, usage = {}) {
     return new Promise((resolve) => {
-      const missionsCount = Number(usage.missions_count || usage.mission_steps_count || 0) || 0;
       const progressCount = Number(usage.progress_count || 0) || 0;
       const sessionsCount = Number(usage.sessions_count || 0) || 0;
       const visibilityCount = Number(usage.visibility_count || 0) || 0;
+      const adventurePassagesCount = Number(usage.adventure_passages_count || 0) || 0;
       const overlay = document.createElement("div");
       overlay.className = "modal super-admin-delete-modal";
       overlay.setAttribute("aria-hidden", "false");
@@ -399,16 +399,11 @@ export function createCatalogAdminViewController({
             <strong>${escapeHtml(activity.config_name || activity.title || activity.id)}</strong><br>
             Cette action effacera l’activité système, ses niveaux, ses visibilités, les progressions et les historiques de séance liés.
           </div>
-          ${missionsCount > 0 ? `
-            <div class="super-admin-delete-warning">
-              <span class="dashboard-material-icon" aria-hidden="true">assignment</span>
-              <span>Cette activité est utilisée dans ${missionsCount} mission${missionsCount > 1 ? "s" : ""}. Elle sera retirée de ces missions.</span>
-            </div>
-          ` : ""}
           <div class="super-admin-delete-stats">
             <span>${progressCount} progression${progressCount > 1 ? "s" : ""}</span>
             <span>${sessionsCount} séance${sessionsCount > 1 ? "s" : ""}</span>
             <span>${visibilityCount} visibilité${visibilityCount > 1 ? "s" : ""}</span>
+            <span>${adventurePassagesCount} passage${adventurePassagesCount > 1 ? "s" : ""} Aventure</span>
           </div>
           <div class="modal-actions">
             <div class="modal-message">Suppression irréversible.</div>

@@ -45,6 +45,8 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `45` | import d’images système indépendant de `phonology_words` | migration active historique ; a préparé la suppression de `47` |
 | `46` | banque lexicale définitive `lexical_entries`, niveaux 1/2/3 et lecture publique des entrées actives | **migration à appliquer avec le patch banque lexicale du 13/09/2026** |
 | `47` | suppression définitive des anciennes banques `phonology_words` / `vocabulary_default_words` | **migration à appliquer avec le patch de nettoyage lexical** |
+| `48` à `56` | activités personnelles, attributions, séquences, liens directs, ressources Seyès, Realtime et remise à zéro historique | migrations actives de septembre 2026 |
+| `57` | suppression de l’ancien système Missions, maintien du lore Mission via les attributions, nettoyage suppression Catalogue/Aventure | **à exécuter avec le patch de suppression Missions / onglet Quiz du 23/09/2026** |
 
 ## Script spécial d’arborescence
 
