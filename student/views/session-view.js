@@ -11,7 +11,8 @@ import {
   startPublicStudentActivityAttempt,
   recordPublicStudentActivityAttemptQuestion,
   finishPublicStudentActivityAttempt,
-  completePublicActivityAssignment
+  completePublicActivityAssignment,
+  savePublicActivityAssignmentCheckpoint
 } from "../student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../../shared/activity-modes.js";
 import { normalizePassationProfile } from "../../shared/activity-config.js";
@@ -184,6 +185,10 @@ export function renderSessionView(root){
   let toolCountdownTicker = null;
   let attemptStopStatus = "interrupted";
   let pendingAdventureAttemptFinalize = Promise.resolve();
+  let missionCheckpointTimer = null;
+  let missionCheckpointDebounce = null;
+  let missionCheckpointSave = Promise.resolve(false);
+  let missionCompleted = false;
   const detailedHistoryIdentityByAttempt = new Map();
 
   const SESSION_SCENE_WIDTH = 1920;
@@ -309,7 +314,12 @@ export function renderSessionView(root){
         },
         onSessionFinished: (summary) => {
           syncFinishedExplorationLevel(summary);
-          pendingActivityAssignmentCompletion = completeSelectedActivityAssignment().catch((error) => {
+          missionCompleted = true;
+          stopMissionCheckpointing();
+          pendingActivityAssignmentCompletion = Promise.resolve(missionCheckpointSave)
+            .catch(() => false)
+            .then(() => completeSelectedActivityAssignment())
+            .catch((error) => {
             console.warn("Impossible de finaliser l’attribution de l’activité.", error);
             return false;
           });
@@ -324,6 +334,7 @@ export function renderSessionView(root){
           ? (payload) => finishDetailedActivityAttempt(payload)
           : undefined,
         onStateChange: () => {
+          scheduleMissionCheckpoint();
           syncPauseButton();
           syncProjectedControls();
           syncFinalChallengePanel();
@@ -362,7 +373,10 @@ export function renderSessionView(root){
         engine.setSelectedStudent?.(selectedParticipants[0]);
       }
 
-      await engine.startSession?.();
+      await engine.startSession?.({
+        resumeCheckpoint: studentState.selectedConfig?.resume_checkpoint || null
+      });
+      startMissionCheckpointing();
 
       syncPauseButton();
       syncProjectedControls();
@@ -378,10 +392,74 @@ export function renderSessionView(root){
     }
   }
 
+  function isMissionCheckpointEnabled(){
+    if (isProjectedTeacherMode || isCatalogTestMode || isSharedSessionEntry || isDirectLaunchMode) return false;
+    if (normalizeActivityMode(studentState.activitiesMode, DEFAULT_ACTIVITY_MODE) !== "individual") return false;
+    const context = String(studentState.selectedConfig?.progression_context?.context || studentState.selectedConfig?.catalog_context || "").trim().toLowerCase();
+    return context === "mission" && !!studentState.selectedConfig?.activity_assignment_id;
+  }
+
+  function startMissionCheckpointing(){
+    if (!isMissionCheckpointEnabled()) return;
+    stopMissionCheckpointing();
+    missionCheckpointTimer = window.setInterval(() => { void persistMissionCheckpoint(); }, 5000);
+    document.addEventListener("visibilitychange", handleMissionVisibilityChange, { signal });
+  }
+
+  function stopMissionCheckpointing(){
+    if (missionCheckpointTimer) window.clearInterval(missionCheckpointTimer);
+    missionCheckpointTimer = null;
+    if (missionCheckpointDebounce) window.clearTimeout(missionCheckpointDebounce);
+    missionCheckpointDebounce = null;
+  }
+
+  function handleMissionVisibilityChange(){
+    if (document.visibilityState === "hidden" && !missionCompleted) void persistMissionCheckpoint();
+  }
+
+  function scheduleMissionCheckpoint(){
+    if (!isMissionCheckpointEnabled() || missionCompleted || disposed) return;
+    if (missionCheckpointDebounce) window.clearTimeout(missionCheckpointDebounce);
+    missionCheckpointDebounce = window.setTimeout(() => {
+      missionCheckpointDebounce = null;
+      void persistMissionCheckpoint();
+    }, 700);
+  }
+
+  function persistMissionCheckpoint(){
+    if (!isMissionCheckpointEnabled() || missionCompleted || !engine) return missionCheckpointSave;
+    const checkpoint = engine.getResumeCheckpoint?.();
+    if (!checkpoint) return missionCheckpointSave;
+    const assignmentId = String(studentState.selectedConfig?.activity_assignment_id || "").trim();
+    const missionRunId = String(studentState.selectedConfig?.progression_context?.missionRunId || "").trim();
+    const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+    const studentId = Number(participant?.id);
+    const studentCode = String(studentState.studentCode || "").trim();
+    if (!assignmentId || !missionRunId || !Number.isFinite(studentId) || studentId <= 0 || !studentCode) return missionCheckpointSave;
+
+    missionCheckpointSave = Promise.resolve(missionCheckpointSave)
+      .catch(() => false)
+      .then(() => savePublicActivityAssignmentCheckpoint({
+        accessCode:String(studentState.accessCode || ""),
+        assignmentId,
+        studentId,
+        studentCode,
+        missionRunId,
+        checkpoint
+      }))
+      .catch((error) => {
+        console.warn("Impossible de sauvegarder le point de reprise de la Mission.", error);
+        return false;
+      });
+    return missionCheckpointSave;
+  }
+
   function cleanup(){
     if (disposed) return;
+    if (!missionCompleted) void persistMissionCheckpoint();
     disposed = true;
 
+    stopMissionCheckpointing();
     closeExitConfirm();
     controller.abort();
     stopToolCountdownTicker();

@@ -11,6 +11,7 @@ import {
   getPublicStudentActivityProgress,
   openPublicStudentAdventureDay,
   listPublicActivityAssignmentsForSpace,
+  getPublicActivityAssignmentCheckpoint,
   resolvePublicDirectLaunch
 } from "./student-api.js";
 import { DEFAULT_ACTIVITY_MODE, normalizeActivityMode } from "../shared/activity-modes.js";
@@ -67,7 +68,6 @@ export async function hydrateDirectLaunch(token) {
     config_name:String(payload.title || rawSource.title || "Activité"),
     catalog_context:"exploration",
     module_key:"tools",
-    skip_detailed_history:true,
     direct_launch:true,
     direct_launch_token:safeToken,
     config_json:configJson
@@ -604,9 +604,27 @@ async function selectActivityAssignment(assignment) {
   if (!rawSource) return;
 
   const sourceType = String(assignment?.source_type || "");
+  const participant = getSelectedParticipantsForCurrentMode()[0] || null;
+  let resumeRecord = null;
+  if (currentMode === "individual" && participant?.id && studentState.studentCode) {
+    try {
+      resumeRecord = await getPublicActivityAssignmentCheckpoint({
+        accessCode:studentState.accessCode,
+        assignmentId:assignment?.id,
+        studentId:participant.id,
+        studentCode:studentState.studentCode
+      });
+    } catch (error) {
+      console.warn("Impossible de charger le point de reprise de la Mission.", error);
+    }
+  }
+  const missionRunId = String(resumeRecord?.mission_run_id || "").trim() || createStudentMissionRunId();
+  const resumeCheckpoint = resumeRecord?.checkpoint_json && typeof resumeRecord.checkpoint_json === "object"
+    ? resumeRecord.checkpoint_json
+    : null;
   const configJson = sourceType === "sequence"
-    ? buildAssignedSequenceRuntimeConfig(assignment, rawSource, currentMode)
-    : buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode);
+    ? buildAssignedSequenceRuntimeConfig(assignment, rawSource, currentMode, missionRunId)
+    : buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode, missionRunId);
   if (!configJson || !Array.isArray(configJson.sequence) || !configJson.sequence.length) return;
 
   studentState.selectedMission = { ...assignment, _kind:"activity_assignment" };
@@ -616,11 +634,12 @@ async function selectActivityAssignment(assignment) {
     config_name:assignment.title || rawSource.title || "Mission",
     catalog_context:"mission",
     module_key:"tools",
-    skip_detailed_history:true,
     progression_context:{
       context:"mission",
-      activityAssignmentId:assignment.id
+      activityAssignmentId:assignment.id,
+      missionRunId
     },
+    resume_checkpoint:resumeCheckpoint,
     config_json:configJson
   };
   studentState.sharedSessionEntry = false;
@@ -628,7 +647,7 @@ async function selectActivityAssignment(assignment) {
   window.location.hash = "#/sessionstart";
 }
 
-function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode) {
+function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, currentMode, missionRunId = "") {
   const sourceType = String(assignment?.source_type || "");
   const runtimeActivity = sourceType === "teacher_activity"
     ? buildTeacherActivityRuntimeShape(rawSource)
@@ -641,7 +660,7 @@ function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, current
     : normalizeCatalogDifficultyLevel(assignment?.difficulty_level ?? 3);
   const executionLimit = normalizeAssignedExecutionLimit(assignment);
 
-  return buildCatalogActivityConfig(runtimeActivity, {
+  const config = buildCatalogActivityConfig(runtimeActivity, {
     activityMode:currentMode,
     difficultyLevel,
     context:"mission",
@@ -649,9 +668,18 @@ function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, current
     executionLimit,
     catalogActivities:[runtimeActivity]
   });
+  const runtimeItem = Array.isArray(config?.sequence) ? config.sequence[0] : null;
+  if (runtimeItem) {
+    runtimeItem.history_source_type = sourceType;
+    runtimeItem.history_source_id = String(assignment?.source_id || rawSource?.id || "");
+    runtimeItem.history_assignment_id = String(assignment?.id || "");
+    runtimeItem.history_mission_run_id = String(missionRunId || "");
+    runtimeItem.history_activity_type = resolveHistoryActivityType(rawSource, runtimeActivity);
+  }
+  return config;
 }
 
-function buildAssignedSequenceRuntimeConfig(assignment, rawSequence, currentMode) {
+function buildAssignedSequenceRuntimeConfig(assignment, rawSequence, currentMode, missionRunId = "") {
   const items = Array.isArray(rawSequence?.items) ? rawSequence.items : [];
   const sequence = [];
 
@@ -682,7 +710,13 @@ function buildAssignedSequenceRuntimeConfig(assignment, rawSequence, currentMode
     sequence.push({
       ...runtimeItem,
       instanceId:`assigned-sequence-${String(assignment?.id || "assignment")}-${index + 1}-${runtimeItem.instanceId || runtimeActivity.tool_id}`,
-      auto_exit_session_on_complete:false
+      auto_exit_session_on_complete:false,
+      history_source_type:itemSourceType,
+      history_source_id:String(item?.source_id || source?.id || ""),
+      history_assignment_id:String(assignment?.id || ""),
+      history_sequence_item_id:String(item?.id || ""),
+      history_mission_run_id:String(missionRunId || ""),
+      history_activity_type:resolveHistoryActivityType(source, runtimeActivity)
     });
   });
 
@@ -725,6 +759,7 @@ function buildTeacherActivityRuntimeShape(activity = {}) {
 
   return normalizeCatalogActivity({
     id:`teacher-activity.${String(activity?.id || "")}`,
+    activity_type:String(activity?.activity_type || "tool"),
     config_name:String(activity?.title || "Activité"),
     title:String(activity?.title || "Activité"),
     tool_id:String(config?.tool_id || "").trim(),
@@ -732,6 +767,27 @@ function buildTeacherActivityRuntimeShape(activity = {}) {
     status:"published",
     default_visible:true
   });
+}
+
+function createStudentMissionRunId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
+function resolveHistoryActivityType(source = {}, runtimeActivity = {}) {
+  const explicit = String(source?.activity_type || runtimeActivity?.activity_type || "").trim().toLowerCase();
+  if (["tool", "quiz", "series"].includes(explicit)) return explicit;
+  const toolId = String(runtimeActivity?.tool_id || source?.tool_id || "").trim();
+  if (toolId !== "quiz") return "tool";
+  const settings = runtimeActivity?.settings && typeof runtimeActivity.settings === "object" ? runtimeActivity.settings : {};
+  const snapshot = settings?.quizSnapshot && typeof settings.quizSnapshot === "object" ? settings.quizSnapshot : {};
+  return String(snapshot?.editorMode || "").trim() === "series" || snapshot?.seriesModelId ? "series" : "quiz";
 }
 
 function cloneActivityData(value) {

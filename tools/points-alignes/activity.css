@@ -1,0 +1,196 @@
+.pa-root{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  overflow:hidden;
+  font-family:"Andika",system-ui,sans-serif;
+}
+
+.pa-board{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 4px 18px;
+  overflow:hidden;
+}
+
+.pa-canvas-wrap{
+  position:relative;
+  width:100%;
+  height:100%;
+  min-height:300px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.pa-canvas{
+  display:block;
+  width:100%;
+  height:100%;
+  max-height:100%;
+  background:#fff;
+  border:1px solid rgba(15,23,42,.14);
+  border-radius:18px;
+  box-shadow:0 12px 34px rgba(15,23,42,.10);
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+.pa-canvas-background{
+  fill:#fff;
+}
+
+.pa-guide{
+  stroke:#334155;
+  stroke-width:3;
+  stroke-linecap:round;
+  opacity:.76;
+  pointer-events:none;
+  vector-effect:non-scaling-stroke;
+}
+
+.pa-guide--preview{
+  stroke:#64748b;
+  stroke-dasharray:9 7;
+  opacity:.56;
+}
+
+.pa-point{
+  cursor:pointer;
+  outline:none;
+}
+
+.pa-point.is-reference,
+.pa-root.is-answer .pa-point{
+  cursor:default;
+}
+
+.pa-point-hit{
+  fill:transparent;
+  stroke:transparent;
+}
+
+.pa-point-halo{
+  fill:transparent;
+  stroke:transparent;
+  stroke-width:4;
+  vector-effect:non-scaling-stroke;
+  transition:fill .12s ease,stroke .12s ease;
+}
+
+.pa-point-cross{
+  fill:none;
+  stroke:#18212f;
+  stroke-width:4.2;
+  stroke-linecap:round;
+  vector-effect:non-scaling-stroke;
+  transition:stroke .12s ease;
+}
+
+.pa-point-label{
+  fill:#2563eb;
+  font-family:"Andika",system-ui,sans-serif;
+  font-size:28px;
+  font-weight:800;
+  paint-order:stroke;
+  stroke:#fff;
+  stroke-width:5px;
+  stroke-linejoin:round;
+  pointer-events:none;
+}
+
+.pa-point.is-reference .pa-point-cross{
+  stroke:#2563eb;
+  stroke-width:5;
+}
+
+.pa-point.is-selected .pa-point-halo{
+  fill:rgba(37,99,235,.18);
+  stroke:#3b82f6;
+}
+
+.pa-point.is-selected .pa-point-cross{
+  stroke:#1d4ed8;
+}
+
+.pa-point.is-correct .pa-point-halo{
+  fill:rgba(34,197,94,.16);
+  stroke:#22c55e;
+}
+
+.pa-point.is-correct .pa-point-cross{
+  stroke:#15803d;
+}
+
+.pa-point.is-missed .pa-point-halo{
+  fill:rgba(34,197,94,.07);
+  stroke:#22c55e;
+  stroke-dasharray:6 5;
+}
+
+.pa-point.is-incorrect .pa-point-halo{
+  fill:rgba(239,68,68,.15);
+  stroke:#ef4444;
+}
+
+.pa-point.is-incorrect .pa-point-cross{
+  stroke:#b91c1c;
+}
+
+.pa-point[tabindex="0"]:focus-visible .pa-point-halo{
+  stroke:#0ea5e9;
+  stroke-width:5;
+}
+
+.pa-eraser{
+  position:absolute;
+  right:14px;
+  top:50%;
+  transform:translateY(-50%);
+  z-index:3;
+  width:clamp(3rem,4.6vw,3.85rem);
+  height:clamp(3rem,4.6vw,3.85rem);
+  min-height:0;
+  padding:.5rem;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  border:2px solid rgba(51,65,85,.28);
+  background:rgba(255,255,255,.96);
+  color:#334155;
+  box-shadow:0 4px 14px rgba(15,23,42,.16);
+  pointer-events:auto;
+}
+
+button.pa-eraser:hover:not(:disabled),
+button.pa-eraser:focus-visible{
+  border-color:rgba(37,99,235,.62);
+  background:#fff;
+  color:#1d4ed8;
+}
+
+.pa-eraser svg{
+  width:100%;
+  height:100%;
+  display:block;
+}
+
+.pa-eraser:disabled{
+  opacity:.58;
+  cursor:default;
+}
+
+@media (max-height:800px){
+  .pa-root{ gap:8px; }
+  .pa-board{ padding-top:2px; padding-bottom:8px; }
+  .pa-canvas-wrap{ min-height:260px; }
+}

@@ -1,3 +1,5 @@
+import { captureSemanticDomHistorySnapshot } from "./activity-history.js";
+
 const TOOL_ACTIVITY_MODES = Object.freeze(["individual", "group"]);
 const TOOL_ACTIVITY_MODE_LABELS = Object.freeze({
   individual: "Individuel",
@@ -499,11 +501,10 @@ function normalizeRuntimeWrapper(runtime, context = {}, tool = null) {
   // Contrat optionnel d’historique riche. Les outils peuvent retourner un
   // instantané structuré pour question / answer / correction. Le moteur
   // utilise sinon un instantané DOM générique.
-  if (getHistorySnapshot) {
-    normalized.getHistorySnapshot = (stage = "question", container = null, maybeContext = context) => {
-      return getHistorySnapshot(stage, container, maybeContext);
-    };
-  }
+  normalized.getHistorySnapshot = (stage = "question", container = null, maybeContext = context) => {
+    if (getHistorySnapshot) return getHistorySnapshot(stage, container, maybeContext);
+    return captureSemanticDomHistorySnapshot(container, stage);
+  };
 
   return normalized;
 }
@@ -579,7 +580,7 @@ function createLegacyToolRuntime(tool, context = {}) {
       if (typeof safeTool.getHistorySnapshot === "function") {
         return safeTool.getHistorySnapshot(stage, targetContainer, maybeContext);
       }
-      return null;
+      return captureSemanticDomHistorySnapshot(targetContainer, stage);
     },
     unmount(container = currentContainer, maybeContext = context) {
       const targetContainer = container ?? currentContainer;

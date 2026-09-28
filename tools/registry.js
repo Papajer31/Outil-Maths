@@ -185,6 +185,14 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
   },
 
   {
+    id: "points-alignes",
+    label: "Points alignés",
+    entry: "../tools/points-alignes/tool.js",
+    description: "Repérer des groupes de points alignés, des points alignés avec A et B ou un point commun à deux alignements.",
+    tags: ["maths", "géométrie", "points", "alignement", "intersection", "tracé", "projection"]
+  },
+
+  {
     id: "encodage",
     label: "Encodage",
     entry: "../tools/encodage/tool.js",

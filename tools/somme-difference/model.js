@@ -3,13 +3,15 @@ import { normalizeNumericConstraint, pickValueFromConstraint } from "../../share
 export const RESPONSE_MODES = Object.freeze({
   PROPOSED: "proposed",
   SEGMENTED: "segmented",
-  COMPLETE: "complete"
+  COMPLETE: "complete",
+  CHOOSE_CALCULATION: "choose-calculation"
 });
 
 export const RESPONSE_MODE_LABELS = Object.freeze({
   [RESPONSE_MODES.PROPOSED]: "Opération proposée",
   [RESPONSE_MODES.SEGMENTED]: "Opération segmentée",
-  [RESPONSE_MODES.COMPLETE]: "Opération complète"
+  [RESPONSE_MODES.COMPLETE]: "Opération complète",
+  [RESPONSE_MODES.CHOOSE_CALCULATION]: "Choisir le calcul"
 });
 
 export const TRACE_MODES = Object.freeze({
@@ -161,6 +163,20 @@ export function evaluateOperationAnswer(question, answer = {}) {
     return { answered: parsed.answered, isCorrect: false, reason: parsed.reason || "invalid" };
   }
 
+  if (normalizeResponseMode(answer.mode) === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    const choices = Array.isArray(question.calculationChoices)
+      ? question.calculationChoices
+      : buildCalculationChoices(question);
+    const selectedIds = new Set(parsed.choiceIds);
+    const selected = choices.filter((choice) => selectedIds.has(choice.id));
+    const allSelectedAreCorrect = selected.length > 0 && selected.every((choice) => choice.isCorrect);
+    return {
+      answered: selected.length > 0,
+      isCorrect: allSelectedAreCorrect,
+      reason: allSelectedAreCorrect ? "correct" : selected.length > 0 ? "wrong_operation" : "invalid"
+    };
+  }
+
   const { left, operator, right, result } = parsed;
   if (operator === "-" && left < right) {
     return {
@@ -192,6 +208,25 @@ export function evaluateOperationAnswer(question, answer = {}) {
   return { answered: true, isCorrect: false, reason: "wrong_operation" };
 }
 
+export function buildCalculationChoices(question) {
+  const top = Number(question?.topCount) || 0;
+  const bottom = Number(question?.bottomCount) || 0;
+  const operationType = question?.operationType;
+  const candidates = [
+    { id: "top-plus-bottom", left: top, operator: "+", right: bottom },
+    { id: "bottom-plus-top", left: bottom, operator: "+", right: top },
+    { id: "top-minus-bottom", left: top, operator: "-", right: bottom },
+    { id: "bottom-minus-top", left: bottom, operator: "-", right: top }
+  ].map((choice) => ({
+    ...choice,
+    expression: `${choice.left} ${choice.operator} ${choice.right}`,
+    isCorrect: operationType === OPERATION_TYPES.SUM
+      ? choice.operator === "+"
+      : choice.operator === "-" && choice.left === Math.max(top, bottom) && choice.right === Math.min(top, bottom)
+  }));
+  return shuffleItems(candidates);
+}
+
 export function getFeedbackMessage(evaluation = {}) {
   if (evaluation?.reason === "impossible_subtraction") {
     return evaluation.message || "Cette soustraction est impossible.";
@@ -216,10 +251,19 @@ function buildRandomQuestion(cfg) {
 
   const operationType = pickOperationType(cfg.operationMode);
   if (operationType === OPERATION_TYPES.DIFFERENCE && topCount === bottomCount) return null;
+  if (cfg.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION && topCount === bottomCount) return null;
 
   const [topCharacter, bottomCharacter] = pickTwoDistinct(CHARACTER_POOL);
   const object = pickRandom(COLLECTION_OBJECTS);
-  const instruction = buildInstruction({ operationType, topCount, bottomCount, topCharacter, bottomCharacter, object });
+  const instruction = buildInstruction({
+    operationType,
+    topCount,
+    bottomCount,
+    topCharacter,
+    bottomCharacter,
+    object,
+    responseMode: cfg.responseMode
+  });
 
   return {
     operationType,
@@ -230,16 +274,20 @@ function buildRandomQuestion(cfg) {
     object,
     instructionId: instruction.id,
     instruction: instruction.text,
-    correctOperation: buildCorrectOperation({ operationType, topCount, bottomCount })
+    correctOperation: buildCorrectOperation({ operationType, topCount, bottomCount }),
+    calculationChoices: buildCalculationChoices({ operationType, topCount, bottomCount })
   };
 }
 
-function buildInstruction({ operationType, topCount, bottomCount, topCharacter, bottomCharacter, object }) {
+function buildInstruction({ operationType, topCount, bottomCount, topCharacter, bottomCharacter, object, responseMode }) {
   if (operationType === OPERATION_TYPES.SUM) {
     const item = pickRandom(SUM_INSTRUCTIONS);
     return {
       id: item.id,
-      text: fillTemplate(item.template, { object, a: topCharacter, b: bottomCharacter })
+      text: adaptInstructionForResponseMode(
+        fillTemplate(item.template, { object, a: topCharacter, b: bottomCharacter }),
+        responseMode
+      )
     };
   }
 
@@ -256,8 +304,25 @@ function buildInstruction({ operationType, topCount, bottomCount, topCharacter, 
 
   return {
     id: item.id,
-    text: fillTemplate(item.template, { object, a, b })
+    text: adaptInstructionForResponseMode(
+      fillTemplate(item.template, { object, a, b }),
+      responseMode
+    )
   };
+}
+
+function adaptInstructionForResponseMode(text, responseMode) {
+  if (responseMode !== RESPONSE_MODES.CHOOSE_CALCULATION) return text;
+  const value = String(text || "");
+  const replacements = new Map([
+    ["Quelle est la somme ?", "Quel calcul permet de trouver la somme ?"],
+    ["Écris l'addition correspondante.", "Choisis l'addition correspondante."],
+    ["Écris le calcul qui donne la somme.", "Choisis le calcul qui donne la somme."],
+    ["Quelle est la différence ?", "Quel calcul permet de trouver la différence ?"],
+    ["Écris la soustraction correspondante.", "Choisis la soustraction correspondante."],
+    ["Écris le calcul qui donne la différence.", "Choisis le calcul qui donne la différence."]
+  ]);
+  return replacements.get(value) || value;
 }
 
 function fillTemplate(template, { object, a, b }) {
@@ -328,6 +393,20 @@ function normalizeTraceMode(value) {
 
 function parseAnswerByMode(answer = {}) {
   const mode = normalizeResponseMode(answer.mode);
+  if (mode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    const rawChoiceIds = Array.isArray(answer.choiceIds)
+      ? answer.choiceIds
+      : [answer.choiceId];
+    const choiceIds = [...new Set(rawChoiceIds
+      .map((choiceId) => String(choiceId ?? "").trim())
+      .filter(Boolean))];
+    return {
+      valid: choiceIds.length > 0,
+      answered: choiceIds.length > 0,
+      choiceIds,
+      reason: choiceIds.length > 0 ? "choice" : "empty"
+    };
+  }
   if (mode === RESPONSE_MODES.COMPLETE) {
     return parseCompleteOperation(answer.complete);
   }
@@ -379,6 +458,15 @@ function buildOperation(left, operator, right, result) {
     result: String(result),
     expression
   };
+}
+
+function shuffleItems(source = []) {
+  const list = Array.isArray(source) ? source.slice() : [];
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(Math.random() * (index + 1));
+    [list[index], list[target]] = [list[target], list[index]];
+  }
+  return list;
 }
 
 function isPlainObject(value) {

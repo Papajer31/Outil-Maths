@@ -13,9 +13,10 @@ import {
 } from "../teacher-tools/surface/state.js";
 import { createSurfaceBackgroundPanel } from "../teacher-tools/surface/background-control.js";
 import { normalizeSceneBackgroundState } from "../teacher-tools/widgets/background/tool.js";
+import { applyOverlayWidgetAction, normalizeOverlayWidgetsState } from "../teacher-tools/overlay-widgets/state.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 
-const WORKSPACE_VERSION = 4;
+const WORKSPACE_VERSION = 5;
 
 function clonePlain(value){
   try { if (typeof structuredClone === "function") return structuredClone(value); } catch {}
@@ -87,6 +88,7 @@ function normalizeWorkspace(raw = {}){
     version: WORKSPACE_VERSION,
     selectedPageId,
     sharedBackground: normalizeSceneBackgroundState(raw.sharedBackground || { background: "white" }),
+    widgets: normalizeOverlayWidgetsState(raw.widgets),
     pages
   };
 }
@@ -123,6 +125,7 @@ export function createTeacherToolsViewController({
     return normalizeWorkspace({
       ...workspace,
       sharedBackground: clonePlain(workspace.sharedBackground),
+      widgets: clonePlain(normalizeOverlayWidgetsState(workspace.widgets)),
       pages: workspace.pages.map((page) => {
         const tool = getTeacherTool(page.toolId);
         const rawState = clonePlain(page.state);
@@ -177,6 +180,10 @@ export function createTeacherToolsViewController({
         }
         if (message?.type === "surface-action") {
           applyPageSurfaceAction(message.pageId, message.action, message.payload);
+          return;
+        }
+        if (message?.type === "widget-action") {
+          applyGlobalWidgetAction(message.widgetId, message.action, message.payload);
         }
       }
     });
@@ -215,7 +222,20 @@ export function createTeacherToolsViewController({
       return;
     }
     try { projectorWindow.focus(); } catch {}
+    renderHeaderStatus();
     window.setTimeout(syncProjector, 160);
+  }
+
+  function closeProjector(){
+    // Le message couvre aussi le cas où la fenêtre principale a été rechargée
+    // et ne possède plus la référence JS directe vers la popup.
+    send("close-projector");
+    if (projectorWindow && !projectorWindow.closed) {
+      try { projectorWindow.close(); } catch {}
+    }
+    projectorWindow = null;
+    projectorConnected = false;
+    renderHeaderStatus();
   }
 
   function selectPage(pageId, { sync = true } = {}){
@@ -363,6 +383,33 @@ export function createTeacherToolsViewController({
     updatePage(page.id, { surface, state }, { renderPanel: false, sync: true });
   }
 
+  function applyGlobalWidgetAction(widgetId, action, payload = {}){
+    const safeWidgetId = String(widgetId || "").trim();
+    const safeAction = String(action || "").trim();
+    let pages = workspace.pages;
+
+    // Masquer le widget Annotations doit rendre tous les calques inactifs sans
+    // supprimer un seul trait. On évite ainsi qu'une page laissée en mode dessin
+    // intercepte le stylet lorsque le widget est désactivé globalement.
+    if (safeWidgetId === "annotations" && safeAction === "set-visible" && payload?.visible !== true) {
+      pages = workspace.pages.map((page) => {
+        const surface = normalizeSurfaceState(page.surface);
+        if (surface.annotations?.enabled !== true) return page;
+        return {
+          ...page,
+          surface: applySurfaceAction(surface, "annotations:set-enabled", { enabled:false })
+        };
+      });
+    }
+
+    workspace = normalizeWorkspace({
+      ...workspace,
+      pages,
+      widgets: applyOverlayWidgetAction(workspace.widgets, safeWidgetId, safeAction, payload || {})
+    });
+    syncProjector();
+  }
+
   function closePicker(){ pickerOverlay?.remove?.(); pickerOverlay = null; }
   function openPicker(){
     if (pickerOverlay?.isConnected) return;
@@ -406,6 +453,8 @@ export function createTeacherToolsViewController({
     node.innerHTML = `<span class="dashboard-material-icon" aria-hidden="true">${projectorConnected ? "cast_connected" : "cast"}</span><span>${projectorConnected ? "Projection connectée" : "Projection non connectée"}</span>`;
     const button = host?.querySelector("#btnTeacherToolsOpenProjector span:last-child");
     if (button) button.textContent = projectorConnected ? "Afficher la projection" : "Ouvrir la projection";
+    const closeButton = host?.querySelector("#btnTeacherToolsCloseProjector");
+    if (closeButton) closeButton.disabled = !projectorConnected && !(projectorWindow && !projectorWindow.closed);
   }
 
   function pageListMarkup(){
@@ -525,7 +574,10 @@ export function createTeacherToolsViewController({
       <div class="dashboard-config-header tt-header tt-app-header">
         <div class="dashboard-config-header-main tt-header-main"><div><div class="dashboard-section-title">Tableau</div><div class="tt-app-header-subtitle" data-page-count></div></div></div>
         <div class="dashboard-config-header-center tt-header-center"><div class="tt-projector-status" data-projector-status></div></div>
-        <div class="dashboard-config-header-actions tt-header-actions"><button id="btnTeacherToolsOpenProjector" class="btn primary" type="button"><span class="dashboard-material-icon" aria-hidden="true">open_in_new</span><span>Ouvrir la projection</span></button></div>
+        <div class="dashboard-config-header-actions tt-header-actions">
+          <button id="btnTeacherToolsOpenProjector" class="btn primary" type="button"><span class="dashboard-material-icon" aria-hidden="true">open_in_new</span><span>Ouvrir la projection</span></button>
+          <button id="btnTeacherToolsCloseProjector" class="btn" type="button" disabled><span class="dashboard-material-icon" aria-hidden="true">close</span><span>Fermer la projection</span></button>
+        </div>
       </div>
       <div class="dashboard-content-scroll dashboard-explorer-host tt-view-scroll tt-app-view">
         <div class="dashboard-activities-explorer tt-board-explorer tt-app-explorer">
@@ -550,6 +602,7 @@ export function createTeacherToolsViewController({
         </div>
       </div>`;
     host.querySelector("#btnTeacherToolsOpenProjector")?.addEventListener("click", openProjector);
+    host.querySelector("#btnTeacherToolsCloseProjector")?.addEventListener("click", closeProjector);
     host.querySelector("#ttOpenWidgetPicker")?.addEventListener("click", openPicker);
     host.querySelector("[data-close-active]")?.addEventListener("click", () => { const current = selectedPage(); if (current) removePage(current.id); });
     host.querySelector("[data-toggle-background]")?.addEventListener("click", toggleBackgroundPanel);

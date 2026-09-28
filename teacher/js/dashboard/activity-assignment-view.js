@@ -950,7 +950,9 @@ export function createActivityAssignmentViewController({
       const updated = await setActivityAssignmentActive?.(assignment.id, nextActive);
       Object.assign(assignment, updated || { is_active:nextActive });
       renderView({ preserveOverviewScroll:true, anchorAssignmentId:assignment.id });
-      showToast?.(nextActive ? "Attribution réactivée." : "Attribution mise en pause.");
+      showToast?.(nextActive
+        ? "Mission réactivée : progression et reprise remises à zéro."
+        : "Attribution mise en pause. La progression est conservée.");
     } catch (error) {
       showToast?.(error?.message || "Impossible de modifier l’état de cette attribution.", { isError:true });
     }

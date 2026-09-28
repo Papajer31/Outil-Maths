@@ -620,6 +620,55 @@ export async function listPublicActivityAssignmentsForSpace(accessCode, studentI
   return Array.isArray(data) ? data : [];
 }
 
+export async function getPublicActivityAssignmentCheckpoint({
+  accessCode,
+  assignmentId,
+  studentId,
+  studentCode
+} = {}) {
+  const code = normalizeAccessCode(accessCode);
+  const id = String(assignmentId || "").trim();
+  const numericStudentId = Number(studentId);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  if (!code || !id || !Number.isFinite(numericStudentId) || numericStudentId <= 0 || !cleanStudentCode) return null;
+
+  const { data, error } = await supabase.rpc("get_space_activity_assignment_checkpoint", {
+    p_access_code: code,
+    p_assignment_id: id,
+    p_student_id: numericStudentId,
+    p_student_code: cleanStudentCode
+  });
+  if (error) throw error;
+  return data && typeof data === "object" ? data : null;
+}
+
+export async function savePublicActivityAssignmentCheckpoint({
+  accessCode,
+  assignmentId,
+  studentId,
+  studentCode,
+  missionRunId,
+  checkpoint
+} = {}) {
+  const code = normalizeAccessCode(accessCode);
+  const id = String(assignmentId || "").trim();
+  const numericStudentId = Number(studentId);
+  const cleanStudentCode = String(studentCode || "").trim().toUpperCase();
+  const runId = String(missionRunId || "").trim();
+  if (!code || !id || !Number.isFinite(numericStudentId) || numericStudentId <= 0 || !cleanStudentCode || !runId) return false;
+
+  const { data, error } = await supabase.rpc("save_space_activity_assignment_checkpoint", {
+    p_access_code: code,
+    p_assignment_id: id,
+    p_student_id: numericStudentId,
+    p_student_code: cleanStudentCode,
+    p_mission_run_id: runId,
+    p_checkpoint_json: checkpoint && typeof checkpoint === "object" ? checkpoint : {}
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function completePublicActivityAssignment({
   accessCode,
   assignmentId,

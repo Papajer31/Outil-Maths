@@ -557,3 +557,60 @@
   outline: 0;
   padding: 0;
 }
+
+/* Mode « Choisir le calcul » ------------------------------------------------ */
+.sd-answer-card--choose-calculation {
+  width: min(48rem, 100%);
+}
+
+.sd-calculation-choice-shell {
+  width: min(48rem, 100%);
+  display: grid;
+  gap: clamp(.55rem, 1.1vh, .9rem);
+}
+
+.sd-calculation-choice-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(.55rem, 1.1vw, .95rem);
+}
+
+.sd-calculation-choice {
+  width: 100%;
+  min-height: clamp(4.7rem, 9vh, 6.2rem);
+  display: grid;
+  place-items: center;
+  padding: clamp(.55rem, 1.1vw, .9rem);
+  text-align: center;
+}
+
+.sd-calculation-choice-text {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(2rem, 4.6vw, 3.65rem);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sd-calculation-choice-grid.is-readonly .sd-calculation-choice {
+  cursor: default;
+}
+
+@media (max-width: 700px) {
+  .sd-calculation-choice-grid {
+    gap: .45rem;
+  }
+
+  .sd-calculation-choice {
+    min-height: 4.25rem;
+    padding: .45rem;
+  }
+
+  .sd-calculation-choice-text {
+    font-size: clamp(1.65rem, 7vw, 2.55rem);
+  }
+}

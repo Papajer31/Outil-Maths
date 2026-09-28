@@ -16,6 +16,7 @@
     <section id="teacherToolsProjectorStage" class="ttp-stage" data-background="white">
       <div id="teacherToolsProjectorStarfield" class="ttp-space-starfield" aria-hidden="true" hidden></div>
       <div id="teacherToolsAppHost" class="ttp-app-host" aria-live="polite"></div>
+      <div id="teacherToolsWidgetLayer" class="ttp-widget-layer" aria-label="Widgets du Tableau"></div>
       <canvas id="teacherToolsAnnotationLayer" class="ttp-annotation-layer" aria-hidden="true"></canvas>
 
       <button id="btnTeacherToolsChromeToggle" class="ttp-chrome-toggle" type="button" aria-pressed="false" aria-label="Masquer les commandes" title="Masquer les commandes">
@@ -34,7 +35,8 @@
 
       <nav class="ttp-page-rail" aria-label="Commandes du Tableau">
         <button id="btnTeacherToolsPageMenu" class="ttp-page-rail-btn" type="button" aria-expanded="false" aria-label="Changer de page" title="Pages"><span class="ttp-material-icon" aria-hidden="true">apps</span></button>
-        <button id="btnTeacherToolsAppControls" class="ttp-page-rail-btn" type="button" aria-expanded="false" aria-label="Commandes de l’application" title="Commandes"><span class="ttp-material-icon" aria-hidden="true">tune</span></button>
+        <button id="btnTeacherToolsWidgets" class="ttp-page-rail-btn" type="button" aria-expanded="false" aria-label="Afficher les widgets" title="Widgets"><span class="ttp-material-icon" aria-hidden="true">widgets</span></button>
+        <button id="btnTeacherToolsAppControls" class="ttp-page-rail-btn" type="button" aria-expanded="false" aria-label="Commandes de l’application" title="Configuration"><span class="ttp-material-icon" aria-hidden="true">tune</span></button>
       </nav>
 
       <aside id="teacherToolsPageDrawer" class="ttp-page-drawer" hidden aria-label="Pages du Tableau">
@@ -56,6 +58,12 @@
           <div id="teacherToolsAppCatalogGrid" class="ttp-catalog-grid"></div>
         </section>
       </div>
+
+
+      <aside id="teacherToolsWidgetsDrawer" class="ttp-widgets-drawer" hidden aria-label="Widgets du Tableau">
+        <div class="ttp-widgets-drawer-head"><strong>Widgets</strong><button id="btnTeacherToolsWidgetsClose" class="ttp-widgets-drawer-close" type="button" aria-label="Fermer"><span class="ttp-material-icon">close</span></button></div>
+        <div id="teacherToolsWidgetsList" class="ttp-widget-menu-list"></div>
+      </aside>
 
       <aside id="teacherToolsAppControls" class="ttp-app-controls" hidden aria-label="Commandes de l’application">
         <div class="ttp-app-controls-head"><strong id="teacherToolsAppControlsTitle">Application</strong><button id="btnTeacherToolsAppControlsClose" type="button" aria-label="Masquer"><span class="ttp-material-icon">close</span></button></div>

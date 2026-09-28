@@ -1,5 +1,5 @@
 export const TOOL_LIMITS = Object.freeze({
-  timePerQ: { min: 5, max: 999, step: 5 },
+  timePerQ: { min: 2, max: 999, step: 1 },
   questionCount: { min: 1, max: 200, step: 1 },
   answerTime: { min: 0, max: 30, step: 1 },
   successGoalSafetyMilestones: { min: 0, max: 12, step: 1 },
@@ -372,6 +372,46 @@ function preserveSequenceMetadata(source, target) {
   const missionStepId = String(source.mission_step_id ?? source.missionStepId ?? "").trim();
   if (missionStepId) {
     target.mission_step_id = missionStepId;
+  }
+
+  // Historique v2 : ces métadonnées décrivent la vraie source jouée. Elles
+  // doivent survivre à chaque normalisation de séquence, notamment pour les
+  // Missions modernes où une activité personnelle n'est pas une
+  // catalog_activity et où l'attribution / le passage de Mission sont
+  // indispensables à l'ouverture de la tentative Supabase.
+  const catalogActivityTitle = String(source.catalog_activity_title ?? source.catalogActivityTitle ?? "").trim();
+  if (catalogActivityTitle) {
+    target.catalog_activity_title = catalogActivityTitle;
+  }
+
+  const historySourceType = String(source.history_source_type ?? source.historySourceType ?? "").trim();
+  if (historySourceType) {
+    target.history_source_type = historySourceType;
+  }
+
+  const historySourceId = String(source.history_source_id ?? source.historySourceId ?? "").trim();
+  if (historySourceId) {
+    target.history_source_id = historySourceId;
+  }
+
+  const historyAssignmentId = String(source.history_assignment_id ?? source.historyAssignmentId ?? "").trim();
+  if (historyAssignmentId) {
+    target.history_assignment_id = historyAssignmentId;
+  }
+
+  const historySequenceItemId = String(source.history_sequence_item_id ?? source.historySequenceItemId ?? "").trim();
+  if (historySequenceItemId) {
+    target.history_sequence_item_id = historySequenceItemId;
+  }
+
+  const historyMissionRunId = String(source.history_mission_run_id ?? source.historyMissionRunId ?? "").trim();
+  if (historyMissionRunId) {
+    target.history_mission_run_id = historyMissionRunId;
+  }
+
+  const historyActivityType = String(source.history_activity_type ?? source.historyActivityType ?? "").trim();
+  if (historyActivityType) {
+    target.history_activity_type = historyActivityType;
   }
 
   if (source.auto_exit_session_on_complete != null || source.autoExitSessionOnComplete != null) {

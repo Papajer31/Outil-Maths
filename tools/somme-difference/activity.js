@@ -5,6 +5,7 @@ import {
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
 import {
+  OPERATION_TYPES,
   RESPONSE_MODES,
   TRACE_MODES,
   buildCorrectOperation,
@@ -100,6 +101,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getSommeDifferenceHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -129,6 +134,7 @@ function createRuntimeState(initialContext = {}) {
     answerDisplayMode: "correction",
     answerParts: createEmptyAnswerParts(),
     activePart: "left",
+    selectedCalculationChoiceIds: [],
     studentAnswerSnapshot: null,
     correctionSnapshot: null,
     lastEvaluation: null,
@@ -170,6 +176,7 @@ async function loadNextQuestion(state) {
   state.answerDisplayMode = "correction";
   state.answerParts = createEmptyAnswerParts();
   state.activePart = "left";
+  state.selectedCalculationChoiceIds = [];
   state.studentAnswerSnapshot = null;
   state.correctionSnapshot = null;
   state.lastEvaluation = null;
@@ -404,10 +411,15 @@ function renderResponseArea(state, { readOnly = false } = {}) {
     evaluation?.reason === "impossible_subtraction" && showStudentAnswer ? "is-impossible" : ""
   ].filter(Boolean).join(" ");
 
+  const isCalculationChoice = mode === RESPONSE_MODES.CHOOSE_CALCULATION;
   state.answerEl.innerHTML = `
     <div class="${escapeHtml(classes)}">
       ${renderOperationInput(state, { mode, snapshot, readOnly })}
-      ${readOnly ? renderReadOnlyKeypadReplacement(state, evaluation, { showStudentAnswer }) : renderOperationKeypad()}
+      ${isCalculationChoice
+        ? ""
+        : readOnly
+          ? renderReadOnlyKeypadReplacement(state, evaluation, { showStudentAnswer })
+          : renderOperationKeypad()}
     </div>
   `;
 }
@@ -446,6 +458,10 @@ function renderOperationInput(state, { mode, snapshot, readOnly = false }) {
   const question = state.currentQuestion;
   const readOnlyClass = readOnly ? " sd-operation-input--readonly" : "";
 
+  if (mode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    return renderCalculationChoices(state, { snapshot, readOnly });
+  }
+
   if (mode === RESPONSE_MODES.COMPLETE) {
     return `
       <div class="sd-operation-input sd-operation-input--complete${readOnlyClass}" data-sd-operation-input>
@@ -469,6 +485,45 @@ function renderOperationInput(state, { mode, snapshot, readOnly = false }) {
       ${renderEditableField({ part: "right", value: snapshot.right, label: "Deuxième nombre", readOnly })}
       <span class="sd-operation-symbol" aria-hidden="true">=</span>
       ${renderEditableField({ part: "result", value: snapshot.result, label: "Résultat", readOnly })}
+    </div>
+  `;
+}
+
+function renderCalculationChoices(state, { snapshot, readOnly = false } = {}) {
+  const choices = Array.isArray(state.currentQuestion?.calculationChoices)
+    ? state.currentQuestion.calculationChoices
+    : [];
+  const selectedChoiceIds = new Set(
+    Array.isArray(snapshot?.choiceIds)
+      ? snapshot.choiceIds.map((choiceId) => String(choiceId || ""))
+      : Array.isArray(state.selectedCalculationChoiceIds)
+        ? state.selectedCalculationChoiceIds.map((choiceId) => String(choiceId || ""))
+        : []
+  );
+  const choiceMarkup = choices.map((choice) => {
+    const isSelected = selectedChoiceIds.has(choice.id);
+    const classes = [
+      "tool-choice-button",
+      "sd-calculation-choice",
+      !readOnly && isSelected ? "is-selected" : "",
+      readOnly && choice.isCorrect ? "is-correct" : "",
+      readOnly && isSelected && !choice.isCorrect ? "is-incorrect" : ""
+    ].filter(Boolean).join(" ");
+    const attributes = readOnly
+      ? 'aria-disabled="true"'
+      : `type="button" data-sd-calculation-choice="${escapeHtml(choice.id)}" aria-pressed="${isSelected ? "true" : "false"}"`;
+    return `
+      <${readOnly ? "div" : "button"} class="${escapeHtml(classes)}" ${attributes}>
+        <span class="tool-choice-text sd-calculation-choice-text">${escapeHtml(choice.expression || "")}</span>
+      </${readOnly ? "div" : "button"}>
+    `;
+  }).join("");
+
+  return `
+    <div class="sd-calculation-choice-shell">
+      <div class="sd-calculation-choice-grid${readOnly ? " is-readonly" : ""}" role="group" aria-label="Choisis un ou plusieurs calculs corrects">
+        ${choiceMarkup}
+      </div>
     </div>
   `;
 }
@@ -515,6 +570,23 @@ function setupResponseBindings(state) {
   const { signal } = abortController;
   state.responseAbortController = abortController;
 
+  state.answerEl.querySelectorAll("[data-sd-calculation-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const choiceId = String(button.dataset.sdCalculationChoice || "");
+      const selectedIds = new Set(state.selectedCalculationChoiceIds || []);
+      if (selectedIds.has(choiceId)) selectedIds.delete(choiceId);
+      else selectedIds.add(choiceId);
+      state.selectedCalculationChoiceIds = [...selectedIds];
+
+      state.answerEl.querySelectorAll("[data-sd-calculation-choice]").forEach((choiceButton) => {
+        const selected = selectedIds.has(String(choiceButton.dataset.sdCalculationChoice || ""));
+        choiceButton.classList.toggle("is-selected", selected);
+        choiceButton.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+      syncValidateState(state);
+    }, { signal });
+  });
+
   state.answerEl.querySelectorAll("[data-sd-part]").forEach((field) => {
     field.addEventListener("click", () => {
       setActivePart(state, field.dataset.sdPart || "left");
@@ -534,6 +606,7 @@ function setupResponseBindings(state) {
 }
 
 function handleGlobalKeydown(state, event) {
+  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) return;
   if (state.answerRevealed || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   const key = event.key;
   if (/^\d$/.test(key) || key === "+" || key === "-" || key === "=" || key === "Backspace" || key === "Delete" || key === "Enter") {
@@ -730,6 +803,7 @@ function syncActiveFieldClass(state) {
 }
 
 function focusActiveField(state) {
+  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) return;
   queueMicrotask(() => {
     syncActiveFieldClass(state);
     const active = state.answerEl?.querySelector?.(`[data-sd-part="${cssEscape(state.activePart)}"]`);
@@ -741,7 +815,9 @@ function revealAnswer(state) {
   if (!state.currentQuestion || state.answerRevealed) return;
   state.answerRevealed = true;
   state.studentAnswerSnapshot = captureAnswerSnapshot(state);
-  state.correctionSnapshot = buildCorrectionSnapshot(state.currentQuestion);
+  state.correctionSnapshot = state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION
+    ? { mode: RESPONSE_MODES.CHOOSE_CALCULATION, choiceIds: [] }
+    : buildCorrectionSnapshot(state.currentQuestion);
   state.lastEvaluation = evaluateOperationAnswer(state.currentQuestion, state.studentAnswerSnapshot);
   state.answerDisplayMode = "correction";
 
@@ -757,6 +833,14 @@ function revealAnswer(state) {
 
 function captureAnswerSnapshot(state) {
   const mode = state.currentSettings.responseMode;
+  if (mode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    return {
+      mode,
+      choiceIds: Array.isArray(state.selectedCalculationChoiceIds)
+        ? state.selectedCalculationChoiceIds.slice()
+        : []
+    };
+  }
   if (mode === RESPONSE_MODES.PROPOSED) {
     return {
       mode,
@@ -787,12 +871,16 @@ function buildCorrectionSnapshot(question) {
 
 function getDisplayedSnapshot(state) {
   if (!state.answerRevealed) return captureAnswerSnapshot(state);
+  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    return state.studentAnswerSnapshot || { mode: RESPONSE_MODES.CHOOSE_CALCULATION, choiceIds: [] };
+  }
   const showStudent = canToggleStudentAnswerDisplay(state) && normalizeAnswerDisplayMode(state.answerDisplayMode) === "student";
   return showStudent ? state.studentAnswerSnapshot : state.correctionSnapshot;
 }
 
 function snapshotToExpression(snapshot) {
   if (!snapshot) return "";
+  if (snapshot.mode === RESPONSE_MODES.CHOOSE_CALCULATION) return (Array.isArray(snapshot.choiceIds) ? snapshot.choiceIds : []).join("|");
   if (snapshot.expression) return snapshot.expression;
   if (snapshot.mode === RESPONSE_MODES.COMPLETE) return String(snapshot.complete || "");
   const left = String(snapshot.left || "");
@@ -803,6 +891,7 @@ function snapshotToExpression(snapshot) {
 }
 
 function canToggleStudentAnswerDisplay(state) {
+  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) return false;
   if (!state.answerRevealed || !state.studentAnswerSnapshot || !state.correctionSnapshot) return false;
   return snapshotToExpression(state.studentAnswerSnapshot) !== snapshotToExpression(state.correctionSnapshot);
 }
@@ -817,10 +906,12 @@ function canSubmitAnswer(state) {
 }
 
 function requestReveal(state) {
+  const immediateFeedback = state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION;
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
     showAnswerNow: true,
-    wasCorrect: isCurrentAnswerCorrect(state)
+    wasCorrect: isCurrentAnswerCorrect(state),
+    skipValidationReview: immediateFeedback
   });
   if (requested === false || !state.latestContext?.services?.requestAnswerPhase) {
     revealAnswer(state);
@@ -958,6 +1049,32 @@ function teardownState(state, container) {
   state.workspaceEl = null;
   state.answerEl = null;
   state.sceneEl = null;
+}
+
+function getSommeDifferenceHistorySnapshot(state, stage = "question") {
+  const q = state.currentQuestion;
+  if (!q) return { kind:"operation", prompt:"" };
+  const safeStage = String(stage || "question").toLowerCase();
+  const facts = [
+    { label:String(q.topCharacter?.name || "Collection 1"), value:`${q.topCount} ${q.object?.plural || "objets"}` },
+    { label:String(q.bottomCharacter?.name || "Collection 2"), value:`${q.bottomCount} ${q.object?.plural || "objets"}` }
+  ];
+  if (safeStage === "question") {
+    return { schemaVersion:2, kind:"operation", prompt:String(q.instruction || ""), facts };
+  }
+  const student = state.studentAnswerSnapshot || captureAnswerSnapshot(state);
+  if (safeStage === "answer") {
+    if (student?.mode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+      const ids = new Set(Array.isArray(student.choiceIds) ? student.choiceIds : []);
+      const selected = (q.calculationChoices || []).filter((c) => ids.has(c.id)).map((c) => c.expression);
+      return { schemaVersion:2, kind:"choices", values:selected, prompt:"Calcul(s) choisi(s)" };
+    }
+    return { schemaVersion:2, kind:"value", value:snapshotToExpression(student), prompt:"Réponse de l’élève" };
+  }
+  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    return { schemaVersion:2, kind:"choices", values:(q.calculationChoices || []).filter((c) => c.isCorrect).map((c) => c.expression), prompt:"Réponse(s) correcte(s)" };
+  }
+  return { schemaVersion:2, kind:"value", value:String(q.correctOperation?.expression || snapshotToExpression(buildCorrectionSnapshot(q))), prompt:"Correction" };
 }
 
 function createEmptyAnswerParts() {

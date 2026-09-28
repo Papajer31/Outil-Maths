@@ -87,6 +87,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getNombresLettresHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -731,6 +735,53 @@ function applyShellAnswerDisplayMode(state, mode) {
 
 function getCurrentEvaluation(state) {
   return evaluateAnswer(state.currentQuestion, getCurrentResponseValue(state));
+}
+
+function getNombresLettresHistorySnapshot(state, stage = "question") {
+  const q = state.currentQuestion;
+  const direction = q?.direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER
+    ? QUESTION_DIRECTIONS.WORDS_TO_NUMBER
+    : QUESTION_DIRECTIONS.NUMBER_TO_WORDS;
+  const directionLabel = direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER
+    ? "Lettres → Nombre"
+    : "Nombre → Lettres";
+
+  if (!q) {
+    return { schemaVersion:2, kind:"number-words", direction, directionLabel, value:"" };
+  }
+
+  const safeStage = String(stage || "question").toLowerCase();
+  if (safeStage === "question") {
+    return {
+      schemaVersion:2,
+      kind:"number-words",
+      direction,
+      directionLabel,
+      prompt:String(q.prompt || ""),
+      value:String(q.displayPrimary || q.value || ""),
+      valueLabel:direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER ? "Écriture proposée" : "Nombre proposé"
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      schemaVersion:2,
+      kind:"number-words",
+      direction,
+      directionLabel,
+      value:String(state.submittedAnswer || getCurrentResponseValue(state) || ""),
+      valueLabel:"Réponse donnée"
+    };
+  }
+
+  return {
+    schemaVersion:2,
+    kind:"number-words",
+    direction,
+    directionLabel,
+    value:String(q.expectedAnswer || ""),
+    valueLabel:"Réponse attendue"
+  };
 }
 
 function isCurrentAnswerCorrect(state) {

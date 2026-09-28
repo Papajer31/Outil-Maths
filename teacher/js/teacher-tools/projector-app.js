@@ -4,6 +4,8 @@ import { getTeacherTool, listTeacherTools } from "./registry.js";
 import { applySurfaceAction, normalizeSurfaceState, resolveSurfaceBackground } from "./surface/state.js";
 import { createSurfaceBackgroundProjector } from "./surface/background-projector.js";
 import { createAnnotationProjector } from "./surface/annotation-projector.js";
+import { applyOverlayWidgetAction, getTimerRemainingMs, normalizeOverlayWidgetsState } from "./overlay-widgets/state.js";
+import { createTimerOverlayProjector } from "./overlay-widgets/timer/projector.js";
 
 startMaterialIconHydration();
 
@@ -13,11 +15,16 @@ const channelId = String(params.get("channel") || "").trim();
 
 const stage = document.getElementById("teacherToolsProjectorStage");
 const appHost = document.getElementById("teacherToolsAppHost");
+const widgetLayer = document.getElementById("teacherToolsWidgetLayer");
 const starfieldHost = document.getElementById("teacherToolsProjectorStarfield");
 const launchOverlay = document.getElementById("teacherToolsLaunchOverlay");
 const btnLaunch = document.getElementById("btnTeacherToolsLaunch");
 const btnChromeToggle = document.getElementById("btnTeacherToolsChromeToggle");
 const btnPageMenu = document.getElementById("btnTeacherToolsPageMenu");
+const btnWidgets = document.getElementById("btnTeacherToolsWidgets");
+const widgetsDrawer = document.getElementById("teacherToolsWidgetsDrawer");
+const widgetsList = document.getElementById("teacherToolsWidgetsList");
+const btnWidgetsClose = document.getElementById("btnTeacherToolsWidgetsClose");
 const pageDrawer = document.getElementById("teacherToolsPageDrawer");
 const btnPageDrawerClose = document.getElementById("btnTeacherToolsPageDrawerClose");
 const pageList = document.getElementById("teacherToolsPageList");
@@ -36,12 +43,14 @@ const btnAppControlsClose = document.getElementById("btnTeacherToolsAppControlsC
 const annotationLayer = document.getElementById("teacherToolsAnnotationLayer");
 const annotationToolbar = document.getElementById("teacherToolsAnnotationToolbar");
 
-let workspace = { version: 4, selectedPageId: "", sharedBackground: {}, pages: [] };
+let workspace = { version: 5, selectedPageId: "", sharedBackground: {}, widgets: normalizeOverlayWidgetsState(), pages: [] };
 let channel = null;
 let appControlsOpen = false;
 let pageDrawerOpen = false;
+let widgetsDrawerOpen = false;
 let appCatalogOpen = false;
 let projectionChromeVisible = true;
+let workspaceBootstrapped = false;
 
 function escapeHtml(value){
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -96,9 +105,10 @@ function normalizeWorkspace(raw = {}){
     .filter((page) => page?.id);
   const requested = String(raw.selectedPageId || "");
   return {
-    version: 4,
+    version: 5,
     selectedPageId: pages.some((page) => page.id === requested) ? requested : (pages[0]?.id || ""),
     sharedBackground: raw.sharedBackground && typeof raw.sharedBackground === "object" ? raw.sharedBackground : {},
+    widgets: normalizeOverlayWidgetsState(raw.widgets),
     pages
   };
 }
@@ -122,6 +132,78 @@ const annotationProjector = createAnnotationProjector({
   }
 });
 
+const timerOverlayProjector = createTimerOverlayProjector({
+  stage,
+  host: widgetLayer,
+  getTimerState: () => workspace.widgets?.timer,
+  onAction(action, payload = {}){ applyLocalWidgetAction("timer", action, payload); }
+});
+
+function setWidgetsDrawerOpen(open){
+  widgetsDrawerOpen = open === true;
+  if (widgetsDrawer) widgetsDrawer.hidden = !widgetsDrawerOpen;
+  btnWidgets?.setAttribute("aria-expanded", widgetsDrawerOpen ? "true" : "false");
+  if (widgetsDrawerOpen) renderWidgetsMenu();
+}
+
+function disableAnnotationDrawingLocally(){
+  workspace = {
+    ...workspace,
+    pages: workspace.pages.map((page) => {
+      const surface = normalizeSurfaceState(page.surface);
+      return surface.annotations?.enabled === true
+        ? { ...page, surface: applySurfaceAction(surface, "annotations:set-enabled", { enabled:false }) }
+        : page;
+    })
+  };
+}
+
+function applyLocalWidgetAction(widgetId, action, payload = {}){
+  const id = String(widgetId || "").trim();
+  const safeAction = String(action || "").trim();
+  if (id === "annotations" && safeAction === "set-visible" && payload?.visible !== true) {
+    disableAnnotationDrawingLocally();
+  }
+  workspace = {
+    ...workspace,
+    widgets: applyOverlayWidgetAction(workspace.widgets, id, safeAction, payload || {})
+  };
+  renderWidgets();
+  if (id === "annotations") renderSurface();
+  send("widget-action", { widgetId:id, action:safeAction, payload:payload || {} });
+}
+
+function renderWidgetsMenu(){
+  if (!widgetsList) return;
+  const widgets = normalizeOverlayWidgetsState(workspace.widgets);
+  const timerRemaining = Math.max(0, Math.ceil(getTimerRemainingMs(widgets.timer) / 1000));
+  const timerStatus = widgets.timer.running
+    ? `En cours · ${String(Math.floor(timerRemaining / 60)).padStart(2,"0")}:${String(timerRemaining % 60).padStart(2,"0")}`
+    : "Compte à rebours déplaçable";
+  widgetsList.innerHTML = `
+    <button class="ttp-widget-menu-row${widgets.annotations.visible ? " is-active" : ""}" type="button" data-widget-menu="annotations" aria-pressed="${widgets.annotations.visible ? "true" : "false"}">
+      <span class="ttp-widget-menu-icon"><span class="ttp-material-icon" aria-hidden="true">edit_note</span></span>
+      <span class="ttp-widget-menu-copy"><strong>Annotations</strong><small>Écrire ou dessiner sur la page.</small></span>
+      <span class="ttp-widget-menu-switch" aria-hidden="true"></span>
+    </button>
+    <button class="ttp-widget-menu-row${widgets.timer.visible ? " is-active" : ""}" type="button" data-widget-menu="timer" aria-pressed="${widgets.timer.visible ? "true" : "false"}">
+      <span class="ttp-widget-menu-icon"><span class="ttp-material-icon" aria-hidden="true">timer</span></span>
+      <span class="ttp-widget-menu-copy"><strong>Minuteur</strong><small>${escapeHtml(timerStatus)}</small></span>
+      <span class="ttp-widget-menu-switch" aria-hidden="true"></span>
+    </button>`;
+  widgetsList.querySelector('[data-widget-menu="annotations"]')?.addEventListener("click", () => {
+    applyLocalWidgetAction("annotations", "set-visible", { visible: !normalizeOverlayWidgetsState(workspace.widgets).annotations.visible });
+  });
+  widgetsList.querySelector('[data-widget-menu="timer"]')?.addEventListener("click", () => {
+    applyLocalWidgetAction("timer", "set-visible", { visible: !normalizeOverlayWidgetsState(workspace.widgets).timer.visible });
+  });
+}
+
+function renderWidgets(){
+  renderWidgetsMenu();
+  timerOverlayProjector.render();
+}
+
 function setPageDrawerOpen(open){
   pageDrawerOpen = open === true;
   if (pageDrawer) pageDrawer.hidden = !pageDrawerOpen;
@@ -134,6 +216,7 @@ function setAppCatalogOpen(open){
   if (appCatalog) appCatalog.hidden = !appCatalogOpen;
   if (!appCatalogOpen) return;
   setPageDrawerOpen(false);
+  setWidgetsDrawerOpen(false);
   setAppControlsOpen(false);
   renderAppCatalog();
 }
@@ -175,6 +258,7 @@ function setProjectionChromeVisible(visible){
 
   if (!projectionChromeVisible) {
     setPageDrawerOpen(false);
+    setWidgetsDrawerOpen(false);
     setAppControlsOpen(false);
     setAppCatalogOpen(false);
 
@@ -275,19 +359,36 @@ function renderActiveApp(){
 function renderSurface(){
   const page = activePage();
   const surface = normalizeSurfaceState(page?.surface);
+  const annotationsVisible = normalizeOverlayWidgetsState(workspace.widgets).annotations.visible === true;
   backgroundProjector.render(resolveSurfaceBackground(surface, workspace.sharedBackground));
-  if (annotationToolbar) annotationToolbar.hidden = !page;
-  annotationProjector.render(surface.annotations);
+  if (annotationToolbar) annotationToolbar.hidden = !page || !annotationsVisible;
+  annotationProjector.render({
+    ...surface.annotations,
+    enabled: Boolean(page && annotationsVisible && surface.annotations?.enabled === true)
+  });
 }
 
 function render(){
   renderNavigation();
   renderSurface();
   renderActiveApp();
+  renderWidgets();
 }
 
 function handleWorkspaceState(next){
-  workspace = normalizeWorkspace(clonePlain(next));
+  const incoming = normalizeWorkspace(clonePlain(next));
+
+  // Les widgets flottants sont globaux au Tableau et pilotés depuis la popup.
+  // Le premier workspace reçu sert à les initialiser. Ensuite, un rerendu d'une
+  // mini-app (zoom PDF/Image, changement de page, etc.) ne doit jamais pouvoir
+  // réinjecter un snapshot global plus ancien et masquer les widgets.
+  if (workspaceBootstrapped) {
+    incoming.widgets = normalizeOverlayWidgetsState(workspace.widgets);
+  } else {
+    workspaceBootstrapped = true;
+  }
+
+  workspace = incoming;
   const page = activePage();
   if (!page || !getTeacherTool(page.toolId)) setAppControlsOpen(false);
   render();
@@ -297,7 +398,8 @@ channel = createTeacherToolsChannel({
   teacherSpaceId,
   channelId,
   onMessage(message){
-    if (message?.type === "workspace-state") handleWorkspaceState(message.workspace);
+    if (message?.type === "workspace-state") { handleWorkspaceState(message.workspace); return; }
+    if (message?.type === "close-projector") window.close();
   }
 });
 
@@ -306,24 +408,27 @@ btnLaunch?.addEventListener("click", async () => {
   if (launchOverlay) launchOverlay.hidden = true;
 });
 btnChromeToggle?.addEventListener("click", () => setProjectionChromeVisible(!projectionChromeVisible));
-btnPageMenu?.addEventListener("click", () => { setPageDrawerOpen(!pageDrawerOpen); setAppControlsOpen(false); });
+btnPageMenu?.addEventListener("click", () => { setPageDrawerOpen(!pageDrawerOpen); setWidgetsDrawerOpen(false); setAppControlsOpen(false); });
+btnWidgets?.addEventListener("click", () => { setWidgetsDrawerOpen(!widgetsDrawerOpen); setPageDrawerOpen(false); setAppControlsOpen(false); });
+btnWidgetsClose?.addEventListener("click", () => setWidgetsDrawerOpen(false));
 btnPageDrawerClose?.addEventListener("click", () => setPageDrawerOpen(false));
 btnPageAdd?.addEventListener("click", () => setAppCatalogOpen(true));
 btnAppCatalogClose?.addEventListener("click", () => setAppCatalogOpen(false));
 appCatalog?.addEventListener("click", (event) => { if (event.target === appCatalog) setAppCatalogOpen(false); });
 btnPageFullscreen?.addEventListener("click", toggleFullscreen);
 btnPageClose?.addEventListener("click", () => window.close());
-btnAppControls?.addEventListener("click", () => { setAppControlsOpen(!appControlsOpen); setPageDrawerOpen(false); });
+btnAppControls?.addEventListener("click", () => { setAppControlsOpen(!appControlsOpen); setPageDrawerOpen(false); setWidgetsDrawerOpen(false); });
 btnAppControlsClose?.addEventListener("click", () => setAppControlsOpen(false));
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (appCatalogOpen) { setAppCatalogOpen(false); event.preventDefault(); return; }
     if (pageDrawerOpen) { setPageDrawerOpen(false); event.preventDefault(); return; }
+    if (widgetsDrawerOpen) { setWidgetsDrawerOpen(false); event.preventDefault(); return; }
     if (appControlsOpen) { setAppControlsOpen(false); event.preventDefault(); }
   }
 });
-window.addEventListener("beforeunload", () => send("projector-closed"));
+window.addEventListener("beforeunload", () => { timerOverlayProjector.destroy(); send("projector-closed"); });
 
 if (!channel) {
   appHost.innerHTML = `<div class="ttp-empty-workspace is-error"><strong>Projection indisponible</strong><span>Le canal de communication n’a pas pu être ouvert.</span></div>`;

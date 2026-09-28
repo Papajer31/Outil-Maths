@@ -2088,44 +2088,65 @@ function buildVerifiedAnswerHint(candidate, expected){
 }
 
 function getQuizHistorySnapshot(state, stage = "question"){
+  const safeStage = String(stage || "question").toLowerCase();
+  const question = state.currentQuestion || {};
   const currentValue = state.answerRevealed
     ? String(state.submittedAnswer || "")
     : String(state.submittedAnswer || getCurrentResponseValue(state) || "");
   const maskedTextMetrics = getMaskedTextMetricsSnapshot(state);
   const audioMetrics = getAudioMetricsSnapshot(state);
-  const snapshot = {
-    responseType:String(state.currentQuestion?.responseType || ""),
-    questionId:String(state.currentQuestion?.id || ""),
+  const visibleText = normalizeQuizHistoryText(state.canvasEl?.innerText || state.canvasEl?.textContent || "");
+  const base = {
+    schemaVersion:2,
+    responseType:String(question?.responseType || ""),
+    questionId:String(question?.id || ""),
     validationMode:isAutoValidationQuestion(state) ? "auto" : "manual",
-    comparisonMode:isAutoValidationQuestion(state) ? "verified" : "standard",
-    hintsEnabled:isAutoValidationQuestion(state),
     attemptCount:Math.max(0, Number(state.attemptCount) || 0),
     hintCount:Math.max(0, Number(state.hintCount) || 0),
     timedOut:state.autoTimedOut === true,
-    autoCompleted:state.autoCompletionPending === true,
-    submittedAnswer:currentValue,
-    ...(maskedTextMetrics.totalCount > 0 || maskedTextMetrics.widgets.length ? {
-      maskedTextViewCount:maskedTextMetrics.totalCount,
-      maskedTextVisibleDurationMs:maskedTextMetrics.totalDurationMs,
-      maskedTextViews:maskedTextMetrics.widgets
-    } : {}),
-    ...(audioMetrics.totalCount > 0 || audioMetrics.widgets.length ? {
-      audioPlayCount:audioMetrics.totalCount,
-      audioPlays:audioMetrics.widgets
-    } : {}),
-    ...(isDoneQuestion(state) ? {
-      completionType:"done",
-      completed:state.doneCompleted === true,
-      completionTimedOut:state.doneTimedOut === true
-    } : isPresentationQuestion(state) ? {
-      completionType:"presentation"
-    } : {})
+    ...(maskedTextMetrics.totalCount > 0 ? { maskedTextViewCount:maskedTextMetrics.totalCount, maskedTextVisibleDurationMs:maskedTextMetrics.totalDurationMs } : {}),
+    ...(audioMetrics.totalCount > 0 ? { audioPlayCount:audioMetrics.totalCount } : {})
   };
-  if (String(stage || "").toLowerCase() === "correction") {
-    snapshot.expectedAnswer = String(state.currentQuestion?.expectedAnswer || "");
+
+  if (safeStage === "question") return { ...base, kind:"quiz-question", prompt:visibleText };
+
+  if (safeStage === "answer") {
+    return { ...base, kind:"quiz-answer", value:currentValue, values:getQuizSelectedHistoryValues(state) };
   }
-  if (state.currentHint) snapshot.lastHint = state.currentHint;
-  return snapshot;
+
+  return {
+    ...base,
+    kind:"quiz-correction",
+    value:String(question?.expectedAnswer || ""),
+    values:getQuizExpectedHistoryValues(state)
+  };
+}
+
+function normalizeQuizHistoryText(value){
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 2200);
+}
+
+function getQuizSelectedHistoryValues(state){
+  const domValues = Array.from(state.canvasEl?.querySelectorAll?.(".is-selected, [aria-selected='true'], [aria-pressed='true']") || [])
+    .map((el) => normalizeQuizHistoryText(el?.innerText || el?.textContent || ""))
+    .filter(Boolean);
+  if (domValues.length) return [...new Set(domValues)];
+  if (state.selectedChoiceId) return [String(state.selectedChoiceId)];
+  if (Array.isArray(state.submittedTokenIndexes) && state.submittedTokenIndexes.length) return state.submittedTokenIndexes.map(String);
+  if (state.submittedCategoryAssignments instanceof Map && state.submittedCategoryAssignments.size) {
+    return Array.from(state.submittedCategoryAssignments.entries()).map(([key, value]) => `${key} → ${value}`);
+  }
+  return [];
+}
+
+function getQuizExpectedHistoryValues(state){
+  const domValues = Array.from(state.canvasEl?.querySelectorAll?.(".is-correct") || [])
+    .map((el) => normalizeQuizHistoryText(el?.innerText || el?.textContent || ""))
+    .filter(Boolean);
+  if (domValues.length) return [...new Set(domValues)];
+  const q = state.currentQuestion || {};
+  const raw = q.correctChoiceIds || q.correctChoices || q.expectedChoiceIds || q.expectedAnswers || [];
+  return Array.isArray(raw) ? raw.map((value) => String(value)) : [];
 }
 
 function getMaskedTextMetricsSnapshot(state){

@@ -107,6 +107,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getReperageOccurrencesHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -360,6 +364,33 @@ function teardownState(state, container) {
   state.studentSelectionSnapshot = null;
   state.lastEvaluation = null;
   state.phaseMode = "idle";
+}
+
+function getReperageOccurrencesHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) {
+    return { schemaVersion:2, kind:"occurrence-selection", prompt:"", items:[] };
+  }
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const studentSelection = getStudentSelection(state);
+  const selectedIds = safeStage === "question" ? [] : [...studentSelection];
+  const expectedIds = Array.isArray(question.expectedIds) ? [...question.expectedIds] : [];
+
+  return {
+    schemaVersion:2,
+    kind:"occurrence-selection",
+    prompt:String(question.prompt || ""),
+    target:String(question.target || ""),
+    writingMode:String(question.writingMode || "script"),
+    items:(Array.isArray(question.items) ? question.items : []).map((item) => ({
+      id:String(item?.id || ""),
+      text:String(item?.text || ""),
+      expected:item?.isTarget === true
+    })),
+    selectedIds,
+    expectedIds:safeStage === "correction" ? expectedIds : []
+  };
 }
 
 function injectActivityStyles() {

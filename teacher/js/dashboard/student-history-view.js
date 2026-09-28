@@ -65,7 +65,7 @@ function getQuestionOutcomeMeta(question) {
   const outcome = String(question?.outcome || "unanswered").trim().toLowerCase();
   if (outcome === "correct") return { label: "Réussie", className: "is-correct", icon: "check_circle" };
   if (outcome === "incorrect") return { label: "Erreur", className: "is-incorrect", icon: "cancel" };
-  return { label: "Sans réponse", className: "is-unanswered", icon: "remove_circle_outline" };
+  return { label: "Sans réponse", className: "is-unanswered", icon: "remove_circle" };
 }
 
 function normalizeSnapshotText(value, maxLength = 1800) {
@@ -123,21 +123,55 @@ function getSnapshotChoiceSummary(snapshot, stage) {
 
 function getCustomSnapshotSummary(snapshot) {
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || snapshot.source !== "tool") return [];
+
+  if (Number(snapshot.schemaVersion || snapshot.version || 0) >= 2) {
+    const lines = [];
+    const prompt = normalizeSnapshotText(snapshot.prompt, 1500);
+    const meta = normalizeSnapshotText(snapshot.meta, 300);
+    const value = normalizeSnapshotText(snapshot.value, 1200);
+    if (prompt) lines.push(prompt);
+    if (meta) lines.push(meta);
+    if (value) lines.push(value);
+    if (Array.isArray(snapshot.facts)) {
+      snapshot.facts.forEach((fact) => {
+        const label = normalizeSnapshotText(fact?.label, 240);
+        const factValue = normalizeSnapshotText(fact?.value, 700);
+        if (factValue) lines.push(label ? `${label} : ${factValue}` : factValue);
+      });
+    }
+    if (Array.isArray(snapshot.values)) {
+      snapshot.values.forEach((item) => {
+        const text = normalizeSnapshotText(item, 700);
+        if (text) lines.push(text);
+      });
+    }
+    if (lines.length) return uniqueStrings(lines);
+  }
+
   const ignored = new Set([
-    "version", "source", "stage", "text", "fields", "choices", "media", "canvases", "truncated", "originalLength", "topLevelKeys"
+    "version", "schemaVersion", "source", "stage", "kind", "text", "fields", "choices", "media", "canvases", "truncated", "originalLength", "topLevelKeys"
   ]);
   const lines = [];
   for (const [key, value] of Object.entries(snapshot)) {
     if (ignored.has(key) || value == null) continue;
     if (["string", "number", "boolean"].includes(typeof value)) {
       const text = normalizeSnapshotText(value, 500);
-      if (text) lines.push(`${key} : ${text}`);
+      if (text) lines.push(`${humanizeHistoryKey(key)} : ${text}`);
     } else if (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) {
       const text = normalizeSnapshotText(value.join(" · "), 700);
-      if (text) lines.push(`${key} : ${text}`);
+      if (text) lines.push(`${humanizeHistoryKey(key)} : ${text}`);
     }
   }
   return uniqueStrings(lines);
+}
+
+function humanizeHistoryKey(key) {
+  const labels = {
+    responseType:"Type de réponse", attemptCount:"Essais", hintCount:"Indices", timedOut:"Temps écoulé",
+    audioPlayCount:"Écoutes audio", maskedTextViewCount:"Affichages du texte masqué",
+    maskedTextVisibleDurationMs:"Durée d’affichage du texte masqué"
+  };
+  return labels[key] || String(key || "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 }
 
 function getSnapshotMediaSummary(snapshot) {
@@ -178,22 +212,149 @@ function getSnapshotStageSummary(snapshot, stage) {
   return [];
 }
 
-function renderSnapshotBlock(title, snapshot, stage, emptyText) {
-  const lines = getSnapshotStageSummary(snapshot, stage);
+function renderOccurrenceSelectionSnapshot(snapshot, stage) {
+  const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  if (!items.length) return "";
+
+  const selectedIds = new Set((Array.isArray(snapshot?.selectedIds) ? snapshot.selectedIds : []).map(String));
+  const expectedIds = new Set((Array.isArray(snapshot?.expectedIds) ? snapshot.expectedIds : []).map(String));
+  const prompt = normalizeSnapshotText(snapshot?.prompt, 600);
+  const target = normalizeSnapshotText(snapshot?.target, 120);
+
+  const tokens = items.map((item) => {
+    const id = String(item?.id || "");
+    const selected = selectedIds.has(id);
+    const expected = stage === "correction" ? (expectedIds.has(id) || item?.expected === true) : item?.expected === true;
+    const classes = ["dashboard-history-occurrence-token"];
+
+    if (stage === "answer") {
+      if (selected) classes.push("is-selected");
+      else classes.push("is-muted");
+    } else if (stage === "correction") {
+      if (expected && selected) classes.push("is-correct");
+      else if (expected) classes.push("is-missed");
+      else if (selected) classes.push("is-incorrect");
+      else classes.push("is-muted");
+    }
+
+    return `<span class="${classes.join(" ")}">${escapeHtml(item?.text || "")}</span>`;
+  }).join("");
+
+  let intro = "";
+  if (stage === "question") {
+    intro = prompt ? `<div class="dashboard-history-occurrence-prompt">${escapeHtml(prompt)}</div>` : "";
+  } else if (stage === "answer") {
+    intro = `<div class="dashboard-history-occurrence-summary">${selectedIds.size} sélection${selectedIds.size > 1 ? "s" : ""}</div>`;
+  } else if (stage === "correction") {
+    intro = target ? `<div class="dashboard-history-occurrence-summary">Occurrences attendues de « ${escapeHtml(target)} »</div>` : "";
+  }
+
+  const legend = stage === "correction" ? `
+    <div class="dashboard-history-occurrence-legend">
+      <span><i class="is-correct"></i>Correcte</span>
+      <span><i class="is-missed"></i>Oubliée</span>
+      <span><i class="is-incorrect"></i>Incorrecte</span>
+    </div>
+  ` : "";
+
+  return `${intro}<div class="dashboard-history-occurrence-sequence">${tokens}</div>${legend}`;
+}
+
+function renderNumberWordsSnapshot(snapshot, stage, outcome) {
+  const value = normalizeSnapshotText(snapshot?.value, 1200);
+  const prompt = normalizeSnapshotText(snapshot?.prompt, 700);
+  const directionLabel = normalizeSnapshotText(snapshot?.directionLabel, 120);
+  const valueLabel = normalizeSnapshotText(snapshot?.valueLabel, 160);
+  const outcomeName = String(outcome?.className || "");
+
+  if (stage === "question") {
+    return `
+      ${prompt ? `<div class="dashboard-history-visual-prompt">${escapeHtml(prompt)}</div>` : ""}
+      <div class="dashboard-history-visual-toolbar">
+        ${directionLabel ? `<span class="dashboard-history-visual-badge">${escapeHtml(directionLabel)}</span>` : ""}
+      </div>
+      <div class="dashboard-history-value-card is-source">
+        ${valueLabel ? `<div class="dashboard-history-value-card-label">${escapeHtml(valueLabel)}</div>` : ""}
+        <div class="dashboard-history-value-card-value">${escapeHtml(value || "—")}</div>
+      </div>
+    `;
+  }
+
+  let statusClass = "is-student";
+  let statusIcon = "";
+  let statusText = "";
+  if (stage === "correction") {
+    statusClass = "is-expected";
+    statusIcon = "check_circle";
+    statusText = "Attendu";
+  } else if (outcomeName === "is-correct") {
+    statusClass = "is-correct";
+    statusIcon = "check_circle";
+    statusText = "Correct";
+  } else if (outcomeName === "is-incorrect") {
+    statusClass = "is-incorrect";
+    statusIcon = "cancel";
+    statusText = "Réponse donnée";
+  } else {
+    statusClass = "is-unanswered";
+    statusIcon = "remove_circle";
+    statusText = "Sans réponse";
+  }
+
   return `
-    <div class="dashboard-history-snapshot dashboard-history-snapshot--${escapeAttr(stage)}">
+    <div class="dashboard-history-value-card ${statusClass}">
+      <div class="dashboard-history-value-card-head">
+        <div class="dashboard-history-value-card-label">${escapeHtml(valueLabel || statusText)}</div>
+        ${statusIcon ? `<span class="dashboard-history-value-status ${statusClass}"><span class="dashboard-material-icon" aria-hidden="true">${statusIcon}</span>${escapeHtml(statusText)}</span>` : ""}
+      </div>
+      <div class="dashboard-history-value-card-value">${escapeHtml(value || "—")}</div>
+    </div>
+  `;
+}
+
+function renderSpecialSnapshotContent(snapshot, stage, outcome) {
+  if (snapshot?.kind === "occurrence-selection") {
+    return renderOccurrenceSelectionSnapshot(snapshot, stage);
+  }
+  if (snapshot?.kind === "number-words") {
+    return renderNumberWordsSnapshot(snapshot, stage, outcome);
+  }
+  return "";
+}
+
+function renderSnapshotBlock(title, snapshot, stage, emptyText, { outcome = null } = {}) {
+  const specialContent = renderSpecialSnapshotContent(snapshot, stage, outcome);
+  const lines = specialContent ? [] : getSnapshotStageSummary(snapshot, stage);
+  return `
+    <div class="dashboard-history-snapshot dashboard-history-snapshot--${escapeAttr(stage)}${specialContent ? " dashboard-history-snapshot--special" : ""}">
       <div class="dashboard-history-snapshot-title">${escapeHtml(title)}</div>
       <div class="dashboard-history-snapshot-content">
-        ${lines.length
+        ${specialContent || (lines.length
           ? lines.map((line) => `<div class="dashboard-history-snapshot-line">${escapeHtml(line)}</div>`).join("")
-          : `<div class="dashboard-history-snapshot-empty">${escapeHtml(emptyText)}</div>`}
+          : `<div class="dashboard-history-snapshot-empty">${escapeHtml(emptyText)}</div>`)}
       </div>
     </div>
   `;
 }
 
+function getComparableSnapshotValue(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return "";
+  return normalizeSnapshotText(snapshot.value, 1600).toLocaleLowerCase("fr-FR");
+}
+
+function canFoldRedundantCorrection(question, outcome) {
+  if (outcome?.className !== "is-correct") return false;
+  const answer = question?.answer_snapshot;
+  const correction = question?.correction_snapshot;
+  if (answer?.kind !== "number-words" || correction?.kind !== "number-words") return false;
+  const answerValue = getComparableSnapshotValue(answer);
+  const correctionValue = getComparableSnapshotValue(correction);
+  return Boolean(answerValue && correctionValue && answerValue === correctionValue);
+}
+
 function renderQuestion(question, index) {
   const outcome = getQuestionOutcomeMeta(question);
+  const foldCorrection = canFoldRedundantCorrection(question, outcome);
   return `
     <article class="dashboard-history-question ${outcome.className}">
       <header class="dashboard-history-question-header">
@@ -206,10 +367,10 @@ function renderQuestion(question, index) {
           <span>${escapeHtml(formatDuration(question?.duration_ms))}</span>
         </div>
       </header>
-      <div class="dashboard-history-question-grid">
-        ${renderSnapshotBlock("Question", question?.question_snapshot, "question", "Question non enregistrée.")}
-        ${renderSnapshotBlock("Réponse de l’élève", question?.answer_snapshot, "answer", "Aucune réponse lisible dans l’instantané.")}
-        ${renderSnapshotBlock("Correction", question?.correction_snapshot, "correction", "Correction non enregistrée.")}
+      <div class="dashboard-history-question-grid${foldCorrection ? " dashboard-history-question-grid--two" : ""}">
+        ${renderSnapshotBlock("Question", question?.question_snapshot, "question", "Question non enregistrée.", { outcome })}
+        ${renderSnapshotBlock(foldCorrection ? "Réponse correcte" : "Réponse de l’élève", question?.answer_snapshot, "answer", "Aucune réponse lisible dans l’instantané.", { outcome })}
+        ${foldCorrection ? "" : renderSnapshotBlock("Correction", question?.correction_snapshot, "correction", "Correction non enregistrée.", { outcome })}
       </div>
     </article>
   `;
@@ -273,6 +434,78 @@ function renderAttemptActions(attempt) {
   `;
 }
 
+function renderActivityTypeBadge(attempt) {
+  const type = String(attempt?.activity_type || "tool").trim().toLowerCase();
+  if (type === "quiz") return '<span class="dashboard-history-activity-type">Quiz</span>';
+  if (type === "series") return '<span class="dashboard-history-activity-type">Série</span>';
+  return "";
+}
+
+function groupMissionRuns(history = []) {
+  const groups = new Map();
+  const output = [];
+  (Array.isArray(history) ? history : []).forEach((attempt) => {
+    const context = String(attempt?.context || "").toLowerCase();
+    const runId = String(attempt?.mission_run_id || "").trim();
+    if (context !== "mission" || !runId) { output.push(attempt); return; }
+    if (!groups.has(runId)) {
+      const group = {
+        _kind:"mission-run",
+        id:`mission-run:${runId}`,
+        mission_run_id:runId,
+        context:"mission",
+        started_at:attempt.started_at,
+        played_at:attempt.played_at,
+        activity_title:String(attempt?.metadata_json?.configName || "Mission"),
+        activities:[],
+        questions_count:0, correct_count:0, wrong_count:0, duration_ms:0
+      };
+      groups.set(runId, group);
+      output.push(group);
+    }
+    const group = groups.get(runId);
+    group.activities.push(attempt);
+    group.questions_count += Math.max(0, Number(attempt?.questions_count) || 0);
+    group.correct_count += Math.max(0, Number(attempt?.correct_count) || 0);
+    group.wrong_count += Math.max(0, Number(attempt?.wrong_count) || 0);
+    group.duration_ms += Math.max(0, Number(attempt?.duration_ms) || 0);
+    if (getAttemptTimestamp(attempt) < getAttemptTimestamp(group)) {
+      group.started_at = attempt.started_at;
+      group.played_at = attempt.played_at;
+    }
+  });
+  return output;
+}
+
+function renderMissionRun(group, expandedAttemptIds) {
+  const id = String(group?.id || "");
+  const expanded = expandedAttemptIds.has(id);
+  const total = Math.max(0, Number(group?.questions_count) || 0);
+  const correct = Math.max(0, Number(group?.correct_count) || 0);
+  const activities = Array.isArray(group?.activities) ? group.activities : [];
+  return `
+    <article class="dashboard-history-attempt dashboard-history-mission-run ${expanded ? "is-expanded" : ""}" data-history-attempt-id="${escapeAttr(id)}">
+      <div class="dashboard-history-attempt-row">
+        <button class="dashboard-history-attempt-main" type="button" data-history-toggle-attempt="${escapeAttr(id)}" aria-expanded="${expanded ? "true" : "false"}">
+          <div class="dashboard-history-attempt-copy">
+            <div class="dashboard-history-attempt-topline">
+              <span class="dashboard-history-attempt-date">${escapeHtml(formatAttemptDate(group))}</span>
+              <span class="dashboard-history-mode dashboard-history-mode--mission">Mission</span>
+            </div>
+            <div class="dashboard-history-attempt-title">${escapeHtml(group?.activity_title || "Mission")}</div>
+            <div class="dashboard-history-attempt-path">${activities.length} activité${activities.length > 1 ? "s" : ""}</div>
+          </div>
+          <div class="dashboard-history-attempt-summary">
+            <span class="dashboard-history-score">${total ? `${correct}/${total}` : "—"}</span>
+            <span class="dashboard-history-duration">${escapeHtml(formatDuration(group?.duration_ms))}</span>
+            <span class="dashboard-material-icon dashboard-history-chevron" aria-hidden="true">expand_more</span>
+          </div>
+        </button>
+      </div>
+      ${expanded ? `<div class="dashboard-history-attempt-details dashboard-history-mission-activities">${activities.map((attempt) => renderAttempt(attempt, expandedAttemptIds)).join("")}</div>` : ""}
+    </article>`;
+}
+
 function renderAttempt(attempt, expandedAttemptIds) {
   const id = String(attempt?.id || "");
   const questions = Array.isArray(attempt?.questions) ? attempt.questions : [];
@@ -299,7 +532,7 @@ function renderAttempt(attempt, expandedAttemptIds) {
               ${String(attempt?.status || "completed") !== "completed" ? `<span class="dashboard-history-status">${escapeHtml(getAttemptStatusLabel(attempt?.status))}</span>` : ""}
               ${effectsReset ? `<span class="dashboard-history-reset-status">Effets réinitialisés</span>` : ""}
             </div>
-            <div class="dashboard-history-attempt-title">${escapeHtml(attempt?.activity_title || "Activité")}</div>
+            <div class="dashboard-history-attempt-title">${escapeHtml(attempt?.activity_title || "Activité")}${renderActivityTypeBadge(attempt)}</div>
             ${breadcrumb ? `<div class="dashboard-history-attempt-path">${escapeHtml(breadcrumb)}</div>` : ""}
           </div>
           <div class="dashboard-history-attempt-summary">
@@ -350,9 +583,10 @@ function renderHistoryList(host, history, filters, expandedAttemptIds, onAttempt
   if (!list || !count) return;
 
   const filtered = getFilteredAttempts(history, filters);
-  count.textContent = `${filtered.length} tentative${filtered.length > 1 ? "s" : ""}`;
+  const displayEntries = groupMissionRuns(filtered);
+  count.textContent = `${displayEntries.length} tentative${displayEntries.length > 1 ? "s" : ""}`;
 
-  if (!filtered.length) {
+  if (!displayEntries.length) {
     list.innerHTML = `
       <div class="dashboard-history-empty">
         <span class="dashboard-material-icon" aria-hidden="true">history</span>
@@ -363,7 +597,9 @@ function renderHistoryList(host, history, filters, expandedAttemptIds, onAttempt
     return;
   }
 
-  list.innerHTML = filtered.map((attempt) => renderAttempt(attempt, expandedAttemptIds)).join("");
+  list.innerHTML = displayEntries.map((entry) => entry?._kind === "mission-run"
+    ? renderMissionRun(entry, expandedAttemptIds)
+    : renderAttempt(entry, expandedAttemptIds)).join("");
   list.querySelectorAll("[data-history-toggle-attempt]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = String(button.dataset.historyToggleAttempt || "");
@@ -534,7 +770,7 @@ export async function mountStudentHistoryView({
 
     if (action === "reset") {
       const message = isMission
-        ? `La progression de « ${activityTitle} » sera annulée à partir de cette étape : cette étape et toutes les suivantes redeviendront à faire pour l’élève. Les tentatives resteront visibles dans l’historique avec la mention « Effets réinitialisés ». `
+        ? `La Mission contenant « ${activityTitle} » redeviendra à faire pour l’élève. Les tentatives de ce passage resteront visibles dans l’historique avec la mention « Effets réinitialisés ». `
         : `Les effets de « ${activityTitle} » sur Exploration seront annulés. Les statistiques et le niveau adaptatif de cette activité seront recalculés à partir des autres tentatives. La trace restera visible dans l’historique.`;
       const confirmed = await openDashboardConfirmDialog({
         title: "Réinitialiser les effets ?",
@@ -550,7 +786,7 @@ export async function mountStudentHistoryView({
         await reloadHistory();
         rerender();
         showToast?.(isMission
-          ? "Progression Mission réinitialisée à partir de cette étape."
+          ? "Mission réinitialisée pour l’élève."
           : "Effets de la tentative réinitialisés et progression recalculée.");
       } catch (error) {
         console.error("Réinitialisation des effets impossible.", error);
@@ -561,7 +797,7 @@ export async function mountStudentHistoryView({
 
     if (action === "delete-total") {
       const message = isMission
-        ? `La tentative « ${activityTitle} » sera supprimée définitivement. Cette étape et toutes les suivantes redeviendront à faire, et leurs effets adaptatifs seront annulés. Cette action est irréversible.`
+        ? `Le passage de Mission contenant « ${activityTitle} » sera supprimé définitivement de l’historique et la Mission redeviendra à faire. Cette action est irréversible.`
         : `La tentative « ${activityTitle} » sera supprimée définitivement et tous ses effets sur Exploration seront annulés. La progression de cette activité sera recalculée à partir des autres tentatives. Cette action est irréversible.`;
       const confirmed = await openDashboardConfirmDialog({
         title: "Supprimer totalement cette tentative ?",

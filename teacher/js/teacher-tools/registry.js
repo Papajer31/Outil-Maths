@@ -1,4 +1,5 @@
 import { imageTeacherTool } from "./apps/image/tool.js";
+import { multiImagesTeacherTool } from "./apps/multi-images/tool.js";
 import { pdfTeacherTool } from "./apps/pdf/tool.js";
 import { randomStudentTeacherTool } from "./apps/random-student/tool.js";
 import { seyesTeacherTool } from "./apps/seyes/tool.js";
@@ -8,6 +9,7 @@ import { seyesTeacherTool } from "./apps/seyes/tool.js";
 // reconstruction sur le contrat commun (page + surface).
 export const TEACHER_TOOLS = Object.freeze([
   imageTeacherTool,
+  multiImagesTeacherTool,
   pdfTeacherTool,
   randomStudentTeacherTool,
   seyesTeacherTool

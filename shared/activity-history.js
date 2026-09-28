@@ -52,7 +52,8 @@ export function captureActivityHistorySnapshot({ runtime = null, container = nul
       const customSnapshot = runtime.getHistorySnapshot(safeStage, container, context);
       if (customSnapshot && typeof customSnapshot === "object" && !Array.isArray(customSnapshot)) {
         return normalizeSnapshot({
-          version: 1,
+          version: 2,
+          schemaVersion: 2,
           source: "tool",
           stage: safeStage,
           ...customSnapshot
@@ -64,6 +65,42 @@ export function captureActivityHistorySnapshot({ runtime = null, container = nul
   }
 
   return captureDomFallbackSnapshot(container, safeStage);
+}
+
+export function captureSemanticDomHistorySnapshot(container = null, stage = "question") {
+  const safeStage = String(stage || "question").trim().toLowerCase() || "question";
+  const snapshot = captureDomFallbackSnapshot(container, safeStage);
+  const fields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+  const choices = Array.isArray(snapshot.choices) ? snapshot.choices : [];
+  const values = [];
+  if (safeStage === "answer") {
+    fields.forEach((field) => {
+      const value = cleanShortText(field?.value || "", 1200);
+      if (value) values.push(value);
+    });
+    choices.filter((choice) => choiceLooksActiveForSemantic(choice, false)).forEach((choice) => {
+      const value = cleanShortText(choice?.text || choice?.ariaLabel || "", 1200);
+      if (value) values.push(value);
+    });
+  } else if (safeStage === "correction") {
+    choices.filter((choice) => choiceLooksActiveForSemantic(choice, true)).forEach((choice) => {
+      const value = cleanShortText(choice?.text || choice?.ariaLabel || "", 1200);
+      if (value) values.push(value);
+    });
+  }
+  return {
+    ...snapshot,
+    schemaVersion:2,
+    kind:"generic",
+    prompt:safeStage === "question" ? normalizeVisibleText(snapshot.text || "") : "",
+    values:[...new Set(values)]
+  };
+}
+
+function choiceLooksActiveForSemantic(choice, correction = false) {
+  if (choice?.pressed === true || choice?.selected === true || choice?.checked === true) return true;
+  const classes = Array.isArray(choice?.classes) ? choice.classes.join(" ").toLowerCase() : "";
+  return correction ? /correct/.test(classes) : /selected|active|answer|response/.test(classes) && !/incorrect/.test(classes);
 }
 
 export function normalizeHistoryJson(value, fallback = {}) {
@@ -91,7 +128,8 @@ function captureDomFallbackSnapshot(container, stage) {
   const root = typeof Element !== "undefined" && container instanceof Element ? container : null;
   if (!root) {
     return {
-      version: 1,
+      version: 2,
+      schemaVersion: 2,
       source: "dom-fallback",
       stage,
       text: "",
@@ -103,7 +141,8 @@ function captureDomFallbackSnapshot(container, stage) {
   }
 
   return normalizeSnapshot({
-    version: 1,
+    version: 2,
+    schemaVersion: 2,
     source: "dom-fallback",
     stage,
     text: normalizeVisibleText(root.innerText || root.textContent || ""),

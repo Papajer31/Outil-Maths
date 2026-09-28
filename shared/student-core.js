@@ -121,6 +121,76 @@ export function createSessionEngine({
     onStateChange?.(getUiState());
   }
 
+  function invokeRuntimeNextWithRandomTape(runtime, container, ctx, replayTape = null) {
+    const originalRandom = Math.random;
+    const replay = Array.isArray(replayTape) ? replayTape.map(Number).filter(Number.isFinite) : [];
+    const tape = [];
+    let replayIndex = 0;
+    let restored = false;
+    const restoreRandom = () => {
+      if (restored) return;
+      restored = true;
+      Math.random = originalRandom;
+    };
+    Math.random = () => {
+      const value = replayIndex < replay.length ? replay[replayIndex++] : originalRandom();
+      tape.push(value);
+      return value;
+    };
+    try {
+      const rawResult = runtime?.next?.(container, ctx);
+      if (rawResult && typeof rawResult.then === "function") {
+        return {
+          result: Promise.resolve(rawResult).finally(restoreRandom),
+          tape
+        };
+      }
+      restoreRandom();
+      return { result: rawResult, tape };
+    } catch (error) {
+      restoreRandom();
+      throw error;
+    }
+  }
+
+  function getResumeCheckpoint() {
+    if (!isSessionRunning || currentToolIndex < 0 || !session[currentToolIndex]) return null;
+    const item = session[currentToolIndex];
+    const snap = paused && pausedPhase ? pausedPhase : captureCurrentPhase();
+    return {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      toolIndex: currentToolIndex,
+      questionIndex: Math.max(0, currentQuestionIndex),
+      phaseKind: String(snap?.kind || phase?.kind || "QUESTION"),
+      remainingMs: Number.isFinite(snap?.remainingMs) ? Math.max(0, Math.round(snap.remainingMs)) : null,
+      questionRandomTape: Array.isArray(item.currentQuestionRandomTape) ? [...item.currentQuestionRandomTape] : [],
+      activityElapsedMs: Math.max(0, Math.round(getActivityElapsedMs())),
+      toolElapsedMs: Math.max(0, Math.round(getToolElapsedMs())),
+      items: session.map((entry) => ({
+        instanceId: String(entry.instanceId || ""),
+        catalogCurrentLevel: normalizeCatalogDifficultyLevel(entry.catalogCurrentLevel ?? entry.catalogStartedLevel ?? 3),
+        progressSessionStats: cloneData(entry.progressSessionStats || { questions:0, correct:0 }),
+        evaluationCounter: cloneData(entry.evaluationCounter || { attempted:0, correct:0 }),
+        evaluationGauge: cloneData(entry.evaluationGauge),
+        lastQuestionOutcome: String(entry.lastQuestionOutcome || "pending")
+      }))
+    };
+  }
+
+  function applyResumeItemStates(checkpoint = {}) {
+    const states = Array.isArray(checkpoint?.items) ? checkpoint.items : [];
+    states.forEach((state, index) => {
+      const entry = session[index];
+      if (!entry || !state) return;
+      entry.catalogCurrentLevel = normalizeCatalogDifficultyLevel(state.catalogCurrentLevel ?? entry.catalogCurrentLevel ?? 3);
+      if (state.progressSessionStats && typeof state.progressSessionStats === "object") entry.progressSessionStats = cloneData(state.progressSessionStats);
+      if (state.evaluationCounter && typeof state.evaluationCounter === "object") entry.evaluationCounter = cloneData(state.evaluationCounter);
+      if (state.evaluationGauge && typeof state.evaluationGauge === "object") entry.evaluationGauge = cloneData(state.evaluationGauge);
+      entry.lastQuestionOutcome = String(state.lastQuestionOutcome || entry.lastQuestionOutcome || "pending");
+    });
+  }
+
   function wait(ms = 0) {
     return new Promise((resolve) => {
       window.setTimeout(resolve, Math.max(0, Math.floor(Number(ms) || 0)));
@@ -428,6 +498,7 @@ export function createSessionEngine({
     isPaused,
     stop,
     getSessionMeta,
+    getResumeCheckpoint,
     getGroupScores,
     setSelectedStudent,
     setSelectedStudents
@@ -1082,7 +1153,7 @@ export function createSessionEngine({
     return attemptFinalizePromise;
   }
 
-  async function startSession() {
+  async function startSession({ resumeCheckpoint = null } = {}) {
     sessionFinishedNotified = false;
     if (sessionBlockingMessage) {
       onFatalError?.(sessionBlockingMessage);
@@ -1111,7 +1182,20 @@ export function createSessionEngine({
     emitStateChange();
 
     try {
-      await nextTool(true);
+      const checkpoint = resumeCheckpoint && typeof resumeCheckpoint === "object" ? resumeCheckpoint : null;
+      const resumeToolIndex = checkpoint ? Math.trunc(Number(checkpoint.toolIndex)) : -1;
+      if (checkpoint && resumeToolIndex >= 0 && resumeToolIndex < session.length) {
+        applyResumeItemStates(checkpoint);
+        currentToolIndex = resumeToolIndex;
+        currentQuestionIndex = Math.max(0, Math.trunc(Number(checkpoint.questionIndex) || 0));
+        activityClockElapsedBeforePauseMs = Math.max(0, Number(checkpoint.activityElapsedMs) || 0);
+        activityClockStartedAt = performance.now();
+        activityClockPaused = false;
+        await beginTool(session[currentToolIndex], { resumeCheckpoint:checkpoint });
+        emitStateChange();
+      } else {
+        await nextTool(true);
+      }
     } catch (err) {
       onFatalError?.(err?.message || "Erreur pendant la séance.");
     }
@@ -1175,7 +1259,7 @@ export function createSessionEngine({
     els.workArea.classList.toggle("session-workarea-stretch", layout === "stretch");
   }
 
-  async function beginTool(item) {
+  async function beginTool(item, { resumeCheckpoint = null } = {}) {
     stopAllTimers();
     stopToolMaxTimeTicker();
     toolMaxTimeAdvancePending = false;
@@ -1196,6 +1280,15 @@ export function createSessionEngine({
 
     refreshComputedSessionValuesWithTool(item, activeTool);
     startToolClock();
+    if (resumeCheckpoint) {
+      const savedToolElapsedMs = Math.max(0, Number(resumeCheckpoint.toolElapsedMs) || 0);
+      const timedExecution = String(item?.executionLimit?.mode || "") === "time";
+      toolClockElapsedBeforePauseMs = timedExecution
+        ? Math.max(0, savedToolElapsedMs - 20000)
+        : savedToolElapsedMs;
+      toolClockStartedAt = performance.now();
+      toolClockPaused = false;
+    }
     if (item.historyFinalized === true) {
       resetActivityAttemptState(item);
     }
@@ -1222,6 +1315,22 @@ export function createSessionEngine({
     await activeRuntime.mount(els.workArea, ctx);
     startActivityAttempt(item);
     startToolMaxTimeTicker();
+
+    if (resumeCheckpoint) {
+      const savedPhaseKind = String(resumeCheckpoint.phaseKind || "QUESTION").trim().toUpperCase();
+      item.resumeReplayRandomTape = ["QUESTION", "ANSWER"].includes(savedPhaseKind) && Array.isArray(resumeCheckpoint.questionRandomTape)
+        ? [...resumeCheckpoint.questionRandomTape]
+        : [];
+      const baseDuration = item.infiniteTimePerQ ? Number.POSITIVE_INFINITY : item.timePerQ * 1000;
+      const savedRemaining = Number(resumeCheckpoint.remainingMs);
+      const resumeDuration = savedPhaseKind === "TRANSITION"
+        ? baseDuration
+        : Number.isFinite(baseDuration) && Number.isFinite(savedRemaining)
+          ? Math.min(baseDuration, Math.max(0, savedRemaining) + 20000)
+          : baseDuration;
+      beginQuestionPhase(item, resumeDuration, { generateQuestion:true });
+      return;
+    }
 
     await nextQuestion(item, true);
   }
@@ -1415,7 +1524,15 @@ export function createSessionEngine({
       }
 
       const runtimeForQuestion = activeRuntime;
-      const maybePromise = runtimeForQuestion?.next?.(els.workArea, ctx);
+      const nextInvocation = invokeRuntimeNextWithRandomTape(
+        runtimeForQuestion,
+        els.workArea,
+        ctx,
+        item.resumeReplayRandomTape
+      );
+      item.resumeReplayRandomTape = null;
+      item.currentQuestionRandomTape = [...nextInvocation.tape];
+      const maybePromise = nextInvocation.result;
 
       if (maybePromise && typeof maybePromise.then === "function") {
         engineState = "LOADING_QUESTION";
@@ -1839,6 +1956,12 @@ export function createSessionEngine({
         catalogContext,
         missionId: String(item.mission_id || item.missionId || "").trim(),
         missionStepId: String(item.mission_step_id || item.missionStepId || "").trim(),
+        historySourceType: String(item.history_source_type || item.historySourceType || "").trim(),
+        historySourceId: String(item.history_source_id || item.historySourceId || "").trim(),
+        historyAssignmentId: String(item.history_assignment_id || item.historyAssignmentId || "").trim(),
+        historySequenceItemId: String(item.history_sequence_item_id || item.historySequenceItemId || "").trim(),
+        historyMissionRunId: String(item.history_mission_run_id || item.historyMissionRunId || "").trim(),
+        historyActivityType: String(item.history_activity_type || item.historyActivityType || "").trim(),
         autoExitSessionOnComplete: item.auto_exit_session_on_complete === true || item.autoExitSessionOnComplete === true,
         catalogLevels: item.catalog_levels && typeof item.catalog_levels === "object" && !Array.isArray(item.catalog_levels) ? cloneData(item.catalog_levels) : null,
         catalogAdaptive,
@@ -1856,7 +1979,9 @@ export function createSessionEngine({
         historyWriteQueue: Promise.resolve(),
         historyCurrentQuestion: null,
         historyStartedAt: 0,
-        historyFinalized: false
+        historyFinalized: false,
+        currentQuestionRandomTape: [],
+        resumeReplayRandomTape: null
       };
 
       const baseToolContext = {
@@ -2325,7 +2450,7 @@ export function createSessionEngine({
   function canRecordActivityHistory(item) {
     if (!item || runMode === "projected-teacher") return false;
     if (String(item.catalogContext || "").trim().toLowerCase() === "test") return false;
-    if (!String(item.catalogActivityId || "").trim()) return false;
+    if (!String(item.catalogActivityId || item.historySourceId || "").trim()) return false;
     return typeof onActivityAttemptStarted === "function";
   }
 
@@ -2336,7 +2461,8 @@ export function createSessionEngine({
     item.historyFinalized = false;
     const context = normalizeActivityHistoryContext(item.catalogContext || "exploration");
     const configSnapshot = {
-      version: 1,
+      version: 2,
+      activityType: resolveHistoryActivityType(item),
       toolId: item.id,
       toolInstanceId: item.instanceId,
       questionFlowMode: item.questionFlowMode,
@@ -2364,7 +2490,14 @@ export function createSessionEngine({
       // Cela permet de reconstruire ensuite la progression même si la
       // Mission est modifiée par l’enseignant après coup.
       catalogAdaptive: item.catalogAdaptive === true,
-      catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3)
+      catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3),
+      schemaVersion: 2,
+      sourceType: item.historySourceType || (item.catalogActivityId ? "catalog_activity" : ""),
+      sourceId: item.historySourceId || item.catalogActivityId || "",
+      activityAssignmentId: item.historyAssignmentId || "",
+      sequenceItemId: item.historySequenceItemId || "",
+      missionRunId: item.historyMissionRunId || "",
+      activityType: resolveHistoryActivityType(item)
     };
 
     item.historyAttemptPromise = Promise.resolve(onActivityAttemptStarted({
@@ -2562,6 +2695,14 @@ export function createSessionEngine({
     }
   }
 
+
+  function resolveHistoryActivityType(item) {
+    const explicit = String(item?.historyActivityType || "").trim().toLowerCase();
+    if (["tool", "quiz", "series"].includes(explicit)) return explicit;
+    if (String(item?.id || "") !== "quiz") return "tool";
+    const snapshot = item?.settings?.quizSnapshot && typeof item.settings.quizSnapshot === "object" ? item.settings.quizSnapshot : {};
+    return String(snapshot?.editorMode || "").trim() === "series" || snapshot?.seriesModelId ? "series" : "quiz";
+  }
 
   function createEvaluationGaugeState(item) {
     if (runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
@@ -3002,6 +3143,12 @@ export function createSessionEngine({
       catalogContext: item.catalogContext || "",
       missionId: item.missionId || "",
       missionStepId: item.missionStepId || "",
+      historySourceType: item.historySourceType || "",
+      historySourceId: item.historySourceId || "",
+      historyAssignmentId: item.historyAssignmentId || "",
+      historySequenceItemId: item.historySequenceItemId || "",
+      historyMissionRunId: item.historyMissionRunId || "",
+      historyActivityType: resolveHistoryActivityType(item),
       catalogAdaptive: item.catalogAdaptive === true,
       catalogStartedLevel: normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? 3),
       catalogCurrentLevel: normalizeCatalogDifficultyLevel(item.catalogCurrentLevel ?? item.catalogStartedLevel ?? 3),

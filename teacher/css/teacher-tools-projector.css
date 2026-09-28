@@ -1,8 +1,10 @@
 @import url("../../shared/color-picker.css");
 @import url("../js/teacher-tools/apps/image/image.css");
+@import url("../js/teacher-tools/apps/multi-images/multi-images.css");
 @import url("../js/teacher-tools/apps/pdf/pdf.css");
 @import url("../js/teacher-tools/apps/random-student/random-student.css");
 @import url("../js/teacher-tools/apps/seyes/seyes.css");
+@import url("../js/teacher-tools/overlay-widgets/widgets.css");
 
 @font-face{font-family:"Andika";src:url("../../shared/ui-assets/fonts/AndikaTT-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Andika";src:url("../../shared/ui-assets/fonts/AndikaTT-SemiBold.ttf") format("truetype");font-weight:600;font-style:normal;font-display:swap}
