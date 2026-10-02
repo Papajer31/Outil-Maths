@@ -22,6 +22,7 @@ import {
   sumDurationEstimates
 } from "./activity-duration.js";
 import {
+  getToolInstructionEditorSpec,
   normalizeToolContract
 } from "./tool-contract.js";
 import {
@@ -173,6 +174,7 @@ function renderCommonToolSettings(draft, context = {}) {
   ).trim();
   const toolDefaultInstructionText = String(safeTool?.defaultInstruction || "").trim();
   const defaultInstructionText = sourceInstructionText || toolDefaultInstructionText;
+  const instructionEditorSpec = getToolInstructionEditorSpec(safeTool || {}, safeDraft.settings || {});
   const passationProfile = normalizePassationProfile({
     activityMode: context?.activityMode ?? context?.activity_mode ?? context?.mode,
     responseUi: context?.responseUi ?? context?.response_ui,
@@ -282,13 +284,10 @@ function renderCommonToolSettings(draft, context = {}) {
             </div>
             ${renderCurrentInstructionHint(defaultInstructionText, toolDefaultInstructionText)}
           </div>
-          <div class="cfg-common-flow-instruction-panel" id="commonToolInstructionPanel"${instructionState.enabled && !instructionState.hidden ? "" : " hidden"}>
-            <textarea
-              class="tv-input tv-minmax-textarea cfg-common-flow-instruction-input"
-              id="commonToolInstructionText"
-              rows="2"
-              placeholder="Saisir une consigne..."
-              ${instructionState.enabled && !instructionState.hidden ? "" : "disabled"}>${escapeHtml(instructionState.text)}</textarea>
+          <div class="cfg-common-flow-instruction-panel" id="commonToolInstructionPanel" data-instruction-editor-kind="${escapeHtml(instructionEditorSpec.kind)}"${instructionState.enabled && !instructionState.hidden ? "" : " hidden"}>
+            ${renderCommonInstructionInputs(instructionEditorSpec, instructionState, {
+              enabled: instructionState.enabled && !instructionState.hidden
+            })}
           </div>
         </div>
       ` : ""}
@@ -301,6 +300,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
   const instructionHiddenToggle = container.querySelector("#commonToolInstructionHidden");
   const instructionPanel = container.querySelector("#commonToolInstructionPanel");
   const instructionInput = container.querySelector("#commonToolInstructionText");
+  const instructionInputs = [...container.querySelectorAll(".cfg-common-flow-instruction-input")];
   const instructionCurrentText = container.querySelector(".cfg-common-flow-instruction-current-text");
   const successGoalRow = container.querySelector("#commonToolSuccessGoalRow");
 
@@ -317,9 +317,9 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
       instructionPanel.hidden = !enabled;
     }
 
-    if (instructionInput) {
-      instructionInput.disabled = !enabled;
-    }
+    instructionInputs.forEach((input) => {
+      input.disabled = !enabled;
+    });
   };
 
   const applySuccessGoalState = (mode) => {
@@ -329,7 +329,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
     }
   };
 
-  if (instructionToggle || instructionHiddenToggle || instructionInput) {
+  if (instructionToggle || instructionHiddenToggle || instructionInputs.length) {
     applyInstructionState();
 
     instructionToggle?.addEventListener("change", () => {
@@ -342,7 +342,7 @@ function bindCommonToolSettings(container, { onDirty, onAnswerInfiniteActivated,
       onDirty?.();
     });
 
-    instructionInput?.addEventListener("input", () => onDirty?.());
+    instructionInputs.forEach((input) => input.addEventListener("input", () => onDirty?.()));
   }
 
   bindStepperField(container, "commonToolSuccessGoalSafetyMilestones", {
@@ -483,10 +483,21 @@ function readCommonToolSettings(container, draft, context = {}) {
   const instructionToggle = container.querySelector("#commonToolInstructionEnabled");
   const instructionHiddenToggle = container.querySelector("#commonToolInstructionHidden");
   const instructionInput = container.querySelector("#commonToolInstructionText");
-  if (instructionToggle && instructionInput) {
+  const instructionVariantInputs = [...container.querySelectorAll("[data-instruction-variant-key]")];
+  if (instructionToggle && (instructionInput || instructionVariantInputs.length)) {
+    const variants = {};
+    instructionVariantInputs.forEach((input) => {
+      const key = String(input.dataset.instructionVariantKey || "").trim();
+      if (!key) return;
+      variants[key] = {
+        text:String(input.value ?? ""),
+        source:String(input.dataset.instructionVariantSource || input.placeholder || "").trim()
+      };
+    });
     nextDraft.settings = ensureCommonInstructionState(nextDraft.settings, {
       enabled: instructionToggle.checked,
-      text: String(instructionInput.value ?? ""),
+      text: instructionInput ? String(instructionInput.value ?? "") : "",
+      variants,
       hidden: instructionHiddenToggle?.checked === true
     });
   }
@@ -506,6 +517,9 @@ function getCommonInstructionState(settings) {
   return {
     enabled: instruction?.enabled === true,
     text: String(instruction?.text ?? ""),
+    variants: instruction?.variants && typeof instruction.variants === "object" && !Array.isArray(instruction.variants)
+      ? cloneData(instruction.variants)
+      : {},
     hidden: instruction?.hidden === true
   };
 }
@@ -626,6 +640,34 @@ function renderQuestionCountModeControl({
   `;
 }
 
+function renderCommonInstructionInputs(spec = {}, instructionState = {}, { enabled = false } = {}) {
+  if (spec?.kind === "variants") {
+    const activeKeys = new Set(Array.isArray(spec.activeKeys) ? spec.activeKeys : []);
+    return `<div class="cfg-common-flow-instruction-dual${activeKeys.size > 1 ? " is-split" : ""}" data-instruction-active-count="${activeKeys.size || 1}">
+      ${(spec.variants || []).map((variant) => {
+        const saved = instructionState?.variants?.[variant.key] || { text:instructionState?.text || "" };
+        const isActive = activeKeys.has(variant.key);
+        return `<div class="cfg-common-flow-instruction-variant" data-instruction-variant-wrap="${escapeHtml(variant.key)}" ${isActive ? "" : "hidden"}>
+          <textarea
+            class="tv-input tv-minmax-textarea cfg-common-flow-instruction-input"
+            rows="2"
+            data-instruction-variant-key="${escapeHtml(variant.key)}"
+            data-instruction-variant-source="${escapeHtml(variant.placeholder)}"
+            aria-label="${escapeHtml(variant.placeholder)}"
+            placeholder="${escapeHtml(variant.placeholder)}"
+            ${enabled ? "" : "disabled"}>${escapeHtml(saved.text || "")}</textarea>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+  return `<textarea
+    class="tv-input tv-minmax-textarea cfg-common-flow-instruction-input"
+    id="commonToolInstructionText"
+    rows="2"
+    placeholder="${escapeHtml(spec?.placeholder || "Saisir une consigne...")}"
+    ${enabled ? "" : "disabled"}>${escapeHtml(instructionState?.text || "")}</textarea>`;
+}
+
 function renderCurrentInstructionHint(defaultInstructionText = "", toolDefaultInstructionText = "") {
   const safeText = String(defaultInstructionText || "").trim() || "Aucune";
   const safeToolDefault = String(toolDefaultInstructionText || "").trim();
@@ -648,6 +690,9 @@ function ensureCommonInstructionState(settings, instructionState = {}) {
   safeCommon.instruction = {
     enabled: instructionState?.enabled === true,
     text: String(instructionState?.text ?? ""),
+    variants: instructionState?.variants && typeof instructionState.variants === "object" && !Array.isArray(instructionState.variants)
+      ? cloneData(instructionState.variants)
+      : {},
     hidden: instructionState?.hidden === true
   };
 

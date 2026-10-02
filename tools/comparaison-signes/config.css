@@ -1,0 +1,48 @@
+.comparaison-signes-config-root{
+  min-width:0;
+}
+
+.comparaison-signes-config-note{
+  margin-top:.65rem;
+  padding:.7rem .8rem;
+  border-radius:12px;
+  background:rgba(59,130,246,.07);
+  color:#475569;
+  font-size:.92rem;
+  line-height:1.4;
+}
+
+.comparaison-signes-max-difference-field{
+  width:auto;
+  flex:0 0 auto;
+  gap:12px;
+}
+
+.comparaison-signes-max-difference-field .tv-stepper-field-label{
+  flex:0 1 auto;
+  font-size:16px;
+  white-space:nowrap;
+}
+
+.comparaison-signes-config-root .tv-settings-stack{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+}
+
+.comparaison-signes-config-root .tv-settings-stack > :not(.comparaison-signes-representation-widget){
+  grid-column:1 / -1;
+}
+
+.comparaison-signes-representation-widget{
+  min-width:0;
+}
+
+[data-comparaison-signes-layout-widget][hidden]{
+  display:none !important;
+}
+
+@media (max-width:1050px){
+  .comparaison-signes-max-difference-field .tv-stepper-field-label{
+    white-space:normal;
+  }
+}

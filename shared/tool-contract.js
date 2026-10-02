@@ -53,6 +53,210 @@ export function normalizeToolInstruction(value, fallback = "") {
   return String(fallback ?? "").trim();
 }
 
+
+const DOUBLE_INSTRUCTION_SPECS = Object.freeze({
+  "droite-numerique-simple": Object.freeze({
+    primary: Object.freeze({ key:"numberToGraduation", placeholder:"Place ce nombre sur la droite graduée." }),
+    secondary: Object.freeze({ key:"graduationToNumber", placeholder:"Écris le nombre correspondant." })
+  }),
+  "droite-numerique-complete": Object.freeze({
+    primary: Object.freeze({ key:"numberToGraduation", placeholder:"Place ce nombre sur la droite graduée." }),
+    secondary: Object.freeze({ key:"graduationToNumber", placeholder:"Écris le nombre correspondant." })
+  }),
+  "frise-picbille": Object.freeze({
+    primary: Object.freeze({ key:"numberToGraduation", placeholder:"Place ce nombre sur la droite graduée." }),
+    secondary: Object.freeze({ key:"graduationToNumber", placeholder:"Écris le nombre correspondant." })
+  }),
+  "nombres-lettres": Object.freeze({
+    primary: Object.freeze({ key:"numberToWords", placeholder:"Écris ce nombre en lettres." }),
+    secondary: Object.freeze({ key:"wordsToNumber", placeholder:"Donne l’écriture chiffrée de ce nombre." })
+  }),
+  "plus-moins-autant": Object.freeze({
+    primary: Object.freeze({ key:"more", placeholder:"Qui en a le plus ?" }),
+    secondary: Object.freeze({ key:"less", placeholder:"Qui en a le moins ?" })
+  }),
+  "representation-carres": Object.freeze({
+    primary: Object.freeze({ key:"numberToRepresentation", placeholder:"Donne une représentation décimale de ce nombre." }),
+    secondary: Object.freeze({ key:"representationToNumber", placeholder:"Donne l’écriture chiffrée de ce nombre." })
+  }),
+  "representation-dede": Object.freeze({
+    primary: Object.freeze({ key:"numberToRepresentation", placeholder:"Donne une représentation décimale de ce nombre." }),
+    secondary: Object.freeze({ key:"representationToNumber", placeholder:"Donne l’écriture chiffrée de ce nombre." })
+  }),
+  "representation-picbille": Object.freeze({
+    primary: Object.freeze({ key:"numberToRepresentation", placeholder:"Donne une représentation décimale de ce nombre." }),
+    secondary: Object.freeze({ key:"representationToNumber", placeholder:"Donne l’écriture chiffrée de ce nombre." })
+  }),
+  "representation-tuiles": Object.freeze({
+    primary: Object.freeze({ key:"numberToRepresentation", placeholder:"Donne une représentation décimale de ce nombre." }),
+    secondary: Object.freeze({ key:"representationToNumber", placeholder:"Donne l’écriture chiffrée de ce nombre." })
+  }),
+  "tables-multiplication": Object.freeze({
+    primary: Object.freeze({ key:"result", placeholder:"Écris le résultat." }),
+    secondary: Object.freeze({ key:"factor", placeholder:"Écris le facteur manquant." })
+  })
+});
+
+export function getToolInstructionEditorSpec(tool = {}, settings = {}) {
+  const safeTool = tool && typeof tool === "object" && !Array.isArray(tool) ? tool : {};
+  const safeSettings = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const toolId = normalizeToolId(safeTool.id);
+  const dual = DOUBLE_INSTRUCTION_SPECS[toolId];
+  if (dual) {
+    const variants = [dual.primary, dual.secondary].map((item) => ({ ...item }));
+    return {
+      kind:"variants",
+      variants,
+      activeKeys:getActiveDoubleInstructionKeys(toolId, safeSettings, dual)
+    };
+  }
+
+  const sourceInstruction = String(safeSettings.sourceInstruction ?? safeSettings.source_instruction ?? "").trim();
+  const placeholder = sourceInstruction || getSingleInstructionPlaceholder(toolId, safeSettings, safeTool);
+  return {
+    kind:"single",
+    placeholder: placeholder || "Saisir une consigne…"
+  };
+}
+
+function getActiveDoubleInstructionKeys(toolId, settings, dual) {
+  const primary = dual.primary.key;
+  const secondary = dual.secondary.key;
+
+  if (toolId === "droite-numerique-simple" || toolId === "droite-numerique-complete" || toolId === "frise-picbille") {
+    const raw = Array.isArray(settings.questionTypes) ? settings.questionTypes.map(String) : [];
+    if (raw.length === 1) {
+      if (raw[0] === "numberToGraduation") return [primary];
+      if (raw[0] === "graduationToNumber") return [secondary];
+    }
+    return [primary, secondary];
+  }
+
+  if (toolId === "nombres-lettres") {
+    const direction = String(settings.direction || "number_to_words");
+    if (direction === "words_to_number") return [secondary];
+    if (direction === "mixed") return [primary, secondary];
+    return [primary];
+  }
+
+  if (toolId === "plus-moins-autant") {
+    const raw = Array.isArray(settings.promptModes) ? settings.promptModes.map(String) : [];
+    if (raw.length === 1) {
+      if (raw[0] === "less") return [secondary];
+      if (raw[0] === "more") return [primary];
+    }
+    return [primary, secondary];
+  }
+
+  if (toolId === "representation-carres" || toolId === "representation-dede" || toolId === "representation-picbille" || toolId === "representation-tuiles") {
+    const hasPrimary = settings.allowNumberToRepresentation !== false;
+    const hasSecondary = settings.allowRepresentationToNumber === true;
+    if (hasPrimary && hasSecondary) return [primary, secondary];
+    if (hasSecondary) return [secondary];
+    return [primary];
+  }
+
+  if (toolId === "tables-multiplication") {
+    const target = String(settings.answerTarget || "result");
+    if (target === "factor") return [secondary];
+    if (target === "both") return [primary, secondary];
+    return [primary];
+  }
+
+  return [primary, secondary];
+}
+
+function getSingleInstructionPlaceholder(toolId, settings, tool) {
+  switch (toolId) {
+    case "collection": {
+      const mode = String(settings.mode || "verify");
+      return ({
+        verify:"La collection est-elle correcte ?",
+        matchCollection:"Retrouve la même collection.",
+        numberToCollection:"Trouve la collection du nombre.",
+        numberLine:"Trouve le nombre sur la file.",
+        writeNumber:"Écris le nombre."
+      })[mode] || "La collection est-elle correcte ?";
+    }
+    case "comparaison":
+      return String(settings.characterSet || settings.characters || "") === "mathieuMathilde"
+        ? "Combien de jetons faut-il donner à Mathieu ?"
+        : "Combien de jetons faut-il donner à Minibille ?";
+    case "comparaison-signes": {
+      const mode = String(settings.mode || "choose-collection");
+      if (mode === "orient-crocodile") return "Clique sur le crocodile pour indiquer ce qu’il va manger.";
+      if (mode === "choose-symbol") return "Complète par < ou >.";
+      return "Que va manger le crocodile ?";
+    }
+    case "m-millimetre":
+      return String(settings.questionType || "read") === "build"
+        ? "Construis comme M. Millimètre."
+        : "Quelle est la longueur de cette ligne de M. Millimètre ?";
+    case "points-alignes": {
+      const mode = String(settings.mode || "groups");
+      if (mode === "with-ab") return "Sélectionne tous les points alignés avec A et B.";
+      if (mode === "double-alignment") return "Quel point est aligné à la fois avec A et B mais aussi avec C et D ?";
+      return Number(settings.groupCount) === 2
+        ? "Sélectionne tous les points qui forment deux groupes de trois points alignés."
+        : "Sélectionne les trois points alignés.";
+    }
+    case "presence-son":
+      return String(settings.questionMode ?? settings.mode ?? "existence") === "syllablePlace"
+        ? "Dans quelle syllabe entends-tu ce son ?"
+        : "Entends-tu ce son dans le mot représenté par l’image ?";
+    case "boites-jetons": {
+      const count = Math.max(1, Math.min(3, Number(settings?.tokenBoxes?.minSolutionsToFind ?? settings.minSolutionsToFind) || 3));
+      return `Clique sur les boites pour trouver ${count} solution${count > 1 ? "s" : ""}.`;
+    }
+    case "recomposer-mots-syllabes": {
+      const count = Math.max(1, Number(settings.wordCount) || 4);
+      return `Recompose les ${count} mots avec les syllabes.`;
+    }
+    case "segmenter-mots": {
+      const count = Math.max(1, Number(settings.wordCount) || 4);
+      return `Découpe cette suite de lettres en ${count} mots.`;
+    }
+    case "conjugaison":
+      return "Conjugue le verbe demandé.";
+    case "reperage-mots":
+      return "Clique sur toutes les occurrences de ce mot :";
+    case "reperage-occurrences":
+      return "Clique sur toutes les occurrences de cette chaîne :";
+    case "mot-cache":
+      return "Retrouve le mot caché.";
+    case "reperage-graphemes":
+      return "Dans chaque mot, clique sur les lettres demandées.";
+    case "quiz":
+      return "Consigne variable selon la question.";
+    case "somme-difference":
+      return "La consigne constitue la question.";
+    default:
+      return normalizeToolInstruction(tool?.defaultInstruction, "");
+  }
+}
+
+export function resolveCustomInstructionText(instruction = {}, sourceText = "") {
+  if (!instruction || instruction.enabled !== true) return "";
+  const source = String(sourceText || "").trim();
+  const variants = instruction.variants && typeof instruction.variants === "object" && !Array.isArray(instruction.variants)
+    ? instruction.variants
+    : null;
+  if (variants) {
+    const normalizedSource = normalizeInstructionMatchText(source);
+    for (const variant of Object.values(variants)) {
+      if (!variant || typeof variant !== "object") continue;
+      const variantSource = normalizeInstructionMatchText(variant.source);
+      if (!variantSource || variantSource !== normalizedSource) continue;
+      return String(variant.text ?? "").trim();
+    }
+  }
+  return String(instruction.text ?? "").trim();
+}
+
+function normalizeInstructionMatchText(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr");
+}
+
 export function normalizeToolTags(value) {
   const rawValues = Array.isArray(value)
     ? value
@@ -109,8 +313,8 @@ export function resolveToolInstruction(tool, settings = null) {
     return defaultInstruction;
   }
 
-  const customText = String(instruction.text ?? "").trim();
-  return customText;
+  const customText = resolveCustomInstructionText(instruction, defaultInstruction);
+  return customText || defaultInstruction;
 }
 
 export function normalizeToolPathSegment(value) {

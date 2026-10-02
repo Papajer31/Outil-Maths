@@ -2044,6 +2044,68 @@ body.student-route-selectstudents .student-selection-class{
 }
 
 
+.session-page .session-exploration-exit-shell{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-sizing:border-box;
+}
+
+.session-page .session-exploration-exit-shell.hidden,
+.session-page .session-exploration-exit-shell[hidden]{
+  display:none;
+}
+
+.session-page .session-exploration-exit-btn{
+  width:var(--runtime-session-sidebar-panel-width, 132px);
+  min-height:190px;
+  padding:14px 8px 16px;
+  border:4px solid rgba(255,255,255,.92);
+  border-radius:26px;
+  background:rgba(13,18,29,.62);
+  box-shadow:0 18px 36px rgba(0,0,0,.28), inset 0 0 0 1px rgba(91,155,255,.26);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:#fff;
+  font-family:"Andika",system-ui,sans-serif;
+  font-size:20px;
+  font-weight:900;
+  line-height:1.05;
+  cursor:pointer;
+  transition:transform .12s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.session-page .session-exploration-exit-btn:hover{
+  transform:translateY(-2px);
+  background:rgba(20,31,51,.78);
+  box-shadow:0 20px 40px rgba(0,0,0,.32), inset 0 0 0 1px rgba(123,178,255,.36);
+}
+
+.session-page .session-exploration-exit-btn:active{
+  transform:translateY(0);
+}
+
+.session-page .session-exploration-exit-btn:focus-visible{
+  outline:4px solid rgba(96,165,250,.95);
+  outline-offset:4px;
+}
+
+.session-page .session-exploration-exit-rocket{
+  width:104px;
+  height:104px;
+  display:block;
+  object-fit:contain;
+  transform:rotate(-90deg);
+  user-select:none;
+  -webkit-user-drag:none;
+  pointer-events:none;
+}
+
 .session-page .session-evaluation-counter-shell{
   width:var(--runtime-session-sidebar-panel-width, 132px);
   min-height:var(--runtime-session-sidebar-panel-min-height, 260px);

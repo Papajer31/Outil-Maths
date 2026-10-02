@@ -12,7 +12,7 @@ export const TOOL_LIMITS = Object.freeze({
 export const RESPONSE_UI_VALUES = Object.freeze(["boxed", "free"]);
 export const PROGRESS_MODE_VALUES = Object.freeze(["evaluated", "practice"]);
 export const QUESTION_FLOW_MODE_VALUES = Object.freeze(["fixed", "unlimited", "successGoal"]);
-export const EXECUTION_LIMIT_MODES = Object.freeze(["questions", "time", "intrinsic"]);
+export const EXECUTION_LIMIT_MODES = Object.freeze(["questions", "time", "success", "intrinsic"]);
 
 export const DEFAULT_RESPONSE_UI = "boxed";
 export const DEFAULT_PROGRESS_MODE = "evaluated";
@@ -98,6 +98,25 @@ export function normalizeExecutionLimit(value, fallback = DEFAULT_EXECUTION_LIMI
   }
 
   const fallbackValue = Math.max(1, Math.trunc(Number(safeFallback.value) || DEFAULT_EXECUTION_LIMIT.value));
+  if (mode === "success") {
+    const rawValue = Math.trunc(Number(raw.value ?? raw.correctCount ?? raw.correct_count));
+    const normalizedValue = Number.isFinite(rawValue) ? rawValue : 10;
+    const rawMilestones = Math.trunc(Number(raw.milestones ?? raw.safetyMilestones ?? raw.safety_milestones));
+    const milestones = Number.isFinite(rawMilestones)
+      ? Math.max(TOOL_LIMITS.successGoalSafetyMilestones.min, Math.min(TOOL_LIMITS.successGoalSafetyMilestones.max, rawMilestones))
+      : DEFAULT_COMMON_SUCCESS_GOAL.successGoalSafetyMilestones;
+    const rawMaxTimeSec = Math.trunc(Number(raw.maxTimeSec ?? raw.max_time_sec ?? raw.seconds));
+    const maxTimeSec = Number.isFinite(rawMaxTimeSec)
+      ? Math.max(60, Math.min(7200, rawMaxTimeSec))
+      : 300;
+    return {
+      mode,
+      value:Math.max(1, Math.min(TOOL_LIMITS.successGoalCorrectCount.max, normalizedValue)),
+      milestones,
+      maxTimeSec
+    };
+  }
+
   const maxValue = mode === "time" ? 120 * 60 : TOOL_LIMITS.questionCount.max;
   const rawValue = Math.trunc(Number(raw.value ?? raw.seconds ?? raw.questionCount ?? raw.question_count));
   const normalizedValue = Number.isFinite(rawValue) ? rawValue : fallbackValue;
@@ -164,6 +183,7 @@ export function normalizeActivityGlobals(globals) {
 
 
 export function normalizeToolDraft(draft, { fallbackGlobals = null } = {}) {
+  const executionLimit = normalizeExecutionLimit(draft?.executionLimit ?? draft?.execution_limit, DEFAULT_EXECUTION_LIMIT);
   const fallbackTransition = normalizeQuestionTransitionSettings(fallbackGlobals, {
     questionTransitionSec: DEFAULT_TOOL_ROW.questionTransitionSec,
     questionTransitionInfinite: DEFAULT_TOOL_ROW.questionTransitionInfinite
@@ -186,7 +206,7 @@ export function normalizeToolDraft(draft, { fallbackGlobals = null } = {}) {
       TOOL_LIMITS.questionCount.min,
       TOOL_LIMITS.questionCount.max
     ),
-    executionLimit: normalizeExecutionLimit(draft?.executionLimit ?? draft?.execution_limit, DEFAULT_EXECUTION_LIMIT),
+    executionLimit,
     answerTime: clampInt(
       draft?.answerTime,
       TOOL_LIMITS.answerTime.min,
@@ -205,17 +225,23 @@ export function normalizeToolDraft(draft, { fallbackGlobals = null } = {}) {
       ? DEFAULT_TOOL_ROW.toolMaxTimeInfinite
       : draft?.toolMaxTimeInfinite === true || !hasValidToolMaxTimeMin,
     infiniteTimePerQ: !!draft?.infiniteTimePerQ,
-    questionFlowMode: normalizeQuestionFlowMode(draft?.questionFlowMode, DEFAULT_QUESTION_FLOW_MODE),
-    successGoalCorrectCount: normalizeOptionalInt(
-      draft?.successGoalCorrectCount,
-      TOOL_LIMITS.successGoalCorrectCount,
-      DEFAULT_COMMON_SUCCESS_GOAL.successGoalCorrectCount
-    ),
-    successGoalSafetyMilestones: normalizeOptionalInt(
-      draft?.successGoalSafetyMilestones,
-      TOOL_LIMITS.successGoalSafetyMilestones,
-      DEFAULT_COMMON_SUCCESS_GOAL.successGoalSafetyMilestones
-    ),
+    questionFlowMode: executionLimit.mode === "success"
+      ? "successGoal"
+      : normalizeQuestionFlowMode(draft?.questionFlowMode, DEFAULT_QUESTION_FLOW_MODE),
+    successGoalCorrectCount: executionLimit.mode === "success"
+      ? executionLimit.value
+      : normalizeOptionalInt(
+          draft?.successGoalCorrectCount,
+          TOOL_LIMITS.successGoalCorrectCount,
+          DEFAULT_COMMON_SUCCESS_GOAL.successGoalCorrectCount
+        ),
+    successGoalSafetyMilestones: executionLimit.mode === "success"
+      ? executionLimit.milestones
+      : normalizeOptionalInt(
+          draft?.successGoalSafetyMilestones,
+          TOOL_LIMITS.successGoalSafetyMilestones,
+          DEFAULT_COMMON_SUCCESS_GOAL.successGoalSafetyMilestones
+        ),
     infiniteAnswerTime: !!draft?.infiniteAnswerTime,
     settings: draft?.settings == null ? null : cloneData(draft.settings)
   };

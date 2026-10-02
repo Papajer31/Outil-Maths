@@ -10,7 +10,7 @@ export default defineTool("segmenter-mots", "Segmenter les mots", {
   description: "Segmenter une suite continue de lettres pour retrouver les mots sélectionnés dans la banque phonologique.",
   tags: ["français", "lecture", "étude-du-code", "segmentation", "mots", "phonologie", "graphèmes", "tablette", "manipulation", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
 
   getDefaultSettings: config.getDefaultSettings,
   renderToolSettings: config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("segmenter-mots", "Segmenter les mots", {
     return createSegmenterMotsActivity({
       ...context,
       defaultInstruction: DEFAULT_INSTRUCTION,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

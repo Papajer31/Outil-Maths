@@ -9,6 +9,7 @@ import {
 import {
   DIFFICULTIES,
   DRAWING_PERSISTENCE,
+  DRAWING_TYPES,
   MODES,
   getDefaultSettings,
   normalizeSettings
@@ -34,40 +35,39 @@ export function renderToolSettings(container, settings = {}) {
           ]
         }),
         `
-          <div class="tv-group pa-config-mode-block" data-pa-mode-block="${MODES.GROUPS}">
-            <div class="tv-group-title">Alignements à trouver</div>
-            ${renderStepperField({
-              id: "pa_groupCount",
-              label: "Groupes de 3 points",
-              value: cfg.groupCount,
-              inputMin: 1,
-              inputMax: 2
-            })}
-          </div>
-        `,
-        `
-          <div class="tv-group pa-config-mode-block" data-pa-mode-block="${MODES.WITH_AB}">
-            <div class="tv-group-title">Points corrects</div>
-            ${renderStepperField({
-              id: "pa_alignedCount",
-              label: "Points alignés avec A et B",
-              value: cfg.alignedCount,
-              inputMin: 1,
-              inputMax: 5
-            })}
-          </div>
-        `,
-        `
-          <div class="tv-group tv-group-inline">
-            <div class="tv-group-title">Distracteurs</div>
-            <div class="pa-config-hint">Dans le mode « groupes de 3 », le minimum est automatiquement de 3 distracteurs par groupe à trouver.</div>
-            ${renderStepperField({
-              id: "pa_distractorCount",
-              label: "Nombre de points",
-              value: cfg.distractorCount,
-              inputMin: 0,
-              inputMax: 12
-            })}
+          <div class="pa-config-count-widgets">
+            <div class="tv-group tv-group-inline pa-config-mode-block" data-pa-mode-block="${MODES.GROUPS}">
+              ${renderStepperField({
+                id: "pa_groupCount",
+                label: "Alignement à trouver",
+                value: cfg.groupCount,
+                inputMin: 1,
+                inputMax: 2,
+                fieldClassName: "tv-stepper-field-inline"
+              })}
+            </div>
+
+            <div class="tv-group tv-group-inline pa-config-mode-block" data-pa-mode-block="${MODES.WITH_AB}">
+              ${renderStepperField({
+                id: "pa_alignedCount",
+                label: "Points corrects",
+                value: cfg.alignedCount,
+                inputMin: 1,
+                inputMax: 5,
+                fieldClassName: "tv-stepper-field-inline"
+              })}
+            </div>
+
+            <div class="tv-group tv-group-inline pa-config-distractors-widget">
+              ${renderStepperField({
+                id: "pa_distractorCount",
+                label: "Distracteurs",
+                value: cfg.distractorCount,
+                inputMin: 0,
+                inputMax: 12,
+                fieldClassName: "tv-stepper-field-inline"
+              })}
+            </div>
           </div>
         `,
         `
@@ -85,6 +85,15 @@ export function renderToolSettings(container, settings = {}) {
           </div>
         `,
         renderRadioGroup({
+          title: "Tracés",
+          id: "pa_drawingType",
+          value: cfg.drawingType,
+          options: [
+            { value: DRAWING_TYPES.SEGMENT, label: "Segment" },
+            { value: DRAWING_TYPES.LINE, label: "Droite" }
+          ]
+        }),
+        renderRadioGroup({
           title: "Dessin persistant",
           id: "pa_drawingPersistence",
           value: cfg.drawingPersistence,
@@ -93,14 +102,7 @@ export function renderToolSettings(container, settings = {}) {
             { value: DRAWING_PERSISTENCE.LAST_ONLY, label: "Un seul trait" },
             { value: DRAWING_PERSISTENCE.NONE, label: "Aucun trait" }
           ]
-        }),
-        `
-          <div class="pa-config-help">
-            <div><strong>Tous les traits</strong> : tous les tracés restent visibles.</div>
-            <div><strong>Un seul trait</strong> : seul le dernier tracé est conservé.</div>
-            <div><strong>Aucun trait</strong> : le trait reste provisoire en pointillés et n’est jamais conservé.</div>
-          </div>
-        `
+        })
       )}
     </div>
   `;
@@ -124,7 +126,8 @@ export function readToolSettings(container, settings = {}) {
     alignedCount: readStepper(container, "pa_alignedCount", { inputMin: 1, inputMax: 5 }),
     distractorCount: mode === MODES.GROUPS ? Math.max(distractorCount, groupCount * 3) : distractorCount,
     difficulty: readRadio(container, "pa_difficulty", DIFFICULTIES.MODERATE),
-    drawingPersistence: readRadio(container, "pa_drawingPersistence", DRAWING_PERSISTENCE.ALL)
+    drawingPersistence: readRadio(container, "pa_drawingPersistence", DRAWING_PERSISTENCE.ALL),
+    drawingType: readRadio(container, "pa_drawingType", DRAWING_TYPES.SEGMENT)
   });
 }
 
@@ -149,8 +152,8 @@ function bindModeVisibility(container) {
 
 function bindGroupsConstraints(container) {
   const modeInputs = [...container.querySelectorAll('input[name="pa_mode"]')];
-  const groupField = container.querySelector('[data-stepper-field="pa_groupCount"] input');
-  const distractorField = container.querySelector('[data-stepper-field="pa_distractorCount"] input');
+  const groupField = container.querySelector("#pa_groupCount");
+  const distractorField = container.querySelector("#pa_distractorCount");
   if (!groupField || !distractorField) return;
 
   const sync = () => {

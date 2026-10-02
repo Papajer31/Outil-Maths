@@ -1,4 +1,5 @@
 import { ensureToolUiStyles } from "./tool-ui/tool-ui.js";
+import { resolveCustomInstructionText } from "./tool-contract.js";
 
 const TOOL_INSTRUCTION_STYLE_DATASET = "toolInstructionStyle";
 
@@ -75,31 +76,35 @@ export function resolveQuestionInstructionText(context = {}, questionText = "", 
 
 function resolveToolInstructionDisplayText(context = {}, fallbackText = "") {
   const defaultInstruction = String(context?.defaultInstruction ?? fallbackText ?? "").trim();
-  const custom = getCustomInstructionState(context);
+  const custom = getCustomInstructionState(context, defaultInstruction);
   return custom.enabled && custom.text ? custom.text : defaultInstruction;
 }
 
 function resolveQuestionInstructionDisplayText(context = {}, questionText = "", fallbackText = "") {
-  const custom = getCustomInstructionState(context);
+  const sourceText = String(questionText || context?.defaultInstruction || fallbackText || "").trim();
+  const custom = getCustomInstructionState(context, sourceText);
   if (custom.enabled && custom.text) {
     return custom.text;
   }
 
-  return String(questionText || context?.defaultInstruction || fallbackText || "").trim();
+  return sourceText;
 }
 
-export function getCustomInstructionState(context = {}) {
+export function getCustomInstructionState(context = {}, sourceText = "") {
   const supportsCustomInstruction = context?.supportsCustomInstruction !== false;
   const common = getCommonSettings(context?.settings);
   const instruction = common && typeof common.instruction === "object" && !Array.isArray(common.instruction)
     ? common.instruction
     : null;
   const text = instruction && instruction.enabled === true
-    ? String(instruction.text ?? "").trim()
+    ? resolveCustomInstructionText(instruction, sourceText)
     : "";
+  const hasAnyVariantText = instruction?.variants && typeof instruction.variants === "object"
+    ? Object.values(instruction.variants).some((variant) => String(variant?.text ?? "").trim())
+    : false;
 
   return {
-    enabled: supportsCustomInstruction && instruction?.enabled === true && !!text,
+    enabled: supportsCustomInstruction && instruction?.enabled === true && (!!text || hasAnyVariantText),
     text
   };
 }

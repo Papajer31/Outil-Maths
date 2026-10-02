@@ -2,6 +2,7 @@ import { isIntrinsicCatalogActivity, normalizeCatalogActivity } from "../../../s
 import { bindStepperField, renderStepperField } from "../../../shared/config-widgets.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { bindSuccessExecutionPopover, executionLimitConfigToDb, normalizeSuccessExecutionConfig, renderSuccessExecutionPopover } from "./execution-limit-ui.js";
 
 const LEVELS = [1, 2, 3, 4, 5];
 
@@ -47,6 +48,8 @@ export function createActivityAssignmentViewController({
   let selectedDifficulty = "adaptive";
   let executionMode = "questions";
   let executionValue = 5;
+  let executionSuccessMilestones = 3;
+  let executionSuccessMaxTimeSec = 300;
   let selectedTargets = new Map();
   let editingAssignmentId = "";
 
@@ -127,7 +130,7 @@ export function createActivityAssignmentViewController({
           </button>
         </div>
 
-        ${loadError ? `<div class="modal-message error">${escapeHtml(loadError)}<br><small>Vérifie que les migrations SQL 49, 50 et 54 ont bien été appliquées.</small></div>` : ""}
+        ${loadError ? `<div class="modal-message error">${escapeHtml(loadError)}<br><small>Vérifie que les migrations SQL 49, 50, 54 et 60 ont bien été appliquées.</small></div>` : ""}
 
         <section class="activity-assignment-overview">
           ${renderCurrentAssignments()}
@@ -494,8 +497,12 @@ export function createActivityAssignmentViewController({
             <select id="${executionModeId}" class="student-select dashboard-mission-step-limit-mode" data-config-field="execution-mode">
               <option value="questions"${mode === "questions" ? " selected" : ""}>Questions</option>
               <option value="time"${mode === "time" ? " selected" : ""}>Temps</option>
+              <option value="success"${mode === "success" ? " selected" : ""}>Réussite</option>
             </select>
-            ${renderStepperField({
+            ${mode === "success" ? renderSuccessExecutionPopover({
+              idPrefix:`${prefix}Success`,
+              value:{ correctCount:value, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec }
+            }) : `${renderStepperField({
               id:executionValueId,
               label:mode === "time" ? "Durée en minutes" : "Nombre de questions",
               value:displayedValue,
@@ -503,8 +510,7 @@ export function createActivityAssignmentViewController({
               inputMax:mode === "time" ? 120 : 200,
               step:1,
               fieldClassName:"dashboard-sequence-limit-stepper"
-            })}
-            <span class="dashboard-mission-step-limit-unit">${mode === "time" ? "min" : "questions"}</span>
+            })}<span class="dashboard-mission-step-limit-unit">${mode === "time" ? "min" : "questions"}</span>`}
           </div>
         `}
       </div>
@@ -613,8 +619,15 @@ export function createActivityAssignmentViewController({
     });
     config.querySelector("#activityAssignmentExecutionMode")?.addEventListener("change", (event) => {
       const priorMode = executionMode;
-      executionMode = String(event.target?.value || "questions") === "time" ? "time" : "questions";
-      if (priorMode !== executionMode) executionValue = executionMode === "time" ? 300 : 5;
+      const candidate = String(event.target?.value || "questions");
+      executionMode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
+      if (priorMode !== executionMode) {
+        executionValue = executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5;
+        if (executionMode === "success") {
+          executionSuccessMilestones = 3;
+          executionSuccessMaxTimeSec = 300;
+        }
+      }
       renderAssignmentConfigIntoHost({ preserveScroll:true });
     });
     if (config.querySelector("#activityAssignmentExecutionValue")) {
@@ -623,6 +636,16 @@ export function createActivityAssignmentViewController({
         inputMax:executionMode === "time" ? 120 : 200,
         onChange:(raw) => {
           executionValue = executionMode === "time" ? raw * 60 : raw;
+        }
+      });
+    }
+    if (executionMode === "success") {
+      bindSuccessExecutionPopover(config, "activityAssignmentSuccess", {
+        value:{ correctCount:executionValue, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec },
+        onChange:(next) => {
+          executionValue = next.correctCount;
+          executionSuccessMilestones = next.milestones;
+          executionSuccessMaxTimeSec = next.maxTimeSec;
         }
       });
     }
@@ -734,6 +757,8 @@ export function createActivityAssignmentViewController({
     selectedDifficulty = "adaptive";
     executionMode = "questions";
     executionValue = 5;
+    executionSuccessMilestones = 3;
+    executionSuccessMaxTimeSec = 300;
   }
 
   function openAssignmentForEdit(assignmentId) {
@@ -744,12 +769,18 @@ export function createActivityAssignmentViewController({
     selectedDifficulty = assignment.difficulty_mode === "adaptive"
       ? "adaptive"
       : String(Math.max(1, Math.min(5, Number(assignment.difficulty_level) || 3)));
-    executionMode = ["questions", "time", "intrinsic"].includes(String(assignment.execution_limit_mode || ""))
+    executionMode = ["questions", "time", "success", "intrinsic"].includes(String(assignment.execution_limit_mode || ""))
       ? String(assignment.execution_limit_mode)
       : "questions";
     executionValue = executionMode === "intrinsic"
       ? 5
-      : Math.max(1, Number(assignment.execution_limit_value) || (executionMode === "time" ? 300 : 5));
+      : Math.max(1, Number(assignment.execution_limit_value) || (executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5));
+    const successConfig = normalizeSuccessExecutionConfig({
+      correctCount:executionValue,
+      ...(assignment.execution_limit_config || {})
+    });
+    executionSuccessMilestones = successConfig.milestones;
+    executionSuccessMaxTimeSec = successConfig.maxTimeSec;
     selectedTargets.clear();
     (Array.isArray(assignment.targets) ? assignment.targets : []).forEach((target) => {
       const type = target?.target_type === "class" ? "class" : target?.target_type === "student" ? "student" : "";
@@ -871,7 +902,10 @@ export function createActivityAssignmentViewController({
         difficulty_mode:adaptive ? "adaptive" : "fixed",
         difficulty_level:adaptive ? null : (isSequence ? 3 : Math.max(1, Math.min(5, Number(selectedDifficulty) || 3))),
         execution_limit_mode:intrinsic ? "intrinsic" : executionMode,
-        execution_limit_value:intrinsic ? null : executionValue
+        execution_limit_value:intrinsic ? null : executionValue,
+        execution_limit_config:!intrinsic && executionMode === "success"
+          ? executionLimitConfigToDb({ correctCount:executionValue, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec })
+          : null
       }, targets);
       showToast?.(wasEditing
         ? `Attribution de « ${getSelectedSourceTitle(source)} » mise à jour.`
@@ -928,7 +962,8 @@ export function createActivityAssignmentViewController({
         difficulty_mode:assignment.difficulty_mode,
         difficulty_level:assignment.difficulty_level,
         execution_limit_mode:assignment.execution_limit_mode,
-        execution_limit_value:assignment.execution_limit_value
+        execution_limit_value:assignment.execution_limit_value,
+        execution_limit_config:assignment.execution_limit_config || null
       }, assignment.targets || []);
       if (duplicate?.id) {
         assignments = [{ ...duplicate, is_active:duplicate.is_active !== false, completions:[] }, ...assignments];
@@ -1086,11 +1121,15 @@ export function createActivityAssignmentViewController({
       selectedDifficulty = "3";
       executionMode = "intrinsic";
       executionValue = 5;
+      executionSuccessMilestones = 3;
+      executionSuccessMaxTimeSec = 300;
       return;
     }
     selectedDifficulty = isAdaptiveAvailableFor(selectedSourceType, source) ? "adaptive" : "3";
     executionMode = isSourceIntrinsic(selectedSourceType, source) ? "intrinsic" : "questions";
     executionValue = executionMode === "time" ? 300 : 5;
+    executionSuccessMilestones = 3;
+    executionSuccessMaxTimeSec = 300;
   }
 
   function normalizeSourceType(value) {

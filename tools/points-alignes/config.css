@@ -2,19 +2,32 @@
   min-width:0;
 }
 
-.pa-config-mode-block[hidden]{
+.pa-config-mode-block[hidden],
+.pa-config-difficulty-block[hidden]{
   display:none !important;
 }
 
-.pa-config-hint,
-.pa-config-help{
-  margin-top:.45rem;
-  font-size:.94rem;
-  line-height:1.38;
-  color:#475569;
+.pa-config-count-widgets{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:16px;
+  min-width:0;
 }
 
-.pa-config-help{
-  display:grid;
-  gap:.25rem;
+.pa-config-count-widgets > .tv-group{
+  min-width:0;
+}
+
+.pa-config-root[data-pa-config-mode="double-alignment"] .pa-config-distractors-widget{
+  grid-column:1 / -1;
+}
+
+@media (max-width:900px){
+  .pa-config-count-widgets{
+    grid-template-columns:1fr;
+  }
+
+  .pa-config-root[data-pa-config-mode="double-alignment"] .pa-config-distractors-widget{
+    grid-column:auto;
+  }
 }

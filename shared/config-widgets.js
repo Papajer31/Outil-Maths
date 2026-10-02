@@ -613,7 +613,8 @@ export function renderRadioGroup({
   id,
   value = "",
   options = [],
-  inline = true
+  inline = true,
+  groupClassName = ""
 }){
   const safeOptions = Array.isArray(options) ? options : [];
 const rowsHtml = safeOptions.map((opt, index) => {
@@ -640,7 +641,7 @@ const rowsHtml = safeOptions.map((opt, index) => {
 }).join("");
 
   return `
-    <div class="tv-group tv-group-inline">
+    <div class="tv-group tv-group-inline ${escapeHtml(groupClassName)}">
       <div class="tv-radio-group ${inline ? "tv-radio-group-inline" : ""}" data-tv-radio-group="${escapeHtml(id)}">
         ${title ? `<div class="tv-group-title tv-radio-group-title">${escapeHtml(title)}</div>` : ""}
         <div class="tv-radio-options">${rowsHtml}</div>

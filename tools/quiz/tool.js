@@ -13,7 +13,7 @@ export default defineTool("quiz", "Quiz", {
   description: "Questions composées librement sur un canevas de widgets.",
   tags: ["quiz", "question", "reponse", "texte", "canevas", "projection"],
   defaultInstruction: "",
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
   workAreaLayout: "stretch",
 
   getDefaultSettings: config.getDefaultSettings,
@@ -61,7 +61,7 @@ export default defineTool("quiz", "Quiz", {
     return createQuizActivity({
       ...context,
       defaultInstruction,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

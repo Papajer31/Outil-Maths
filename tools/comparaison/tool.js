@@ -5,7 +5,7 @@ import { defineTool } from "../../shared/tool-contract.js";
 
 const DEFAULT_INSTRUCTION = "Combien de jetons faut-il donner à Minibille ?";
 
-export default defineTool("comparaison", "Comparaison", {
+export default defineTool("comparaison", "Différence entre collections", {
   version: "1",
   description: "Comparer deux collections par correspondance terme à terme pour trouver la différence.",
   tags: ["maths", "nombres", "comparaison", "collections", "différence", "jetons", "tracé", "projection"],

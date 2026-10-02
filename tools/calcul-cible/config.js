@@ -92,8 +92,8 @@ function renderOperationsWidget(allowedOperations) {
         ${OPERATION_OPTIONS.map((op) => {
           const label = getOperationLabel(op);
           return `
-          <label class="${ROOT_CLASS}__op-pill${selected.has(op) ? " is-selected" : ""}" title="${op === "÷" ? "Division exacte" : ""}">
-            <input type="checkbox" data-${ID_PREFIX}-operation value="${escapeAttr(op)}" ${selected.has(op) ? "checked" : ""} aria-label="${escapeAttr(op === "÷" ? "Autoriser la division exacte" : `Autoriser ${op}`)}">
+          <label class="tv-radio-row ${ROOT_CLASS}__op-pill${selected.has(op) ? " is-selected" : ""}" title="${op === "÷" ? "Division exacte" : ""}">
+            <input class="tv-radio" type="checkbox" data-${ID_PREFIX}-operation value="${escapeAttr(op)}" ${selected.has(op) ? "checked" : ""} aria-label="${escapeAttr(op === "÷" ? "Autoriser la division exacte" : `Autoriser ${op}`)}">
             <span class="${ROOT_CLASS}__op-symbol">${escapeHtml(op)}</span>
             <span class="${ROOT_CLASS}__op-label">${escapeHtml(label)}</span>
           </label>
@@ -117,8 +117,8 @@ function renderNumberPoolWidget(selection) {
   const selected = selection && typeof selection === "object" ? selection : {};
   const items = NUMBER_POOL_OPTIONS
     .map((option) => `
-      <label class="${ROOT_CLASS}__number-pill${selected[option.id] ? " is-selected" : ""}">
-        <input type="checkbox" data-${ID_PREFIX}-number-pool value="${escapeAttr(option.id)}" ${selected[option.id] ? "checked" : ""}>
+      <label class="tv-radio-row ${ROOT_CLASS}__number-pill${selected[option.id] ? " is-selected" : ""}">
+        <input class="tv-radio" type="checkbox" data-${ID_PREFIX}-number-pool value="${escapeAttr(option.id)}" ${selected[option.id] ? "checked" : ""}>
         <span>${escapeHtml(option.label)}</span>
       </label>
     `).join("");
@@ -138,11 +138,18 @@ function bindToolSettings(container) {
   bindMinMax(container, `${ID_PREFIX}_target`, { inputMin: 1, inputMax: 1000 });
 
   container.querySelectorAll(`[data-${ID_PREFIX}-operation]`).forEach((input) => {
-    input.addEventListener("change", () => syncValidationState(container));
+    input.addEventListener("change", () => {
+      syncChoiceVisualState(container);
+      syncValidationState(container);
+    });
   });
   container.querySelectorAll(`[data-${ID_PREFIX}-number-pool]`).forEach((input) => {
-    input.addEventListener("change", () => syncValidationState(container));
+    input.addEventListener("change", () => {
+      syncChoiceVisualState(container);
+      syncValidationState(container);
+    });
   });
+  syncChoiceVisualState(container);
   syncValidationState(container);
 }
 
@@ -232,6 +239,12 @@ function syncValidationState(container) {
   const numbersWidget = container.querySelector(`[data-${ID_PREFIX}-widget="number-pool"]`);
   operationsWidget?.classList.toggle("is-incomplete", operationCount === 0);
   numbersWidget?.classList.toggle("is-incomplete", selectedNumbers < requiredNumbers);
+}
+
+function syncChoiceVisualState(container) {
+  container.querySelectorAll(`[data-${ID_PREFIX}-operation], [data-${ID_PREFIX}-number-pool]`).forEach((input) => {
+    input.closest(".tv-radio-row")?.classList.toggle("is-selected", input.checked === true);
+  });
 }
 
 function getSelectedNumberValues(container) {

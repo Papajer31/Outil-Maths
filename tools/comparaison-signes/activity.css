@@ -1,0 +1,323 @@
+.cmp-root{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  overflow:hidden;
+  font-family:"Andika",system-ui,sans-serif;
+}
+
+.cmp-panel{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  align-items:stretch;
+  justify-content:center;
+  padding:4px 16px 18px;
+  overflow:hidden;
+}
+
+.cmp-stage{
+  width:min(100%, 1240px);
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(12px,2vh,24px);
+}
+
+.cmp-comparison{
+  width:100%;
+  flex:1 1 auto;
+  min-height:300px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) clamp(190px,23vw,300px) minmax(0,1fr);
+  align-items:center;
+  gap:clamp(12px,2vw,28px);
+}
+
+.cmp-center{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* Les collections sont posées directement sur la zone de travail : aucun cartouche blanc. */
+.cmp-collection{
+  appearance:none;
+  border:3px solid transparent;
+  background:transparent;
+  border-radius:24px;
+  min-width:0;
+  width:100%;
+  height:min(52vh,440px);
+  min-height:260px;
+  padding:clamp(14px,2vw,24px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:none;
+  transition:transform .12s ease,border-color .12s ease,background .12s ease;
+  font:inherit;
+  color:inherit;
+}
+
+button.cmp-collection{
+  cursor:pointer;
+}
+
+button.cmp-collection:focus-visible{
+  outline:4px solid rgba(14,165,233,.32);
+  outline-offset:3px;
+}
+
+.cmp-collection.is-selected{
+  border-color:#3b82f6;
+  background:rgba(59,130,246,.07);
+}
+
+.cmp-collection.is-correct{
+  border-color:#22c55e;
+  background:rgba(34,197,94,.06);
+}
+
+.cmp-collection.is-incorrect{
+  border-color:#ef4444;
+  background:rgba(239,68,68,.06);
+}
+
+.cmp-items{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+}
+
+.cmp-items--rows{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-auto-rows:1fr;
+  align-items:center;
+  justify-items:center;
+  align-content:center;
+}
+
+.cmp-items--cloud{
+  position:relative;
+}
+
+.cmp-item{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:clamp(2rem,4.2vw,4.35rem);
+  height:clamp(2rem,4.2vw,4.35rem);
+  line-height:1;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  object-fit:contain;
+  user-select:none;
+  -webkit-user-select:none;
+  filter:drop-shadow(0 2px 1px rgba(15,23,42,.10));
+}
+
+.cmp-items--rows .cmp-item{
+  width:clamp(2rem,4.2vw,4.35rem);
+  height:clamp(2rem,4.2vw,4.35rem);
+}
+
+.cmp-item--cloud{
+  position:absolute;
+  width:clamp(2rem,4.4vw,4.55rem);
+  height:clamp(2rem,4.4vw,4.55rem);
+}
+
+.cmp-collection[data-cmp-density="medium"] .cmp-item{
+  width:clamp(1.85rem,3.6vw,3.8rem);
+  height:clamp(1.85rem,3.6vw,3.8rem);
+}
+
+.cmp-collection[data-cmp-density="large"] .cmp-item{
+  width:clamp(1.55rem,3vw,3.2rem);
+  height:clamp(1.55rem,3vw,3.2rem);
+}
+
+.cmp-empty-state{
+  margin:0;
+  color:#475569;
+  font-size:clamp(1.1rem,2vw,1.4rem);
+  text-align:center;
+}
+
+.cmp-crocodile{
+  appearance:none;
+  border:0;
+  background:transparent;
+  width:100%;
+  max-width:300px;
+  min-width:150px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:28px;
+  transition:transform .12s ease,filter .12s ease;
+}
+
+.cmp-crocodile img{
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:270px;
+  object-fit:contain;
+  pointer-events:none;
+  user-select:none;
+}
+
+button.cmp-crocodile{
+  cursor:pointer;
+}
+
+button.cmp-crocodile:focus-visible{
+  outline:4px solid rgba(14,165,233,.34);
+  outline-offset:4px;
+}
+
+.cmp-crocodile.is-correct{
+  filter:drop-shadow(0 0 9px rgba(34,197,94,.60));
+}
+
+.cmp-crocodile.is-incorrect{
+  filter:drop-shadow(0 0 9px rgba(239,68,68,.55));
+}
+
+/* Le signe central reste nu, tandis que les choix reprennent les boutons de Collection. */
+.cmp-symbol-slot{
+  width:clamp(112px,13vw,170px);
+  height:clamp(112px,13vw,170px);
+  display:grid;
+  place-items:center;
+  color:#ffffff;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+}
+
+.cmp-symbol-slot.is-selected{
+  color:#ffffff;
+}
+
+.cmp-symbol-slot.is-correct,
+.cmp-symbol-slot.is-correction{
+  color:#57d07a;
+}
+
+.cmp-symbol-buttons{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(3rem,9vw,8rem);
+  padding-bottom:4px;
+}
+
+.tool-choice-button.cmp-symbol-button{
+  width:clamp(6rem,10vw,8.5rem);
+  height:clamp(6rem,10vw,8.5rem);
+  min-height:0;
+  padding:.25rem;
+  border-radius:.9rem;
+  display:grid;
+  place-items:center;
+}
+
+.cmp-symbol-icon{
+  width:86%;
+  height:86%;
+  display:block;
+}
+
+.cmp-symbol-placeholder{
+  font-family:Arial,sans-serif;
+  font-size:clamp(5rem,11vw,9rem);
+  font-weight:700;
+  line-height:1;
+}
+
+.cmp-symbol-button.is-selected{
+  outline:3px solid rgba(255,255,255,.28);
+  outline-offset:0;
+}
+
+@media (max-width:900px){
+  .cmp-panel{ padding-left:8px; padding-right:8px; }
+  .cmp-comparison{
+    grid-template-columns:minmax(0,1fr) clamp(130px,21vw,190px) minmax(0,1fr);
+    gap:8px;
+  }
+  .cmp-collection{
+    min-height:230px;
+    padding:10px;
+  }
+}
+
+@media (max-height:760px){
+  .cmp-root{ gap:6px; }
+  .cmp-panel{ padding-top:0; padding-bottom:6px; }
+  .cmp-stage{ gap:8px; }
+  .cmp-comparison{ min-height:240px; }
+  .cmp-collection{ height:min(49vh,360px); min-height:220px; }
+  .cmp-crocodile img{ max-height:220px; }
+  .cmp-symbol-buttons{ padding-bottom:0; }
+}
+
+.cmp-number{
+  appearance:none;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+  width:100%;
+  height:min(52vh,440px);
+  min-height:260px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+  font:inherit;
+  font-size:clamp(7rem,16vw,14rem);
+  font-weight:800;
+  line-height:1;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+button.cmp-number{
+  cursor:pointer;
+}
+
+button.cmp-number:focus-visible{
+  outline:0;
+  text-shadow:0 0 14px rgba(255,255,255,.35);
+}
+
+.cmp-number.is-selected{
+  color:#fff;
+  text-shadow:0 0 16px rgba(59,130,246,.80);
+}
+
+.cmp-number.is-correct{
+  color:#57d07a;
+}
+
+.cmp-number.is-incorrect{
+  color:#f87171;
+}

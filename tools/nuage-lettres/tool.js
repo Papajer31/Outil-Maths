@@ -10,7 +10,7 @@ export default defineTool("nuage-lettres", "Nuage de lettres", {
   description: "Reconstituer un mot contenant un son ciblé à partir de lettres mélangées.",
   tags: ["français", "lecture", "étude-du-code", "phonologie", "orthographe", "lettres", "manipulation", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
 
   getDefaultSettings: config.getDefaultSettings,
   renderToolSettings: config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("nuage-lettres", "Nuage de lettres", {
     return createNuageLettresActivity({
       ...context,
       defaultInstruction: DEFAULT_INSTRUCTION,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

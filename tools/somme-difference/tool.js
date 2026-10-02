@@ -10,7 +10,7 @@ export default defineTool("somme-difference", "Somme ou différence ?", {
   description: "Choisir entre addition et soustraction à partir de deux collections, puis écrire l'opération complète.",
   tags: ["maths", "calcul", "addition", "soustraction", "collections", "opération", "tracé", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
   workAreaLayout: "stretch",
 
   getDefaultSettings: config.getDefaultSettings,
@@ -43,7 +43,7 @@ export default defineTool("somme-difference", "Somme ou différence ?", {
     return createSommeDifferenceActivity({
       ...context,
       defaultInstruction: DEFAULT_INSTRUCTION,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

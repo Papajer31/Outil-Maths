@@ -16,6 +16,11 @@ export const DRAWING_PERSISTENCE = Object.freeze({
   NONE: "none"
 });
 
+export const DRAWING_TYPES = Object.freeze({
+  SEGMENT: "segment",
+  LINE: "line"
+});
+
 export const BOARD = Object.freeze({
   width: 1180,
   height: 650,
@@ -39,6 +44,20 @@ const GROUP_RECT = Object.freeze({
   bottom: BOARD.height * 0.9
 });
 
+const AB_RECT = Object.freeze({
+  left: BOARD.width * 0.15,
+  right: BOARD.width * 0.85,
+  top: BOARD.height * 0.15,
+  bottom: BOARD.height * 0.85
+});
+
+const BOARD_INNER_RECT = Object.freeze({
+  left: BOARD.margin,
+  right: BOARD.width - BOARD.margin,
+  top: BOARD.margin,
+  bottom: BOARD.height - BOARD.margin
+});
+
 const GROUP_MIN_POINT_DISTANCE = 68;
 
 export function getDefaultSettings() {
@@ -48,7 +67,8 @@ export function getDefaultSettings() {
     alignedCount: 2,
     distractorCount: 6,
     difficulty: DIFFICULTIES.MODERATE,
-    drawingPersistence: DRAWING_PERSISTENCE.ALL
+    drawingPersistence: DRAWING_PERSISTENCE.ALL,
+    drawingType: DRAWING_TYPES.SEGMENT
   };
 }
 
@@ -63,7 +83,8 @@ export function normalizeSettings(settings = {}) {
     alignedCount: clampInt(settings?.alignedCount, LIMITS.alignedCount.min, LIMITS.alignedCount.max, fallback.alignedCount),
     distractorCount: mode === MODES.GROUPS ? Math.max(rawDistractorCount, groupCount * 3) : rawDistractorCount,
     difficulty: normalizeDifficulty(settings?.difficulty, fallback.difficulty),
-    drawingPersistence: normalizeDrawingPersistence(settings?.drawingPersistence, fallback.drawingPersistence)
+    drawingPersistence: normalizeDrawingPersistence(settings?.drawingPersistence, fallback.drawingPersistence),
+    drawingType: normalizeDrawingType(settings?.drawingType, fallback.drawingType)
   };
 }
 
@@ -207,41 +228,55 @@ function generateGroupsQuestion(cfg, layout = {}) {
 }
 
 function generateWithABQuestion(cfg) {
-  for (let outer = 0; outer < 160; outer += 1) {
-    const line = createLongLine();
-    if (!line) continue;
+  const orientation = Math.random() < 0.5 ? "left-right" : "top-bottom";
 
-    const tPool = shuffle([0.05, 0.31, 0.43, 0.57, 0.69, 0.95]);
-    const referenceTs = [0.18, 0.82];
-    const selectedTs = tPool.slice(0, cfg.alignedCount).sort((a, b) => a - b);
-    if (selectedTs.length !== cfg.alignedCount) continue;
+  for (let outer = 0; outer < 220; outer += 1) {
+    const referenceLine = createOppositeSidesChord(AB_RECT, orientation);
+    if (!referenceLine) continue;
 
-    const a = pointOnLine(line, referenceTs[0], { id: "ref-a", label: "A", selectable: false, role: "reference" });
-    const b = pointOnLine(line, referenceTs[1], { id: "ref-b", label: "B", selectable: false, role: "reference" });
-    const targets = selectedTs.map((t, index) => pointOnLine(line, t, {
-      id: `target-${index + 1}`,
-      selectable: true,
-      role: "target"
-    }));
-    const core = [a, b, ...targets];
+    const boardLine = extendLineToRect(referenceLine, BOARD_INNER_RECT);
+    if (!boardLine) continue;
 
-    if (!hasSafePointSpacing(core)) continue;
+    const a = {
+      id: "ref-a",
+      x: referenceLine.a.x,
+      y: referenceLine.a.y,
+      label: "A",
+      selectable: false,
+      role: "reference"
+    };
+    const b = {
+      id: "ref-b",
+      x: referenceLine.b.x,
+      y: referenceLine.b.y,
+      label: "B",
+      selectable: false,
+      role: "reference"
+    };
 
-    const distractors = createDistractors({
+    const core = [a, b];
+    const abMinPointDistance = getABMinimumPointDistance(boardLine, 2 + cfg.alignedCount + cfg.distractorCount);
+    const targets = createABTargets({
+      count: cfg.alignedCount,
+      boardLine,
+      referenceLine,
+      existing: core,
+      minPointDistance: abMinPointDistance
+    });
+    if (!targets) continue;
+    core.push(...targets);
+
+    const distractors = createABDistractors({
       count: cfg.distractorCount,
       difficulty: cfg.difficulty,
+      boardLine,
       existing: core,
-      lines: [line]
+      minPointDistance: abMinPointDistance
     });
     if (!distractors) continue;
 
     const points = [...core, ...distractors];
-    const mainIds = new Set(core.map((point) => point.id));
-    if (!validateFigure(points, {
-      allowAlignedTriple(ids) {
-        return ids.every((id) => mainIds.has(id));
-      }
-    })) continue;
+    if (!hasMinimumPointSpacing(points, abMinPointDistance)) continue;
 
     return {
       mode: MODES.WITH_AB,
@@ -256,53 +291,703 @@ function generateWithABQuestion(cfg) {
   return null;
 }
 
+function createABTargets({ count, boardLine, referenceLine, existing, minPointDistance }) {
+  const total = Math.max(0, Number(count) || 0);
+  const result = [];
+  const refT1 = projectionParameter(referenceLine.a, boardLine);
+  const refT2 = projectionParameter(referenceLine.b, boardLine);
+  const refLow = Math.min(refT1, refT2);
+  const refHigh = Math.max(refT1, refT2);
+
+  for (let index = 0; index < total; index += 1) {
+    let found = null;
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const useOutside = Math.random() < 0.36;
+      let t;
+
+      if (useOutside && (refLow > 0.045 || refHigh < 0.955)) {
+        const canBefore = refLow > 0.045;
+        const canAfter = refHigh < 0.955;
+        if (canBefore && canAfter) {
+          t = Math.random() < 0.5
+            ? randomBetween(0.025, refLow - 0.02)
+            : randomBetween(refHigh + 0.02, 0.975);
+        } else if (canBefore) {
+          t = randomBetween(0.025, refLow - 0.02);
+        } else {
+          t = randomBetween(refHigh + 0.02, 0.975);
+        }
+      } else {
+        t = randomBetween(refLow + 0.035, refHigh - 0.035);
+      }
+
+      if (!Number.isFinite(t)) continue;
+      const candidate = pointOnLine(boardLine, t, {
+        id: `target-${index + 1}`,
+        selectable: true,
+        role: "target",
+        label: ""
+      });
+      if (!pointInsideBoard(candidate)) continue;
+      if (!hasMinimumPointSpacing([...existing, ...result, candidate], minPointDistance)) continue;
+      found = candidate;
+      break;
+    }
+    if (!found) return null;
+    result.push(found);
+  }
+  return result;
+}
+
+function createABDistractors({ count, difficulty, boardLine, existing, minPointDistance }) {
+  const total = Math.max(0, Number(count) || 0);
+  const result = [];
+
+  for (let index = 0; index < total; index += 1) {
+    let found = null;
+    for (let attempt = 0; attempt < 700; attempt += 1) {
+      const t = randomBetween(0.035, 0.965);
+      const base = pointOnLine(boardLine, t, {});
+      const jitter = getABDistractorJitter(difficulty);
+      const sign = Math.random() < 0.5 ? -1 : 1;
+      const candidate = offsetPointFromLine(boardLine, base, jitter, sign, {
+        id: `d-${index + 1}`,
+        selectable: true,
+        role: "distractor",
+        label: ""
+      });
+
+      if (!pointInsideBoard(candidate)) continue;
+      if (!hasMinimumPointSpacing([...existing, ...result, candidate], minPointDistance)) continue;
+      found = candidate;
+      break;
+    }
+    if (!found) return null;
+    result.push(found);
+  }
+  return result;
+}
+
+function getABMinimumPointDistance(boardLine, pointCount) {
+  const span = distance(boardLine.a, boardLine.b);
+  const count = Math.max(3, Number(pointCount) || 3);
+  return Math.max(24, Math.min(BOARD.minPointDistance, (span / (count + 1)) * 0.78));
+}
+
+function getABDistractorJitter(difficulty) {
+  const mode = normalizeDifficulty(difficulty, DIFFICULTIES.MODERATE);
+  if (mode === DIFFICULTIES.DEMANDING) {
+    return [3, 4, 5][Math.floor(Math.random() * 3)];
+  }
+  if (mode === DIFFICULTIES.MODERATE) {
+    return randomBetween(8, 14);
+  }
+  return randomBetween(30, 40);
+}
+
 function generateDoubleAlignmentQuestion(cfg) {
-  for (let outer = 0; outer < 180; outer += 1) {
-    const target = {
-      x: randomBetween(360, 820),
-      y: randomBetween(235, 415)
-    };
-    const angle1 = randomBetween(-72, 72) * Math.PI / 180;
-    let angle2 = angle1 + randomBetween(48, 118) * Math.PI / 180;
-    angle2 = normalizeAngle(angle2);
+  const boardRect = {
+    left: BOARD.margin,
+    right: BOARD.width - BOARD.margin,
+    top: BOARD.margin,
+    bottom: BOARD.height - BOARD.margin
+  };
 
-    const line1 = centeredLine(target, angle1, randomBetween(245, 320));
-    const line2 = centeredLine(target, angle2, randomBetween(235, 300));
-    if (!lineInsideBoard(line1) || !lineInsideBoard(line2)) continue;
+  for (let outer = 0; outer < 220; outer += 1) {
+    const abChord = createOppositeSidesChord(GROUP_RECT);
+    const cdChord = createOppositeSidesChord(GROUP_RECT);
+    if (!abChord || !cdChord) continue;
 
-    const a = pointAtSignedDistance(target, angle1, -randomBetween(175, 245), { id: "ref-a", label: "A", selectable: false, role: "reference" });
-    const b = pointAtSignedDistance(target, angle1, randomBetween(175, 245), { id: "ref-b", label: "B", selectable: false, role: "reference" });
-    const c = pointAtSignedDistance(target, angle2, -randomBetween(165, 235), { id: "ref-c", label: "C", selectable: false, role: "reference" });
-    const d = pointAtSignedDistance(target, angle2, randomBetween(165, 235), { id: "ref-d", label: "D", selectable: false, role: "reference" });
+    const target = lineIntersection(abChord.a, abChord.b, cdChord.a, cdChord.b);
+    if (!target) continue;
+    if (!pointInsideRect(target, GROUP_RECT)) continue;
+    if (acuteAngleBetweenLines(abChord, cdChord) <= 10) continue;
+
+    const a = { id: "ref-a", label: "A", selectable: false, role: "reference", x: abChord.a.x, y: abChord.a.y };
+    const b = { id: "ref-b", label: "B", selectable: false, role: "reference", x: abChord.b.x, y: abChord.b.y };
+    const c = { id: "ref-c", label: "C", selectable: false, role: "reference", x: cdChord.a.x, y: cdChord.a.y };
+    const d = { id: "ref-d", label: "D", selectable: false, role: "reference", x: cdChord.b.x, y: cdChord.b.y };
     const answer = { id: "target-1", x: target.x, y: target.y, selectable: true, role: "target", label: "" };
     const core = [a, b, c, d, answer];
     if (!hasSafePointSpacing(core)) continue;
+    if ([a, b, c, d].some((point) => distance(point, answer) < 88)) continue;
 
-    const distractors = createDistractors({
+    const fullAB = extendLineToRect(abChord, boardRect);
+    const fullCD = extendLineToRect(cdChord, boardRect);
+    if (!fullAB || !fullCD) continue;
+
+    const distractors = createRecursiveIntersectionDistractors({
+      target: answer,
       count: cfg.distractorCount,
       difficulty: cfg.difficulty,
       existing: core,
-      lines: [line1, line2]
+      fullAB,
+      fullCD
     });
     if (!distractors) continue;
-    const points = [...core, ...distractors];
-
-    const allowedTriples = new Set([
-      tripleKey([a.id, b.id, answer.id]),
-      tripleKey([c.id, d.id, answer.id])
-    ]);
-    if (!validateFigure(points, { allowedTriples })) continue;
 
     return {
       mode: MODES.DOUBLE_ALIGNMENT,
       prompt: "Quel point est aligné à la fois avec A et B mais aussi avec C et D ?",
-      points: shuffleKeepingReferences(points, ["ref-a", "ref-b", "ref-c", "ref-d"]).map(copyPoint),
+      points: shuffleKeepingReferences([...core, ...distractors], ["ref-a", "ref-b", "ref-c", "ref-d"]).map(copyPoint),
       expectedIds: [answer.id],
       difficulty: cfg.difficulty,
       distractorCount: cfg.distractorCount
     };
   }
   return null;
+}
+
+function createRecursiveIntersectionDistractors({ target, count, difficulty, existing, fullAB, fullCD }) {
+  const total = Math.max(0, Number(count) || 0);
+  if (total <= 0) return [];
+
+  const profile = getIntersectionDifficultyProfile(difficulty);
+  const context = createIntersectionDistractorContext(target, fullAB, fullCD, profile);
+  if (!context) return null;
+
+  const result = [];
+  const nearCount = Math.min(total, profile.nearTargetCount);
+  if (nearCount > 0) {
+    const nearTarget = createNearTargetIntersectionDistractors({
+      target,
+      count: nearCount,
+      existing,
+      context,
+      profile,
+      idStart: 1
+    });
+    if (!nearTarget) return null;
+    result.push(...nearTarget);
+  }
+
+  const remaining = total - result.length;
+  const familyPlan = buildIntersectionFamilyPlan(remaining, profile.familyWeights);
+  for (let index = 0; index < remaining; index += 1) {
+    const current = [...existing, ...result];
+    const preferredFamily = familyPlan[index] || "arc";
+    const candidate = createRecursiveIntersectionDistractorCandidate({
+      id: `d-${result.length + 1}`,
+      target,
+      current,
+      context,
+      profile,
+      preferredFamily
+    });
+    if (!candidate) return null;
+    result.push(candidate);
+  }
+
+  return result;
+}
+
+function createNearTargetIntersectionDistractors({ target, count, existing, context, profile, idStart }) {
+  const result = [];
+  const baseAngle = context.dominantAngleDeg + randomBetween(-28, 28);
+  const chosenAngles = [];
+
+  for (let index = 0; index < count; index += 1) {
+    let found = null;
+
+    if (index === 0) {
+      found = createExactNearTargetDistractor({
+        id: `d-${idStart + index}`,
+        target,
+        existing,
+        result,
+        context,
+        profile,
+        chosenAngles
+      });
+    }
+
+    for (let attempt = 0; !found && attempt < 120; attempt += 1) {
+      let angleDeg;
+      if (index === 0) {
+        angleDeg = baseAngle + randomBetween(-18, 18);
+      } else {
+        const separation = randomBetween(profile.nearAngularSeparationMin, profile.nearAngularSeparationMax);
+        angleDeg = chosenAngles[0] + separation * (Math.random() < 0.5 ? -1 : 1);
+      }
+      angleDeg = normalizeAngleDeg(angleDeg);
+      if (!angleWithinDominantSector(angleDeg, context.dominantAngleDeg, profile.dominantSectorWidthDeg + 28)) continue;
+
+      const angleRad = angleDeg * Math.PI / 180;
+      const candidate = {
+        id: `d-${idStart + index}`,
+        x: target.x + Math.cos(angleRad) * profile.nearTargetDistance,
+        y: target.y + Math.sin(angleRad) * profile.nearTargetDistance,
+        selectable: true,
+        role: "distractor",
+        label: ""
+      };
+      if (!pointInsideBoard(candidate)) continue;
+      if (!hasMinimumDistanceFromPoints(candidate, existing.filter((point) => String(point.id) !== String(target.id)), profile.minPointSpacing)) continue;
+      if (!hasMinimumDistanceFromPoints(candidate, result, profile.nearTargetDistance - 0.25)) continue;
+      found = candidate;
+      chosenAngles.push(angleDeg);
+      break;
+    }
+    if (!found) return null;
+    result.push(found);
+  }
+
+  return result;
+}
+
+function createExactNearTargetDistractor({ id, target, existing, result, context, profile, chosenAngles }) {
+  const branches = [...context.trueBranches]
+    .map((branch) => ({
+      branch,
+      score: dotProduct(branch.direction, context.dominantDirection)
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  for (const { branch } of shuffle(branches.slice(0, Math.min(3, branches.length)))) {
+    const angleDeg = vectorAngleDeg(branch.direction.x, branch.direction.y);
+    const candidate = {
+      id,
+      x: target.x + branch.direction.x * profile.nearTargetDistance,
+      y: target.y + branch.direction.y * profile.nearTargetDistance,
+      selectable: true,
+      role: "distractor",
+      label: ""
+    };
+    if (!pointInsideBoard(candidate)) continue;
+    if (!hasMinimumDistanceFromPoints(candidate, existing.filter((point) => String(point.id) !== String(target.id)), profile.minPointSpacing)) continue;
+    if (!hasMinimumDistanceFromPoints(candidate, result, profile.nearTargetDistance - 0.25)) continue;
+    chosenAngles.push(angleDeg);
+    return candidate;
+  }
+  return null;
+}
+
+function createRecursiveIntersectionDistractorCandidate({ id, target, current, context, profile, preferredFamily }) {
+  const families = prioritizeIntersectionFamilies(preferredFamily);
+  for (const family of families) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const candidate = family === "true"
+        ? createTrueLineIntersectionDistractor(id, target, current, context, profile)
+        : family === "fake"
+          ? createFakeAxisIntersectionDistractor(id, target, current, context, profile)
+          : createArcIntersectionDistractor(id, target, current, context, profile);
+      if (candidate) return candidate;
+    }
+  }
+  return null;
+}
+
+function getIntersectionDifficultyProfile(difficulty) {
+  const mode = normalizeDifficulty(difficulty, DIFFICULTIES.MODERATE);
+  if (mode === DIFFICULTIES.TRIVIAL) {
+    return {
+      nearTargetCount: 0,
+      nearTargetDistance: 20,
+      nearAngularSeparationMin: 70,
+      nearAngularSeparationMax: 125,
+      dominantSectorWidthDeg: 290,
+      dominantPreference: 0.68,
+      trueRadiusMin: 54,
+      trueRadiusMax: 220,
+      trueAngleMax: 18,
+      trueRadialGap: 24,
+      fakeOffsetMin: 65,
+      fakeOffsetMax: 135,
+      fakeAlongMin: 22,
+      fakeAlongMax: 185,
+      fakeAlongGap: 26,
+      fakeAngleMax: 8,
+      arcRadiusMin: 48,
+      arcRadiusMax: 185,
+      minPointSpacing: 56,
+      trueZeroProbability: 0.18,
+      familyWeights: { true: 0.28, fake: 0.34, arc: 0.38 }
+    };
+  }
+  if (mode === DIFFICULTIES.DEMANDING) {
+    return {
+      nearTargetCount: 2,
+      nearTargetDistance: 20,
+      nearAngularSeparationMin: 70,
+      nearAngularSeparationMax: 125,
+      dominantSectorWidthDeg: 215,
+      dominantPreference: 0.9,
+      trueRadiusMin: 44,
+      trueRadiusMax: 138,
+      trueAngleMax: 8,
+      trueRadialGap: 16,
+      fakeOffsetMin: 44,
+      fakeOffsetMax: 90,
+      fakeAlongMin: 20,
+      fakeAlongMax: 128,
+      fakeAlongGap: 20,
+      fakeAngleMax: 5,
+      arcRadiusMin: 44,
+      arcRadiusMax: 128,
+      minPointSpacing: 44,
+      trueZeroProbability: 0.3,
+      familyWeights: { true: 0.48, fake: 0.24, arc: 0.28 }
+    };
+  }
+  return {
+    nearTargetCount: 1,
+    nearTargetDistance: 20,
+    nearAngularSeparationMin: 70,
+    nearAngularSeparationMax: 125,
+    dominantSectorWidthDeg: 250,
+    dominantPreference: 0.8,
+    trueRadiusMin: 48,
+    trueRadiusMax: 172,
+    trueAngleMax: 12,
+    trueRadialGap: 20,
+    fakeOffsetMin: 54,
+    fakeOffsetMax: 110,
+    fakeAlongMin: 20,
+    fakeAlongMax: 150,
+    fakeAlongGap: 22,
+    fakeAngleMax: 6,
+    arcRadiusMin: 44,
+    arcRadiusMax: 150,
+    minPointSpacing: 50,
+    trueZeroProbability: 0.24,
+    familyWeights: { true: 0.4, fake: 0.28, arc: 0.32 }
+  };
+}
+
+function createIntersectionDistractorContext(target, fullAB, fullCD, profile) {
+  const boardRect = {
+    left: BOARD.margin,
+    right: BOARD.width - BOARD.margin,
+    top: BOARD.margin,
+    bottom: BOARD.height - BOARD.margin
+  };
+
+  const trueBranches = createIntersectionBranches(target, fullAB, fullCD)
+    .filter((branch) => branch.maxDistance >= profile.trueRadiusMin + 12);
+  if (trueBranches.length < 2) return null;
+
+  const axisAB = normalizeVector({ x: fullAB.b.x - fullAB.a.x, y: fullAB.b.y - fullAB.a.y });
+  const axisCD = normalizeVector({ x: fullCD.b.x - fullCD.a.x, y: fullCD.b.y - fullCD.a.y });
+  if (!axisAB || !axisCD) return null;
+
+  const dominantAngleDeg = chooseDominantAngle(target);
+  const dominantDirection = angleDegToVector(dominantAngleDeg);
+  const fakeAxes = [
+    createParallelFakeAxis({ target, baseDirection: axisAB, boardRect, profile, key: "fake-ab", dominantDirection }),
+    createParallelFakeAxis({ target, baseDirection: axisCD, boardRect, profile, key: "fake-cd", dominantDirection })
+  ].filter(Boolean);
+  if (!fakeAxes.length) return null;
+
+  return {
+    trueBranches,
+    fakeAxes,
+    dominantAngleDeg,
+    dominantDirection
+  };
+}
+
+function buildIntersectionFamilyPlan(total, weights) {
+  const entries = [
+    ["true", Math.max(0, Number(weights?.true) || 0)],
+    ["fake", Math.max(0, Number(weights?.fake) || 0)],
+    ["arc", Math.max(0, Number(weights?.arc) || 0)]
+  ];
+  const sum = entries.reduce((acc, [, value]) => acc + value, 0) || 1;
+  const normalized = entries.map(([key, value]) => ({ key, exact: total * value / sum }));
+  const counts = Object.fromEntries(normalized.map(({ key, exact }) => [key, Math.floor(exact)]));
+  let assigned = counts.true + counts.fake + counts.arc;
+  const remainders = normalized
+    .map(({ key, exact }) => ({ key, remainder: exact - Math.floor(exact) }))
+    .sort((a, b) => b.remainder - a.remainder);
+  let idx = 0;
+  while (assigned < total) {
+    counts[remainders[idx % remainders.length].key] += 1;
+    assigned += 1;
+    idx += 1;
+  }
+  if (total >= 4) {
+    if (counts.fake === 0) {
+      counts.fake = 1;
+      counts.true = Math.max(0, counts.true - 1);
+    }
+    if (counts.arc === 0) {
+      counts.arc = 1;
+      if (counts.true >= counts.fake) counts.true = Math.max(0, counts.true - 1);
+      else counts.fake = Math.max(0, counts.fake - 1);
+    }
+  }
+  const plan = [];
+  for (const [key, value] of Object.entries(counts)) {
+    for (let i = 0; i < value; i += 1) plan.push(key);
+  }
+  return shuffle(plan);
+}
+
+function prioritizeIntersectionFamilies(preferredFamily) {
+  const all = ["true", "fake", "arc"];
+  return [preferredFamily, ...all.filter((key) => key !== preferredFamily)];
+}
+
+function createTrueLineIntersectionDistractor(id, target, current, context, profile) {
+  const preferred = [];
+  const secondary = [];
+  for (const branch of context.trueBranches) {
+    const dot = dotProduct(branch.direction, context.dominantDirection);
+    (dot >= -0.08 ? preferred : secondary).push({ branch, dot });
+  }
+  preferred.sort((left, right) => right.dot - left.dot || left.branch.used.length - right.branch.used.length);
+  secondary.sort((left, right) => right.dot - left.dot || left.branch.used.length - right.branch.used.length);
+  let ordered = [...preferred, ...secondary].map((entry) => entry.branch);
+  if (Math.random() > profile.dominantPreference) ordered = shuffle(ordered);
+
+  for (const branch of ordered) {
+    const intervals = getAvailableRadiusIntervals(
+      profile.trueRadiusMin,
+      Math.min(profile.trueRadiusMax, branch.maxDistance),
+      branch.used,
+      profile.trueRadialGap
+    );
+    if (!intervals.length) continue;
+
+    const radius = chooseRadiusFromIntervals(intervals);
+    const angleOffsetDeg = chooseAngleOffsetWithZero(profile.trueAngleMax, profile.trueZeroProbability);
+    const rotated = rotateVector(branch.direction, angleOffsetDeg * Math.PI / 180);
+    const candidate = {
+      id,
+      x: target.x + rotated.x * radius,
+      y: target.y + rotated.y * radius,
+      selectable: true,
+      role: "distractor",
+      label: ""
+    };
+    if (!pointInsideBoard(candidate)) continue;
+    if (!angleWithinDominantSector(vectorAngleDeg(candidate.x - target.x, candidate.y - target.y), context.dominantAngleDeg, profile.dominantSectorWidthDeg)) continue;
+    if (!hasMinimumDistanceFromPoints(candidate, current, profile.minPointSpacing)) continue;
+    branch.used.push(radius);
+    return candidate;
+  }
+  return null;
+}
+
+function createFakeAxisIntersectionDistractor(id, target, current, context, profile) {
+  const orderedAxes = shuffle([...context.fakeAxes].sort((left, right) => left.used.length - right.used.length));
+  for (const axis of orderedAxes) {
+    const intervals = getAvailableRadiusIntervals(
+      profile.fakeAlongMin,
+      Math.min(profile.fakeAlongMax, axis.maxDistance),
+      axis.used,
+      profile.fakeAlongGap
+    );
+    if (!intervals.length) continue;
+
+    const along = chooseRadiusFromIntervals(intervals);
+    const candidateOptions = [1, -1].map((sign) => {
+      const baseDirection = sign > 0 ? axis.direction : { x: -axis.direction.x, y: -axis.direction.y };
+      const angleOffsetDeg = randomBetween(-profile.fakeAngleMax, profile.fakeAngleMax);
+      const rotated = rotateVector(baseDirection, angleOffsetDeg * Math.PI / 180);
+      const point = {
+        id,
+        x: axis.origin.x + rotated.x * along,
+        y: axis.origin.y + rotated.y * along,
+        selectable: true,
+        role: "distractor",
+        label: ""
+      };
+      return {
+        point,
+        score: dotProduct(normalizeVector({ x: point.x - target.x, y: point.y - target.y }) || { x: 0, y: 0 }, context.dominantDirection)
+      };
+    }).sort((left, right) => right.score - left.score);
+
+    const chosen = Math.random() < profile.dominantPreference ? candidateOptions[0] : candidateOptions[1];
+    const candidate = chosen.point;
+    if (!pointInsideBoard(candidate)) continue;
+    if (!angleWithinDominantSector(vectorAngleDeg(candidate.x - target.x, candidate.y - target.y), context.dominantAngleDeg, profile.dominantSectorWidthDeg + 25)) continue;
+    if (!hasMinimumDistanceFromPoints(candidate, current, profile.minPointSpacing)) continue;
+    axis.used.push(along);
+    return candidate;
+  }
+  return null;
+}
+
+function createArcIntersectionDistractor(id, target, current, context, profile) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const radius = randomBetween(profile.arcRadiusMin, profile.arcRadiusMax);
+    const angleDeg = randomAngleInSector(context.dominantAngleDeg, profile.dominantSectorWidthDeg);
+    const angleRad = angleDeg * Math.PI / 180;
+    const candidate = {
+      id,
+      x: target.x + Math.cos(angleRad) * radius,
+      y: target.y + Math.sin(angleRad) * radius,
+      selectable: true,
+      role: "distractor",
+      label: ""
+    };
+    if (!pointInsideBoard(candidate)) continue;
+    if (!hasMinimumDistanceFromPoints(candidate, current, profile.minPointSpacing)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+function createIntersectionBranches(target, fullAB, fullCD) {
+  return [
+    createIntersectionBranch(target, fullAB.a, "ab-neg"),
+    createIntersectionBranch(target, fullAB.b, "ab-pos"),
+    createIntersectionBranch(target, fullCD.a, "cd-neg"),
+    createIntersectionBranch(target, fullCD.b, "cd-pos")
+  ].filter(Boolean);
+}
+
+function createIntersectionBranch(target, endpoint, key) {
+  const span = distance(target, endpoint);
+  if (!(span > 0)) return null;
+  return {
+    key,
+    direction: {
+      x: (endpoint.x - target.x) / span,
+      y: (endpoint.y - target.y) / span
+    },
+    maxDistance: span - 12,
+    used: []
+  };
+}
+
+function createParallelFakeAxis({ target, baseDirection, boardRect, profile, key, dominantDirection }) {
+  const perpendicular = { x: -baseDirection.y, y: baseDirection.x };
+  const preferredSign = dotProduct(perpendicular, dominantDirection) >= 0 ? 1 : -1;
+  const offsetSign = Math.random() < profile.dominantPreference ? preferredSign : -preferredSign;
+  const offset = randomBetween(profile.fakeOffsetMin, profile.fakeOffsetMax) * offsetSign;
+  const alongSign = dotProduct(baseDirection, dominantDirection) >= 0 ? 1 : -1;
+  const alongCenterShift = randomBetween(0, profile.fakeAlongMin * 1.15) * alongSign;
+  const origin = {
+    x: target.x + perpendicular.x * offset + baseDirection.x * alongCenterShift,
+    y: target.y + perpendicular.y * offset + baseDirection.y * alongCenterShift
+  };
+  const clipped = extendLineToRect({
+    a: { x: origin.x - baseDirection.x * 2000, y: origin.y - baseDirection.y * 2000 },
+    b: { x: origin.x + baseDirection.x * 2000, y: origin.y + baseDirection.y * 2000 }
+  }, boardRect);
+  if (!clipped) return null;
+  const maxDistance = Math.max(0, Math.min(distance(origin, clipped.a), distance(origin, clipped.b)) - 10);
+  if (maxDistance < profile.fakeAlongMin + 10) return null;
+  return {
+    key,
+    origin,
+    direction: baseDirection,
+    maxDistance,
+    used: []
+  };
+}
+
+function getAvailableRadiusIntervals(minRadius, maxRadius, used = [], gap = 0) {
+  if (!(maxRadius > minRadius)) return [];
+  const blocked = [...used]
+    .map((radius) => ({
+      start: Math.max(minRadius, Math.abs(radius) - gap),
+      end: Math.min(maxRadius, Math.abs(radius) + gap)
+    }))
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start);
+
+  const intervals = [];
+  let cursor = minRadius;
+  for (const range of blocked) {
+    if (range.start > cursor) intervals.push({ min: cursor, max: range.start });
+    cursor = Math.max(cursor, range.end);
+  }
+  if (cursor < maxRadius) intervals.push({ min: cursor, max: maxRadius });
+  return intervals.filter((interval) => interval.max - interval.min >= 8);
+}
+
+function chooseRadiusFromIntervals(intervals) {
+  const totalLength = intervals.reduce((sum, interval) => sum + (interval.max - interval.min), 0);
+  let roll = randomBetween(0, totalLength);
+  for (const interval of intervals) {
+    const length = interval.max - interval.min;
+    if (roll <= length) return randomBetween(interval.min, interval.max);
+    roll -= length;
+  }
+  const last = intervals[intervals.length - 1];
+  return randomBetween(last.min, last.max);
+}
+
+function chooseAngleOffsetWithZero(angleMax, zeroProbability = 0.25) {
+  if (Math.random() < zeroProbability) return 0;
+  return randomBetween(-angleMax, angleMax);
+}
+
+function chooseDominantAngle(target) {
+  const boardCenter = { x: BOARD.width / 2, y: BOARD.height / 2 };
+  const inwardAngle = vectorAngleDeg(boardCenter.x - target.x, boardCenter.y - target.y);
+  return normalizeAngleDeg(inwardAngle + randomBetween(-78, 78));
+}
+
+function randomAngleInSector(centerDeg, widthDeg) {
+  return normalizeAngleDeg(centerDeg + randomBetween(-widthDeg / 2, widthDeg / 2));
+}
+
+function angleWithinDominantSector(angleDeg, centerDeg, widthDeg) {
+  const delta = Math.abs(shortestAngleDeltaDeg(angleDeg, centerDeg));
+  return delta <= widthDeg / 2;
+}
+
+function shortestAngleDeltaDeg(left, right) {
+  let delta = normalizeAngleDeg(left) - normalizeAngleDeg(right);
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function angleDegToVector(angleDeg) {
+  const angleRad = angleDeg * Math.PI / 180;
+  return { x: Math.cos(angleRad), y: Math.sin(angleRad) };
+}
+
+function vectorAngleDeg(x, y) {
+  return normalizeAngleDeg(Math.atan2(y, x) * 180 / Math.PI);
+}
+
+function dotProduct(left, right) {
+  return left.x * right.x + left.y * right.y;
+}
+
+function hasMinimumDistanceFromPoints(candidate, points, minDistance) {
+  return (Array.isArray(points) ? points : []).every((point) => distance(candidate, point) >= minDistance);
+}
+
+function rotateVector(vector, angleRad) {
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  return {
+    x: vector.x * cos - vector.y * sin,
+    y: vector.x * sin + vector.y * cos
+  };
+}
+
+function normalizeVector(vector) {
+  const length = Math.hypot(vector.x, vector.y);
+  if (!(length > 0)) return null;
+  return { x: vector.x / length, y: vector.y / length };
+}
+
+function normalizeAngleDeg(angle) {
+  let normalized = angle % 360;
+  if (normalized < 0) normalized += 360;
+  return normalized;
+}
+
+function acuteAngleBetweenLines(left, right) {
+  const dx1 = left.b.x - left.a.x;
+  const dy1 = left.b.y - left.a.y;
+  const dx2 = right.b.x - right.a.x;
+  const dy2 = right.b.y - right.a.y;
+  const len1 = Math.hypot(dx1, dy1);
+  const len2 = Math.hypot(dx2, dy2);
+  if (!(len1 > 0 && len2 > 0)) return 0;
+  const cos = clampNumber(((dx1 * dx2) + (dy1 * dy2)) / (len1 * len2), -1, 1);
+  const raw = Math.acos(cos) * 180 / Math.PI;
+  return raw > 90 ? 180 - raw : raw;
 }
 
 function createStructuredSolutionGroup(groupId, existing = [], existingGroups = [], orientation = "left-right") {
@@ -917,6 +1602,12 @@ function normalizeDifficulty(value, fallback) {
 
 function normalizeDrawingPersistence(value, fallback) {
   const allowed = new Set(Object.values(DRAWING_PERSISTENCE));
+  const normalized = String(value || "").trim();
+  return allowed.has(normalized) ? normalized : fallback;
+}
+
+function normalizeDrawingType(value, fallback) {
+  const allowed = new Set(Object.values(DRAWING_TYPES));
   const normalized = String(value || "").trim();
   return allowed.has(normalized) ? normalized : fallback;
 }

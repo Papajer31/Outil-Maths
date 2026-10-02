@@ -10,7 +10,7 @@ export default defineTool("reperage-mots", "Repérage de mots", {
   description:"Repérer toutes les occurrences d’un mot sélectionné dans la banque, parmi des distracteurs graphiquement proches.",
   tags:["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "mots", "discrimination-visuelle", "sélection", "projection"],
   defaultInstruction:DEFAULT_INSTRUCTION,
-  supportsCustomInstruction:false,
+  supportsCustomInstruction:true,
 
   getDefaultSettings:config.getDefaultSettings,
   renderToolSettings:config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("reperage-mots", "Repérage de mots", {
     return createReperageMotsActivity({
       ...context,
       defaultInstruction:DEFAULT_INSTRUCTION,
-      supportsCustomInstruction:false
+      supportsCustomInstruction:true
     });
   }
 });

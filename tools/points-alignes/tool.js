@@ -10,7 +10,7 @@ export default defineTool("points-alignes", "Points alignés", {
   description: "Repérer des alignements de points et un point commun à deux alignements.",
   tags: ["maths", "géométrie", "points", "alignement", "intersection", "tracé", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
 
   getDefaultSettings: config.getDefaultSettings,
   renderToolSettings: config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("points-alignes", "Points alignés", {
     return createPointsAlignesActivity({
       ...context,
       defaultInstruction: DEFAULT_INSTRUCTION,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

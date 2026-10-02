@@ -12,6 +12,7 @@ import {
 } from "../../../shared/config-widgets.js";
 import { getActiveToolsRegistry } from "../../../tools/registry.js";
 import { loadToolsRuntime } from "../../../shared/tool-root-runtime.js";
+import { getToolInstructionEditorSpec } from "../../../shared/tool-contract.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
 import { openCatalogTreeAdminDialog } from "./catalog-tree-admin-dialog.js";
@@ -78,6 +79,7 @@ const ADMIN_TOOL_PICKER_GROUPS = Object.freeze([
     toolIds: [
       "plus-moins-autant",
       "comparaison",
+      "comparaison-signes",
       "collection",
       "frise-picbille",
       "droite-numerique-simple",
@@ -1050,6 +1052,9 @@ export function createCatalogAdminViewController({
       } else {
         settingsHost.innerHTML = `<div class="cfg-empty-state">Aucun réglage spécifique pour cet outil.</div>`;
       }
+      if (!hideCommonQuizControls) {
+        bindInstructionPlaceholderRefresh(host, settingsHost, tool, settings);
+      }
 
       host.querySelectorAll('input[type="number"]').forEach((inp) => {
         inp.addEventListener("focus", () => {
@@ -1159,29 +1164,42 @@ export function createCatalogAdminViewController({
     const checkedAttr = instruction.enabled ? "checked" : "";
     const disabledAttr = instruction.enabled ? "" : "disabled";
     const normalizedLevelDraft = normalizeLevelDraft(levelDraft);
-    const sourceInstruction = String(
-      normalizedLevelDraft?.settings?.sourceInstruction
-        ?? normalizedLevelDraft?.settings?.source_instruction
-        ?? ""
-    ).trim();
-    const defaultInstruction = sourceInstruction || String(tool?.defaultInstruction || "").trim();
-    const placeholder = defaultInstruction || "Consigne affichée uniquement pour ce niveau...";
+    const spec = getToolInstructionEditorSpec(tool || {}, normalizedLevelDraft.settings || {});
+
+    const activeVariantKeys = new Set(Array.isArray(spec.activeKeys) ? spec.activeKeys : []);
+    const inputMarkup = spec.kind === "variants"
+      ? `<div class="super-admin-level-instruction-dual${activeVariantKeys.size > 1 ? " is-split" : ""}" data-instruction-active-count="${activeVariantKeys.size || 1}">
+          ${spec.variants.map((variant) => {
+            const saved = instruction.variants?.[variant.key] || { text:instruction.text || "" };
+            const isActive = activeVariantKeys.has(variant.key);
+            return `<div class="super-admin-level-instruction-variant" data-instruction-variant-wrap="${escapeAttr(variant.key)}" ${isActive ? "" : "hidden"}>
+              <input class="tv-input super-admin-level-instruction-input" type="text"
+                data-instruction-variant-key="${escapeAttr(variant.key)}"
+                data-instruction-variant-source="${escapeAttr(variant.placeholder)}"
+                aria-label="${escapeAttr(variant.placeholder)}"
+                placeholder="${escapeAttr(variant.placeholder)}"
+                value="${escapeAttr(saved.text || "")}" ${disabledAttr}>
+            </div>`;
+          }).join("")}
+        </div>`
+      : `<input
+          id="adminLevelInstructionText"
+          class="tv-input super-admin-level-instruction-input"
+          type="text"
+          placeholder="${escapeAttr(spec.placeholder)}"
+          data-tool-default-instruction="${escapeAttr(String(tool?.defaultInstruction || "").trim())}"
+          value="${escapeAttr(instruction.text)}"
+          ${disabledAttr}>`;
+
     return `
-      <div class="tv-group tv-group-inline super-admin-level-instruction-group">
+      <div class="tv-group tv-group-inline super-admin-level-instruction-group" data-instruction-editor-kind="${escapeAttr(spec.kind)}">
         <div class="super-admin-level-instruction-head">
           <label class="super-admin-level-instruction-checkline" for="adminLevelInstructionEnabled">
             <input id="adminLevelInstructionEnabled" type="checkbox" ${checkedAttr}>
             <span>Consigne personnalisée :</span>
           </label>
         </div>
-        <input
-          id="adminLevelInstructionText"
-          class="tv-input super-admin-level-instruction-input"
-          type="text"
-          placeholder="${escapeAttr(placeholder)}"
-          data-tool-default-instruction="${escapeAttr(String(tool?.defaultInstruction || "").trim())}"
-          value="${escapeAttr(instruction.text)}"
-          ${disabledAttr}>
+        ${inputMarkup}
       </div>
     `;
   }
@@ -1199,23 +1217,61 @@ export function createCatalogAdminViewController({
 
   function bindLevelInstructionBlock(container) {
     const checkbox = container.querySelector("#adminLevelInstructionEnabled");
-    const input = container.querySelector("#adminLevelInstructionText");
-    if (!checkbox || !input) return;
+    const inputs = [...container.querySelectorAll(".super-admin-level-instruction-input")];
+    if (!checkbox || !inputs.length) return;
     const applyState = () => {
-      input.disabled = checkbox.checked !== true;
-      input.closest(".super-admin-level-instruction-group")?.classList.toggle("is-enabled", checkbox.checked === true);
+      inputs.forEach((input) => { input.disabled = checkbox.checked !== true; });
+      inputs[0]?.closest(".super-admin-level-instruction-group")?.classList.toggle("is-enabled", checkbox.checked === true);
     };
     applyState();
     checkbox.addEventListener("change", () => {
       applyState();
-      if (checkbox.checked) input.focus();
+      if (checkbox.checked) inputs.find((input) => !input.closest("[hidden]"))?.focus();
     });
 
     container.addEventListener("toolsourceinstructionchange", (event) => {
+      const input = container.querySelector("#adminLevelInstructionText");
+      if (!input) return;
       const sourceInstruction = String(event?.detail?.instruction || "").trim();
       const toolDefault = String(input.dataset.toolDefaultInstruction || "").trim();
       input.placeholder = sourceInstruction || toolDefault || "Consigne affichée uniquement pour ce niveau...";
     });
+  }
+
+  function bindInstructionPlaceholderRefresh(container, settingsHost, tool, baseSettings = {}) {
+    if (!container || !settingsHost || !tool) return;
+    const refresh = () => {
+      let liveSettings = cloneJson(baseSettings || {});
+      try {
+        if (typeof tool.readToolSettings === "function") {
+          liveSettings = tool.readToolSettings(settingsHost, cloneJson(baseSettings || {}), getToolEditorContext(activeLevel)) || liveSettings;
+        }
+      } catch {}
+      const spec = getToolInstructionEditorSpec(tool, liveSettings);
+      const single = container.querySelector("#adminLevelInstructionText");
+      if (spec.kind === "single" && single) {
+        single.placeholder = spec.placeholder || "Consigne affichée uniquement pour ce niveau...";
+        return;
+      }
+      if (spec.kind === "variants") {
+        const activeKeys = new Set(Array.isArray(spec.activeKeys) ? spec.activeKeys : []);
+        const dualHost = container.querySelector(".super-admin-level-instruction-dual");
+        dualHost?.classList.toggle("is-split", activeKeys.size > 1);
+        if (dualHost) dualHost.dataset.instructionActiveCount = String(activeKeys.size || 1);
+        spec.variants.forEach((variant) => {
+          const input = container.querySelector(`[data-instruction-variant-key="${cssEscape(variant.key)}"]`);
+          const wrap = container.querySelector(`[data-instruction-variant-wrap="${cssEscape(variant.key)}"]`);
+          if (wrap) wrap.hidden = !activeKeys.has(variant.key);
+          if (!input) return;
+          input.placeholder = variant.placeholder;
+          input.setAttribute("aria-label", variant.placeholder);
+          input.dataset.instructionVariantSource = variant.placeholder;
+        });
+      }
+    };
+    settingsHost.addEventListener("change", refresh);
+    settingsHost.addEventListener("toolsettingschange", refresh);
+    refresh();
   }
 
   function renderAdminInfiniteToggleButton({ id, label, active = false }) {
@@ -1346,11 +1402,22 @@ export function createCatalogAdminViewController({
   function readLevelInstructionState(container, fallback = {}) {
     const fallbackState = getLevelInstructionState(fallback);
     const checkbox = container?.querySelector("#adminLevelInstructionEnabled");
-    const input = container?.querySelector("#adminLevelInstructionText");
-    if (!checkbox || !input) return fallbackState;
+    const singleInput = container?.querySelector("#adminLevelInstructionText");
+    const variantInputs = [...(container?.querySelectorAll("[data-instruction-variant-key]") || [])];
+    if (!checkbox || (!singleInput && !variantInputs.length)) return fallbackState;
+    const variants = {};
+    variantInputs.forEach((input) => {
+      const key = String(input.dataset.instructionVariantKey || "").trim();
+      if (!key) return;
+      variants[key] = {
+        text:String(input.value ?? ""),
+        source:String(input.dataset.instructionVariantSource || input.placeholder || "").trim()
+      };
+    });
     return {
-      enabled: checkbox.checked === true,
-      text: String(input.value ?? "")
+      enabled:checkbox.checked === true,
+      text:singleInput ? String(singleInput.value ?? "") : "",
+      variants
     };
   }
 
@@ -1365,9 +1432,13 @@ export function createCatalogAdminViewController({
     const instruction = common.instruction && typeof common.instruction === "object" && !Array.isArray(common.instruction)
       ? common.instruction
       : {};
+    const variants = instruction.variants && typeof instruction.variants === "object" && !Array.isArray(instruction.variants)
+      ? instruction.variants
+      : {};
     return {
       enabled: instruction.enabled === true,
-      text: String(instruction.text ?? "")
+      text: String(instruction.text ?? ""),
+      variants: cloneJson(variants)
     };
   }
 
@@ -1381,6 +1452,9 @@ export function createCatalogAdminViewController({
     common.instruction = {
       enabled: instructionState.enabled === true,
       text: String(instructionState.text ?? ""),
+      variants: instructionState.variants && typeof instructionState.variants === "object" && !Array.isArray(instructionState.variants)
+        ? cloneJson(instructionState.variants)
+        : {},
       hidden: false
     };
     safeSettings.common = common;

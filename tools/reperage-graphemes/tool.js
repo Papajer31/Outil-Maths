@@ -10,7 +10,7 @@ export default defineTool("reperage-graphemes", "Repérer les graphèmes", {
   description: "Repérer dans plusieurs mots les lettres qui transcrivent un son ciblé.",
   tags: ["français", "lecture", "étude-du-code", "phonologie", "graphèmes", "sélection", "projection"],
   defaultInstruction: DEFAULT_INSTRUCTION,
-  supportsCustomInstruction: false,
+  supportsCustomInstruction: true,
 
   getDefaultSettings: config.getDefaultSettings,
   renderToolSettings: config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("reperage-graphemes", "Repérer les graphèmes", {
     return createReperageGraphemesActivity({
       ...context,
       defaultInstruction: DEFAULT_INSTRUCTION,
-      supportsCustomInstruction: false
+      supportsCustomInstruction: true
     });
   }
 });

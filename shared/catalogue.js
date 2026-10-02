@@ -226,7 +226,7 @@ export const CATALOG_ACTIVITIES = Object.freeze([
   },
   {
     id: "mathematiques.nombres.comparaison",
-    config_name: "Comparaison",
+    config_name: "Différence entre collections",
     pedagogical_node_id: "mathematiques.nombres",
     tool_id: "comparaison",
     description: "Comparer deux collections terme à terme pour trouver la différence.",
@@ -236,6 +236,19 @@ export const CATALOG_ACTIVITIES = Object.freeze([
       collectionRange: { min: 1, max: 10, mode: "simple", start: 1, step: 1, values: [] },
       tokenMode: "displayed",
       traceMode: "free"
+    }
+  },
+  {
+    id: "mathematiques.nombres.comparaison-signes",
+    config_name: "Comparaison (introduction)",
+    pedagogical_node_id: "mathematiques.nombres",
+    tool_id: "comparaison-signes",
+    description: "Comparer deux collections avec le crocodile ou les signes < et >.",
+    display_order: 8.5,
+    settings: {
+      mode: "choose-collection",
+      layout: "rows",
+      collectionRange: { min: 1, max: 10, mode: "simple", start: 1, step: 1, values: [] }
     }
   },
   {
@@ -931,24 +944,27 @@ export function buildCatalogActivityConfig(activityOrId, options = {}) {
   ) === true;
   const toolMaxTimeMin = clampPositiveInt(pickCatalogConfigValue(options, runtimeOverrides, "toolMaxTimeMin", defaults.toolMaxTimeMin), defaults.toolMaxTimeMin);
   const toolMaxTimeInfinite = pickCatalogConfigValue(options, runtimeOverrides, "toolMaxTimeInfinite", defaults.toolMaxTimeInfinite) === true;
-  const questionFlowMode = normalizeQuestionFlowModeValue(pickCatalogConfigValue(
-    options,
-    runtimeOverrides,
-    "questionFlowMode",
-    defaults.questionFlowMode
-  ), defaults.questionFlowMode);
-  const successGoalCorrectCount = clampPositiveInt(pickCatalogConfigValue(
-    options,
-    runtimeOverrides,
-    "successGoalCorrectCount",
-    defaults.successGoalCorrectCount
-  ), defaults.successGoalCorrectCount);
-  const successGoalSafetyMilestones = clampNonNegativeInt(pickCatalogConfigValue(
-    options,
-    runtimeOverrides,
-    "successGoalSafetyMilestones",
-    defaults.successGoalSafetyMilestones
-  ), defaults.successGoalSafetyMilestones);
+  const questionFlowMode = executionLimit.mode === "success"
+    ? "successGoal"
+    : executionLimit.mode === "time"
+      ? "unlimited"
+      : "fixed";
+  const successGoalCorrectCount = executionLimit.mode === "success"
+    ? Math.max(1, Math.trunc(Number(executionLimit.value) || 10))
+    : clampPositiveInt(pickCatalogConfigValue(
+        options,
+        runtimeOverrides,
+        "successGoalCorrectCount",
+        defaults.successGoalCorrectCount
+      ), defaults.successGoalCorrectCount);
+  const successGoalSafetyMilestones = executionLimit.mode === "success"
+    ? Math.max(0, Math.min(12, Math.trunc(Number(executionLimit.milestones) || 0)))
+    : clampNonNegativeInt(pickCatalogConfigValue(
+        options,
+        runtimeOverrides,
+        "successGoalSafetyMilestones",
+        defaults.successGoalSafetyMilestones
+      ), defaults.successGoalSafetyMilestones);
   const activityTotalTimeSec = pickCatalogConfigValue(options, runtimeOverrides, "activityTotalTimeSec", null);
   const hasActivityTotalTimeSec = activityTotalTimeSec != null
     && String(activityTotalTimeSec).trim() !== ""

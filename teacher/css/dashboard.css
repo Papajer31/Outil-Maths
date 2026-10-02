@@ -2957,7 +2957,7 @@ body .dashboard-share-popup.cfg-share-popup{
 }
 
 .dashboard-toggle input:checked + .dashboard-toggle-track{
-  background:#1f8c5a;
+  background:#ffb020;
 }
 
 .dashboard-toggle input:checked + .dashboard-toggle-track::after{
@@ -9506,4 +9506,283 @@ body.dashboard-catalog-test-fullscreen-lock{
 .dashboard-history-mission-activities > .dashboard-history-attempt{
   margin:0;
   box-shadow:none;
+}
+
+/* Consigne personnalisée à variantes : un champ, ou deux champs si le mode les active. */
+.super-admin-level-instruction-dual{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr);
+  gap:10px;
+  min-width:0;
+}
+
+.super-admin-level-instruction-dual.is-split{
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+}
+
+.super-admin-level-instruction-variant{
+  min-width:0;
+}
+
+.super-admin-level-instruction-variant[hidden]{
+  display:none !important;
+}
+
+.super-admin-level-instruction-variant > .super-admin-level-instruction-input{
+  width:100%;
+}
+
+@media (max-width: 900px){
+  .super-admin-level-instruction-dual.is-split{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Passation Réussite : mêmes repères visuels que les steppers communs. */
+.execution-success-popover{
+  --execution-success-control-size:32px;
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+}
+
+.execution-success-popover > summary{
+  list-style:none;
+}
+
+.execution-success-popover > summary::-webkit-details-marker{
+  display:none;
+}
+
+.execution-success-popover-trigger{
+  flex-basis:var(--execution-success-control-size);
+  width:var(--execution-success-control-size);
+  min-width:var(--execution-success-control-size);
+  height:var(--execution-success-control-size);
+  color:var(--text);
+}
+
+.execution-success-popover-dots{
+  position:relative;
+  top:-2px;
+  font:800 16px/.7 system-ui,sans-serif;
+  letter-spacing:1px;
+}
+
+.execution-success-popover[open] .execution-success-popover-trigger,
+.execution-success-popover-trigger:hover{
+  background:color-mix(in srgb, var(--good) 18%, var(--panel-2));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--good) 52%, transparent);
+}
+
+.execution-success-popover-trigger:focus-visible{
+  outline:2px solid var(--good);
+  outline-offset:2px;
+}
+
+.execution-success-popover-panel{
+  position:absolute;
+  z-index:80;
+  top:calc(100% + 8px);
+  right:0;
+  width:min(306px,calc(100vw - 32px));
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  background:var(--panel-2);
+  color:var(--text);
+  box-shadow:var(--shadow-soft), 0 18px 42px rgba(0,0,0,.3);
+}
+
+.execution-success-popover[data-popover-placement="above"] .execution-success-popover-panel{
+  top:auto;
+  bottom:calc(100% + 8px);
+}
+
+.execution-success-popover-title{
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+  font-size:.9rem;
+  font-weight:800;
+  line-height:1.2;
+}
+
+.execution-success-popover-panel .execution-success-stepper{
+  width:100%;
+  min-width:0;
+}
+
+.execution-success-popover-panel .tv-stepper-field{
+  width:100%;
+  gap:7px;
+}
+
+.execution-success-popover-panel .tv-stepper-field-label{
+  color:var(--muted);
+  font-size:.78rem;
+  font-weight:700;
+}
+
+.execution-success-popover-panel .tv-stepper-btn{
+  width:34px;
+  min-width:34px;
+  height:34px;
+  flex-basis:34px;
+}
+
+.execution-success-popover-panel .tv-input-stepper{
+  height:34px;
+  min-width:64px;
+  border-radius:10px;
+  font-size:18px;
+}
+
+.direct-launch-passation-grid .execution-success-popover{
+  --execution-success-control-size:38px;
+}
+
+/* Laisser la petite popover Réussite sortir des cartes/panneaux qui la contiennent. */
+.dashboard-mission-step-settings:has(.execution-success-popover[open]),
+.activity-assignment-rules-line:has(.execution-success-popover[open]){
+  overflow:visible;
+}
+
+.adventure-days-grid:has(.execution-success-popover[open]),
+.adventure-day-column.is-editing:has(.execution-success-popover[open]),
+.adventure-menu-slot:has(.execution-success-popover[open]){
+  overflow:visible;
+}
+
+.adventure-day-column.is-editing:has(.execution-success-popover[open]),
+.adventure-menu-slot:has(.execution-success-popover[open]){
+  position:relative;
+  z-index:90;
+}
+
+/* Historique — Somme ou différence ? */
+.dashboard-history-operation-facts{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+  margin-top:2px;
+}
+
+.dashboard-history-operation-fact{
+  min-width:0;
+  padding:10px 11px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+}
+
+.dashboard-history-operation-fact-label{
+  margin-bottom:4px;
+  color:var(--muted);
+  font-size:11px;
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+
+.dashboard-history-operation-fact-value{
+  color:var(--text);
+  font-size:17px;
+  font-weight:900;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.dashboard-history-operation-choices{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:7px;
+}
+
+.dashboard-history-operation-choice{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:34px;
+  padding:6px 10px;
+  border:1px solid rgba(96,165,250,.42);
+  border-radius:9px;
+  background:rgba(59,130,246,.12);
+  color:#dbeafe;
+  font-size:16px;
+  font-weight:900;
+  line-height:1;
+}
+
+.dashboard-history-operation-choice.is-correct,
+.dashboard-history-operation-choice.is-expected{
+  border-color:rgba(74,222,128,.62);
+  background:rgba(34,197,94,.16);
+  color:#dcfce7;
+}
+
+.dashboard-history-operation-choice.is-incorrect{
+  border-color:rgba(248,113,113,.64);
+  background:rgba(239,68,68,.17);
+  color:#fee2e2;
+}
+
+.dashboard-history-operation-choice.is-unanswered{
+  border-color:rgba(148,163,184,.28);
+  background:rgba(148,163,184,.055);
+  color:#cbd5e1;
+}
+
+.dashboard-history-operation-value{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  min-width:0;
+  padding:10px 11px;
+  border:1px solid rgba(96,165,250,.42);
+  border-radius:10px;
+  background:rgba(59,130,246,.11);
+}
+
+.dashboard-history-operation-value.is-correct,
+.dashboard-history-operation-value.is-expected{
+  border-color:rgba(74,222,128,.55);
+  background:rgba(34,197,94,.13);
+}
+
+.dashboard-history-operation-value.is-incorrect{
+  border-color:rgba(248,113,113,.58);
+  background:rgba(239,68,68,.14);
+}
+
+.dashboard-history-operation-value.is-unanswered{
+  border-color:rgba(148,163,184,.28);
+  background:rgba(148,163,184,.055);
+}
+
+.dashboard-history-operation-expression{
+  min-width:0;
+  color:var(--text);
+  font-size:21px;
+  font-weight:950;
+  line-height:1.15;
+  overflow-wrap:anywhere;
+}
+
+.dashboard-history-operation-empty{
+  color:var(--muted);
+  font-size:12px;
+  font-style:italic;
+}
+
+@media (max-width:720px){
+  .dashboard-history-operation-facts{
+    grid-template-columns:1fr;
+  }
 }

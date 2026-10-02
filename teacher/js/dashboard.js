@@ -6,6 +6,8 @@ import {
   createOrGetMyTeacherSpace,
   updateMyTeacherSpace,
   markTeacherSpaceAsOpened,
+  getGeneratorSettingsForSpace,
+  saveGeneratorSettingsForSpace,
   getMyTeacherClasses,
   listStudentsForTeacherSpace,
   createStudentForTeacherSpace,
@@ -97,6 +99,7 @@ import { createQuizWorkshopViewController } from "./dashboard/quiz-workshop-view
 import { createQuizSeriesViewController, openQuizSeriesCreationOverlay } from "./dashboard/quiz-series-view.js";
 import { createResourcesViewController } from "./dashboard/resources-view.js";
 import { createLexicalBankViewController } from "./dashboard/lexical-bank-view.js";
+import { createWorksheetGeneratorViewController } from "./dashboard/worksheet-generator-view.js";
 import { createAudioAdminViewController } from "./dashboard/audio-admin-view.js";
 import { createSystemImagesImportDialog } from "./dashboard/system-images-import-dialog.js";
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
@@ -255,6 +258,7 @@ let quizWorkshopViewController = null;
 let quizSeriesViewController = null;
 let resourcesViewController = null;
 let lexicalBankViewController = null;
+let worksheetGeneratorViewController = null;
 let systemImagesImportDialog = null;
 let teacherToolsViewController = null;
 let audioAdminViewController = null;
@@ -1000,6 +1004,24 @@ lexicalBankViewController = createLexicalBankViewController({
   }
 });
 
+worksheetGeneratorViewController = createWorksheetGeneratorViewController({
+  view: resourcesView,
+  host: resourcesList,
+  showToast: showDashboardShareToast,
+  loadSettings: async (generatorKey) => {
+    if (!currentTeacherSpace?.id) return null;
+    return await getGeneratorSettingsForSpace(currentTeacherSpace.id, generatorKey);
+  },
+  saveSettings: async (generatorKey, settings, options) => {
+    if (!currentTeacherSpace?.id) return false;
+    return await saveGeneratorSettingsForSpace(currentTeacherSpace.id, generatorKey, settings, options);
+  },
+  listLexicalEntries,
+  onBack: () => {
+    resourcesViewController?.render?.();
+  }
+});
+
 resourcesViewController = createResourcesViewController({
   view: resourcesView,
   header: resourcesHeader,
@@ -1026,6 +1048,7 @@ resourcesViewController = createResourcesViewController({
   createResourceSignedUrl,
   getLexicalEntriesCount,
   onOpenLexicalBank: () => { void lexicalBankViewController?.open?.(); },
+  onOpenGenerator: (generatorId) => { worksheetGeneratorViewController?.open?.(generatorId); },
   onImportSystemImages: ({ folderPath, folderName } = {}) => {
     systemImagesImportDialog?.open?.({ destinationPath:folderPath, destinationLabel:folderName });
   }

@@ -312,18 +312,110 @@ function renderNumberWordsSnapshot(snapshot, stage, outcome) {
   `;
 }
 
-function renderSpecialSnapshotContent(snapshot, stage, outcome) {
+function normalizeHistoryComparableText(value) {
+  return normalizeSnapshotText(value, 1600).toLocaleLowerCase("fr-FR");
+}
+
+function renderSommeDifferenceSnapshot(snapshot, stage, outcome, correctionSnapshot = null) {
+  const prompt = normalizeSnapshotText(snapshot?.prompt, 700);
+
+  if (stage === "question") {
+    const facts = Array.isArray(snapshot?.facts) ? snapshot.facts : [];
+    return `
+      ${prompt ? `<div class="dashboard-history-visual-prompt">${escapeHtml(prompt)}</div>` : ""}
+      ${facts.length ? `
+        <div class="dashboard-history-operation-facts">
+          ${facts.map((fact) => {
+            const label = normalizeSnapshotText(fact?.label, 180);
+            const value = normalizeSnapshotText(fact?.value, 300);
+            return `
+              <div class="dashboard-history-operation-fact">
+                ${label ? `<div class="dashboard-history-operation-fact-label">${escapeHtml(label)}</div>` : ""}
+                <div class="dashboard-history-operation-fact-value">${escapeHtml(value || "—")}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : ""}
+    `;
+  }
+
+  const values = snapshot?.kind === "choices"
+    ? (Array.isArray(snapshot?.values) ? snapshot.values : [])
+    : [snapshot?.value];
+  const safeValues = uniqueStrings(values);
+  const expectedValues = new Set(
+    (correctionSnapshot?.kind === "choices"
+      ? (Array.isArray(correctionSnapshot?.values) ? correctionSnapshot.values : [])
+      : [correctionSnapshot?.value])
+      .map(normalizeHistoryComparableText)
+      .filter(Boolean)
+  );
+
+  if (!safeValues.length) {
+    return `<div class="dashboard-history-operation-empty">Aucune réponse</div>`;
+  }
+
+  if (snapshot?.kind === "choices") {
+    return `
+      <div class="dashboard-history-operation-choices">
+        ${safeValues.map((value) => {
+          let className = "is-student";
+          if (stage === "correction") className = "is-expected";
+          else if (expectedValues.has(normalizeHistoryComparableText(value))) className = "is-correct";
+          else if (outcome?.className === "is-incorrect") className = "is-incorrect";
+          else if (outcome?.className === "is-correct") className = "is-correct";
+          else if (outcome?.className === "is-unanswered") className = "is-unanswered";
+          return `<span class="dashboard-history-operation-choice ${className}">${escapeHtml(value)}</span>`;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  let statusClass = "is-student";
+  let statusIcon = "";
+  let statusText = "";
+  if (stage === "correction") {
+    statusClass = "is-expected";
+    statusIcon = "check_circle";
+    statusText = "Attendu";
+  } else if (outcome?.className === "is-correct") {
+    statusClass = "is-correct";
+    statusIcon = "check_circle";
+    statusText = "Correct";
+  } else if (outcome?.className === "is-incorrect") {
+    statusClass = "is-incorrect";
+    statusIcon = "cancel";
+    statusText = "Réponse donnée";
+  } else {
+    statusClass = "is-unanswered";
+    statusIcon = "remove_circle";
+    statusText = "Sans réponse";
+  }
+
+  return `
+    <div class="dashboard-history-operation-value ${statusClass}">
+      <div class="dashboard-history-operation-expression">${escapeHtml(safeValues[0])}</div>
+      ${statusIcon ? `<span class="dashboard-history-value-status ${statusClass}"><span class="dashboard-material-icon" aria-hidden="true">${statusIcon}</span>${escapeHtml(statusText)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderSpecialSnapshotContent(snapshot, stage, outcome, { questionSnapshot = null, correctionSnapshot = null } = {}) {
   if (snapshot?.kind === "occurrence-selection") {
     return renderOccurrenceSelectionSnapshot(snapshot, stage);
   }
   if (snapshot?.kind === "number-words") {
     return renderNumberWordsSnapshot(snapshot, stage, outcome);
   }
+  if (questionSnapshot?.kind === "operation") {
+    return renderSommeDifferenceSnapshot(snapshot, stage, outcome, correctionSnapshot);
+  }
   return "";
 }
 
-function renderSnapshotBlock(title, snapshot, stage, emptyText, { outcome = null } = {}) {
-  const specialContent = renderSpecialSnapshotContent(snapshot, stage, outcome);
+function renderSnapshotBlock(title, snapshot, stage, emptyText, { outcome = null, questionSnapshot = null, correctionSnapshot = null } = {}) {
+  const specialContent = renderSpecialSnapshotContent(snapshot, stage, outcome, { questionSnapshot, correctionSnapshot });
   const lines = specialContent ? [] : getSnapshotStageSummary(snapshot, stage);
   return `
     <div class="dashboard-history-snapshot dashboard-history-snapshot--${escapeAttr(stage)}${specialContent ? " dashboard-history-snapshot--special" : ""}">
@@ -346,10 +438,28 @@ function canFoldRedundantCorrection(question, outcome) {
   if (outcome?.className !== "is-correct") return false;
   const answer = question?.answer_snapshot;
   const correction = question?.correction_snapshot;
-  if (answer?.kind !== "number-words" || correction?.kind !== "number-words") return false;
-  const answerValue = getComparableSnapshotValue(answer);
-  const correctionValue = getComparableSnapshotValue(correction);
-  return Boolean(answerValue && correctionValue && answerValue === correctionValue);
+
+  if (answer?.kind === "number-words" && correction?.kind === "number-words") {
+    const answerValue = getComparableSnapshotValue(answer);
+    const correctionValue = getComparableSnapshotValue(correction);
+    return Boolean(answerValue && correctionValue && answerValue === correctionValue);
+  }
+
+  if (question?.question_snapshot?.kind === "operation") {
+    const answerValues = answer?.kind === "choices"
+      ? uniqueStrings(Array.isArray(answer?.values) ? answer.values : []).map(normalizeHistoryComparableText).sort()
+      : [normalizeHistoryComparableText(answer?.value)].filter(Boolean);
+    const correctionValues = correction?.kind === "choices"
+      ? uniqueStrings(Array.isArray(correction?.values) ? correction.values : []).map(normalizeHistoryComparableText).sort()
+      : [normalizeHistoryComparableText(correction?.value)].filter(Boolean);
+    return Boolean(
+      answerValues.length
+      && answerValues.length === correctionValues.length
+      && answerValues.every((value, index) => value === correctionValues[index])
+    );
+  }
+
+  return false;
 }
 
 function renderQuestion(question, index) {
@@ -368,9 +478,21 @@ function renderQuestion(question, index) {
         </div>
       </header>
       <div class="dashboard-history-question-grid${foldCorrection ? " dashboard-history-question-grid--two" : ""}">
-        ${renderSnapshotBlock("Question", question?.question_snapshot, "question", "Question non enregistrée.", { outcome })}
-        ${renderSnapshotBlock(foldCorrection ? "Réponse correcte" : "Réponse de l’élève", question?.answer_snapshot, "answer", "Aucune réponse lisible dans l’instantané.", { outcome })}
-        ${foldCorrection ? "" : renderSnapshotBlock("Correction", question?.correction_snapshot, "correction", "Correction non enregistrée.", { outcome })}
+        ${renderSnapshotBlock("Question", question?.question_snapshot, "question", "Question non enregistrée.", {
+          outcome,
+          questionSnapshot: question?.question_snapshot,
+          correctionSnapshot: question?.correction_snapshot
+        })}
+        ${renderSnapshotBlock(foldCorrection ? "Réponse correcte" : "Réponse de l’élève", question?.answer_snapshot, "answer", "Aucune réponse lisible dans l’instantané.", {
+          outcome,
+          questionSnapshot: question?.question_snapshot,
+          correctionSnapshot: question?.correction_snapshot
+        })}
+        ${foldCorrection ? "" : renderSnapshotBlock("Correction", question?.correction_snapshot, "correction", "Correction non enregistrée.", {
+          outcome,
+          questionSnapshot: question?.question_snapshot,
+          correctionSnapshot: question?.correction_snapshot
+        })}
       </div>
     </article>
   `;

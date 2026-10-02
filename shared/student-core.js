@@ -67,6 +67,9 @@ export function createSessionEngine({
   let gaugeDurationMs = 0;
   let gaugeCurrentScale = 1;
   let manualActionHandler = null;
+  let manualActionLabel = "";
+  let nextQuestionActionLockedUntil = 0;
+  let nextQuestionActionUnlockTimer = null;
 
   let paused = false;
   let engineState = "IDLE";
@@ -198,6 +201,7 @@ export function createSessionEngine({
   }
 
   const VALIDATION_REVIEW_DELAY_MS = 3000;
+  const NEXT_QUESTION_ACTION_LOCK_MS = 750;
   const VALIDATION_REVEAL_FADE_OUT_MS = 500;
   const VALIDATION_REVEAL_FADE_IN_MS = 500;
 
@@ -464,6 +468,12 @@ export function createSessionEngine({
     overlay.classList.add(wasCorrect ? "is-correct" : "is-incorrect", "is-flashing");
   }
 
+  function flashValidationFeedbackWithGauge(item, wasCorrect) {
+    flashValidationFeedback(wasCorrect);
+    commitCurrentQuestionGaugeOutcomeOnce(item, wasCorrect);
+    emitStateChange();
+  }
+
   function isCatalogTestSequence(value) {
     return (Array.isArray(value) ? value : []).some((item) => (
       String(item?.catalog_context ?? item?.catalogContext ?? "").trim().toLowerCase() === "test"
@@ -590,7 +600,11 @@ export function createSessionEngine({
       return false;
     }
 
-    return validateCurrentResponse(item);
+    const validated = validateCurrentResponse(item);
+    if (validated) {
+      lockNextQuestionAction();
+    }
+    return validated;
   }
 
   function validateCurrentResponse(item) {
@@ -794,6 +808,10 @@ export function createSessionEngine({
       item.questionCount = clampInt(intrinsicQuestionCount, 1, 999, item.questionCount);
     } else if (item.executionLimit.mode === "time") {
       item.questionFlowMode = "unlimited";
+    } else if (item.executionLimit.mode === "success") {
+      item.questionFlowMode = "successGoal";
+      item.successGoalCorrectCount = Math.max(1, Math.trunc(Number(item.executionLimit.value) || 10));
+      item.successGoalSafetyMilestones = Math.max(0, Math.min(12, Math.trunc(Number(item.executionLimit.milestones) || 0)));
     } else {
       item.questionFlowMode = "fixed";
       item.questionCount = clampInt(item.executionLimit.value, 1, 999, item.questionCount);
@@ -815,6 +833,7 @@ export function createSessionEngine({
     }
 
     applyCatalogTestRuntimeSettings(item);
+    applyExplorationRuntimeSettings(item);
 
     if (isFinalChallengeItem(item)) {
       item.questionFlowMode = "unlimited";
@@ -1282,7 +1301,7 @@ export function createSessionEngine({
     startToolClock();
     if (resumeCheckpoint) {
       const savedToolElapsedMs = Math.max(0, Number(resumeCheckpoint.toolElapsedMs) || 0);
-      const timedExecution = String(item?.executionLimit?.mode || "") === "time";
+      const timedExecution = ["time", "success"].includes(String(item?.executionLimit?.mode || ""));
       toolClockElapsedBeforePauseMs = timedExecution
         ? Math.max(0, savedToolElapsedMs - 20000)
         : savedToolElapsedMs;
@@ -1577,6 +1596,7 @@ export function createSessionEngine({
     item.currentQuestionResolvedCorrectly = false;
     item.currentQuestionOutcomeKind = "pending";
     item.currentQuestionOutcomeCommitted = false;
+    item.currentQuestionGaugeOutcomeCommitted = false;
     item.lastQuestionOutcome = "pending";
     setStatus(`${item.title} — ${currentQuestionIndex + 1}/${item.questionFlowMode === "fixed" ? item.questionCount : "∞"}`);
 
@@ -1667,8 +1687,7 @@ export function createSessionEngine({
       setValidationReviewPending(true);
       hideTimer();
       hideManualAction();
-      flashValidationFeedback(validationWasCorrect);
-      emitStateChange();
+      flashValidationFeedbackWithGauge(item, validationWasCorrect);
       void runValidationReview(item, remainingMs, validationWasCorrect, {
         delayAfterPreparation: validationReviewDelayAfterPreparation === true,
         reviewDelayMs: validationReviewDelayMs
@@ -1694,15 +1713,14 @@ export function createSessionEngine({
         Promise.resolve(maybePromise)
           .then(() => {
             if (!isSessionRunning) return;
-            flashValidationFeedback(wasCorrect);
+            flashValidationFeedbackWithGauge(item, wasCorrect);
             captureHistoryStage(item, "correction");
-            emitStateChange();
           })
           .catch((err) => {
             onFatalError?.(err?.message || "Erreur pendant la séance.");
           });
       } else {
-        flashValidationFeedback(wasCorrect);
+        flashValidationFeedbackWithGauge(item, wasCorrect);
         captureHistoryStage(item, "correction");
       }
     }
@@ -2140,9 +2158,15 @@ export function createSessionEngine({
 
   function getExecutionTimeLimitMs(item) {
     const limit = normalizeExecutionLimit(item?.executionLimit, { mode: "questions", value: 5 });
-    if (limit.mode !== "time") return Number.POSITIVE_INFINITY;
-    const seconds = Math.max(1, Math.floor(Number(limit.value) || 0));
-    return seconds * 1000;
+    if (limit.mode === "time") {
+      const seconds = Math.max(1, Math.floor(Number(limit.value) || 0));
+      return seconds * 1000;
+    }
+    if (limit.mode === "success") {
+      const seconds = Math.max(60, Math.floor(Number(limit.maxTimeSec) || 300));
+      return seconds * 1000;
+    }
+    return Number.POSITIVE_INFINITY;
   }
 
   function isExecutionTimeReached(item) {
@@ -2705,11 +2729,22 @@ export function createSessionEngine({
   }
 
   function createEvaluationGaugeState(item) {
-    if (runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
+    if (runMode === "projected-teacher" || !isBoxedResponseProfile()) {
       return null;
     }
 
-    if (!item || isFinalChallengeItem(item)) return null;
+    if (!item || isFinalChallengeItem(item) || String(item.catalogContext || "").trim().toLowerCase() === "exploration") return null;
+
+    if (item.executionLimit?.mode === "time") {
+      return {
+        mode: "time",
+        progress: 0,
+        milestones: [],
+        completed: false,
+        launching: false,
+        rocketState: "off"
+      };
+    }
 
     if (item.questionFlowMode === "successGoal") {
       const successGoalSettings = getCommonSuccessGoalSettings(item);
@@ -2765,6 +2800,7 @@ export function createSessionEngine({
       item.currentQuestionResolvedCorrectly = false;
       item.currentQuestionOutcomeKind = "pending";
       item.currentQuestionOutcomeCommitted = false;
+      item.currentQuestionGaugeOutcomeCommitted = false;
       item.lastQuestionOutcome = "pending";
       item.catalogCurrentLevel = normalizeCatalogDifficultyLevel(item.catalogStartedLevel ?? item.catalogCurrentLevel ?? 3);
       item.progressSessionStats = { questions: 0, correct: 0 };
@@ -2790,13 +2826,30 @@ export function createSessionEngine({
   }
 
   function getEvaluationGaugeUiState(item) {
-    if (runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
+    if (runMode === "projected-teacher" || !isBoxedResponseProfile()) {
       return null;
     }
 
     if (!item?.evaluationGauge || isFinalChallengeItem(item)) return null;
 
     const gauge = item.evaluationGauge;
+    if (gauge.mode === "time") {
+      const maxMs = getEffectiveToolTimeLimitMs(item);
+      const progress = Number.isFinite(maxMs) && maxMs > 0
+        ? normalizeGaugeProgress(getToolElapsedMs() / maxMs)
+        : 0;
+      const completed = progress + GAUGE_EPSILON >= 1;
+      return {
+        mode:"time",
+        progress,
+        lockedFloor:0,
+        milestones:[],
+        step:0,
+        completed,
+        launching:completed,
+        rocketState:completed ? "on" : "off"
+      };
+    }
     if (gauge.mode === "infinite") {
       return {
         mode: "infinite",
@@ -2822,84 +2875,44 @@ export function createSessionEngine({
     };
   }
 
-  function commitCurrentQuestionOutcome(item) {
-    const outcomeKind = String(item?.currentQuestionOutcomeKind || "").trim().toLowerCase();
-    if (outcomeKind === "completed") {
-      const level = normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3);
-      finalizeHistoryQuestion(item, {
-        outcome:"unanswered",
-        isCorrect:null,
-        levelAfter:level,
-        pointsAwarded:0
-      });
-      if (item) {
-        item.lastQuestionOutcome = "completed";
-        item.currentQuestionResolvedCorrectly = false;
-        item.currentQuestionOutcomeKind = "pending";
-      }
-      if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) return false;
-      const gauge = item.evaluationGauge;
-      if (gauge?.mode === "finite" && Array.isArray(gauge.segments) && currentQuestionIndex >= 0 && currentQuestionIndex < gauge.segments.length) {
-        gauge.segments[currentQuestionIndex] = "neutral";
-        gauge.completed = gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
-        gauge.launching = false;
-        gauge.rocketState = "off";
-      }
-      return false;
+  function commitCurrentQuestionGaugeOutcomeOnce(item, forcedCorrect = null) {
+    if (!item) return false;
+    if (item.currentQuestionGaugeOutcomeCommitted === true) {
+      return hasCompletedSuccessGoalGauge(item);
     }
 
-    const isCorrect = item?.currentQuestionResolvedCorrectly === true;
-    if (isFinalChallengeItem(item) && isCorrect) {
-      incrementFinalChallengeCorrectCount(item);
-    }
+    const isCorrect = forcedCorrect === true
+      ? true
+      : forcedCorrect === false
+        ? false
+        : item.currentQuestionResolvedCorrectly === true;
 
-    const levelTransition = recordCatalogProgressQuestionOutcome(item, isCorrect);
-    finalizeHistoryQuestion(item, {
-      outcome: isCorrect ? "correct" : "incorrect",
-      isCorrect,
-      levelAfter: levelTransition.levelAfter,
-      pointsAwarded: 0
-    });
-
-    if (!item || runMode === "projected-teacher" || !isBoxedEvaluatedProfile()) {
-      if (item) {
-        item.currentQuestionResolvedCorrectly = false;
-        item.currentQuestionOutcomeKind = "pending";
-      }
-      return false;
-    }
-
-    if (item.questionFlowMode === "unlimited") {
-      const counter = item.evaluationCounter || { attempted: 0, correct: 0 };
-      counter.attempted = Math.max(0, Math.floor(Number(counter.attempted) || 0)) + 1;
-      if (isCorrect) {
-        counter.correct = Math.max(0, Math.floor(Number(counter.correct) || 0)) + 1;
-      }
-      item.evaluationCounter = counter;
-      item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
-      item.currentQuestionResolvedCorrectly = false;
-      item.currentQuestionOutcomeKind = "pending";
+    if (runMode === "projected-teacher" || !isBoxedResponseProfile()) {
+      item.currentQuestionGaugeOutcomeCommitted = true;
       return false;
     }
 
     const gauge = item.evaluationGauge;
     if (!gauge) {
-      item.currentQuestionResolvedCorrectly = false;
-      item.currentQuestionOutcomeKind = "pending";
+      item.currentQuestionGaugeOutcomeCommitted = true;
       return false;
     }
 
-    item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
-    item.currentQuestionResolvedCorrectly = false;
-    item.currentQuestionOutcomeKind = "pending";
+    // La jauge temporelle est pilotée uniquement par le temps écoulé.
+    if (gauge.mode === "time") {
+      item.currentQuestionGaugeOutcomeCommitted = true;
+      return false;
+    }
 
     if (gauge.mode === "finite") {
       if (Array.isArray(gauge.segments) && currentQuestionIndex >= 0 && currentQuestionIndex < gauge.segments.length) {
         gauge.segments[currentQuestionIndex] = isCorrect ? "correct" : "incorrect";
       }
-      gauge.completed = Array.isArray(gauge.segments) && gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
+      gauge.completed = Array.isArray(gauge.segments)
+        && gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
       gauge.launching = false;
       gauge.rocketState = "off";
+      item.currentQuestionGaugeOutcomeCommitted = true;
       return false;
     }
 
@@ -2923,6 +2936,7 @@ export function createSessionEngine({
         gauge.completed = true;
         gauge.launching = true;
         gauge.rocketState = "on";
+        item.currentQuestionGaugeOutcomeCommitted = true;
         return true;
       }
 
@@ -2931,7 +2945,82 @@ export function createSessionEngine({
       gauge.rocketState = "off";
     }
 
+    item.currentQuestionGaugeOutcomeCommitted = true;
     return false;
+  }
+
+  function commitCurrentQuestionOutcome(item) {
+    const outcomeKind = String(item?.currentQuestionOutcomeKind || "").trim().toLowerCase();
+    if (outcomeKind === "completed") {
+      const level = normalizeCatalogDifficultyLevel(item?.catalogCurrentLevel ?? item?.catalogStartedLevel ?? 3);
+      finalizeHistoryQuestion(item, {
+        outcome:"unanswered",
+        isCorrect:null,
+        levelAfter:level,
+        pointsAwarded:0
+      });
+      if (item) {
+        item.lastQuestionOutcome = "completed";
+        item.currentQuestionResolvedCorrectly = false;
+        item.currentQuestionOutcomeKind = "pending";
+      }
+      if (!item || runMode === "projected-teacher" || !isBoxedResponseProfile()) return false;
+      const gauge = item.evaluationGauge;
+      if (item.currentQuestionGaugeOutcomeCommitted !== true
+        && gauge?.mode === "finite"
+        && Array.isArray(gauge.segments)
+        && currentQuestionIndex >= 0
+        && currentQuestionIndex < gauge.segments.length) {
+        gauge.segments[currentQuestionIndex] = "neutral";
+        gauge.completed = gauge.segments.every((value) => value === "correct" || value === "incorrect" || value === "neutral");
+        gauge.launching = false;
+        gauge.rocketState = "off";
+        item.currentQuestionGaugeOutcomeCommitted = true;
+      }
+      return false;
+    }
+
+    const isCorrect = item?.currentQuestionResolvedCorrectly === true;
+    if (isFinalChallengeItem(item) && isCorrect) {
+      incrementFinalChallengeCorrectCount(item);
+    }
+
+    const levelTransition = recordCatalogProgressQuestionOutcome(item, isCorrect);
+    finalizeHistoryQuestion(item, {
+      outcome: isCorrect ? "correct" : "incorrect",
+      isCorrect,
+      levelAfter: levelTransition.levelAfter,
+      pointsAwarded: 0
+    });
+
+    if (!item || runMode === "projected-teacher" || !isBoxedResponseProfile()) {
+      if (item) {
+        item.currentQuestionResolvedCorrectly = false;
+        item.currentQuestionOutcomeKind = "pending";
+      }
+      return false;
+    }
+
+    if (item.questionFlowMode === "unlimited") {
+      const counter = item.evaluationCounter || { attempted: 0, correct: 0 };
+      counter.attempted = Math.max(0, Math.floor(Number(counter.attempted) || 0)) + 1;
+      if (isCorrect) {
+        counter.correct = Math.max(0, Math.floor(Number(counter.correct) || 0)) + 1;
+      }
+      item.evaluationCounter = counter;
+      item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
+      item.currentQuestionResolvedCorrectly = false;
+      item.currentQuestionOutcomeKind = "pending";
+      return false;
+    }
+
+    const completedByGauge = commitCurrentQuestionGaugeOutcomeOnce(item, isCorrect);
+
+    item.lastQuestionOutcome = isCorrect ? "correct" : "incorrect";
+    item.currentQuestionResolvedCorrectly = false;
+    item.currentQuestionOutcomeKind = "pending";
+
+    return completedByGauge;
   }
 
 
@@ -3017,6 +3106,16 @@ export function createSessionEngine({
       return;
     }
 
+    item.questionFlowMode = "unlimited";
+  }
+
+
+  function applyExplorationRuntimeSettings(item) {
+    if (!item || String(item.catalogContext || "").trim().toLowerCase() !== "exploration") return;
+
+    // Exploration est un entraînement libre : aucune activité du catalogue système
+    // ne s'arrête d'elle-même. Les contenus génératifs continuent naturellement et
+    // les quiz finis rebouclent sur leur deck jusqu'au départ volontaire de l'élève.
     item.questionFlowMode = "unlimited";
   }
 
@@ -3638,6 +3737,10 @@ export function createSessionEngine({
   }
 
   function handleManualAction() {
+    if (manualActionLabel === "Question suivante" && isNextQuestionActionLocked()) {
+      return;
+    }
+
     const item = session[currentToolIndex];
     if (item && isToolMaxTimeExpiredOrAdvancing(item)) {
       void enforceCurrentToolMaxTime();
@@ -3655,6 +3758,26 @@ export function createSessionEngine({
     }
   }
 
+  function isCurrentQuestionFinalForActivity(item) {
+    if (!item) return false;
+
+    if (item.questionFlowMode === "fixed"
+      && Number.isFinite(Number(item.questionCount))
+      && currentQuestionIndex + 1 >= Number(item.questionCount)) {
+      return true;
+    }
+
+    if (item.questionFlowMode === "successGoal" && hasCompletedSuccessGoalGauge(item)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function getNextQuestionActionLabel(item) {
+    return isCurrentQuestionFinalForActivity(item) ? "Fin de l'activité" : "Question suivante";
+  }
+
   function refreshShellManualAction(item) {
     if (validationReviewPending) {
       hideManualAction();
@@ -3667,10 +3790,7 @@ export function createSessionEngine({
     }
 
     if (phase.kind === "QUESTION" && item.manualQuestionCompletionAction === true) {
-      const isLastFixedQuestion = item.questionFlowMode === "fixed"
-        && Number.isFinite(Number(item.questionCount))
-        && currentQuestionIndex + 1 >= Number(item.questionCount);
-      showManualAction(isLastFixedQuestion ? "Activité terminée" : "Question suivante", () => {
+      showManualAction(getNextQuestionActionLabel(item), () => {
         const controls = createToolSessionControls(item);
         controls.requestQuestionCompletion({ outcome:"completed" });
       });
@@ -3694,7 +3814,7 @@ export function createSessionEngine({
       }
 
       const skipAnswerPhase = item.hasAnswerPhase === false || suppressCorrectionPhase;
-      showManualAction(skipAnswerPhase ? "Question suivante" : "Afficher la réponse", async () => {
+      showManualAction(skipAnswerPhase ? getNextQuestionActionLabel(item) : "Afficher la réponse", async () => {
         hideManualAction();
 
         if (skipAnswerPhase) {
@@ -3715,7 +3835,7 @@ export function createSessionEngine({
         return;
       }
 
-      showManualAction("Question suivante", async () => {
+      showManualAction(getNextQuestionActionLabel(item), async () => {
         hideManualAction();
         await advanceToNextQuestion(item);
       });
@@ -3731,19 +3851,52 @@ export function createSessionEngine({
       return;
     }
 
+    manualActionLabel = String(label || "");
     manualActionHandler = typeof onClick === "function" ? onClick : null;
     if (!els.manualActionBtn) return;
-    els.manualActionBtn.textContent = String(label || "");
+    els.manualActionBtn.textContent = manualActionLabel;
     els.manualActionBtn.classList.remove("hidden");
-    els.manualActionBtn.disabled = !manualActionHandler || paused || enabled !== true;
+    const nextQuestionLocked = manualActionLabel === "Question suivante" && isNextQuestionActionLocked();
+    els.manualActionBtn.disabled = !manualActionHandler || paused || enabled !== true || nextQuestionLocked;
+
+    if (nextQuestionLocked) {
+      scheduleNextQuestionActionUnlock();
+    }
   }
 
   function hideManualAction() {
+    manualActionLabel = "";
     manualActionHandler = null;
     if (!els.manualActionBtn) return;
     els.manualActionBtn.textContent = "";
     els.manualActionBtn.disabled = true;
     els.manualActionBtn.classList.add("hidden");
+  }
+
+  function lockNextQuestionAction() {
+    nextQuestionActionLockedUntil = performance.now() + NEXT_QUESTION_ACTION_LOCK_MS;
+    scheduleNextQuestionActionUnlock();
+  }
+
+  function isNextQuestionActionLocked() {
+    return performance.now() < nextQuestionActionLockedUntil;
+  }
+
+  function scheduleNextQuestionActionUnlock() {
+    if (nextQuestionActionUnlockTimer) {
+      window.clearTimeout(nextQuestionActionUnlockTimer);
+      nextQuestionActionUnlockTimer = null;
+    }
+
+    const remainingMs = Math.max(0, nextQuestionActionLockedUntil - performance.now());
+    if (remainingMs <= 0) return;
+
+    nextQuestionActionUnlockTimer = window.setTimeout(() => {
+      nextQuestionActionUnlockTimer = null;
+      if (!isNextQuestionActionLocked()) {
+        refreshShellManualAction(session[currentToolIndex]);
+      }
+    }, remainingMs);
   }
 
   function setStatus(text, mood) {

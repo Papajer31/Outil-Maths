@@ -2,6 +2,7 @@ import { isIntrinsicCatalogActivity, normalizeCatalogActivity } from "../../../s
 import { bindStepperField, renderStepperField } from "../../../shared/config-widgets.js";
 import { renderMaterialIcon, setMaterialIcon } from "../../../shared/material-icons-svg.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
+import { bindSuccessExecutionPopover, executionLimitConfigToDb, renderSuccessExecutionPopover } from "./execution-limit-ui.js";
 
 const LEVELS = [1, 2, 3, 4, 5];
 const QR_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js";
@@ -30,6 +31,8 @@ export async function openDirectLaunchDialog({
   let difficulty = adaptiveAvailable ? "adaptive" : "3";
   let executionMode = intrinsic ? "intrinsic" : "questions";
   let executionValue = executionMode === "time" ? 300 : 5;
+  let executionSuccessMilestones = 3;
+  let executionSuccessMaxTimeSec = 300;
   let refreshId = 0;
   const previouslyFocused = document.activeElement;
 
@@ -148,9 +151,13 @@ export async function openDirectLaunchDialog({
               <select id="directLaunchExecutionMode" class="student-select">
                 <option value="questions"${executionMode === "questions" ? " selected" : ""}>Nombre de questions</option>
                 <option value="time"${executionMode === "time" ? " selected" : ""}>Durée</option>
+                <option value="success"${executionMode === "success" ? " selected" : ""}>Réussite</option>
               </select>
             </label>
-            ${renderStepperField({
+            ${executionMode === "success" ? renderSuccessExecutionPopover({
+              idPrefix:"directLaunchSuccess",
+              value:{ correctCount:executionValue, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec }
+            }) : renderStepperField({
               id:"directLaunchExecutionValue",
               label:executionMode === "time" ? "Durée (min)" : "Quantité",
               value:amount,
@@ -168,19 +175,37 @@ export async function openDirectLaunchDialog({
       await refreshLink();
     });
     host.querySelector("#directLaunchExecutionMode")?.addEventListener("change", async (event) => {
-      executionMode = String(event.target?.value || "questions") === "time" ? "time" : "questions";
-      executionValue = executionMode === "time" ? 300 : 5;
+      const candidate = String(event.target?.value || "questions");
+      executionMode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
+      executionValue = executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5;
+      if (executionMode === "success") {
+        executionSuccessMilestones = 3;
+        executionSuccessMaxTimeSec = 300;
+      }
       renderSettings();
       await refreshLink();
     });
-    bindStepperField(host, "directLaunchExecutionValue", {
-      inputMin:1,
-      inputMax:amountMax,
-      onChange:async (raw) => {
-        executionValue = executionMode === "time" ? raw * 60 : raw;
-        await refreshLink();
-      }
-    });
+    if (host.querySelector("#directLaunchExecutionValue")) {
+      bindStepperField(host, "directLaunchExecutionValue", {
+        inputMin:1,
+        inputMax:amountMax,
+        onChange:async (raw) => {
+          executionValue = executionMode === "time" ? raw * 60 : raw;
+          await refreshLink();
+        }
+      });
+    }
+    if (executionMode === "success") {
+      bindSuccessExecutionPopover(host, "directLaunchSuccess", {
+        value:{ correctCount:executionValue, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec },
+        onChange:async (next) => {
+          executionValue = next.correctCount;
+          executionSuccessMilestones = next.milestones;
+          executionSuccessMaxTimeSec = next.maxTimeSec;
+          await refreshLink();
+        }
+      });
+    }
   }
 
   async function refreshLink() {
@@ -210,7 +235,10 @@ export async function openDirectLaunchDialog({
         difficulty_mode:adaptive ? "adaptive" : "fixed",
         difficulty_level:adaptive ? null : Math.max(1, Math.min(5, Number(difficulty) || 3)),
         execution_limit_mode:isSequence || intrinsic ? "intrinsic" : executionMode,
-        execution_limit_value:isSequence || intrinsic ? null : executionValue
+        execution_limit_value:isSequence || intrinsic ? null : executionValue,
+        execution_limit_config:!isSequence && !intrinsic && executionMode === "success"
+          ? executionLimitConfigToDb({ correctCount:executionValue, milestones:executionSuccessMilestones, maxTimeSec:executionSuccessMaxTimeSec })
+          : null
       });
       if (requestId !== refreshId || !overlay.isConnected) return;
       const token = String(savedLink?.token || "").trim();

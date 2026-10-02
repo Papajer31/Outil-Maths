@@ -658,7 +658,7 @@ function buildAssignedSingleActivityRuntimeConfig(assignment, rawSource, current
   const difficultyLevel = adaptive
     ? 1
     : normalizeCatalogDifficultyLevel(assignment?.difficulty_level ?? 3);
-  const executionLimit = normalizeAssignedExecutionLimit(assignment);
+  const executionLimit = normalizeAssignedExecutionLimit(assignment, rawSource);
 
   const config = buildCatalogActivityConfig(runtimeActivity, {
     activityMode:currentMode,
@@ -736,9 +736,24 @@ function buildAssignedSequenceRuntimeConfig(assignment, rawSequence, currentMode
   };
 }
 
-function normalizeAssignedExecutionLimit(source = {}) {
-  const mode = String(source?.execution_limit_mode || "questions");
+function normalizeAssignedExecutionLimit(source = {}, rawSource = null) {
+  const modeCandidate = String(source?.execution_limit_mode || "questions").trim();
+  const mode = ["questions", "time", "success", "intrinsic"].includes(modeCandidate) ? modeCandidate : "questions";
   if (mode === "intrinsic") return { mode:"intrinsic", value:null };
+  if (mode === "success") {
+    const config = source?.execution_limit_config && typeof source.execution_limit_config === "object"
+      ? source.execution_limit_config
+      : rawSource?.__execution_limit_config && typeof rawSource.__execution_limit_config === "object"
+        ? rawSource.__execution_limit_config
+        : {};
+    const rawMilestones = Math.trunc(Number(config?.milestones));
+    return {
+      mode:"success",
+      value:Math.max(1, Math.trunc(Number(source?.execution_limit_value) || 10)),
+      milestones:Number.isFinite(rawMilestones) ? Math.max(0, Math.min(12, rawMilestones)) : 3,
+      maxTimeSec:Math.max(60, Math.min(7200, Math.trunc(Number(config?.max_time_sec ?? config?.maxTimeSec) || 300)))
+    };
+  }
   return {
     mode:mode === "time" ? "time" : "questions",
     value:Math.max(1, Math.trunc(Number(source?.execution_limit_value) || (mode === "time" ? 300 : 5)))

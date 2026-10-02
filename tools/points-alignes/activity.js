@@ -1,6 +1,8 @@
 import {
   BOARD,
   DRAWING_PERSISTENCE,
+  DRAWING_TYPES,
+  MODES,
   evaluateSelection,
   getPrompt,
   normalizeSettings,
@@ -55,7 +57,9 @@ export function createActivity(initialContext = {}) {
       }
       state.lastEvaluation = evaluateSelection(state.currentQuestion, [...state.studentSelectionSnapshot]);
       state.phaseMode = "answer";
+      state.guideLines = [];
       state.activeGuide = null;
+      resetGuidePreview(state);
       renderFigure(state);
       syncValidationState(state);
     },
@@ -284,16 +288,38 @@ function togglePointSelection(state, id) {
 
 function beginGuide(state, event) {
   if (!isQuestionInteractive(state) || event.button > 0) return;
+  const pointerPoint = clientToBoardPoint(state.svgEl, event.clientX, event.clientY);
   const pointTarget = event.target instanceof Element ? event.target.closest("[data-pa-point-id]") : null;
-  const pointId = String(pointTarget?.getAttribute("data-pa-point-id") || "");
-  const point = pointId ? state.currentQuestion?.points?.find((item) => String(item.id) === pointId) : null;
+  const domPointId = String(pointTarget?.getAttribute("data-pa-point-id") || "");
+  const nearestPoint = state.currentQuestion?.mode === MODES.DOUBLE_ALIGNMENT
+    ? findNearestQuestionPoint(state.currentQuestion, pointerPoint, 26)
+    : null;
+  const pointId = String(nearestPoint?.id || domPointId || "");
+  const point = nearestPoint || (pointId
+    ? state.currentQuestion?.points?.find((item) => String(item.id) === pointId)
+    : null);
   const start = point
     ? { x: Number(point.x) || 0, y: Number(point.y) || 0 }
-    : clientToBoardPoint(state.svgEl, event.clientX, event.clientY);
+    : pointerPoint;
   if (!start) return;
   state.activeGuide = { pointerId: event.pointerId, start, end: start, startedOnPointId: pointId };
   state.svgEl.setPointerCapture?.(event.pointerId);
   renderGuidePreview(state);
+}
+
+function findNearestQuestionPoint(question, boardPoint, maxDistance = 26) {
+  if (!boardPoint) return null;
+  let nearest = null;
+  let bestDistance = Math.max(0, Number(maxDistance) || 0);
+  for (const point of question?.points || []) {
+    const dx = (Number(point.x) || 0) - boardPoint.x;
+    const dy = (Number(point.y) || 0) - boardPoint.y;
+    const currentDistance = Math.hypot(dx, dy);
+    if (currentDistance > bestDistance) continue;
+    nearest = point;
+    bestDistance = currentDistance;
+  }
+  return nearest;
 }
 
 function updateGuide(state, event) {
@@ -314,12 +340,7 @@ function finishGuide(state, event) {
   state.svgEl.releasePointerCapture?.(event.pointerId);
 
   if (gestureLength >= MIN_GUIDE_LENGTH) {
-    persistGuideLine(state, {
-      x1: start.x / BOARD.width,
-      y1: start.y / BOARD.height,
-      x2: end.x / BOARD.width,
-      y2: end.y / BOARD.height
-    });
+    persistGuideLine(state, createStudentGuideLine(state, start, end));
     renderGuideLines(state);
     return;
   }
@@ -343,10 +364,13 @@ function cancelGuide(state) {
 }
 
 function renderGuideLines(state) {
+  const isAnswer = state.phaseMode === "answer" && !!state.currentQuestion;
   const persistence = getDrawingPersistence(state);
-  const persistentLines = persistence === DRAWING_PERSISTENCE.NONE ? [] : state.guideLines;
+  const persistentLines = !isAnswer && persistence !== DRAWING_PERSISTENCE.NONE ? state.guideLines : [];
+  const solutionLines = isAnswer ? getSolutionLines(state.currentQuestion) : [];
+
   if (state.guideLayerEl) {
-    state.guideLayerEl.innerHTML = persistentLines.map((line) => `
+    const studentMarkup = persistentLines.map((line) => `
       <line
         class="pa-guide"
         x1="${round(line.x1 * BOARD.width)}"
@@ -355,13 +379,125 @@ function renderGuideLines(state) {
         y2="${round(line.y2 * BOARD.height)}"
       ></line>
     `).join("");
+    const solutionMarkup = solutionLines.map((line) => `
+      <line
+        class="pa-guide pa-guide--solution"
+        stroke-linecap="square"
+        x1="${round(line.x1)}"
+        y1="${round(line.y1)}"
+        x2="${round(line.x2)}"
+        y2="${round(line.y2)}"
+      ></line>
+    `).join("");
+    state.guideLayerEl.innerHTML = studentMarkup + solutionMarkup;
   }
+
   if (state.eraserButton) {
-    const disableEraser = persistence === DRAWING_PERSISTENCE.NONE || persistentLines.length === 0;
-    state.eraserButton.hidden = persistence === DRAWING_PERSISTENCE.NONE;
+    const disableEraser = isAnswer || persistence === DRAWING_PERSISTENCE.NONE || persistentLines.length === 0;
+    state.eraserButton.hidden = isAnswer || persistence === DRAWING_PERSISTENCE.NONE;
     state.eraserButton.toggleAttribute("disabled", disableEraser);
   }
   renderGuidePreview(state);
+}
+
+function getSolutionLines(question) {
+  const points = Array.isArray(question?.points) ? question.points : [];
+  const byId = new Map(points.map((point) => [String(point.id), point]));
+  const sourceLines = [];
+
+  if (question?.mode === "with-ab") {
+    const a = byId.get("ref-a");
+    const b = byId.get("ref-b");
+    if (a && b) sourceLines.push([a, b]);
+  } else if (question?.mode === "double-alignment") {
+    const a = byId.get("ref-a");
+    const b = byId.get("ref-b");
+    const c = byId.get("ref-c");
+    const d = byId.get("ref-d");
+    if (a && b) sourceLines.push([a, b]);
+    if (c && d) sourceLines.push([c, d]);
+  } else if (question?.mode === "groups") {
+    const groups = new Map();
+    for (const point of points) {
+      if (point?.role !== "target" || !point?.groupId) continue;
+      const key = String(point.groupId);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(point);
+    }
+    for (const groupPoints of groups.values()) {
+      if (groupPoints.length >= 2) sourceLines.push([groupPoints[0], groupPoints[1]]);
+    }
+  }
+
+  return sourceLines
+    .map(([a, b]) => extendInfiniteLineToBoard(a, b))
+    .filter(Boolean);
+}
+
+function extendInfiniteLineToBoard(a, b) {
+  const ax = Number(a?.x);
+  const ay = Number(a?.y);
+  const bx = Number(b?.x);
+  const by = Number(b?.y);
+  if (![ax, ay, bx, by].every(Number.isFinite)) return null;
+
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (Math.hypot(dx, dy) < 1e-6) return null;
+
+  const intersections = [];
+  const add = (x, y) => {
+    if (x < -1e-6 || x > BOARD.width + 1e-6 || y < -1e-6 || y > BOARD.height + 1e-6) return;
+    const point = { x: clamp(x, 0, BOARD.width), y: clamp(y, 0, BOARD.height) };
+    if (!intersections.some((other) => Math.hypot(other.x - point.x, other.y - point.y) < 0.1)) {
+      intersections.push(point);
+    }
+  };
+
+  if (Math.abs(dx) > 1e-9) {
+    let t = (0 - ax) / dx;
+    add(0, ay + t * dy);
+    t = (BOARD.width - ax) / dx;
+    add(BOARD.width, ay + t * dy);
+  }
+  if (Math.abs(dy) > 1e-9) {
+    let t = (0 - ay) / dy;
+    add(ax + t * dx, 0);
+    t = (BOARD.height - ay) / dy;
+    add(ax + t * dx, BOARD.height);
+  }
+
+  if (intersections.length < 2) return null;
+  let bestA = intersections[0];
+  let bestB = intersections[1];
+  let bestDistance = -1;
+  for (let i = 0; i < intersections.length - 1; i += 1) {
+    for (let j = i + 1; j < intersections.length; j += 1) {
+      const candidateDistance = Math.hypot(
+        intersections[j].x - intersections[i].x,
+        intersections[j].y - intersections[i].y
+      );
+      if (candidateDistance > bestDistance) {
+        bestDistance = candidateDistance;
+        bestA = intersections[i];
+        bestB = intersections[j];
+      }
+    }
+  }
+  // Dépasser légèrement le viewBox garantit que le trait rendu est clippé
+  // exactement sur le vrai bord blanc, sans laisser apparaître de retrait.
+  const edgeDx = bestB.x - bestA.x;
+  const edgeDy = bestB.y - bestA.y;
+  const edgeLength = Math.hypot(edgeDx, edgeDy) || 1;
+  const overshoot = 64;
+  const ux = edgeDx / edgeLength;
+  const uy = edgeDy / edgeLength;
+  return {
+    x1: bestA.x - ux * overshoot,
+    y1: bestA.y - uy * overshoot,
+    x2: bestB.x + ux * overshoot,
+    y2: bestB.y + uy * overshoot
+  };
 }
 
 function renderGuidePreview(state) {
@@ -372,13 +508,24 @@ function renderGuidePreview(state) {
     resetGuidePreview(state);
     return;
   }
+
+  let preview = {
+    x1: active.start.x,
+    y1: active.start.y,
+    x2: active.end.x,
+    y2: active.end.y
+  };
+  if (getDrawingType(state) === DRAWING_TYPES.LINE) {
+    preview = extendInfiniteLineToBoard(active.start, active.end) || preview;
+  }
+
   line.hidden = false;
   line.removeAttribute("hidden");
   line.style.removeProperty("display");
-  line.setAttribute("x1", round(active.start.x));
-  line.setAttribute("y1", round(active.start.y));
-  line.setAttribute("x2", round(active.end.x));
-  line.setAttribute("y2", round(active.end.y));
+  line.setAttribute("x1", round(preview.x1));
+  line.setAttribute("y1", round(preview.y1));
+  line.setAttribute("x2", round(preview.x2));
+  line.setAttribute("y2", round(preview.y2));
 }
 
 function resetGuidePreview(state) {
@@ -391,6 +538,30 @@ function resetGuidePreview(state) {
   line.setAttribute("y1", "0");
   line.setAttribute("x2", "0");
   line.setAttribute("y2", "0");
+}
+
+function createStudentGuideLine(state, start, end) {
+  if (getDrawingType(state) === DRAWING_TYPES.LINE) {
+    const extended = extendInfiniteLineToBoard(start, end);
+    if (extended) {
+      return {
+        x1: extended.x1 / BOARD.width,
+        y1: extended.y1 / BOARD.height,
+        x2: extended.x2 / BOARD.width,
+        y2: extended.y2 / BOARD.height
+      };
+    }
+  }
+  return {
+    x1: start.x / BOARD.width,
+    y1: start.y / BOARD.height,
+    x2: end.x / BOARD.width,
+    y2: end.y / BOARD.height
+  };
+}
+
+function getDrawingType(state) {
+  return state?.settings?.drawingType || DRAWING_TYPES.SEGMENT;
 }
 
 function persistGuideLine(state, line) {
@@ -439,6 +610,9 @@ function submitCurrentAnswer(state) {
 
   if (!requested) {
     state.phaseMode = "answer";
+    state.guideLines = [];
+    state.activeGuide = null;
+    resetGuidePreview(state);
     renderFigure(state);
   }
   syncValidationState(state);

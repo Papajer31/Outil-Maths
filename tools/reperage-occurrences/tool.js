@@ -10,7 +10,7 @@ export default defineTool("reperage-occurrences", "Repérage personnalisé", {
   description:"Repérer toutes les occurrences d’une cible tirée parmi plusieurs possibilités personnalisées.",
   tags:["français", "lecture", "étude-du-code", "discrimination-visuelle", "lettres", "graphèmes", "mots", "sélection", "projection"],
   defaultInstruction:DEFAULT_INSTRUCTION,
-  supportsCustomInstruction:false,
+  supportsCustomInstruction:true,
 
   getDefaultSettings:config.getDefaultSettings,
   renderToolSettings:config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("reperage-occurrences", "Repérage personnalisé", {
     return createReperageOccurrencesActivity({
       ...context,
       defaultInstruction:DEFAULT_INSTRUCTION,
-      supportsCustomInstruction:false
+      supportsCustomInstruction:true
     });
   }
 });

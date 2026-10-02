@@ -16,7 +16,8 @@ export function createSessionShell(root, options = {}) {
     hasIndividualSidebar = false,
     isCatalogTestMode = false,
     isProjectedTeacherMode = false,
-    isSharedSessionEntry = false
+    isSharedSessionEntry = false,
+    showExplorationExit = false
   } = options;
 
   root.innerHTML = `
@@ -105,6 +106,14 @@ export function createSessionShell(root, options = {}) {
                   <div id="sessionWorkArea" class="session-workarea"></div>
                 </div>
                 <div class="session-sidebar-reserve session-sidebar-reserve-right">
+                  ${showExplorationExit ? `
+                    <aside class="session-exploration-exit-shell" id="sessionExplorationExitShell" aria-label="Quitter l’entraînement">
+                      <button class="session-exploration-exit-btn" id="btnExplorationExit" type="button" data-skip-autofs="true">
+                        <img class="session-exploration-exit-rocket" src="${rocketOnUrl}" alt="" draggable="false">
+                        <span>Décoller !</span>
+                      </button>
+                    </aside>
+                  ` : ""}
                   <aside class="session-final-challenge-panel hidden" id="sessionFinalChallengePanel" aria-label="Défi final">
                     <div class="session-final-challenge-title">Défi final</div>
                     <div class="session-final-challenge-metric">
@@ -224,6 +233,8 @@ export function getSessionShellRefs(root) {
     scene: root.querySelector("#sessionScene"),
     workArea: root.querySelector("#sessionWorkArea"),
     rightReserve: root.querySelector(".session-sidebar-reserve-right"),
+    explorationExitShell: root.querySelector("#sessionExplorationExitShell"),
+    btnExplorationExit: root.querySelector("#btnExplorationExit"),
     progressShell: root.querySelector("#sessionProgressShell"),
     progressGauge: root.querySelector("#sessionProgressGauge"),
     progressTrack: root.querySelector("#sessionProgressTrack"),

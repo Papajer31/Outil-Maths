@@ -15,6 +15,11 @@ const RESOURCE_ROOT_SYSTEM = "__resource_root_system";
 const RESOURCE_SYSTEM_IMAGES = "__resource_system_images";
 const RESOURCE_SYSTEM_AUDIO = "__resource_system_audio";
 const RESOURCE_SYSTEM_WORDS = "__resource_system_words";
+const RESOURCE_SYSTEM_GENERATORS = "__resource_system_generators";
+const RESOURCE_GENERATOR_MAGIC_SQUARE = "__resource_generator_magic_square";
+const RESOURCE_GENERATOR_NUMBER_MYSTERY = "__resource_generator_number_mystery";
+const RESOURCE_GENERATOR_WORD_SEARCH = "__resource_generator_word_search";
+const RESOURCE_GENERATOR_PENTOMINO = "__resource_generator_pentomino";
 const SYSTEM_IMAGES_ROOT_ROLE = "system_images_root";
 const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
@@ -89,6 +94,55 @@ function createSystemVirtualFolders(){
       is_system: true,
       is_virtual_root: true,
       resource_type: "words"
+    },
+    {
+      id: RESOURCE_SYSTEM_GENERATORS,
+      parent_id: RESOURCE_ROOT_SYSTEM,
+      name: "Générateurs",
+      display_order: 3,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generators"
+    },
+    {
+      id: RESOURCE_GENERATOR_MAGIC_SQUARE,
+      parent_id: RESOURCE_SYSTEM_GENERATORS,
+      name: "Carré magique",
+      display_order: 0,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generator",
+      generator_id: "magic-square"
+    },
+    {
+      id: RESOURCE_GENERATOR_NUMBER_MYSTERY,
+      parent_id: RESOURCE_SYSTEM_GENERATORS,
+      name: "Nombre mystérieux",
+      display_order: 1,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generator",
+      generator_id: "number-mystery"
+    },
+    {
+      id: RESOURCE_GENERATOR_WORD_SEARCH,
+      parent_id: RESOURCE_SYSTEM_GENERATORS,
+      name: "Mots mêlés",
+      display_order: 2,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generator",
+      generator_id: "word-search"
+    },
+    {
+      id: RESOURCE_GENERATOR_PENTOMINO,
+      parent_id: RESOURCE_SYSTEM_GENERATORS,
+      name: "Défis pentaminos",
+      display_order: 3,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generator",
+      generator_id: "pentomino"
     }
   ];
 }
@@ -118,6 +172,7 @@ export function createResourcesViewController({
   createResourceSignedUrl,
   getLexicalEntriesCount,
   onOpenLexicalBank,
+  onOpenGenerator,
   onImportSystemImages
 } = {}){
   let personalFolders = [];
@@ -462,7 +517,8 @@ export function createResourcesViewController({
       || safeId === RESOURCE_ROOT_SYSTEM
       || safeId === RESOURCE_SYSTEM_IMAGES
       || safeId === RESOURCE_SYSTEM_AUDIO
-      || safeId === RESOURCE_SYSTEM_WORDS;
+      || safeId === RESOURCE_SYSTEM_WORDS
+      || safeId === RESOURCE_SYSTEM_GENERATORS;
   }
 
   function syncKnownFolders(){
@@ -504,6 +560,22 @@ export function createResourcesViewController({
       onOpenLexicalBank?.();
       return;
     }
+    if (nextFolderId === RESOURCE_GENERATOR_MAGIC_SQUARE) {
+      onOpenGenerator?.("magic-square");
+      return;
+    }
+    if (nextFolderId === RESOURCE_GENERATOR_NUMBER_MYSTERY) {
+      onOpenGenerator?.("number-mystery");
+      return;
+    }
+    if (nextFolderId === RESOURCE_GENERATOR_WORD_SEARCH) {
+      onOpenGenerator?.("word-search");
+      return;
+    }
+    if (nextFolderId === RESOURCE_GENERATOR_PENTOMINO) {
+      onOpenGenerator?.("pentomino");
+      return;
+    }
     currentOpenFolderId = nextFolderId;
     if (currentOpenFolderId) expandFolderPath(currentOpenFolderId);
     render();
@@ -525,6 +597,7 @@ export function createResourcesViewController({
 
   function countResourcesInFolder(folderId, treeState){
     if (String(folderId || "") === RESOURCE_SYSTEM_WORDS) return lexicalEntryCount ?? 0;
+    if (String(folderId || "") === RESOURCE_SYSTEM_GENERATORS) return 4;
     let count = (treeState.activityChildren.get(String(folderId)) || []).length;
     for (const child of treeState.folderChildren.get(String(folderId)) || []) {
       count += countResourcesInFolder(child.id, treeState);
@@ -560,7 +633,7 @@ export function createResourcesViewController({
           <span class="dashboard-material-icon" aria-hidden="true">${isCollapsed ? "chevron_right" : "expand_more"}</span>
         </button>
         <button class="dashboard-activity-tree-main" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folderId)}">
-          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">${folderId === RESOURCE_SYSTEM_WORDS ? "menu_book" : "folder"}</span>
+          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">${folderId === RESOURCE_SYSTEM_WORDS ? "menu_book" : (folderId === RESOURCE_SYSTEM_GENERATORS ? "widgets" : (folderId === RESOURCE_GENERATOR_MAGIC_SQUARE ? "grid_view" : (folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : "folder")))))}</span>
           <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name || "")}</span>
         </button>
       </div>
@@ -570,10 +643,18 @@ export function createResourcesViewController({
   function renderFolderTile(folder, treeState){
     const isManageable = canManageFolder(folder);
     const resourceCount = countResourcesInFolder(folder.id, treeState);
-    const isWordsShortcut = String(folder.id || "") === RESOURCE_SYSTEM_WORDS;
+    const folderId = String(folder.id || "");
+    const isWordsShortcut = folderId === RESOURCE_SYSTEM_WORDS;
+    const isGeneratorsFolder = folderId === RESOURCE_SYSTEM_GENERATORS;
+    const isGeneratorShortcut = folderId === RESOURCE_GENERATOR_MAGIC_SQUARE || folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY || folderId === RESOURCE_GENERATOR_WORD_SEARCH || folderId === RESOURCE_GENERATOR_PENTOMINO;
+    const generatorIcon = folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : "grid_view"));
     const countLabel = isWordsShortcut
       ? (lexicalEntryCount == null ? "Banque lexicale" : `${resourceCount} mot${resourceCount > 1 ? "s" : ""}`)
-      : `${resourceCount} ressource${resourceCount > 1 ? "s" : ""}`;
+      : isGeneratorsFolder
+        ? `${resourceCount} générateur${resourceCount > 1 ? "s" : ""}`
+        : isGeneratorShortcut
+          ? "Fiche imprimable"
+          : `${resourceCount} ressource${resourceCount > 1 ? "s" : ""}`;
     const actions = isManageable
       ? `
         <div class="dashboard-activity-tile-corner-actions dashboard-activity-tile-corner-actions--stacked">
@@ -591,7 +672,7 @@ export function createResourcesViewController({
       <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-resource-folder-tile" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-resource-folder-topline">
-            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">${isWordsShortcut ? "menu_book" : "folder"}</span>
+            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">${isWordsShortcut ? "menu_book" : (isGeneratorsFolder ? "widgets" : (isGeneratorShortcut ? generatorIcon : "folder"))}</span>
             <span class="dashboard-resource-folder-count">${escapeHtml(countLabel)}</span>
           </span>
           <span class="dashboard-activity-tile-title">${escapeHtml(folder.name || "")}</span>

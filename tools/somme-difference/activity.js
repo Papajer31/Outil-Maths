@@ -2,6 +2,7 @@ import { loadPublicEmojiAssetsById } from "../../shared/public-emoji-assets.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
+  resolveQuestionInstructionText,
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
 import {
@@ -215,7 +216,8 @@ async function ensureEmojiAssetsLoaded(state) {
 
 function renderQuestion(state) {
   if (!state.currentQuestion) return;
-  setToolInstructionText(state.instructionEl, state.currentQuestion.instruction || "Écris le bon calcul.");
+  const defaultInstruction = state.currentQuestion.instruction || "Écris le bon calcul.";
+  setToolInstructionText(state.instructionEl, resolveQuestionInstructionText(state.latestContext, defaultInstruction, defaultInstruction));
   teardownBindings(state);
   teardownDrawing(state);
 

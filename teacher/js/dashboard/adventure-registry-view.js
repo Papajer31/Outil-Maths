@@ -5,6 +5,7 @@ import {
 } from "../../../shared/catalogue.js";
 import { renderMaterialIcon } from "../../../shared/material-icons-svg.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
+import { bindSuccessExecutionPopover, normalizeSuccessExecutionConfig, renderSuccessExecutionPopover } from "./execution-limit-ui.js";
 
 const STORAGE_KEY_GRADE = "site-outils.adventure-grade";
 const STORAGE_KEY_MENU = "site-outils.adventure-menu";
@@ -293,6 +294,7 @@ export function createAdventureRegistryViewController({
         ${Array.from({ length: DAY_COUNT }, (_, index) => renderDay(index + 1)).join("")}
       </div>
     `;
+    bindAdventureSuccessPopovers(weekPane);
   }
 
   function renderClassCursorBar(){
@@ -420,19 +422,51 @@ export function createAdventureRegistryViewController({
 
     const limit = normalizeLocalExecutionLimit(item?.execution_limit);
     if (!isEditing) {
-      const label = limit.mode === "time" ? `${Math.max(1, Math.round(limit.value / 60))} min` : `${limit.value} question${limit.value === 1 ? "" : "s"}`;
+      const label = limit.mode === "time"
+        ? `${Math.max(1, Math.round(limit.value / 60))} min`
+        : limit.mode === "success"
+          ? `${limit.value} réussites`
+          : `${limit.value} question${limit.value === 1 ? "" : "s"}`;
       return `<span class="adventure-slot-limit-summary">${escapeHtml(label)}</span>`;
     }
 
     const attrs = `data-day-number="${dayNumber}" data-slot-number="${slotNumber}"`;
+    const popoverId = `adventureSuccess-${dayNumber}-${slotNumber}`;
     return `<div class="adventure-slot-limit-editor">
       <select class="student-select" data-adventure-limit-mode ${attrs} aria-label="Règle d’arrêt">
         <option value="questions" ${limit.mode === "questions" ? "selected" : ""}>Questions</option>
         <option value="time" ${limit.mode === "time" ? "selected" : ""}>Temps</option>
+        <option value="success" ${limit.mode === "success" ? "selected" : ""}>Réussite</option>
       </select>
-      <input class="modal-text-input" type="number" min="1" max="${limit.mode === "time" ? 120 : 200}" value="${escapeAttr(limit.mode === "time" ? Math.max(1, Math.round(limit.value / 60)) : limit.value)}" data-adventure-limit-value ${attrs} aria-label="${limit.mode === "time" ? "Minutes" : "Nombre de questions"}">
-      <span>${limit.mode === "time" ? "min" : "questions"}</span>
+      ${limit.mode === "success" ? renderSuccessExecutionPopover({
+        idPrefix:popoverId,
+        value:{ correctCount:limit.value, milestones:limit.milestones, maxTimeSec:limit.maxTimeSec }
+      }) : `
+        <input class="modal-text-input" type="number" min="1" max="${limit.mode === "time" ? 120 : 200}" value="${escapeAttr(limit.mode === "time" ? Math.max(1, Math.round(limit.value / 60)) : limit.value)}" data-adventure-limit-value ${attrs} aria-label="${limit.mode === "time" ? "Minutes" : "Nombre de questions"}">
+        <span>${limit.mode === "time" ? "min" : "questions"}</span>
+      `}
     </div>`;
+  }
+
+  function bindAdventureSuccessPopovers(root = menuLayout){
+    if (!root) return;
+    root.querySelectorAll(".adventure-menu-slot").forEach((slot) => {
+      const dayNumber = normalizeDayNumber(slot.dataset.dayNumber);
+      const slotNumber = normalizeSlotNumber(slot.dataset.slotNumber);
+      const item = getEffectiveSlot(selectedMenu, dayNumber, slotNumber);
+      const limit = normalizeLocalExecutionLimit(item?.execution_limit);
+      if (!item || limit.mode !== "success") return;
+      bindSuccessExecutionPopover(slot, `adventureSuccess-${dayNumber}-${slotNumber}`, {
+        value:{ correctCount:limit.value, milestones:limit.milestones, maxTimeSec:limit.maxTimeSec },
+        onChange:(next) => {
+          const nextItem = {
+            ...item,
+            execution_limit:{ mode:"success", value:next.correctCount, milestones:next.milestones, maxTimeSec:next.maxTimeSec }
+          };
+          void setSlot(dayNumber, slotNumber, nextItem, { rerender:false, toast:false });
+        }
+      });
+    });
   }
 
   function describeMenuItem(item){
@@ -509,14 +543,20 @@ export function createAdventureRegistryViewController({
     const slot = control.closest(".adventure-menu-slot");
     const modeEl = slot?.querySelector("[data-adventure-limit-mode]");
     const valueEl = slot?.querySelector("[data-adventure-limit-value]");
-    if (!modeEl || !valueEl) return;
-    const mode = String(modeEl.value || "questions") === "time" ? "time" : "questions";
+    if (!modeEl) return;
+    const candidate = String(modeEl.value || "questions");
+    const mode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
     const previousLimit = normalizeLocalExecutionLimit(item.execution_limit);
     let nextLimit;
     if (modeSelect && mode !== previousLimit.mode) {
-      // Changer d’unité repart sur un défaut lisible au lieu de transformer 5 questions en 5 minutes.
-      nextLimit = mode === "time" ? { mode: "time", value: 180 } : { mode: "questions", value: 5 };
+      // Changer de mode repart sur des défauts lisibles et prévisibles.
+      nextLimit = mode === "time"
+        ? { mode:"time", value:180 }
+        : mode === "success"
+          ? { mode:"success", value:10, milestones:3, maxTimeSec:300 }
+          : { mode:"questions", value:5 };
     } else {
+      if (!valueEl) return;
       const amount = Math.max(1, Math.trunc(Number(valueEl.value) || (mode === "time" ? 3 : 5)));
       nextLimit = { mode, value: mode === "time" ? amount * 60 : amount };
     }
@@ -526,6 +566,8 @@ export function createAdventureRegistryViewController({
   function renderDayColumn(dayNumber){
     const current = menuLayout?.querySelector(`[data-day-column="${dayNumber}"]`);
     if (current) current.outerHTML = renderDay(dayNumber);
+    const next = menuLayout?.querySelector(`[data-day-column="${dayNumber}"]`);
+    bindAdventureSuccessPopovers(next);
   }
 
   function updateMenuNavigation(menuNumber = selectedMenu){
@@ -646,7 +688,7 @@ export function createAdventureRegistryViewController({
     pickerElement = null;
   }
 
-  async function setSlot(dayNumber, slotNumber, item){
+  async function setSlot(dayNumber, slotNumber, item, { rerender = true, toast = true } = {}){
     const key = slotKey(selectedMenu, dayNumber, slotNumber);
     const teacherSpaceId = getTeacherSpaceId();
     if (!teacherSpaceId) return;
@@ -669,9 +711,9 @@ export function createAdventureRegistryViewController({
       }
       refreshDefaultDifferences();
       renderHeader();
-      renderSlotElement(dayNumber, slotNumber);
+      if (rerender) renderSlotElement(dayNumber, slotNumber);
       updateMenuNavigation(selectedMenu);
-      showToast?.("Menu personnalisé enregistré.");
+      if (toast) showToast?.("Menu personnalisé enregistré.");
     } catch (error) {
       console.error(error);
       showToast?.(error?.message || "Impossible d’enregistrer cette case.", { isError: true });
@@ -818,6 +860,8 @@ export function createAdventureRegistryViewController({
   function renderSlotElement(dayNumber, slotNumber){
     const current = menuLayout?.querySelector(`[data-day-number="${dayNumber}"][data-slot-number="${slotNumber}"]`);
     if (current) current.outerHTML = renderSlot(dayNumber, slotNumber, editingDay === dayNumber);
+    const next = menuLayout?.querySelector(`[data-day-number="${dayNumber}"][data-slot-number="${slotNumber}"]`);
+    bindAdventureSuccessPopovers(next);
   }
 
   function getEffectiveSlot(menuNumber, dayNumber, slotNumber){
@@ -911,7 +955,12 @@ function normalizeLocalSlot(menuNumber, dayNumber, slotNumber, item = {}){
 
 function normalizeLocalExecutionLimit(value){
   const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const mode = String(raw.mode || "questions").trim() === "time" ? "time" : "questions";
+  const candidate = String(raw.mode || "questions").trim();
+  const mode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
+  if (mode === "success") {
+    const success = normalizeSuccessExecutionConfig({ correctCount:raw.value, ...raw });
+    return { mode, value:success.correctCount, milestones:success.milestones, maxTimeSec:success.maxTimeSec };
+  }
   const fallback = mode === "time" ? 180 : 5;
   const amount = Math.max(1, Math.trunc(Number(raw.value) || fallback));
   return { mode, value: mode === "time" ? Math.min(7200, amount) : Math.min(200, amount) };
@@ -920,7 +969,9 @@ function normalizeLocalExecutionLimit(value){
 function sameExecutionLimit(a, b){
   const left = normalizeLocalExecutionLimit(a);
   const right = normalizeLocalExecutionLimit(b);
-  return left.mode === right.mode && left.value === right.value;
+  return left.mode === right.mode
+    && left.value === right.value
+    && (left.mode !== "success" || (left.milestones === right.milestones && left.maxTimeSec === right.maxTimeSec));
 }
 
 function sameMenuItem(a, b){

@@ -167,6 +167,62 @@ export async function markTeacherSpaceAsOpened(teacherSpaceId) {
   return data;
 }
 
+const TEACHER_GENERATOR_SETTINGS_FIELDS = "teacher_space_id, generator_key, settings_version, settings, updated_at";
+
+function normalizeGeneratorKey(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(key)) {
+    throw new Error("Identifiant de générateur invalide.");
+  }
+  return key;
+}
+
+export async function getGeneratorSettingsForSpace(teacherSpaceId, generatorKey) {
+  const spaceId = Number(teacherSpaceId);
+  if (!Number.isFinite(spaceId) || spaceId <= 0) return null;
+  const key = normalizeGeneratorKey(generatorKey);
+
+  const { data, error } = await supabase
+    .from("teacher_generator_settings")
+    .select(TEACHER_GENERATOR_SETTINGS_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .eq("generator_key", key)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    version:Number(data.settings_version) || 1,
+    settings:data.settings && typeof data.settings === "object" && !Array.isArray(data.settings)
+      ? data.settings
+      : {},
+    updatedAt:data.updated_at || null
+  };
+}
+
+export async function saveGeneratorSettingsForSpace(teacherSpaceId, generatorKey, settings = {}, { version = 1 } = {}) {
+  const spaceId = Number(teacherSpaceId);
+  if (!Number.isFinite(spaceId) || spaceId <= 0) {
+    throw new Error("Espace enseignant introuvable.");
+  }
+  const key = normalizeGeneratorKey(generatorKey);
+  const safeSettings = settings && typeof settings === "object" && !Array.isArray(settings)
+    ? settings
+    : {};
+
+  const { error } = await supabase
+    .from("teacher_generator_settings")
+    .upsert({
+      teacher_space_id:spaceId,
+      generator_key:key,
+      settings_version:Math.max(1, Math.trunc(Number(version) || 1)),
+      settings:safeSettings
+    }, { onConflict:"teacher_space_id,generator_key" });
+
+  if (error) throw error;
+  return true;
+}
+
 export async function getMyTeacherClasses(teacherSpaceId) {
   const { data, error } = await supabase
     .from("teacher_classes")
@@ -1136,7 +1192,7 @@ export async function deleteTeacherActivity(activityId) {
    ========================= */
 
 const TEACHER_SEQUENCE_FIELDS = "id, teacher_space_id, folder_id, title, title_normalized, display_order, created_at, updated_at";
-const TEACHER_SEQUENCE_ITEM_FIELDS = "id, sequence_id, position, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, created_at, updated_at";
+const TEACHER_SEQUENCE_ITEM_FIELDS = "id, sequence_id, position, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, execution_limit_config, created_at, updated_at";
 
 export async function listTeacherSequencesForSpace(teacherSpaceId) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
@@ -1190,12 +1246,15 @@ export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {})
       ? null
       : Math.max(1, Math.min(5, Math.trunc(Number(item?.difficulty_level) || 3)));
     const executionModeCandidate = String(item?.execution_limit_mode || "questions").trim();
-    const executionMode = ["questions", "time", "intrinsic"].includes(executionModeCandidate)
+    const executionMode = ["questions", "time", "success", "intrinsic"].includes(executionModeCandidate)
       ? executionModeCandidate
       : "questions";
     const executionValue = executionMode === "intrinsic"
       ? null
-      : Math.max(1, Math.trunc(Number(item?.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+      : Math.max(1, Math.trunc(Number(item?.execution_limit_value) || (executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5)));
+    const executionLimitConfig = executionMode === "success"
+      ? normalizeSuccessExecutionLimitConfig(item?.execution_limit_config)
+      : null;
     return {
       position:index,
       source_type:sourceType,
@@ -1204,7 +1263,8 @@ export async function saveTeacherSequenceForSpace(teacherSpaceId, sequence = {})
       difficulty_mode:difficultyMode,
       difficulty_level:difficultyLevel,
       execution_limit_mode:executionMode,
-      execution_limit_value:executionValue
+      execution_limit_value:executionValue,
+      execution_limit_config:executionLimitConfig
     };
   });
 
@@ -1307,7 +1367,7 @@ export async function deleteTeacherSequence(sequenceId) {
    ATTRIBUTION DIRECTE D’ACTIVITÉS
    ========================= */
 
-const ACTIVITY_ASSIGNMENT_FIELDS = "id, teacher_space_id, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, is_active, created_at, updated_at";
+const ACTIVITY_ASSIGNMENT_FIELDS = "id, teacher_space_id, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, execution_limit_config, is_active, created_at, updated_at";
 const ACTIVITY_ASSIGNMENT_TARGET_FIELDS = "id, assignment_id, target_type, teacher_class_id, student_id, created_at";
 const ACTIVITY_ASSIGNMENT_PROGRESS_FIELDS = "assignment_id, student_id, completed_at";
 
@@ -1376,12 +1436,15 @@ export async function saveActivityAssignmentForSpace(teacherSpaceId, assignment 
     ? null
     : Math.max(1, Math.min(5, Math.trunc(Number(assignment.difficulty_level) || 3)));
   const executionModeCandidate = String(assignment.execution_limit_mode || "questions").trim();
-  const executionMode = ["questions", "time", "intrinsic"].includes(executionModeCandidate)
+  const executionMode = ["questions", "time", "success", "intrinsic"].includes(executionModeCandidate)
     ? executionModeCandidate
     : "questions";
   const executionValue = executionMode === "intrinsic"
     ? null
-    : Math.max(1, Math.trunc(Number(assignment.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+    : Math.max(1, Math.trunc(Number(assignment.execution_limit_value) || (executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5)));
+  const executionLimitConfig = executionMode === "success"
+    ? normalizeSuccessExecutionLimitConfig(assignment.execution_limit_config)
+    : null;
 
   const cleanTargets = (Array.isArray(targets) ? targets : []).map((target) => {
     const type = String(target?.target_type || "").trim();
@@ -1409,7 +1472,8 @@ export async function saveActivityAssignmentForSpace(teacherSpaceId, assignment 
     difficulty_mode:difficultyMode,
     difficulty_level:difficultyLevel,
     execution_limit_mode:executionMode,
-    execution_limit_value:executionValue
+    execution_limit_value:executionValue,
+    execution_limit_config:executionLimitConfig
   };
   const existingId = normalizeUuid(assignment.id);
   const query = existingId
@@ -1450,7 +1514,7 @@ export async function saveActivityAssignmentForSpace(teacherSpaceId, assignment 
   };
 }
 
-const DIRECT_LAUNCH_LINK_FIELDS = "id, teacher_space_id, token, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, is_active, created_at, updated_at";
+const DIRECT_LAUNCH_LINK_FIELDS = "id, teacher_space_id, token, source_type, source_id, title_snapshot, difficulty_mode, difficulty_level, execution_limit_mode, execution_limit_value, execution_limit_config, is_active, created_at, updated_at";
 
 export async function saveDirectLaunchLinkForSpace(teacherSpaceId, link = {}) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
@@ -1468,10 +1532,13 @@ export async function saveDirectLaunchLinkForSpace(teacherSpaceId, link = {}) {
     ? null
     : Math.max(1, Math.min(5, Math.trunc(Number(link.difficulty_level) || 3)));
   const executionCandidate = String(link.execution_limit_mode || "questions").trim();
-  const executionMode = ["questions", "time", "intrinsic"].includes(executionCandidate) ? executionCandidate : "questions";
+  const executionMode = ["questions", "time", "success", "intrinsic"].includes(executionCandidate) ? executionCandidate : "questions";
   const executionValue = executionMode === "intrinsic"
     ? null
-    : Math.max(1, Math.trunc(Number(link.execution_limit_value) || (executionMode === "time" ? 300 : 5)));
+    : Math.max(1, Math.trunc(Number(link.execution_limit_value) || (executionMode === "time" ? 300 : executionMode === "success" ? 10 : 5)));
+  const executionLimitConfig = executionMode === "success"
+    ? normalizeSuccessExecutionLimitConfig(link.execution_limit_config)
+    : null;
 
   const payload = {
     teacher_space_id:spaceId,
@@ -1482,6 +1549,7 @@ export async function saveDirectLaunchLinkForSpace(teacherSpaceId, link = {}) {
     difficulty_level:difficultyLevel,
     execution_limit_mode:executionMode,
     execution_limit_value:executionValue,
+    execution_limit_config:executionLimitConfig,
     is_active:true
   };
 
@@ -1735,10 +1803,30 @@ function normalizeAdventureMenuSlot(item = {}) {
 
 function normalizeAdventureExecutionLimit(value) {
   const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const mode = String(raw.mode || "questions").trim() === "time" ? "time" : "questions";
+  const candidate = String(raw.mode || "questions").trim();
+  const mode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
+  if (mode === "success") {
+    const config = normalizeSuccessExecutionLimitConfig(raw);
+    return {
+      mode,
+      value:Math.max(1, Math.min(999, Math.trunc(Number(raw.value) || 10))),
+      milestones:config.milestones,
+      max_time_sec:config.max_time_sec
+    };
+  }
   const fallback = mode === "time" ? 180 : 5;
   const amount = Math.max(1, Math.trunc(Number(raw.value) || fallback));
   return { mode, value: mode === "time" ? Math.min(7200, amount) : Math.min(200, amount) };
+}
+
+function normalizeSuccessExecutionLimitConfig(value = {}) {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const milestonesRaw = Math.trunc(Number(raw.milestones ?? raw.safety_milestones));
+  const maxTimeRaw = Math.trunc(Number(raw.max_time_sec ?? raw.maxTimeSec));
+  return {
+    milestones:Number.isFinite(milestonesRaw) ? Math.max(0, Math.min(12, milestonesRaw)) : 3,
+    max_time_sec:Number.isFinite(maxTimeRaw) ? Math.max(60, Math.min(7200, maxTimeRaw)) : 300
+  };
 }
 
 function normalizeAdventureGradeLevel(value) {

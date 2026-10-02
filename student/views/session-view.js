@@ -158,6 +158,12 @@ export function renderSessionView(root){
   );
   const isCatalogTestMode = catalogRuntimeContext === "test";
   const isDirectLaunchMode = studentState.selectedConfig?.direct_launch === true;
+  const isExplorationSession = !isProjectedTeacherMode
+    && !isCatalogTestMode
+    && !isDirectLaunchMode
+    && !isSharedSessionEntry
+    && String(studentState.activityEntry || "").trim().toLowerCase() === "exploration"
+    && catalogRuntimeContext === "exploration";
   const catalogTestCloseHandler = typeof studentState.selectedConfig?.catalogTestClose === "function"
     ? studentState.selectedConfig.catalogTestClose
     : null;
@@ -168,7 +174,8 @@ export function renderSessionView(root){
     hasIndividualSidebar,
     isCatalogTestMode,
     isProjectedTeacherMode,
-    isSharedSessionEntry
+    isSharedSessionEntry,
+    showExplorationExit:isExplorationSession
   });
 
   const controller = new AbortController();
@@ -484,6 +491,11 @@ export function renderSessionView(root){
       openExitConfirm();
     }, { signal });
 
+    els.btnExplorationExit?.addEventListener("click", () => {
+      if (!isExplorationSession || !engine || exitConfirmOpen) return;
+      void leaveExplorationSession();
+    }, { signal });
+
     els.btnPause?.addEventListener("click", () => {
       if (!engine || exitConfirmOpen) return;
       if (engine.getUiState?.().pauseAllowed !== true) return;
@@ -647,7 +659,8 @@ export function renderSessionView(root){
     const btn = els.manualActionBtn;
     if (!btn || btn.disabled) return null;
     if (btn.classList.contains("hidden")) return null;
-    if (String(btn.textContent || "").trim().toLowerCase() !== "question suivante") return null;
+    const label = String(btn.textContent || "").trim().toLowerCase();
+    if (label !== "question suivante" && label !== "fin de l'activité" && label !== "fin de l’activité") return null;
     return btn;
   }
 
@@ -1187,6 +1200,22 @@ export function renderSessionView(root){
     leaveSessionImmediately();
   }
 
+  async function leaveExplorationSession(){
+    if (!isExplorationSession) return;
+
+    attemptStopStatus = "completed";
+    let finalizePromise = null;
+    try {
+      finalizePromise = engine?.stop?.({ attemptStatus:"completed" }) || null;
+    } catch {}
+
+    if (finalizePromise) {
+      await Promise.resolve(finalizePromise).catch(() => null);
+    }
+
+    goBackToActivities();
+  }
+
   function leaveSessionImmediately(){
     if (isProjectedTeacherMode) {
       closeProjectedWindow();
@@ -1378,20 +1407,27 @@ export function renderSessionView(root){
 
   function syncRightReserveMode(finalChallengeVisible){
     const visible = finalChallengeVisible === true;
-    const gaugeVisible = !visible && shouldShowEvaluationGaugeShell();
-    const counterVisible = !visible && !gaugeVisible && shouldShowEvaluationCounterShell();
-    const fixedQuestionCounterVisible = !visible && !gaugeVisible && !counterVisible && shouldShowFixedQuestionCounterShell();
+    const explorationExitVisible = !visible && isExplorationSession;
+    const gaugeVisible = !visible && !explorationExitVisible && shouldShowEvaluationGaugeShell();
+    const counterVisible = !visible && !explorationExitVisible && !gaugeVisible && shouldShowEvaluationCounterShell();
+    const fixedQuestionCounterVisible = !visible && !explorationExitVisible && !gaugeVisible && !counterVisible && shouldShowFixedQuestionCounterShell();
 
     els.rightReserve?.classList.toggle("is-final-challenge", visible);
     els.rightReserve?.setAttribute(
       "data-reserve-mode",
       visible
         ? "final-challenge"
-        : (gaugeVisible ? "gauge" : (counterVisible ? "counter" : (fixedQuestionCounterVisible ? "fixed-question-counter" : "empty")))
+        : (explorationExitVisible ? "exploration-exit" : (gaugeVisible ? "gauge" : (counterVisible ? "counter" : (fixedQuestionCounterVisible ? "fixed-question-counter" : "empty"))))
     );
 
     els.finalChallengePanel?.classList.toggle("hidden", !visible);
     els.finalChallengePanel?.setAttribute("aria-hidden", visible ? "false" : "true");
+
+    if (els.explorationExitShell) {
+      els.explorationExitShell.hidden = !explorationExitVisible;
+      els.explorationExitShell.classList.toggle("hidden", !explorationExitVisible);
+      els.explorationExitShell.setAttribute("aria-hidden", explorationExitVisible ? "false" : "true");
+    }
 
     if (els.progressShell) {
       els.progressShell.hidden = !gaugeVisible;

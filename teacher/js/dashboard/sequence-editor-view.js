@@ -1,6 +1,7 @@
 import { isIntrinsicCatalogActivity, normalizeCatalogActivity } from "../../../shared/catalogue.js";
 import { bindStepperField, refreshStepper, renderStepperField } from "../../../shared/config-widgets.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
+import { bindSuccessExecutionPopover, executionLimitConfigToDb, normalizeSuccessExecutionConfig, renderSuccessExecutionPopover } from "./execution-limit-ui.js";
 
 const LEVELS = [1, 2, 3, 4, 5];
 
@@ -278,9 +279,11 @@ export function createSequenceEditorController({
     const intrinsic = source ? isSourceIntrinsic(item.source_type, source) : item.execution_limit_mode === "intrinsic";
     const adaptiveAvailable = source ? isAdaptiveAvailableFor(item.source_type, source) : item.difficulty_mode === "adaptive";
     const difficulty = item.difficulty_mode === "adaptive" ? "adaptive" : String(item.difficulty_level || 3);
-    const mode = intrinsic ? "intrinsic" : (String(item.execution_limit_mode || "questions") === "time" ? "time" : "questions");
-    const value = Math.max(1, Number(item.execution_limit_value) || (mode === "time" ? 300 : 5));
+    const rawMode = String(item.execution_limit_mode || "questions");
+    const mode = intrinsic ? "intrinsic" : (["questions", "time", "success"].includes(rawMode) ? rawMode : "questions");
+    const value = Math.max(1, Number(item.execution_limit_value) || (mode === "time" ? 300 : mode === "success" ? 10 : 5));
     const displayedLimitValue = mode === "time" ? Math.max(1, Math.round(value / 60)) : value;
+    const successConfig = normalizeSuccessExecutionConfig({ correctCount:value, ...(item.execution_limit_config || {}) });
     const limitStepperId = getSequenceItemControlId(item);
     const title = item.title_snapshot || getSourceTitle(source) || "Activité";
     const difficultyHtml = `
@@ -299,8 +302,12 @@ export function createSequenceEditorController({
           <select class="student-select dashboard-mission-step-limit-mode" data-sequence-item-limit-mode="${index}" aria-label="Règle d’arrêt">
             <option value="questions" ${mode === "questions" ? "selected" : ""}>Questions</option>
             <option value="time" ${mode === "time" ? "selected" : ""}>Temps</option>
+            <option value="success" ${mode === "success" ? "selected" : ""}>Réussite</option>
           </select>
-          ${renderStepperField({
+          ${mode === "success" ? renderSuccessExecutionPopover({
+            idPrefix:`${limitStepperId}Success`,
+            value:successConfig
+          }) : `${renderStepperField({
             id:limitStepperId,
             label:mode === "time" ? "Durée en minutes" : "Nombre de questions",
             value:displayedLimitValue,
@@ -308,8 +315,7 @@ export function createSequenceEditorController({
             inputMax:mode === "time" ? 120 : 200,
             step:1,
             fieldClassName:"dashboard-sequence-limit-stepper"
-          })}
-          <span class="dashboard-mission-step-limit-unit">${mode === "time" ? "min" : "questions"}</span>
+          })}<span class="dashboard-mission-step-limit-unit">${mode === "time" ? "min" : "questions"}</span>`}
         </div>`;
     return `
       <div class="dashboard-class-card dashboard-mission-step-card dashboard-sequence-step-card" data-sequence-item-index="${index}" draggable="true">
@@ -394,7 +400,8 @@ export function createSequenceEditorController({
         difficulty_mode:adaptive ? "adaptive" : "fixed",
         difficulty_level:adaptive ? null : 3,
         execution_limit_mode:intrinsic ? "intrinsic" : "questions",
-        execution_limit_value:intrinsic ? null : 5
+        execution_limit_value:intrinsic ? null : 5,
+        execution_limit_config:null
       });
       appendSequenceItem(draft.items.length - 1);
     }));
@@ -420,21 +427,35 @@ export function createSequenceEditorController({
       if (intrinsic) {
         item.execution_limit_mode = "intrinsic";
         item.execution_limit_value = null;
+        item.execution_limit_config = null;
         return;
       }
       const modeEl = editorHost?.querySelector(`[data-sequence-item-limit-mode="${index}"]`);
       const card = editorHost?.querySelector(`[data-sequence-item-index="${index}"]`);
-      const valueEl = card?.querySelector(".dashboard-sequence-limit-stepper .tv-input-stepper");
-      if (!modeEl || !valueEl) return;
-      const mode = String(modeEl.value || "questions") === "time" ? "time" : "questions";
+      if (!modeEl || !card) return;
+      const candidate = String(modeEl.value || "questions");
+      const mode = ["questions", "time", "success"].includes(candidate) ? candidate : "questions";
       if (index === changingLimitIndex && mode !== item.execution_limit_mode) {
         item.execution_limit_mode = mode;
-        item.execution_limit_value = mode === "time" ? 300 : 5;
+        item.execution_limit_value = mode === "time" ? 300 : mode === "success" ? 10 : 5;
+        item.execution_limit_config = mode === "success" ? executionLimitConfigToDb({ correctCount:10, milestones:3, maxTimeSec:300 }) : null;
         return;
       }
-      const raw = Math.max(1, Math.trunc(Number(valueEl.value) || (mode === "time" ? 5 : 5)));
+      if (mode === "success") {
+        item.execution_limit_mode = "success";
+        item.execution_limit_value = Math.max(1, Math.trunc(Number(item.execution_limit_value) || 10));
+        item.execution_limit_config = executionLimitConfigToDb(normalizeSuccessExecutionConfig({
+          correctCount:item.execution_limit_value,
+          ...(item.execution_limit_config || {})
+        }));
+        return;
+      }
+      const valueEl = card.querySelector(".dashboard-sequence-limit-stepper .tv-input-stepper");
+      if (!valueEl) return;
+      const raw = Math.max(1, Math.trunc(Number(valueEl.value) || 5));
       item.execution_limit_mode = mode;
       item.execution_limit_value = mode === "time" ? raw * 60 : raw;
+      item.execution_limit_config = null;
     });
   }
 
@@ -548,25 +569,10 @@ export function createSequenceEditorController({
   function updateSequenceLimitControl(index) {
     const item = draft?.items?.[index];
     const card = editorHost?.querySelector(`[data-sequence-item-index="${index}"]`);
-    if (!item || !card || item.execution_limit_mode === "intrinsic") return;
-    const mode = item.execution_limit_mode === "time" ? "time" : "questions";
-    const value = card.querySelector(".dashboard-sequence-limit-stepper .tv-input-stepper");
-    const unit = card.querySelector(".dashboard-mission-step-limit-unit");
-    const label = mode === "time" ? "Durée en minutes" : "Nombre de questions";
-    if (value) {
-      value.max = mode === "time" ? "120" : "200";
-      value.value = mode === "time"
-        ? String(Math.max(1, Math.round((Number(item.execution_limit_value) || 300) / 60)))
-        : String(Math.max(1, Number(item.execution_limit_value) || 5));
-    }
-    if (unit) unit.textContent = mode === "time" ? "min" : "questions";
-    const stepper = card.querySelector(".dashboard-sequence-limit-stepper .tv-stepper");
-    const fieldLabel = card.querySelector(".dashboard-sequence-limit-stepper .tv-stepper-field-label");
-    if (stepper) stepper.setAttribute("aria-label", label);
-    if (fieldLabel) fieldLabel.textContent = label;
-    stepper?.querySelector('[data-stepper-direction="-1"]')?.setAttribute("aria-label", `Diminuer ${label}`);
-    stepper?.querySelector('[data-stepper-direction="1"]')?.setAttribute("aria-label", `Augmenter ${label}`);
-    refreshStepper(card, getSequenceItemControlId(item), { inputMin:1, inputMax:mode === "time" ? 120 : 200 });
+    if (!item || !card) return;
+    card.outerHTML = renderSequenceItem(item, index);
+    const nextCard = editorHost?.querySelector(`[data-sequence-item-index="${index}"]`);
+    if (nextCard) bindSequenceSteppers(nextCard);
   }
 
   function reindexSequenceCards(list) {
@@ -591,10 +597,26 @@ export function createSequenceEditorController({
     cards.forEach((card) => {
       const index = Number(card.dataset.sequenceItemIndex);
       const item = draft?.items?.[index];
+      if (!item) return;
+      const mode = ["questions", "time", "success"].includes(String(item.execution_limit_mode || ""))
+        ? String(item.execution_limit_mode)
+        : "questions";
+      if (mode === "success") {
+        if (card.dataset.successStepperBound === "true") return;
+        card.dataset.successStepperBound = "true";
+        const success = normalizeSuccessExecutionConfig({ correctCount:item.execution_limit_value, ...(item.execution_limit_config || {}) });
+        bindSuccessExecutionPopover(card, `${getSequenceItemControlId(item)}Success`, {
+          value:success,
+          onChange:(next) => {
+            item.execution_limit_value = next.correctCount;
+            item.execution_limit_config = executionLimitConfigToDb(next);
+          }
+        });
+        return;
+      }
       const input = card.querySelector(".dashboard-sequence-limit-stepper .tv-input-stepper");
-      if (!item || !input || input.dataset.sequenceStepperBound === "true") return;
+      if (!input || input.dataset.sequenceStepperBound === "true") return;
       input.dataset.sequenceStepperBound = "true";
-      const mode = item.execution_limit_mode === "time" ? "time" : "questions";
       bindStepperField(card, getSequenceItemControlId(item), {
         inputMin:1,
         inputMax:mode === "time" ? 120 : 200,

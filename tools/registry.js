@@ -70,10 +70,17 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
   },
   {
     id: "comparaison",
-    label: "Comparaison",
+    label: "Différence entre collections",
     entry: "../tools/comparaison/tool.js",
     description: "Comparer deux collections terme à terme pour trouver la différence.",
     tags: ["maths", "nombres", "comparaison", "collections", "difference", "jetons", "trace", "projection"]
+  },
+  {
+    id: "comparaison-signes",
+    label: "Comparaison (introduction)",
+    entry: "../tools/comparaison-signes/tool.js",
+    description: "Comparer deux collections avec le crocodile ou les signes < et >.",
+    tags: ["maths", "nombres", "comparaison", "collections", "crocodile", "inferieur", "superieur", "projection"]
   },
 
   {

@@ -10,7 +10,7 @@ export default defineTool("recomposer-mots-syllabes", "Recomposer les mots", {
   description:"Recomposer plusieurs mots en répartissant et en ordonnant leurs syllabes dans des zones de réponse.",
   tags:["français", "lecture", "étude-du-code", "syllabes", "mots", "phonologie", "graphèmes", "tablette", "manipulation", "projection"],
   defaultInstruction:DEFAULT_INSTRUCTION,
-  supportsCustomInstruction:false,
+  supportsCustomInstruction:true,
 
   getDefaultSettings:config.getDefaultSettings,
   renderToolSettings:config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("recomposer-mots-syllabes", "Recomposer les mots", {
     return createActivity({
       ...context,
       defaultInstruction:DEFAULT_INSTRUCTION,
-      supportsCustomInstruction:false
+      supportsCustomInstruction:true
     });
   }
 });

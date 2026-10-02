@@ -10,7 +10,7 @@ export default defineTool("identifier-verbe", "Identifier le verbe", {
   description:"Identifier des verbes à l’infinitif ou conjugués parmi des mots issus de la banque lexicale.",
   tags:["français", "grammaire", "verbe", "conjugaison", "mots", "sélection", "projection"],
   defaultInstruction:DEFAULT_INSTRUCTION,
-  supportsCustomInstruction:false,
+  supportsCustomInstruction:true,
 
   getDefaultSettings:config.getDefaultSettings,
   renderToolSettings:config.renderToolSettings,
@@ -42,7 +42,7 @@ export default defineTool("identifier-verbe", "Identifier le verbe", {
     return createIdentifierVerbeActivity({
       ...context,
       defaultInstruction:DEFAULT_INSTRUCTION,
-      supportsCustomInstruction:false
+      supportsCustomInstruction:true
     });
   }
 });
