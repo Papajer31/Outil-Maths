@@ -277,6 +277,13 @@ const ACTIVE_TOOLS_REGISTRY = Object.freeze([
     tags: ["graphisme", "écriture", "chiffres", "tracé", "tablette", "projection"]
   },
   {
+    id: "copie",
+    label: "Copie",
+    entry: "../tools/copie/tool.js",
+    description: "Travailler la copie différée à partir d’un texte masqué, puis vérifier et relever ses données de copie.",
+    tags: ["français", "écriture", "copie", "mémorisation", "texte"]
+  },
+  {
     id: "nombres-lettres",
     label: "Nombres en lettres",
     entry: "../tools/nombres-lettres/tool.js",

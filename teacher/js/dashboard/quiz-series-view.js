@@ -326,7 +326,7 @@ function getSeriesModelPreviewMarkup(model, analysis){
     const classes = [
       "quiz-series-model-preview-block",
       widget.type === "answer" ? "is-answer" : "",
-      widget.type === "numeric-keypad" ? "is-keypad" : "",
+      (widget.type === "numeric-keypad" || widget.type === "alphabet-keyboard") ? "is-keypad" : "",
       widget.type === "qcm-text" ? "is-qcm" : "",
       widget.type === "selection-words" ? "is-selection" : "",
       index === instructionIndex ? "is-instruction" : "",

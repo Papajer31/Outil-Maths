@@ -2087,3 +2087,39 @@ button.dashboard-resource-detail-tag:focus-visible{
   .dashboard-pentomino-verso-sheet-stage{width:174px; height:236px;}
   .dashboard-pentomino-verso-sheet-origin,.dashboard-pentomino-verso-sheet-moving{width:105px; height:149px;}
 }
+
+.dashboard-worksheet-generating{
+  position:absolute;
+  inset:0;
+  z-index:12;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  background:rgba(23,27,35,.48);
+  backdrop-filter:blur(2px);
+  pointer-events:none;
+  color:#fff;
+}
+
+.dashboard-worksheet-generating[hidden]{
+  display:none;
+}
+
+.dashboard-worksheet-generating strong{
+  font-size:18px;
+  font-weight:700;
+}
+
+.dashboard-worksheet-generating-spinner{
+  width:28px;
+  height:28px;
+  border:3px solid rgba(255,255,255,.28);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:dashboardWorksheetGeneratingSpin .8s linear infinite;
+}
+
+@keyframes dashboardWorksheetGeneratingSpin{
+  to{transform:rotate(360deg)}
+}

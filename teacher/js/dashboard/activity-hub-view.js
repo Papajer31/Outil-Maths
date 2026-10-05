@@ -2,7 +2,8 @@ export function createActivityHubViewController({
   view,
   onOpenExploration,
   onOpenMyActivities,
-  onOpenAssignedWork
+  onOpenAssignedWork,
+  onOpenRocketGame
 } = {}) {
   function render() {
     if (!view) return;
@@ -16,7 +17,7 @@ export function createActivityHubViewController({
       </div>
 
       <div class="activity-hub-shell dashboard-content-scroll dashboard-config-list">
-        <div class="activity-hub-grid activity-hub-grid--three" aria-label="Espaces Activités">
+        <div class="activity-hub-grid activity-hub-grid--four" aria-label="Espaces Activités">
           ${renderHubCard({
             action: "open-exploration",
             icon: "travel_explore",
@@ -34,6 +35,12 @@ export function createActivityHubViewController({
             icon: "assignment_ind",
             title: "Activités attribuées",
             text: "Voir les activités et séquences actuellement proposées aux élèves, puis en attribuer de nouvelles."
+          })}
+          ${renderHubCard({
+            action: "open-rocket-game",
+            icon: "rocket_launch",
+            title: "La Fusée",
+            text: "Lancer le jeu coopératif avec une activité Tujer différente pour chaque ressource."
           })}
         </div>
 
@@ -58,6 +65,7 @@ export function createActivityHubViewController({
     view?.querySelector("[data-action='open-exploration']")?.addEventListener("click", () => onOpenExploration?.());
     view?.querySelector("[data-action='open-my-activities']")?.addEventListener("click", () => onOpenMyActivities?.());
     view?.querySelector("[data-action='open-assigned']")?.addEventListener("click", () => onOpenAssignedWork?.());
+    view?.querySelector("[data-action='open-rocket-game']")?.addEventListener("click", () => onOpenRocketGame?.());
   }
 
   return { render };

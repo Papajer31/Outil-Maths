@@ -19,7 +19,7 @@ const GRID_ROWS = 8;
 const DEFAULT_DRAW_MODE = "random";
 const DEFAULT_VARIANT_DRAW_MODE = "in_order";
 const DRAW_MODES = new Set(["in_order", "random"]);
-const SUPPORTED_WIDGET_TYPES = new Set(["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"]);
+const SUPPORTED_WIDGET_TYPES = new Set(["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "alphabet-keyboard", "qcm-text", "selection-words", "categories"]);
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
 const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
 const QCM_MIN_CHOICES = 2;
@@ -336,12 +336,13 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const isAudio = type === "audio";
   const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
+  const isAlphabetKeyboard = type === "alphabet-keyboard";
   const isQcmText = type === "qcm-text";
   const isSelectionWords = type === "selection-words";
   const isCategories = type === "categories";
 
-  const questionText = isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.questionText ?? safe.question_text ?? "");
-  const correctionText = isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
+  const questionText = isNumericKeypad || isAlphabetKeyboard || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.questionText ?? safe.question_text ?? "");
+  const correctionText = isNumericKeypad || isAlphabetKeyboard || isDone || isImage || isAudio || isLabels || isCategories ? "" : String(safe.correctionText ?? safe.correction_text ?? questionText);
   const questionImageSource = isImage
     ? normalizeQuizImageSource(safe.questionImageSource ?? safe.question_image_source ?? safe.imageSource ?? safe.image_source)
     : null;
@@ -367,7 +368,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
     safe.column,
     safe.columnSpan ?? safe.column_span,
     sourceGridColumns,
-    isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isMaskedText || isFlashText || isTextAnswer ? 8 : isDone ? 3 : 5
+    isNumericKeypad || isAlphabetKeyboard ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage ? 4 : isAudio ? 4 : isMaskedText || isFlashText || isTextAnswer ? 8 : isDone ? 3 : 5
   );
   const correctionArea = migrateHorizontalArea(
     safe.correctionColumn ?? safe.correction_column ?? safe.column,
@@ -378,16 +379,16 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   const column = questionArea.column;
   const row = clampInt(safe.row, 1, GRID_ROWS, 1);
   const columnSpan = questionArea.columnSpan;
-  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isSelectionWords || isAudio || isMaskedText || isFlashText ? 2 : 1);
+  const rowSpan = clampInt(safe.rowSpan ?? safe.row_span, 1, GRID_ROWS, isCategories ? 4 : isLabels || isImage || isQcmText ? 3 : isAlphabetKeyboard || isSelectionWords || isAudio || isMaskedText || isFlashText ? 2 : 1);
   const overrides = normalizeCorrectionOverrides(safe.correctionOverrides || safe.correction_overrides || {});
-  const questionVisible = isNumericKeypad || isDone
+  const questionVisible = isNumericKeypad || isAlphabetKeyboard || isDone
     ? true
     : safe.questionVisible ?? safe.question_visible ?? safe.visibility !== "correction";
-  const correctionVisible = isNumericKeypad || isDone
+  const correctionVisible = isNumericKeypad || isAlphabetKeyboard || isDone
     ? false
     : safe.correctionVisible ?? safe.correction_visible ?? safe.visibility !== "question";
   const inheritedCorrectionVisibility = questionVisible ? "visible" : "hidden";
-  const correctionVisibility = isNumericKeypad || isDone
+  const correctionVisibility = isNumericKeypad || isAlphabetKeyboard || isDone
     ? "hidden"
     : normalizeCorrectionVisibility(
         safe.correctionVisibility ?? safe.correction_visibility,
@@ -400,7 +401,7 @@ export function normalizeQuizWidget(widget = {}, index = 0, sourceColumns = GRID
   return {
     id: String(safe.id || `widget-${index + 1}`).trim() || `widget-${index + 1}`,
     type,
-    label: String(safe.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
+    label: String(safe.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isAlphabetKeyboard ? "Clavier alphabétique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte")).trim(),
     questionText,
     correctionText,
     questionHtml,
@@ -750,7 +751,7 @@ export function getWidgetView(widget, mode = "question"){
       visibilityMode:mode !== "correction" ? "visible" : "hidden"
     });
   }
-  if (widget.type === "numeric-keypad") {
+  if (widget.type === "numeric-keypad" || widget.type === "alphabet-keyboard") {
     return normalizeViewBounds({
       html: "",
       text: "",
@@ -1194,7 +1195,7 @@ function normalizeCorrectionVisibility(value, fallback = "visible"){
 }
 
 function getWidgetVisibilityState(widget, mode = "question"){
-  if (widget?.type === "numeric-keypad" || widget?.type === "done") {
+  if (widget?.type === "numeric-keypad" || widget?.type === "alphabet-keyboard" || widget?.type === "done") {
     const visible = mode !== "correction";
     return { visible, visibilityMode:visible ? "visible" : "hidden" };
   }

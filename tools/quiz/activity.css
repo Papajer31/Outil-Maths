@@ -238,6 +238,15 @@
   box-shadow: 0 0 0 3px rgba(239, 68, 68, .18);
 }
 
+
+/* Widget Clavier alphabétique : le rendu interne est intégralement celui du composant commun. */
+.quiz-runtime-widget--alphabet-keyboard {
+  align-items:center;
+  justify-content:center;
+  padding:clamp(5px,.55vmin,10px);
+  overflow:visible;
+}
+
 /* QCM (texte) -------------------------------------------------------------- */
 .quiz-runtime-widget--qcm-text{
   align-items:stretch;

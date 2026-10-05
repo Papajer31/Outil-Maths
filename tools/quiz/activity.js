@@ -14,6 +14,7 @@ import { resolveQuizImageSourceUrl } from "../../shared/quiz-local-image-store.j
 import { resolveQuizAudioSourceUrl } from "../../shared/quiz-audio-source.js";
 import { ensureToolUiStyles } from "../../shared/tool-ui/tool-ui.js";
 import { bindNumericKeypadEvents, renderNumericKeypad } from "../../shared/tool-ui/numeric-keypad.js";
+import { bindAlphabetKeyboardEvents, renderAlphabetKeyboard } from "../../shared/tool-ui/alphabet-keyboard.js";
 import {
   clientPointToLocalPoint,
   clientRectToLocalRect
@@ -119,6 +120,7 @@ function createRuntimeState(initialContext = {}){
     answerInputEl: null,
     inputAbortController: null,
     keypadAbortController: null,
+    alphabetKeyboardAbortController: null,
     qcmAbortController: null,
     selectionAbortController: null,
     labelsAbortController: null,
@@ -473,6 +475,7 @@ function renderCurrentView(state){
     bindAnswerInput(state);
   }
   bindRuntimeNumericKeypad(state);
+  bindRuntimeAlphabetKeyboard(state);
   bindRuntimeQcm(state);
   bindRuntimeSelection(state);
   bindRuntimeLabels(state);
@@ -521,6 +524,7 @@ function patchCorrectionView(state){
       && widget.type !== "answer"
       && widget.type !== "verified-answer"
       && widget.type !== "numeric-keypad"
+      && widget.type !== "alphabet-keyboard"
       && widget.type !== "qcm-text"
       && widget.type !== "selection-words"
       && widget.type !== "labels"
@@ -674,6 +678,10 @@ function renderWidget(state, widget, mode){
 
   if (widget.type === "numeric-keypad") {
     return renderNumericKeypadWidget(widget, view, style);
+  }
+
+  if (widget.type === "alphabet-keyboard") {
+    return renderAlphabetKeyboardWidget(widget, view, style);
   }
 
   if (widget.type === "qcm-text") {
@@ -1397,6 +1405,25 @@ function renderNumericKeypadWidget(widget, view, style){
   `;
 }
 
+function renderAlphabetKeyboardWidget(widget, view, style){
+  return `
+    <section
+      class="quiz-runtime-widget quiz-runtime-widget--alphabet-keyboard"
+      style="${style}"
+      data-quiz-runtime-widget-id="${escapeHtml(widget.id)}"
+      data-quiz-runtime-alphabet-keyboard-host
+      aria-label="Clavier alphabétique"
+    >
+      ${renderAlphabetKeyboard({
+        dataAttribute: "data-quiz-runtime-alphabet-key",
+        ariaLabel: "Clavier alphabétique",
+        showDiacritics: true,
+        showBackspace: true
+      })}
+    </section>
+  `;
+}
+
 function getMaskedTextMetric(state, widgetId){
   const key = String(widgetId || "");
   let metric = state.maskedTextMetrics.get(key);
@@ -1687,13 +1714,17 @@ function renderAnswerWidget(state, widget, view, mode, style){
       `;
     }
 
+    const hasNumericKeypad = state.currentQuestion?.widgets?.some((entry) => entry?.type === "numeric-keypad");
+    const hasAlphabetKeyboard = state.currentQuestion?.widgets?.some((entry) => entry?.type === "alphabet-keyboard");
+    const answerInputMode = hasNumericKeypad ? "numeric" : hasAlphabetKeyboard ? "none" : "text";
+
     const answerControl = isVerifiedAnswer
       ? `<textarea
             class="tool-answer-input quiz-runtime-answer-input quiz-runtime-verified-answer-input"
             data-quiz-runtime-answer-input
             data-quiz-runtime-verified-answer-input
             rows="2"
-            inputmode="text"
+            inputmode="${answerInputMode}"
             autocomplete="off"
             autocapitalize="none"
             autocorrect="off"
@@ -1707,7 +1738,7 @@ function renderAnswerWidget(state, widget, view, mode, style){
             class="tool-answer-input quiz-runtime-answer-input"
             data-quiz-runtime-answer-input
             type="text"
-            inputmode="${state.currentQuestion?.widgets?.some((entry) => entry?.type === "numeric-keypad") ? "numeric" : "text"}"
+            inputmode="${answerInputMode}"
             autocomplete="off"
             autocapitalize="none"
             autocorrect="off"
@@ -2293,6 +2324,78 @@ function bindRuntimeNumericKeypad(state){
       signal:controller.signal,
       dataAttribute:"data-quiz-runtime-numeric-key",
       onAfterInput:() => syncValidateState(state)
+    });
+  });
+}
+
+function bindRuntimeAlphabetKeyboard(state){
+  state.alphabetKeyboardAbortController?.abort();
+  state.alphabetKeyboardAbortController = null;
+  const hosts = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-alphabet-keyboard-host]") || []);
+  const input = state.answerInputEl;
+  if (!hosts.length || !input || state.answerRevealed) return;
+
+  const controller = new AbortController();
+  state.alphabetKeyboardAbortController = controller;
+
+  const commitValue = (nextValue, selectionStart = null) => {
+    input.value = String(nextValue ?? "");
+    input.dispatchEvent(new Event("input", { bubbles:true }));
+    if (Number.isFinite(selectionStart)) {
+      try { input.setSelectionRange(selectionStart, selectionStart); } catch {}
+    }
+  };
+
+  const getSelection = () => {
+    const value = String(input.value || "");
+    const start = Number.isFinite(input.selectionStart) ? input.selectionStart : value.length;
+    const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
+    return { value, start, end };
+  };
+
+  const control = {
+    appendCharacter(character){
+      const safeCharacter = String(character || "");
+      if (!safeCharacter) return;
+      const { value, start, end } = getSelection();
+      commitValue(`${value.slice(0, start)}${safeCharacter}${value.slice(end)}`, start + safeCharacter.length);
+    },
+    clear(){
+      commitValue("", 0);
+    },
+    backspace(){
+      const { value, start, end } = getSelection();
+      if (start !== end) {
+        commitValue(`${value.slice(0, start)}${value.slice(end)}`, start);
+        return;
+      }
+      if (start <= 0) return;
+      commitValue(`${value.slice(0, start - 1)}${value.slice(end)}`, start - 1);
+    },
+    focus(){
+      try {
+        input.focus({ preventScroll:true });
+      } catch {
+        input.focus?.();
+      }
+    }
+  };
+
+  hosts.forEach((host) => {
+    // Les touches à l’écran conservent le focus du champ : la bordure et le
+    // curseur restent stables pendant toute la saisie, y compris les accents.
+    host.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const key = event.target instanceof Element
+        ? event.target.closest("[data-quiz-runtime-alphabet-key], [data-tool-alphabet-drawer-toggle]")
+        : null;
+      if (key) event.preventDefault();
+    }, { signal:controller.signal });
+    bindAlphabetKeyboardEvents({
+      root:host,
+      control,
+      signal:controller.signal,
+      dataAttribute:"data-quiz-runtime-alphabet-key"
     });
   });
 }
@@ -3221,6 +3324,8 @@ function teardownInputBindings(state){
   state.inputAbortController = null;
   state.keypadAbortController?.abort();
   state.keypadAbortController = null;
+  state.alphabetKeyboardAbortController?.abort();
+  state.alphabetKeyboardAbortController = null;
   state.qcmAbortController?.abort();
   state.qcmAbortController = null;
   state.selectionAbortController?.abort();

@@ -2395,6 +2395,73 @@
 }
 
 /* -------------------------------------------------------------------------- */
+/* Élément Clavier alphabétique                                                */
+/* -------------------------------------------------------------------------- */
+
+.quiz-workshop-canvas-widget--alphabet-keyboard{
+  border-color:#9aa9c1;
+  background:#f7f9fc;
+}
+
+.quiz-workshop-canvas-widget--alphabet-keyboard.is-selected,
+.quiz-workshop-canvas-widget--alphabet-keyboard:focus-visible{
+  border-color:var(--quiz-widget-state);
+}
+
+.quiz-workshop-alphabet-keyboard-preview{
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:clamp(4px,.4vw,7px);
+  padding:clamp(7px,.65vw,12px);
+  overflow:hidden;
+  pointer-events:none;
+}
+
+.quiz-workshop-alphabet-keyboard-preview-row{
+  width:100%;
+  min-width:0;
+  display:grid;
+  gap:clamp(2px,.18vw,4px);
+}
+
+.quiz-workshop-alphabet-keyboard-preview-row.is-vowels{
+  width:min(52%,520px);
+  align-self:center;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+}
+
+.quiz-workshop-alphabet-keyboard-preview-row.is-consonants{
+  grid-template-columns:repeat(21,minmax(0,1fr));
+}
+
+.quiz-workshop-alphabet-keyboard-preview-key{
+  min-width:0;
+  height:clamp(25px,2.45vw,40px);
+  display:grid;
+  place-items:center;
+  border:1px solid #b9c4d6;
+  border-radius:clamp(4px,.4vw,7px);
+  background:#fff;
+  color:#39465d;
+  font-size:clamp(10px,.8vw,15px);
+  font-weight:800;
+  line-height:1;
+}
+
+.quiz-workshop-alphabet-keyboard-preview-key.is-backspace{
+  font-size:clamp(13px,1vw,18px);
+}
+
+.quiz-workshop-canvas-widget--alphabet-keyboard.is-hidden-in-view .quiz-workshop-alphabet-keyboard-preview{
+  opacity:.28;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Élément QCM (texte)                                                         */
 /* -------------------------------------------------------------------------- */
 

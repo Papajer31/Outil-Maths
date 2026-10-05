@@ -924,9 +924,21 @@ function bindEditor(editor, sendAction){
   ["keyup","pointerup","focus"].forEach((type) => editor.addEventListener(type, () => { saveSelection(editor); refreshFormatState(); }));
   editor.addEventListener("blur", () => flushEditor(editor, sendAction));
   editor.addEventListener("paste", (event) => {
-    event.preventDefault(); const text = event.clipboardData?.getData("text/plain") || "";
+    event.preventDefault();
+    const html = event.clipboardData?.getData("text/html") || "";
+    const text = event.clipboardData?.getData("text/plain") || "";
     restoreSelection(editor) || editor.focus({ preventScroll:true });
-    try { document.execCommand("insertText", false, text); } catch {}
+    try {
+      if (html.trim()) {
+        const safeHtml = sanitizeContentHtml(html);
+        const inserted = document.execCommand("insertHTML", false, safeHtml);
+        if (!inserted) document.execCommand("insertText", false, text);
+      } else {
+        document.execCommand("insertText", false, text);
+      }
+    } catch {
+      try { document.execCommand("insertText", false, text); } catch {}
+    }
     editor.dispatchEvent(new Event("input", { bubbles:true }));
   });
 }

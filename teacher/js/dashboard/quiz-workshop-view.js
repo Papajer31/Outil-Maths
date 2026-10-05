@@ -145,6 +145,14 @@ const QUESTION_ELEMENTS = [
     detail: "Affiché pendant la question."
   },
   {
+    id: "alphabet-keyboard",
+    group: "input",
+    icon: "spellcheck",
+    title: "Clavier alphabétique",
+    description: "Clavier alphabétique commun.",
+    detail: "Affiché pendant la question."
+  },
+  {
     id: "qcm-text",
     group: "response",
     icon: "quiz",
@@ -303,7 +311,7 @@ function normalizeCorrectionVisibility(value, fallback = "visible"){
 }
 
 function getWidgetVisibilityState(widget, mode = "question"){
-  if (widget?.type === "numeric-keypad") {
+  if (widget?.type === "numeric-keypad" || widget?.type === "alphabet-keyboard") {
     const visible = mode !== "correction";
     return { visible, visibilityMode: visible ? "visible" : "hidden" };
   }
@@ -339,7 +347,8 @@ function getQuestionCompositionIssues(widgets = [], responseMode = "required"){
   const normalizedResponseMode = normalizeQuestionResponseMode(responseMode);
   const responseCount = safeWidgets.filter(isResponseWidget).length;
   const hasNumericKeypad = safeWidgets.some((widget) => widget.type === "numeric-keypad");
-  const hasAnswerReceiver = safeWidgets.some((widget) => widget.type === "answer");
+  const hasAlphabetKeyboard = safeWidgets.some((widget) => widget.type === "alphabet-keyboard");
+  const hasAnswerReceiver = safeWidgets.some((widget) => widget.type === "answer" || widget.type === "verified-answer");
   const issues = [];
 
   if (normalizedResponseMode === "none") {
@@ -367,6 +376,13 @@ function getQuestionCompositionIssues(widgets = [], responseMode = "required"){
     issues.push({
       code:"keypad-without-receiver",
       label:"Le clavier numérique nécessite un champ Réponse"
+    });
+  }
+
+  if (hasAlphabetKeyboard && !hasAnswerReceiver) {
+    issues.push({
+      code:"alphabet-keyboard-without-receiver",
+      label:"Le clavier alphabétique nécessite un champ Réponse"
     });
   }
 
@@ -703,6 +719,7 @@ function getQcmGridColumnCount(widgetView, choices = []){
 
 function getWidgetMinimumGridSize(type = ""){
   if (type === "numeric-keypad") return { columnSpan:6, rowSpan:1 };
+  if (type === "alphabet-keyboard") return { columnSpan:8, rowSpan:2 };
   if (type === "categories") return { columnSpan:4, rowSpan:2 };
   if (type === "labels") return { columnSpan:4, rowSpan:3 };
   if (type === "qcm-text") return { columnSpan:3, rowSpan:1 };
@@ -724,7 +741,7 @@ function normalizeFlashVisibleSeconds(value){
 
 function createWidget(source = {}){
   const rawType = String(source.type || "text").trim().toLowerCase();
-  const type = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
+  const type = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "alphabet-keyboard", "qcm-text", "selection-words", "categories"].includes(rawType) ? rawType : "text";
   const isMaskedText = type === "masked-text";
   const isFlashText = type === "flash-text";
   const isFlashImage = type === "flash-image";
@@ -736,6 +753,7 @@ function createWidget(source = {}){
   const isAudio = type === "audio";
   const isLabels = type === "labels";
   const isNumericKeypad = type === "numeric-keypad";
+  const isAlphabetKeyboard = type === "alphabet-keyboard";
   const isQcmText = type === "qcm-text";
   const isSelectionWords = type === "selection-words";
   const isCategories = type === "categories";
@@ -747,7 +765,7 @@ function createWidget(source = {}){
         ? "Saisissez le texte à afficher brièvement"
       : isSelectionWords
         ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
-        : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories
+        : isNumericKeypad || isAlphabetKeyboard || isDone || isImage || isAudio || isLabels || isCategories
           ? ""
           : "Saisissez le texte";
   const defaultCorrectionPlaceholder = isTextAnswer ? "Saisissez la réponse attendue" : defaultQuestionPlaceholder;
@@ -776,14 +794,14 @@ function createWidget(source = {}){
     : null;
 
   const legacyVisibility = source.visibility || "both";
-  const questionVisible = isNumericKeypad || isDone
+  const questionVisible = isNumericKeypad || isAlphabetKeyboard || isDone
     ? true
     : source.questionVisible ?? legacyVisibility !== "correction";
-  const correctionVisible = isNumericKeypad || isDone
+  const correctionVisible = isNumericKeypad || isAlphabetKeyboard || isDone
     ? false
     : source.correctionVisible ?? legacyVisibility !== "question";
   const inheritedCorrectionVisibility = questionVisible ? "visible" : "hidden";
-  const correctionVisibility = isNumericKeypad || isDone
+  const correctionVisibility = isNumericKeypad || isAlphabetKeyboard || isDone
     ? "hidden"
     : normalizeCorrectionVisibility(
         source.correctionVisibility ?? source.correction_visibility,
@@ -792,7 +810,7 @@ function createWidget(source = {}){
   const minimumGridSize = getWidgetMinimumGridSize(type);
   const column = clamp(Number(source.column) || 1, 1, GRID_COLUMNS);
   const row = clamp(Number(source.row) || 1, 1, GRID_ROWS);
-  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText ? 7 : isDone ? 3 : 5), minimumGridSize.columnSpan, GRID_COLUMNS);
+  const columnSpan = clamp(Number(source.columnSpan) || (isNumericKeypad || isAlphabetKeyboard ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText ? 7 : isDone ? 3 : 5), minimumGridSize.columnSpan, GRID_COLUMNS);
   const rowSpan = clamp(Number(source.rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText || isFlashText ? 2 : isImage || isAudio ? 2 : 1), minimumGridSize.rowSpan, GRID_ROWS);
   const textAlign = source.textAlign || "center";
   const verticalAlign = source.verticalAlign || "middle";
@@ -814,7 +832,7 @@ function createWidget(source = {}){
   return {
     id: source.id || createId("widget"),
     type,
-    label: source.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte"),
+    label: source.label || (isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isAlphabetKeyboard ? "Clavier alphabétique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte"),
     questionText,
     correctionText,
     questionPlaceholder: String(source.questionPlaceholder ?? defaultQuestionPlaceholder),
@@ -879,7 +897,7 @@ function createWidget(source = {}){
 
 function getWidgetView(widget, mode = "question"){
   const visibilityState = getWidgetVisibilityState(widget, mode);
-  if (widget?.type === "numeric-keypad") {
+  if (widget?.type === "numeric-keypad" || widget?.type === "alphabet-keyboard") {
     return {
       html: "",
       text: "",
@@ -1562,7 +1580,7 @@ function getWidgetStyle(widgetView){
 function getTemplatePreviewMarkup(model){
   const blocks = model.widgets.map((widget) => `
     <span
-      class="quiz-workshop-model-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
+      class="quiz-workshop-model-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${(widget.type === "numeric-keypad" || widget.type === "alphabet-keyboard") ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${widget.visibility === "correction" ? " is-correction" : ""}"
       style="${getPositionStyle(widget)}"
     ></span>
   `).join("");
@@ -1578,7 +1596,7 @@ function getQuestionPreviewMarkup(question){
   const blocks = getQuestionPreviewWidgets(question).map(({ widget, view }) => {
     return `
       <span
-        class="quiz-workshop-card-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${widget.type === "numeric-keypad" ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
+        class="quiz-workshop-card-preview-block${(widget.type === "answer" || widget.type === "verified-answer") ? " is-answer" : ""}${(widget.type === "image" || widget.type === "flash-image") ? " is-image" : ""}${widget.type === "audio" ? " is-audio" : ""}${(widget.type === "numeric-keypad" || widget.type === "alphabet-keyboard") ? " is-keypad" : ""}${widget.type === "qcm-text" ? " is-qcm" : ""}${widget.type === "selection-words" ? " is-selection" : ""}${view.visible ? "" : " is-hidden"}"
         style="${getPositionStyle(view)}"
       ></span>
     `;
@@ -2051,6 +2069,7 @@ export function createQuizWorkshopViewController({
     if (!elementGrid) return;
 
     const hasNumericKeypad = draftWidgets.some((widget) => widget.type === "numeric-keypad");
+    const hasAlphabetKeyboard = draftWidgets.some((widget) => widget.type === "alphabet-keyboard");
     const hasResponseWidget = draftWidgets.some(isResponseWidget);
     const noResponse = draftResponseMode === "none";
 
@@ -2066,15 +2085,19 @@ export function createQuizWorkshopViewController({
 
       const tiles = groupElements.map((element) => {
         const isResponseElement = RESPONSE_WIDGET_TYPES.has(element.id);
-        const isInputOnlyElement = element.id === "numeric-keypad";
-        const isDuplicateKeypad = isInputOnlyElement && hasNumericKeypad;
+        const isInputOnlyElement = element.id === "numeric-keypad" || element.id === "alphabet-keyboard";
+        const isDuplicateKeypad = element.id === "numeric-keypad" && hasNumericKeypad;
+        const isDuplicateAlphabetKeyboard = element.id === "alphabet-keyboard" && hasAlphabetKeyboard;
         const isDisabled = noResponse && (isResponseElement || isInputOnlyElement)
           || isDuplicateKeypad
+          || isDuplicateAlphabetKeyboard
           || (isResponseElement && hasResponseWidget);
         const disabledTitle = noResponse && (isResponseElement || isInputOnlyElement)
           ? "Cette question est configurée sans réponse attendue"
           : isDuplicateKeypad
             ? "Un clavier numérique est déjà présent dans cette question"
+            : isDuplicateAlphabetKeyboard
+              ? "Un clavier alphabétique est déjà présent dans cette question"
             : isResponseElement && hasResponseWidget
               ? "Un élément de réponse est déjà présent dans cette question"
               : "";
@@ -2184,6 +2207,24 @@ export function createQuizWorkshopViewController({
             <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" fill="currentColor"/>
           </svg>
         </span>
+      </div>
+    `;
+  }
+
+  function getAlphabetKeyboardPreviewMarkup(){
+    const vowels = ["a", "e", "i", "o", "u"]
+      .map((letter) => `<span class="quiz-workshop-alphabet-keyboard-preview-key">${letter}</span>`)
+      .join("");
+    const consonants = ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"]
+      .map((letter) => `<span class="quiz-workshop-alphabet-keyboard-preview-key">${letter}</span>`)
+      .join("");
+    return `
+      <div class="quiz-workshop-alphabet-keyboard-preview" aria-hidden="true">
+        <div class="quiz-workshop-alphabet-keyboard-preview-row is-vowels">
+          ${vowels}
+          <span class="quiz-workshop-alphabet-keyboard-preview-key is-backspace">⌫</span>
+        </div>
+        <div class="quiz-workshop-alphabet-keyboard-preview-row is-consonants">${consonants}</div>
       </div>
     `;
   }
@@ -3200,6 +3241,7 @@ export function createQuizWorkshopViewController({
       const isAudioWidget = widget.type === "audio";
       const isLabelsWidget = widget.type === "labels";
       const isNumericKeypadWidget = widget.type === "numeric-keypad";
+      const isAlphabetKeyboardWidget = widget.type === "alphabet-keyboard";
       const isQcmTextWidget = widget.type === "qcm-text";
       const isSelectionWordsWidget = widget.type === "selection-words";
       const isCategoriesWidget = widget.type === "categories";
@@ -3208,6 +3250,7 @@ export function createQuizWorkshopViewController({
         && !isAudioWidget
         && !isLabelsWidget
         && !isNumericKeypadWidget
+        && !isAlphabetKeyboardWidget
         && !isQcmTextWidget
         && !isCategoriesWidget
         && (!isTextAnswerWidget || previewMode === "correction")
@@ -3221,6 +3264,8 @@ export function createQuizWorkshopViewController({
         ? `<div class="quiz-workshop-done-preview"><button class="quiz-workshop-done-preview-button" type="button" tabindex="-1">J’ai terminé</button></div>`
         : isNumericKeypadWidget
         ? getNumericKeypadPreviewMarkup()
+        : isAlphabetKeyboardWidget
+          ? getAlphabetKeyboardPreviewMarkup()
         : isLabelsWidget
           ? getLabelsEditorMarkup(widget, widgetView, isSelected)
           : isCategoriesWidget
@@ -3246,7 +3291,7 @@ export function createQuizWorkshopViewController({
             >${editorHtml}</div>
           </div>
         `;
-      const visibilityMarkup = isNumericKeypadWidget || isDoneWidget ? "" : `
+      const visibilityMarkup = isNumericKeypadWidget || isAlphabetKeyboardWidget || isDoneWidget ? "" : `
           <button
             class="quiz-workshop-widget-visibility dashboard-material-icon-btn"
             type="button"
@@ -3258,7 +3303,7 @@ export function createQuizWorkshopViewController({
             <span class="quiz-workshop-widget-visibility-label">${escapeHtml(visibilityPresentation.label)}</span>
           </button>
       `;
-      const canTransformWidget = (!isNumericKeypadWidget || previewMode === "question") && (!isDoneWidget || previewMode === "question");
+      const canTransformWidget = (!(isNumericKeypadWidget || isAlphabetKeyboardWidget) || previewMode === "question") && (!isDoneWidget || previewMode === "question");
       const moveMarkup = canTransformWidget ? `
           <button
             class="quiz-workshop-canvas-widget-move"
@@ -3560,7 +3605,7 @@ export function createQuizWorkshopViewController({
   }
 
   function addWidget(elementType = "text", { column = null, row = null, columnSpan = null, rowSpan = null } = {}){
-    const normalizedType = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
+    const normalizedType = ["text", "masked-text", "flash-text", "answer", "verified-answer", "done", "image", "flash-image", "audio", "labels", "numeric-keypad", "alphabet-keyboard", "qcm-text", "selection-words", "categories"].includes(elementType) ? elementType : "text";
     const isMaskedText = normalizedType === "masked-text";
     const isFlashText = normalizedType === "flash-text";
     const isFlashImage = normalizedType === "flash-image";
@@ -3572,6 +3617,7 @@ export function createQuizWorkshopViewController({
     const isAudio = normalizedType === "audio";
     const isLabels = normalizedType === "labels";
     const isNumericKeypad = normalizedType === "numeric-keypad";
+    const isAlphabetKeyboard = normalizedType === "alphabet-keyboard";
     const isQcmText = normalizedType === "qcm-text";
     const isSelectionWords = normalizedType === "selection-words";
     const isCategories = normalizedType === "categories";
@@ -3582,16 +3628,17 @@ export function createQuizWorkshopViewController({
         return;
       }
     }
-    if (isNumericKeypad) {
-      const existing = draftWidgets.find((widget) => widget.type === "numeric-keypad");
+    if (isNumericKeypad || isAlphabetKeyboard) {
+      const keyboardType = isAlphabetKeyboard ? "alphabet-keyboard" : "numeric-keypad";
+      const existing = draftWidgets.find((widget) => widget.type === keyboardType);
       if (existing) {
         selectWidget(existing.id);
         return;
       }
     }
 
-    const resolvedColumnSpan = columnSpan || (isNumericKeypad ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText || isTextAnswer ? 7 : isDone ? 3 : 5);
-    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText || isFlashText ? 2 : isImage || isAudio ? 2 : 1));
+    const resolvedColumnSpan = columnSpan || (isNumericKeypad || isAlphabetKeyboard ? GRID_COLUMNS : isCategories ? 8 : isQcmText || isSelectionWords ? 8 : isLabels ? 6 : isImage || isAudio ? 3 : isMaskedText || isFlashText || isTextAnswer ? 7 : isDone ? 3 : 5);
+    const resolvedRowSpan = Math.max(1, Number(rowSpan) || (isAlphabetKeyboard ? 2 : isCategories ? 4 : isQcmText ? 3 : isLabels ? 3 : isSelectionWords || isMaskedText || isFlashText ? 2 : isImage || isAudio ? 2 : 1));
     const requested = column && row
       ? { column, row, columnSpan: resolvedColumnSpan, rowSpan: resolvedRowSpan }
       : findAvailablePosition(resolvedColumnSpan, resolvedRowSpan);
@@ -3600,7 +3647,7 @@ export function createQuizWorkshopViewController({
     const availableLabelWidgets = draftWidgets.filter((entry) => entry.type === "labels");
     const widget = ensureWidgetContent(normalizeWidgetPosition(createWidget({
       type: normalizedType,
-      label: isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
+      label: isMaskedText ? "Texte masqué" : isFlashText ? "Texte flash" : isFlashImage ? "Image flash" : isDone ? "J’ai terminé" : isVerifiedAnswer ? "Réponse texte vérifiée" : isAnswer ? "Réponse de l’élève" : isImage ? "Image" : isAudio ? "Audio" : isLabels ? "Étiquettes" : isNumericKeypad ? "Clavier numérique" : isAlphabetKeyboard ? "Clavier alphabétique" : isQcmText ? "QCM (texte)" : isSelectionWords ? "Sélection de mots" : isCategories ? "Catégories" : "Texte",
       ...((isFlashText || isFlashImage) ? { flashDelaySeconds:5, flashVisibleSeconds:3 } : {}),
       questionText: "",
       correctionText: "",
@@ -3612,16 +3659,16 @@ export function createQuizWorkshopViewController({
             ? "Saisissez le texte à afficher brièvement"
           : isSelectionWords
             ? "Saisissez la phrase dans laquelle l’élève sélectionnera des mots"
-            : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories
+            : isNumericKeypad || isAlphabetKeyboard || isDone || isImage || isAudio || isLabels || isCategories
               ? ""
               : "Saisissez le texte",
-      correctionPlaceholder: isTextAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isDone || isImage || isAudio || isLabels || isCategories ? "" : isMaskedText ? "Saisissez le texte que l’élève devra mémoriser" : isFlashText ? "Saisissez le texte à afficher brièvement" : "Saisissez le texte",
+      correctionPlaceholder: isTextAnswer ? "Saisissez la réponse attendue" : isNumericKeypad || isAlphabetKeyboard || isDone || isImage || isAudio || isLabels || isCategories ? "" : isMaskedText ? "Saisissez le texte que l’élève devra mémoriser" : isFlashText ? "Saisissez le texte à afficher brièvement" : "Saisissez le texte",
       labelsSourceWidgetId:isCategories && availableLabelWidgets.length ? availableLabelWidgets[0].id : "",
       column: requested.column,
       row: requested.row,
       columnSpan: resolvedColumnSpan,
       rowSpan: resolvedRowSpan,
-      visibility: isNumericKeypad || isDone ? "question" : "both",
+      visibility: isNumericKeypad || isAlphabetKeyboard || isDone ? "question" : "both",
       textAlign: "center",
       verticalAlign: "middle"
     })));
@@ -3642,7 +3689,7 @@ export function createQuizWorkshopViewController({
       variant.widgetContents[widget.id] = captureWidgetVariantContent(widget);
     });
     selectedWidgetId = widget.id;
-    editingWidgetId = isDone || isImage || isAudio || isLabels || isCategories || isNumericKeypad || isQcmText || (isAnswer && previewMode === "question") || (isSelectionWords && previewMode === "correction") ? "" : widget.id;
+    editingWidgetId = isDone || isImage || isAudio || isLabels || isCategories || isNumericKeypad || isAlphabetKeyboard || isQcmText || (isAnswer && previewMode === "question") || (isSelectionWords && previewMode === "correction") ? "" : widget.id;
     editingChoiceId = "";
     markLayoutAsCustom();
     renderEditor();

@@ -2954,3 +2954,29 @@ body.student-orientation-blocked{
   visibility:hidden !important;
   pointer-events:none !important;
 }
+
+.session-page .session-progress-time-base,
+.session-page .session-progress-time-interval{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  pointer-events:none;
+}
+
+.session-page .session-progress-time-base{
+  background:#ffb020;
+  transition:height .22s linear;
+}
+
+.session-page .session-progress-time-interval{
+  z-index:1;
+}
+
+.session-page .session-progress-time-interval.is-correct{
+  background:#37b24d;
+}
+
+.session-page .session-progress-time-interval.is-incorrect{
+  background:#e03131;
+}

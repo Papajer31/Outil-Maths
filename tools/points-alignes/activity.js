@@ -572,6 +572,9 @@ function persistGuideLine(state, line) {
     return;
   }
   state.guideLines.push(line);
+  if (state.guideLines.length > 10) {
+    state.guideLines.splice(0, state.guideLines.length - 10);
+  }
 }
 
 function getDrawingPersistence(state) {

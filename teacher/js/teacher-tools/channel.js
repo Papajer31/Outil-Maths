@@ -12,6 +12,22 @@ export function createTeacherToolsChannelId(){
   return `tt-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
 
+
+export function getOrCreateTeacherToolsSessionChannelId(teacherSpaceId){
+  const spaceId = normalizePart(teacherSpaceId);
+  if (!spaceId) return createTeacherToolsChannelId();
+  const key = `teacher-tools-projector-channel:${spaceId}`;
+  try {
+    const stored = normalizePart(sessionStorage.getItem(key));
+    if (stored) return stored;
+    const created = createTeacherToolsChannelId();
+    sessionStorage.setItem(key, created);
+    return created;
+  } catch {
+    return createTeacherToolsChannelId();
+  }
+}
+
 export function buildTeacherToolsChannelName({ teacherSpaceId, channelId } = {}){
   const safeTeacherSpaceId = encodeURIComponent(normalizePart(teacherSpaceId));
   const safeChannelId = encodeURIComponent(normalizePart(channelId));

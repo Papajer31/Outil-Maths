@@ -281,7 +281,7 @@ function bindTextResponseEvents(state) {
 
   input.addEventListener("input", () => {
     if (state.answerRevealed) return;
-    removeConsecutiveHyphens(input);
+    sanitizeTextResponseInput(input);
     fitTextResponseToPanel(input);
     syncValidateState(state);
   });
@@ -599,15 +599,23 @@ function getCurrentResponseValue(state) {
   return String(state.responseInputEl?.value ?? "").trim();
 }
 
-function removeConsecutiveHyphens(input) {
+function sanitizeTextResponseInput(input) {
   const source = String(input?.value ?? "");
-  const normalized = source.replace(/-{2,}/g, "-");
+  const cursor = Number(input?.selectionStart);
+  const selectionEnd = Number(input?.selectionEnd);
+  const normalize = (value) => String(value ?? "")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/[^\p{L}\s-]/gu, "")
+    .replace(/-{2,}/g, "-");
+  const normalized = normalize(source);
   if (normalized === source) return;
 
-  const cursor = Number(input.selectionStart) || source.length;
-  const normalizedCursor = source.slice(0, cursor).replace(/-{2,}/g, "-").length;
+  const safeCursor = Number.isFinite(cursor) ? cursor : source.length;
+  const safeSelectionEnd = Number.isFinite(selectionEnd) ? selectionEnd : safeCursor;
+  const normalizedCursor = normalize(source.slice(0, safeCursor)).length;
+  const normalizedSelectionEnd = normalize(source.slice(0, safeSelectionEnd)).length;
   input.value = normalized;
-  input.setSelectionRange?.(normalizedCursor, normalizedCursor);
+  input.setSelectionRange?.(normalizedCursor, normalizedSelectionEnd);
 }
 
 function fitTextResponseToPanel(input) {

@@ -1521,7 +1521,42 @@ export function renderSessionView(root){
       return;
     }
 
+    if (mode === "time") {
+      renderTimeGauge(gauge);
+      return;
+    }
+
     renderInfiniteGauge(gauge);
+  }
+
+  function renderTimeGauge(gauge){
+    const progress = Math.max(0, Math.min(1, Number(gauge?.progress) || 0));
+    const intervals = Array.isArray(gauge?.responseIntervals) ? gauge.responseIntervals : [];
+    const intervalKey = intervals.map((interval) => [
+      Number(interval?.start) || 0,
+      Number(interval?.end) || 0,
+      String(interval?.outcome || "")
+    ].join(":")) .join("|");
+    const needsRerender = els.progressTrack.dataset.renderMode !== "time"
+      || els.progressTrack.dataset.timeIntervalKey !== intervalKey
+      || !els.progressTrack.querySelector(".session-progress-time-base");
+
+    if (needsRerender) {
+      els.progressTrack.innerHTML = `
+        <div class="session-progress-time-base"></div>
+        ${intervals.map((interval) => {
+          const start = Math.max(0, Math.min(1, Number(interval?.start) || 0));
+          const end = Math.max(start, Math.min(1, Number(interval?.end) || 0));
+          const height = Math.max(0, end - start);
+          const stateClass = String(interval?.outcome || "") === "correct" ? "is-correct" : "is-incorrect";
+          return `<div class="session-progress-time-interval ${stateClass}" style="bottom:${start * 100}%;height:${height * 100}%"></div>`;
+        }).join("")}
+      `;
+      els.progressTrack.dataset.renderMode = "time";
+      els.progressTrack.dataset.timeIntervalKey = intervalKey;
+    }
+
+    els.progressTrack.querySelector(".session-progress-time-base")?.style.setProperty("height", `${progress * 100}%`);
   }
 
   function renderInfiniteGauge(gauge){

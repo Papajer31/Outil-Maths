@@ -189,7 +189,10 @@ export function createSessionEngine({
       entry.catalogCurrentLevel = normalizeCatalogDifficultyLevel(state.catalogCurrentLevel ?? entry.catalogCurrentLevel ?? 3);
       if (state.progressSessionStats && typeof state.progressSessionStats === "object") entry.progressSessionStats = cloneData(state.progressSessionStats);
       if (state.evaluationCounter && typeof state.evaluationCounter === "object") entry.evaluationCounter = cloneData(state.evaluationCounter);
-      if (state.evaluationGauge && typeof state.evaluationGauge === "object") entry.evaluationGauge = cloneData(state.evaluationGauge);
+      if (state.evaluationGauge && typeof state.evaluationGauge === "object") {
+        entry.evaluationGauge = cloneData(state.evaluationGauge);
+        entry.evaluationGaugeResolved = true;
+      }
       entry.lastQuestionOutcome = String(state.lastQuestionOutcome || entry.lastQuestionOutcome || "pending");
     });
   }
@@ -839,6 +842,8 @@ export function createSessionEngine({
       item.questionFlowMode = "unlimited";
       item.evaluationGauge = null;
     }
+
+    resolveEvaluationGaugeDefinition(item);
   }
 
   function getSessionSummary() {
@@ -1571,6 +1576,7 @@ export function createSessionEngine({
             }
             captureHistoryStage(item, "question");
             startHistoryQuestionTimer(item);
+            markTimeGaugeQuestionStart(item);
             const resolvedDurationMs = resolveRuntimeQuestionDurationMs(runtimeForQuestion, item, ctx, remainingMs);
             beginQuestionPhase(item, resolvedDurationMs, {
               generateQuestion: false,
@@ -1585,6 +1591,7 @@ export function createSessionEngine({
 
       captureHistoryStage(item, "question");
       startHistoryQuestionTimer(item);
+      markTimeGaugeQuestionStart(item);
       remainingMs = resolveRuntimeQuestionDurationMs(runtimeForQuestion, item, ctx, remainingMs);
     }
 
@@ -1630,12 +1637,17 @@ export function createSessionEngine({
         return;
       }
 
+      // Certains outils à flux interne (ex. Copie) réutilisent le chrono commun
+      // pour borner une phase sans pour autant terminer la question/l’activité.
+      // Leur hook de timeout doit donc avoir la priorité sur le comportement
+      // générique des outils sans phase Réponse.
+      if (handleRuntimeQuestionTimeout(item, "question")) return;
+
       if (item.hasAnswerPhase === false) {
         void advanceToNextQuestion(item);
         return;
       }
 
-      if (handleRuntimeQuestionTimeout(item, "question")) return;
       if (validateCurrentResponse(item)) return;
 
       beginAnswerPhase(item, item.infiniteAnswerTime ? Number.POSITIVE_INFINITY : item.answerTime * 1000, { showAnswerNow: true });
@@ -1965,7 +1977,9 @@ export function createSessionEngine({
         successGoalSafetyMilestones: normalizedDraft.successGoalSafetyMilestones,
         infiniteAnswerTime: normalizedDraft.infiniteAnswerTime === true,
         evaluationGauge: null,
+        evaluationGaugeResolved: false,
         evaluationCounter: { attempted: 0, correct: 0 },
+        timeGaugeQuestionStartedMs: null,
         defaultInstruction: instructionMeta.defaultInstruction,
         supportsCustomInstruction: instructionMeta.supportsCustomInstruction,
         settings,
@@ -2740,6 +2754,7 @@ export function createSessionEngine({
         mode: "time",
         progress: 0,
         milestones: [],
+        responseIntervals: [],
         completed: false,
         launching: false,
         rocketState: "off"
@@ -2778,6 +2793,57 @@ export function createSessionEngine({
     };
   }
 
+  function resolveEvaluationGaugeDefinition(item) {
+    if (!item || item.evaluationGaugeResolved === true) return;
+    item.evaluationGauge = createEvaluationGaugeState(item);
+    item.evaluationGaugeResolved = true;
+  }
+
+  function markTimeGaugeQuestionStart(item) {
+    if (!item || item.evaluationGauge?.mode !== "time") return;
+    item.timeGaugeQuestionStartedMs = Math.max(0, getToolElapsedMs());
+  }
+
+  function recordTimeGaugeResponseInterval(item, isCorrect, answeredAtMs = getToolElapsedMs()) {
+    const gauge = item?.evaluationGauge;
+    if (!item || gauge?.mode !== "time") return false;
+    if (isCorrect !== true && isCorrect !== false) return false;
+
+    const startMs = Number(item.timeGaugeQuestionStartedMs);
+    if (!Number.isFinite(startMs)) return false;
+
+    const maxMs = getEffectiveToolTimeLimitMs(item);
+    if (!Number.isFinite(maxMs) || maxMs <= 0) return false;
+
+    const safeAnsweredAtMs = Number(answeredAtMs);
+    if (!Number.isFinite(safeAnsweredAtMs)) return false;
+
+    const endMs = Math.max(startMs, Math.min(maxMs, safeAnsweredAtMs));
+    if (endMs <= startMs) return false;
+
+    const intervals = Array.isArray(gauge.responseIntervals) ? gauge.responseIntervals : [];
+    intervals.push({
+      startMs: Math.max(0, Math.min(maxMs, startMs)),
+      endMs,
+      outcome: isCorrect ? "correct" : "incorrect"
+    });
+    gauge.responseIntervals = intervals.slice(-200);
+    item.timeGaugeQuestionStartedMs = null;
+    return true;
+  }
+
+  function commitTimeGaugeResponseAtValidation(item, wasCorrect) {
+    if (!item || item.evaluationGauge?.mode !== "time") return false;
+    if (item.currentQuestionGaugeOutcomeCommitted === true) return false;
+    if (wasCorrect !== true && wasCorrect !== false) return false;
+
+    const recorded = recordTimeGaugeResponseInterval(item, wasCorrect, getToolElapsedMs());
+    if (!recorded) return false;
+
+    item.currentQuestionGaugeOutcomeCommitted = true;
+    return true;
+  }
+
   function resetActivityAttemptState(item) {
     if (!item) return;
     item.historyClientAttemptId = createActivityAttemptClientId();
@@ -2792,7 +2858,9 @@ export function createSessionEngine({
   function resetSessionGaugeStates() {
     session.forEach((item) => {
       item.evaluationGauge = createEvaluationGaugeState(item);
+      item.evaluationGaugeResolved = false;
       item.evaluationCounter = { attempted: 0, correct: 0 };
+      item.timeGaugeQuestionStartedMs = null;
       if (isFinalChallengeItem(item)) {
         item.finalChallengeStarted = false;
         item.finalChallengeCorrectCount = 0;
@@ -2844,6 +2912,11 @@ export function createSessionEngine({
         progress,
         lockedFloor:0,
         milestones:[],
+        responseIntervals:(Array.isArray(gauge.responseIntervals) ? gauge.responseIntervals : []).map((interval) => ({
+          start:normalizeGaugeProgress((Number(interval?.startMs) || 0) / maxMs),
+          end:normalizeGaugeProgress((Number(interval?.endMs) || 0) / maxMs),
+          outcome:String(interval?.outcome || "") === "correct" ? "correct" : "incorrect"
+        })).filter((interval) => interval.end > interval.start),
         step:0,
         completed,
         launching:completed,
@@ -2898,8 +2971,14 @@ export function createSessionEngine({
       return false;
     }
 
-    // La jauge temporelle est pilotée uniquement par le temps écoulé.
+    // La hauteur de la jauge temporelle reste pilotée uniquement par le temps.
+    // Normalement, sa tranche vert/rouge est enregistrée dès la validation réelle
+    // dans requestAnswerPhase(). Cette branche ne sert que de filet de sécurité
+    // pour un runtime ancien qui arriverait au feedback sans être passé par là.
     if (gauge.mode === "time") {
+      if (isCorrect === true || isCorrect === false) {
+        recordTimeGaugeResponseInterval(item, isCorrect, getToolElapsedMs());
+      }
       item.currentQuestionGaugeOutcomeCommitted = true;
       return false;
     }
@@ -3002,6 +3081,9 @@ export function createSessionEngine({
     }
 
     if (item.questionFlowMode === "unlimited") {
+      if (item.evaluationGauge?.mode === "time" && item.currentQuestionGaugeOutcomeCommitted !== true) {
+        commitCurrentQuestionGaugeOutcomeOnce(item, isCorrect);
+      }
       const counter = item.evaluationCounter || { attempted: 0, correct: 0 };
       counter.attempted = Math.max(0, Math.floor(Number(counter.attempted) || 0)) + 1;
       if (isCorrect) {
@@ -3209,7 +3291,11 @@ export function createSessionEngine({
           requestQuestionCompletion: sessionControls.requestQuestionCompletion,
           setQuestionCompletionAction: sessionControls.setQuestionCompletionAction,
           requestValidationFeedback: sessionControls.requestValidationFeedback,
-          getPhaseKind: sessionControls.getPhaseKind
+          setRuntimeManualAction: sessionControls.setRuntimeManualAction,
+          restartQuestionTimer: sessionControls.restartQuestionTimer,
+          getQuestionRemainingMs: sessionControls.getQuestionRemainingMs,
+          getPhaseKind: sessionControls.getPhaseKind,
+          isPaused: sessionControls.isPaused
         },
         sessionControls
       };
@@ -3261,7 +3347,11 @@ export function createSessionEngine({
         requestQuestionCompletion: sessionControls.requestQuestionCompletion,
         setQuestionCompletionAction: sessionControls.setQuestionCompletionAction,
         requestValidationFeedback: sessionControls.requestValidationFeedback,
+        setRuntimeManualAction: sessionControls.setRuntimeManualAction,
+        restartQuestionTimer: sessionControls.restartQuestionTimer,
+        getQuestionRemainingMs: sessionControls.getQuestionRemainingMs,
         getPhaseKind: sessionControls.getPhaseKind,
+        isPaused: sessionControls.isPaused,
         notifyValidationStateChanged: sessionControls.notifyValidationStateChanged
       },
       sessionControls
@@ -3292,6 +3382,11 @@ export function createSessionEngine({
             : wasCorrect === false
               ? "incorrect"
               : "pending";
+
+        // Passation Temps : la tranche colorée s'arrête à l'instant exact où
+        // l'outil valide la réponse. La correction et toute attente qui suit
+        // restent donc naturellement jaunes dans la jauge chronologique.
+        commitTimeGaugeResponseAtValidation(item, wasCorrect);
 
         const durationMs = manual
           ? Number.POSITIVE_INFINITY
@@ -3351,6 +3446,50 @@ export function createSessionEngine({
         return true;
       },
 
+      setRuntimeManualAction(action = null) {
+        if (!item) return false;
+
+        const label = action && typeof action === "object"
+          ? String(action.label || "").trim()
+          : "";
+
+        item.runtimeManualAction = label
+          ? { label, enabled: action?.enabled !== false }
+          : null;
+
+        if (session[currentToolIndex] === item && phase.kind === "QUESTION") {
+          refreshShellManualAction(item);
+          emitStateChange();
+        }
+        return true;
+      },
+
+      restartQuestionTimer(durationSec = 0) {
+        if (!item || !isSessionRunning || paused) return false;
+        if (session[currentToolIndex] !== item) return false;
+        if (phase.kind !== "QUESTION") return false;
+
+        const seconds = Number(durationSec);
+        const durationMs = Number.isFinite(seconds) && seconds > 0
+          ? Math.max(1, seconds * 1000)
+          : Number.POSITIVE_INFINITY;
+
+        beginQuestionPhase(item, durationMs, { generateQuestion:false });
+        emitStateChange();
+        return true;
+      },
+
+      getQuestionRemainingMs() {
+        if (!item || session[currentToolIndex] !== item) return Number.POSITIVE_INFINITY;
+        if (paused && pausedPhase?.kind === "QUESTION") {
+          return Number.isFinite(pausedPhase.remainingMs)
+            ? Math.max(0, Number(pausedPhase.remainingMs) || 0)
+            : Number.POSITIVE_INFINITY;
+        }
+        if (phase.kind !== "QUESTION") return Number.POSITIVE_INFINITY;
+        return getPhaseRemainingMs();
+      },
+
       requestValidationFeedback(wasCorrect = false) {
         if (!item || !isSessionRunning || paused || validationReviewPending) return false;
         if (session[currentToolIndex] !== item) return false;
@@ -3370,6 +3509,10 @@ export function createSessionEngine({
 
       getPhaseKind() {
         return phase.kind;
+      },
+
+      isPaused() {
+        return paused === true;
       }
     };
   }
@@ -3786,6 +3929,21 @@ export function createSessionEngine({
 
     if (!item || !isSessionRunning || paused || isToolMaxTimeExpiredOrAdvancing(item)) {
       hideManualAction();
+      return;
+    }
+
+    if (phase.kind === "QUESTION" && item.runtimeManualAction?.label) {
+      const runtimeAction = item.runtimeManualAction;
+      showManualAction(runtimeAction.label, () => {
+        if (!activeRuntime || typeof activeRuntime.handleShellManualAction !== "function") return;
+        try {
+          activeRuntime.handleShellManualAction(els.workArea, getToolContext(item));
+        } catch (err) {
+          onFatalError?.(err?.message || "Erreur pendant l’action de l’activité.");
+        }
+      }, {
+        enabled: runtimeAction.enabled !== false
+      });
       return;
     }
 

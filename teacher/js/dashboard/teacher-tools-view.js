@@ -1,7 +1,7 @@
 import {
   buildTeacherToolsProjectorUrl,
   createTeacherToolsChannel,
-  createTeacherToolsChannelId
+  getOrCreateTeacherToolsSessionChannelId
 } from "../teacher-tools/channel.js";
 import { getTeacherTool, listTeacherTools } from "../teacher-tools/registry.js";
 import {
@@ -13,7 +13,9 @@ import {
 } from "../teacher-tools/surface/state.js";
 import { createSurfaceBackgroundPanel } from "../teacher-tools/surface/background-control.js";
 import { normalizeSceneBackgroundState } from "../teacher-tools/widgets/background/tool.js";
-import { applyOverlayWidgetAction, normalizeOverlayWidgetsState } from "../teacher-tools/overlay-widgets/state.js";
+import { applyOverlayWidgetAction, getTimerRemainingMs, normalizeOverlayWidgetsState } from "../teacher-tools/overlay-widgets/state.js";
+import { createWorkspacePersistence } from "../teacher-tools/workspace-persistence.js";
+import { createWorkspaceSessionDraftStore } from "../teacher-tools/workspace-session-draft.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 
 const WORKSPACE_VERSION = 5;
@@ -103,11 +105,16 @@ export function createTeacherToolsViewController({
   listResourcesForSpace,
   uploadResourceForSpace,
   createResourceSignedUrl,
+  getTeacherTableauWorkspaceForSpace,
+  saveTeacherTableauWorkspaceForSpace,
+  uploadTeacherTableauAsset,
+  createTeacherTableauAssetSignedUrl,
+  cleanupTeacherTableauAssetsForSpace,
   showToast
 } = {}){
   const tools = listTeacherTools();
   let workspace = normalizeWorkspace();
-  let channelId = createTeacherToolsChannelId();
+  let channelId = "";
   let channel = null;
   let channelTeacherSpaceId = "";
   let projectorWindow = null;
@@ -116,10 +123,210 @@ export function createTeacherToolsViewController({
   let backgroundPanelSession = null;
   let backgroundPanelOpen = false;
   let pickerOverlay = null;
+  let closeConfirmOverlay = null;
+  let workspaceLoadedSpaceId = "";
+  let workspaceLoadPromise = null;
+  let workspaceRevision = 0;
+  let isDirty = false;
+  let isSaving = false;
+  let draftSaveTimer = 0;
+  let draftSaveEpoch = 0;
+
+  const persistence = createWorkspacePersistence({
+    uploadAsset: uploadTeacherTableauAsset,
+    createAssetSignedUrl: createTeacherTableauAssetSignedUrl,
+    cleanupAssets: cleanupTeacherTableauAssetsForSpace
+  });
+  const sessionDraft = createWorkspaceSessionDraftStore();
 
   function teacherSpaceId(){ return String(getCurrentTeacherSpace?.()?.id || "").trim(); }
   function selectedPage(){ return workspace.pages.find((page) => page.id === workspace.selectedPageId) || null; }
   function getPage(pageId){ return workspace.pages.find((page) => page.id === String(pageId || "")) || null; }
+
+  function sessionChannelId(spaceId = teacherSpaceId()){
+    const safeSpaceId = String(spaceId || "").trim();
+    if (!safeSpaceId) return "";
+    const persistentId = getOrCreateTeacherToolsSessionChannelId(safeSpaceId);
+    if (channelTeacherSpaceId === safeSpaceId || !channelTeacherSpaceId) channelId = persistentId;
+    return persistentId;
+  }
+
+  function cancelSessionDraftSave(){
+    if (!draftSaveTimer) return;
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = 0;
+  }
+
+  async function persistSessionDraftNow(){
+    draftSaveTimer = 0;
+    if (!isDirty) return;
+    const spaceId = teacherSpaceId();
+    const safeChannelId = sessionChannelId(spaceId);
+    if (!spaceId || !safeChannelId) return;
+    const epoch = draftSaveEpoch;
+    const revision = workspaceRevision;
+    const snapshot = normalizeWorkspace(clonePlain(workspace));
+    await sessionDraft.save(spaceId, safeChannelId, snapshot, { revision });
+    if (epoch !== draftSaveEpoch || !isDirty) {
+      await sessionDraft.clear(spaceId, safeChannelId);
+      return;
+    }
+    if (revision !== workspaceRevision) scheduleSessionDraftSave();
+  }
+
+  function scheduleSessionDraftSave(){
+    cancelSessionDraftSave();
+    draftSaveTimer = window.setTimeout(() => { void persistSessionDraftNow(); }, 180);
+  }
+
+  function markDirty(){
+    workspaceRevision += 1;
+    isDirty = true;
+    renderSaveStatus();
+    scheduleSessionDraftSave();
+  }
+
+  function handlePageHide(){
+    if (!isDirty) return;
+    cancelSessionDraftSave();
+    void persistSessionDraftNow();
+  }
+
+  window.addEventListener("pagehide", handlePageHide);
+
+  function setCleanIfUnchanged(revision){
+    if (workspaceRevision !== revision) return;
+    isDirty = false;
+    renderSaveStatus();
+  }
+
+  function renderSaveStatus(){
+    const button = host?.querySelector("#btnTeacherToolsSaveProjector");
+    if (!button) return;
+    button.disabled = isSaving || !isDirty;
+    button.classList.toggle("is-saving", isSaving);
+    const icon = button.querySelector(".dashboard-material-icon");
+    const label = button.querySelector("span:last-child");
+    if (icon) icon.textContent = isSaving ? "sync" : "save";
+    if (label) label.textContent = isSaving ? "Enregistrement…" : "Enregistrer la projection";
+  }
+
+  function workspaceSnapshotForSave(){
+    const snapshot = normalizeWorkspace(clonePlain(workspace));
+    const widgets = normalizeOverlayWidgetsState(snapshot.widgets);
+    const remainingMs = getTimerRemainingMs(widgets.timer);
+    snapshot.widgets = normalizeOverlayWidgetsState({
+      ...widgets,
+      timer: {
+        ...widgets.timer,
+        remainingMs,
+        running:false,
+        deadlineAt:0
+      }
+    });
+    return snapshot;
+  }
+
+  async function ensureWorkspaceLoaded(){
+    const spaceId = teacherSpaceId();
+    if (!spaceId) return;
+    if (workspaceLoadedSpaceId === spaceId) return;
+    if (workspaceLoadPromise) return workspaceLoadPromise;
+
+    workspaceLoadPromise = (async () => {
+      workspace = normalizeWorkspace();
+      persistence.clearLiveRegistry();
+      isDirty = false;
+      workspaceRevision = 0;
+      try {
+        const safeChannelId = sessionChannelId(spaceId);
+        let savedWorkspace = normalizeWorkspace();
+        let savedWorkspaceError = null;
+
+        try {
+          const record = typeof getTeacherTableauWorkspaceForSpace === "function"
+            ? await getTeacherTableauWorkspaceForSpace(spaceId)
+            : null;
+          if (record?.workspace) {
+            const hydrated = await persistence.hydrateWorkspace(record);
+            savedWorkspace = normalizeWorkspace(hydrated.workspace);
+          }
+        } catch (error) {
+          savedWorkspaceError = error;
+        }
+
+        const draft = safeChannelId ? await sessionDraft.load(spaceId, safeChannelId) : null;
+        if (draft?.workspace) {
+          const draftWorkspace = normalizeWorkspace(draft.workspace);
+          workspace = normalizeWorkspace(mergeProjectorStateKeepingLocalFiles(savedWorkspace, draftWorkspace));
+          workspaceRevision = Math.max(1, Number(draft.revision) || 1);
+          isDirty = true;
+        } else {
+          workspace = savedWorkspace;
+          if (savedWorkspaceError) throw savedWorkspaceError;
+        }
+      } catch (error) {
+        console.error("Impossible de restaurer le Tableau enregistré.", error);
+        showToast?.("Impossible de restaurer le Tableau enregistré.", { isError:true });
+      } finally {
+        workspaceLoadedSpaceId = spaceId;
+        workspaceLoadPromise = null;
+      }
+    })();
+    return workspaceLoadPromise;
+  }
+
+  async function saveWorkspace(){
+    const spaceId = teacherSpaceId();
+    if (!spaceId) {
+      showToast?.("Espace enseignant introuvable.", { isError:true });
+      return false;
+    }
+    if (isSaving) return false;
+    if (typeof saveTeacherTableauWorkspaceForSpace !== "function") {
+      showToast?.("L’enregistrement du Tableau est indisponible.", { isError:true });
+      return false;
+    }
+
+    isSaving = true;
+    renderSaveStatus();
+    const revisionAtStart = workspaceRevision;
+    let serialized = null;
+    try {
+      serialized = await persistence.serializeWorkspace(workspaceSnapshotForSave(), { teacherSpaceId:spaceId });
+      await saveTeacherTableauWorkspaceForSpace(spaceId, {
+        workspace: serialized.workspace,
+        assets: serialized.assets,
+        workspaceVersion: WORKSPACE_VERSION
+      });
+      try {
+        await persistence.cleanupAfterSave(spaceId, serialized.assets);
+      } catch (cleanupError) {
+        console.warn("Le Tableau est enregistré, mais certains anciens fichiers n’ont pas pu être nettoyés.", cleanupError);
+      }
+      const unchanged = workspaceRevision === revisionAtStart;
+      setCleanIfUnchanged(revisionAtStart);
+      if (unchanged) {
+        cancelSessionDraftSave();
+        draftSaveEpoch += 1;
+        await sessionDraft.clear(spaceId, sessionChannelId(spaceId));
+      } else {
+        scheduleSessionDraftSave();
+      }
+      showToast?.("Projection enregistrée.");
+      return true;
+    } catch (error) {
+      console.error("Impossible d’enregistrer la projection.", error);
+      if (serialized?.uploadedPaths?.length) {
+        try { await persistence.cleanupFailedUploads(spaceId, serialized.uploadedPaths); } catch {}
+      }
+      showToast?.(error?.message || "Impossible d’enregistrer la projection.", { isError:true });
+      return false;
+    } finally {
+      isSaving = false;
+      renderSaveStatus();
+    }
+  }
 
   function cloneWorkspaceForProjector(){
     return normalizeWorkspace({
@@ -139,17 +346,91 @@ export function createTeacherToolsViewController({
     });
   }
 
+  function representsSameLocalFile(currentObject, incomingObject){
+    const currentSource = String(currentObject?.source || currentObject?.backgroundImageSource || "");
+    const incomingSource = String(incomingObject?.source || incomingObject?.backgroundImageSource || "");
+    const currentIsBlob = currentSource.startsWith("blob:");
+    const incomingIsBlob = incomingSource.startsWith("blob:");
+    if (incomingIsBlob && !currentIsBlob) return false;
+    if (currentIsBlob && !incomingIsBlob) return true;
+
+    const identityKeys = [
+      "imageName", "pdfName", "backgroundImageName",
+      "naturalWidth", "naturalHeight",
+      "backgroundImageNaturalWidth", "backgroundImageNaturalHeight"
+    ];
+    const meaningfulKeys = identityKeys.filter((key) => currentObject?.[key] != null || incomingObject?.[key] != null);
+    if (!meaningfulKeys.length) return true;
+    return meaningfulKeys.every((key) => String(currentObject?.[key] ?? "") === String(incomingObject?.[key] ?? ""));
+  }
+
+  function mergeProjectorStateKeepingLocalFiles(currentValue, incomingValue){
+    if (Array.isArray(incomingValue)) {
+      const currentItems = Array.isArray(currentValue) ? currentValue : [];
+      const currentById = new Map(currentItems
+        .filter((item) => item && typeof item === "object" && String(item.id || "").trim())
+        .map((item) => [String(item.id), item]));
+      return incomingValue.map((item, index) => {
+        const matching = item && typeof item === "object" && String(item.id || "").trim()
+          ? currentById.get(String(item.id))
+          : currentItems[index];
+        return mergeProjectorStateKeepingLocalFiles(matching, item);
+      });
+    }
+    if (!incomingValue || typeof incomingValue !== "object") return incomingValue;
+
+    const currentObject = currentValue && typeof currentValue === "object" ? currentValue : {};
+    const merged = {};
+    for (const [key, value] of Object.entries(incomingValue)) {
+      merged[key] = mergeProjectorStateKeepingLocalFiles(currentObject[key], value);
+    }
+
+    if (incomingValue.sourceKind === "file"
+      && currentObject.sourceKind === "file"
+      && representsSameLocalFile(currentObject, incomingValue)
+      && typeof currentObject.source === "string"
+      && currentObject.source) {
+      merged.source = currentObject.source;
+    }
+    if (incomingValue.backgroundImageKind === "file"
+      && currentObject.backgroundImageKind === "file"
+      && representsSameLocalFile(currentObject, incomingValue)
+      && typeof currentObject.backgroundImageSource === "string"
+      && currentObject.backgroundImageSource) {
+      merged.backgroundImageSource = currentObject.backgroundImageSource;
+    }
+    return merged;
+  }
+
+  function adoptProjectorWorkspace(rawWorkspace){
+    if (!rawWorkspace || typeof rawWorkspace !== "object") return;
+    const incoming = normalizeWorkspace(clonePlain(rawWorkspace));
+    const merged = normalizeWorkspace(mergeProjectorStateKeepingLocalFiles(workspace, incoming));
+    let changed = true;
+    try { changed = JSON.stringify(workspace) !== JSON.stringify(merged); } catch {}
+    if (!changed) return;
+    workspace = merged;
+    markDirty();
+    renderPageList();
+    renderControls();
+    if (backgroundPanelOpen) renderBackgroundPanel();
+  }
+
   function ensureChannel(){
     const spaceId = teacherSpaceId();
     if (!spaceId) return null;
     if (channel && channelTeacherSpaceId === spaceId) return channel;
     channel?.close?.();
     channelTeacherSpaceId = spaceId;
-    channelId = createTeacherToolsChannelId();
+    channelId = sessionChannelId(spaceId);
     channel = createTeacherToolsChannel({
       teacherSpaceId: spaceId,
       channelId,
       onMessage(message){
+        if (message?.type === "projector-workspace" && message?.bootstrapped === true) {
+          adoptProjectorWorkspace(message.workspace);
+          return;
+        }
         if (message?.type === "projector-ready" || message?.type === "request-workspace") {
           projectorConnected = true;
           renderHeaderStatus();
@@ -212,6 +493,14 @@ export function createTeacherToolsViewController({
       syncProjector();
       return;
     }
+    if (projectorConnected) {
+      try { projectorWindow = window.open("", "teacherToolsProjector"); } catch {}
+      if (projectorWindow && !projectorWindow.closed) {
+        try { projectorWindow.focus(); } catch {}
+        syncProjector();
+        return;
+      }
+    }
     const url = buildTeacherToolsProjectorUrl({ teacherSpaceId: spaceId, channelId });
     projectorWindow = window.open(url, "teacherToolsProjector", [
       "popup=yes", "width=1400", "height=900", "menubar=no", "toolbar=no",
@@ -226,7 +515,7 @@ export function createTeacherToolsViewController({
     window.setTimeout(syncProjector, 160);
   }
 
-  function closeProjector(){
+  function closeProjectorNow(){
     // Le message couvre aussi le cas où la fenêtre principale a été rechargée
     // et ne possède plus la référence JS directe vers la popup.
     send("close-projector");
@@ -238,10 +527,62 @@ export function createTeacherToolsViewController({
     renderHeaderStatus();
   }
 
+  function closeCloseConfirmOverlay(){
+    closeConfirmOverlay?.remove?.();
+    closeConfirmOverlay = null;
+  }
+
+  function askCloseProjectorAction(){
+    return new Promise((resolve) => {
+      closeCloseConfirmOverlay();
+      const overlay = document.createElement("div");
+      overlay.className = "modal dashboard-confirm-dialog tt-save-projector-dialog";
+      overlay.innerHTML = `
+        <section class="modal-content modal-content-wide" role="dialog" aria-modal="true" aria-labelledby="ttSaveProjectorDialogTitle">
+          <header class="dashboard-confirm-dialog-header">
+            <h2 class="modal-title" id="ttSaveProjectorDialogTitle">Enregistrer le Tableau ?</h2>
+          </header>
+          <p class="dashboard-confirm-dialog-message">Le Tableau a été modifié depuis le dernier enregistrement.</p>
+          <footer class="modal-actions dashboard-confirm-dialog-actions">
+            <button class="btn" type="button" data-tt-close-choice="cancel">Annuler</button>
+            <button class="btn" type="button" data-tt-close-choice="discard">Fermer sans enregistrer</button>
+            <button class="btn primary" type="button" data-tt-close-choice="save">Enregistrer et fermer</button>
+          </footer>
+        </section>`;
+      document.body.appendChild(overlay);
+      closeConfirmOverlay = overlay;
+      let settled = false;
+      const finish = (choice) => {
+        if (settled) return;
+        settled = true;
+        closeCloseConfirmOverlay();
+        resolve(choice);
+      };
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) finish("cancel");
+        const button = event.target.closest("[data-tt-close-choice]");
+        if (button) finish(String(button.dataset.ttCloseChoice || "cancel"));
+      });
+      overlay.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") { event.preventDefault(); finish("cancel"); }
+      });
+      requestAnimationFrame(() => overlay.querySelector('[data-tt-close-choice="save"]')?.focus());
+    });
+  }
+
+  async function requestCloseProjector(){
+    if (!isDirty) { closeProjectorNow(); return; }
+    const choice = await askCloseProjectorAction();
+    if (choice === "discard") { closeProjectorNow(); return; }
+    if (choice !== "save") return;
+    if (await saveWorkspace()) closeProjectorNow();
+  }
+
   function selectPage(pageId, { sync = true } = {}){
     const page = getPage(pageId);
-    if (!page) return;
+    if (!page || workspace.selectedPageId === page.id) return;
     workspace = { ...workspace, selectedPageId: page.id };
+    markDirty();
     if (!pageSupports(page, "background")) backgroundPanelOpen = false;
     renderPageList();
     renderControls();
@@ -256,14 +597,16 @@ export function createTeacherToolsViewController({
     // donc être ajouté plusieurs fois au Tableau, avec son propre état.
     const page = createPage(tool);
     workspace = normalizeWorkspace({ ...workspace, selectedPageId: page.id, pages: [...workspace.pages, page] });
-    render();
+    markDirty();
+    renderView();
     syncProjector();
   }
 
   function addBlankPage(){
     const page = createBlankPage();
     workspace = normalizeWorkspace({ ...workspace, selectedPageId: page.id, pages: [...workspace.pages, page] });
-    render();
+    markDirty();
+    renderView();
     syncProjector();
   }
 
@@ -276,8 +619,9 @@ export function createTeacherToolsViewController({
       ? (pages[Math.max(0, workspace.pages.indexOf(page) - 1)]?.id || pages[0]?.id || "")
       : workspace.selectedPageId;
     workspace = normalizeWorkspace({ ...workspace, selectedPageId: nextSelected, pages });
+    markDirty();
     if (!pages.length) backgroundPanelOpen = false;
-    render();
+    renderView();
     syncProjector();
   }
 
@@ -298,6 +642,7 @@ export function createTeacherToolsViewController({
       })
     });
     if (!changed) return;
+    markDirty();
     if (renderPanel) renderControls();
     if (sync) syncProjector();
   }
@@ -331,6 +676,7 @@ export function createTeacherToolsViewController({
 
   function setSharedBackground(background, { renderView = true } = {}){
     workspace = normalizeWorkspace({ ...workspace, sharedBackground: normalizeSceneBackgroundState(background) });
+    markDirty();
     if (renderView && backgroundPanelOpen) renderBackgroundPanel();
     syncProjector();
   }
@@ -407,6 +753,7 @@ export function createTeacherToolsViewController({
       pages,
       widgets: applyOverlayWidgetAction(workspace.widgets, safeWidgetId, safeAction, payload || {})
     });
+    markDirty();
     syncProjector();
   }
 
@@ -455,6 +802,7 @@ export function createTeacherToolsViewController({
     if (button) button.textContent = projectorConnected ? "Afficher la projection" : "Ouvrir la projection";
     const closeButton = host?.querySelector("#btnTeacherToolsCloseProjector");
     if (closeButton) closeButton.disabled = !projectorConnected && !(projectorWindow && !projectorWindow.closed);
+    renderSaveStatus();
   }
 
   function pageListMarkup(){
@@ -565,7 +913,7 @@ export function createTeacherToolsViewController({
     renderBackgroundPanel();
   }
 
-  function render(){
+  function renderView(){
     if (!host) return;
     workspace = normalizeWorkspace(workspace);
     const page = selectedPage();
@@ -576,6 +924,7 @@ export function createTeacherToolsViewController({
         <div class="dashboard-config-header-center tt-header-center"><div class="tt-projector-status" data-projector-status></div></div>
         <div class="dashboard-config-header-actions tt-header-actions">
           <button id="btnTeacherToolsOpenProjector" class="btn primary" type="button"><span class="dashboard-material-icon" aria-hidden="true">open_in_new</span><span>Ouvrir la projection</span></button>
+          <button id="btnTeacherToolsSaveProjector" class="btn" type="button" disabled><span class="dashboard-material-icon" aria-hidden="true">save</span><span>Enregistrer la projection</span></button>
           <button id="btnTeacherToolsCloseProjector" class="btn" type="button" disabled><span class="dashboard-material-icon" aria-hidden="true">close</span><span>Fermer la projection</span></button>
         </div>
       </div>
@@ -602,7 +951,8 @@ export function createTeacherToolsViewController({
         </div>
       </div>`;
     host.querySelector("#btnTeacherToolsOpenProjector")?.addEventListener("click", openProjector);
-    host.querySelector("#btnTeacherToolsCloseProjector")?.addEventListener("click", closeProjector);
+    host.querySelector("#btnTeacherToolsSaveProjector")?.addEventListener("click", () => { void saveWorkspace(); });
+    host.querySelector("#btnTeacherToolsCloseProjector")?.addEventListener("click", () => { void requestCloseProjector(); });
     host.querySelector("#ttOpenWidgetPicker")?.addEventListener("click", openPicker);
     host.querySelector("[data-close-active]")?.addEventListener("click", () => { const current = selectedPage(); if (current) removePage(current.id); });
     host.querySelector("[data-toggle-background]")?.addEventListener("click", toggleBackgroundPanel);
@@ -614,12 +964,20 @@ export function createTeacherToolsViewController({
   }
 
   return {
-    render,
+    async render(){
+      await ensureWorkspaceLoaded();
+      renderView();
+      ensureChannel()?.send("dashboard-ready");
+    },
     refresh(){ renderControls(); if (backgroundPanelOpen) renderBackgroundPanel(); syncProjector(); },
     destroy(){
       appControlSession?.destroy?.();
       backgroundPanelSession?.destroy?.();
       closePicker();
+      closeCloseConfirmOverlay();
+      window.removeEventListener("pagehide", handlePageHide);
+      cancelSessionDraftSave();
+      if (isDirty) void persistSessionDraftNow();
       channel?.close?.();
       channel = null;
       if (view) view.innerHTML = "";

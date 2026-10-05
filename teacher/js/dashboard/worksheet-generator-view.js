@@ -1014,6 +1014,9 @@ export function createWorksheetGeneratorViewController({
   let pendingSettingsSave = null;
   let configEditRevision = 0;
   let openRevision = 0;
+  let generationRequestId = 0;
+  let activeGeneration = null;
+  let isGenerating = false;
   const lastPersistedSettingsByGenerator = new Map();
 
   function getTitleElement(){
@@ -1025,6 +1028,98 @@ export function createWorksheetGeneratorViewController({
     view?.classList.toggle("is-worksheet-generator-open", isOpen);
     const title = getTitleElement();
     if (title) title.textContent = "Ressources";
+  }
+
+  function setGeneratingState(next){
+    isGenerating = next === true;
+    const panel = host?.querySelector?.(".dashboard-worksheet-preview-panel");
+    const overlay = host?.querySelector?.("[data-worksheet-generating]");
+    panel?.setAttribute("aria-busy", isGenerating ? "true" : "false");
+    if (overlay) overlay.hidden = !isGenerating;
+    const pdfButton = host?.querySelector?.('[data-generator-action="pdf"]');
+    if (pdfButton) pdfButton.disabled = isGenerating;
+  }
+
+  function cancelActiveGeneration(){
+    if (!activeGeneration) return;
+    try { activeGeneration.worker?.terminate?.(); } catch {}
+    try {
+      const error = new Error("Génération remplacée par une demande plus récente.");
+      error.name = "AbortError";
+      activeGeneration.reject?.(error);
+    } catch {}
+    activeGeneration = null;
+  }
+
+  function generateWorksheetAsync(requestedGeneratorId, requestedConfig){
+    cancelActiveGeneration();
+    const requestId = ++generationRequestId;
+    const safeConfig = typeof structuredClone === "function"
+      ? structuredClone(requestedConfig)
+      : JSON.parse(JSON.stringify(requestedConfig || {}));
+
+    if (typeof Worker !== "function") {
+      return new Promise((resolve, reject) => {
+        activeGeneration = { requestId, worker:null, reject };
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            if (activeGeneration?.requestId !== requestId) return;
+            try {
+              resolve(buildWorksheet(requestedGeneratorId, safeConfig));
+            } catch (error) {
+              reject(error);
+            } finally {
+              if (activeGeneration?.requestId === requestId) activeGeneration = null;
+            }
+          }, 0);
+        });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(new URL("./worksheet-generator-worker.js", import.meta.url), { type:"module" });
+      activeGeneration = { requestId, worker, reject };
+      worker.addEventListener("message", (event) => {
+        if (Number(event.data?.requestId) !== requestId) return;
+        if (activeGeneration?.requestId === requestId) activeGeneration = null;
+        worker.terminate();
+        if (event.data?.error) {
+          reject(new Error(String(event.data.error)));
+          return;
+        }
+        resolve(event.data?.worksheet);
+      }, { once:true });
+      worker.addEventListener("error", (event) => {
+        if (activeGeneration?.requestId === requestId) activeGeneration = null;
+        worker.terminate();
+        reject(new Error(event?.message || "Génération impossible."));
+      }, { once:true });
+      worker.postMessage({ requestId, generatorId:requestedGeneratorId, config:safeConfig });
+    });
+  }
+
+  async function regenerate(){
+    normalizeCurrentConfig();
+    if (generatorId === WORD_SEARCH_GENERATOR_ID) config.resolvedWords = config.sourceWords;
+    const requestedGeneratorId = generatorId;
+    const requestedOpenRevision = openRevision;
+    const requestConfig = { ...config };
+    setGeneratingState(true);
+
+    try {
+      const nextWorksheet = await generateWorksheetAsync(requestedGeneratorId, requestConfig);
+      if (!isOpen || requestedOpenRevision !== openRevision || requestedGeneratorId !== generatorId) return;
+      worksheet = nextWorksheet;
+      renderPreview();
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      console.error("Génération de fiche impossible.", error);
+      showToast?.(error?.message || "Génération impossible.", { isError:true });
+    } finally {
+      if (requestedOpenRevision === openRevision && requestedGeneratorId === generatorId && !activeGeneration) {
+        setGeneratingState(false);
+      }
+    }
   }
 
   function normalizeCurrentConfig(){
@@ -1153,22 +1248,10 @@ export function createWorksheetGeneratorViewController({
         serializePersistableConfig(requestedGeneratorId, config)
       );
       if (requestedGeneratorId === WORD_SEARCH_GENERATOR_ID) config.resolvedWords = config.sourceWords;
-      worksheet = buildWorksheet(requestedGeneratorId, config);
       render();
+      await regenerate();
     } catch (error) {
       console.warn("Chargement des réglages du générateur impossible.", error);
-    }
-  }
-
-  function regenerate(){
-    try {
-      normalizeCurrentConfig();
-      if (generatorId === WORD_SEARCH_GENERATOR_ID) config.resolvedWords = config.sourceWords;
-      worksheet = buildWorksheet(generatorId, config);
-      renderPreview();
-    } catch (error) {
-      console.error("Génération de fiche impossible.", error);
-      showToast?.(error?.message || "Génération impossible.", { isError:true });
     }
   }
 
@@ -1242,14 +1325,14 @@ export function createWorksheetGeneratorViewController({
                 <span>${showSolutions ? "Voir la fiche élève" : "Correction"}</span>
               </button>
             </div>
-            <button class="btn primary dashboard-btn-with-icon" type="button" data-generator-action="pdf">
+            <button class="btn primary dashboard-btn-with-icon" type="button" data-generator-action="pdf" ${isGenerating ? "disabled" : ""}>
               <span class="dashboard-material-icon" aria-hidden="true">picture_as_pdf</span>
               <span>Télécharger le PDF</span>
             </button>
           </div>
         </aside>
 
-        <main class="dashboard-worksheet-preview-panel" aria-label="Aperçu A4">
+        <main class="dashboard-worksheet-preview-panel" aria-label="Aperçu A4" aria-busy="${isGenerating ? "true" : "false"}">
           <div class="dashboard-worksheet-preview-scroll">
             <div class="dashboard-worksheet-preview-stage-sizer">
               <div class="dashboard-worksheet-preview-stage">
@@ -1266,6 +1349,10 @@ export function createWorksheetGeneratorViewController({
                 </div>
               </div>
             </div>
+          </div>
+          <div class="dashboard-worksheet-generating" data-worksheet-generating ${isGenerating ? "" : "hidden"} aria-live="polite">
+            <span class="dashboard-worksheet-generating-spinner" aria-hidden="true"></span>
+            <strong>Génération en cours…</strong>
           </div>
           <div class="dashboard-worksheet-preview-zoom" role="toolbar" aria-label="Zoom de l’aperçu">
             <button class="dashboard-worksheet-preview-zoom-button" type="button" data-preview-zoom-action="out" aria-label="Réduire le zoom" title="Réduire le zoom">
@@ -1848,6 +1935,8 @@ export function createWorksheetGeneratorViewController({
   function close(){
     void flushPendingSettingsSave();
     cleanupPreviewObserver();
+    cancelActiveGeneration();
+    setGeneratingState(false);
     openRevision += 1;
     setOpenState(false);
     generatorId = "";
@@ -1874,15 +1963,10 @@ export function createWorksheetGeneratorViewController({
         generatorId,
         serializePersistableConfig(generatorId, config)
       );
-      try {
-        worksheet = buildWorksheet(generatorId, config);
-      } catch (error) {
-        console.error("Génération initiale impossible.", error);
-        showToast?.(error?.message || "Génération impossible.", { isError:true });
-        return;
-      }
+      worksheet = { exercises:[] };
       setOpenState(true);
       render();
+      void regenerate();
       void hydrateSavedSettings(requested, requestedOpenRevision, requestedEditRevision);
     },
     close,

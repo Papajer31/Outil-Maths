@@ -68,6 +68,11 @@ import {
   deleteResourceFolder,
   listResourcesForSpace,
   uploadResourceForSpace,
+  getTeacherTableauWorkspaceForSpace,
+  saveTeacherTableauWorkspaceForSpace,
+  uploadTeacherTableauAsset,
+  createTeacherTableauAssetSignedUrl,
+  cleanupTeacherTableauAssetsForSpace,
   replaceAudioResourceFile,
   updateResource,
   deleteResource,
@@ -324,7 +329,8 @@ activityHubViewController = createActivityHubViewController({
   view: activityHubView,
   onOpenExploration: () => openDashboardSection("activities"),
   onOpenMyActivities: () => openDashboardSection("my-activities"),
-  onOpenAssignedWork: () => openDashboardSection("activity-assignment")
+  onOpenAssignedWork: () => openDashboardSection("activity-assignment"),
+  onOpenRocketGame: () => { window.location.href = "../games/fusee/"; }
 });
 activityHubViewController.render();
 
@@ -1074,6 +1080,11 @@ teacherToolsViewController = createTeacherToolsViewController({
   listResourcesForSpace,
   uploadResourceForSpace,
   createResourceSignedUrl,
+  getTeacherTableauWorkspaceForSpace,
+  saveTeacherTableauWorkspaceForSpace,
+  uploadTeacherTableauAsset,
+  createTeacherTableauAssetSignedUrl,
+  cleanupTeacherTableauAssetsForSpace,
   showToast: showDashboardShareToast
 });
 
@@ -1246,7 +1257,7 @@ async function ensureTeacherToolsViewMounted({ forceRefresh = false } = {}){
   if (!forceRefresh && hasMountedTeacherToolsView && mountedTeacherToolsTeacherSpaceId === teacherSpaceId) {
     return;
   }
-  teacherToolsViewController?.render?.();
+  await teacherToolsViewController?.render?.();
   hasMountedTeacherToolsView = true;
   mountedTeacherToolsTeacherSpaceId = teacherSpaceId;
 }

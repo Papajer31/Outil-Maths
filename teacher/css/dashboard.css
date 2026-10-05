@@ -7664,6 +7664,21 @@ body.dashboard-catalog-test-fullscreen-lock{
   }
 }
 
+
+.activity-hub-grid--four{
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+}
+.activity-hub-grid--four .activity-hub-card{
+  width:calc(100% - 40px);
+  min-height:220px;
+}
+@media (max-width: 1250px){
+  .activity-hub-grid--four{grid-template-columns:repeat(2, minmax(0, 1fr));}
+}
+@media (max-width: 760px){
+  .activity-hub-grid--four{grid-template-columns:1fr;}
+}
+
 /* Étape 2 — Activités personnelles */
 .activity-hub-grid--three{
   grid-template-columns:repeat(3, minmax(0, 1fr));

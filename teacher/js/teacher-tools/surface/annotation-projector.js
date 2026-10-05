@@ -8,6 +8,7 @@ import {
 } from "./annotations.js";
 
 const MIN_POINT_DISTANCE_PX = 1.8;
+const LINE_SNAP_ANGLE_DEG = 6;
 const MAX_DEVICE_PIXEL_RATIO = 2.5;
 
 function escapeAttr(value){
@@ -67,6 +68,17 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
       x: (Number(point?.x) || 0) * rect.width,
       y: (Number(point?.y) || 0) * rect.height
     };
+  }
+
+  function snapLinePoint(start, next, rect = getRect()){
+    const dx = (Number(next?.x) - Number(start?.x)) * Math.max(1, rect.width);
+    const dy = (Number(next?.y) - Number(start?.y)) * Math.max(1, rect.height);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < MIN_POINT_DISTANCE_PX) return next;
+    const angle = Math.atan2(Math.abs(dy), Math.abs(dx));
+    const threshold = LINE_SNAP_ANGLE_DEG * Math.PI / 180;
+    if (angle <= threshold) return { ...next, y:start.y };
+    if ((Math.PI / 2) - angle <= threshold) return { ...next, x:start.x };
+    return next;
   }
 
   function resizeCanvas(){
@@ -401,10 +413,11 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     updateEraserCursor(event, true);
     if (event.pointerId !== activePointerId) return;
     const rect = getRect();
-    const next = normalizedPoint(event);
+    let next = normalizedPoint(event);
 
     if (draftTool === "line") {
       const start = draftPoints[0];
+      next = snapLinePoint(start, next, rect);
       const prev = draftPoints[draftPoints.length - 1] || start;
       const dx = (next.x - prev.x) * rect.width;
       const dy = (next.y - prev.y) * rect.height;

@@ -21,7 +21,7 @@ const CATALOG_EDITOR_SOURCE_META_KEY = "__editor_source";
 
 const TOOL_GROUPS = Object.freeze([
   { id:"lecture", label:"Lecture", toolIds:["reperage-graphemes", "presence-son", "nuage-lettres", "segmenter-mots", "recomposer-mots-syllabes", "mot-cache", "reperage-occurrences", "reperage-mots"] },
-  { id:"ecriture", label:"Écriture", toolIds:["encodage", "dictee-muette", "geste-graphique"] },
+  { id:"ecriture", label:"Écriture", toolIds:["encodage", "dictee-muette", "geste-graphique", "copie"] },
   { id:"conjugaison", label:"Conjugaison", toolIds:["conjugaison", "identifier-verbe"] },
   { id:"lexique", label:"Lexique", toolIds:["ordre-alphabetique-lettres", "ordre-alphabetique-mots"] },
   { id:"nombres", label:"Nombres", toolIds:["plus-moins-autant", "comparaison", "comparaison-signes", "collection", "frise-picbille", "droite-numerique-simple", "droite-numerique-complete", "representation-picbille", "representation-dede", "representation-carres", "representation-tuiles", "nombres-lettres"] },
@@ -457,12 +457,15 @@ export function createPersonalActivityEditorController({
       const tool = mod.default || {};
       const draft = getCurrentDraft(tool);
       const settings = ensureToolSettings(draft.settings, tool);
-      // Les quiz libres gèrent ces réglages dans leur propre interface. Une
-      // série utilise le même moteur, mais doit les proposer par niveau.
-      const hideCommonQuizControls = editingActivity?.activity_type === "quiz";
+      // Certains outils à flux intrinsèque (comme Copie) gèrent eux-mêmes
+      // leurs chronos et leur déroulé : ne pas leur réinjecter les réglages
+      // communs « Temps par question / Consigne ». Les quiz libres gardent
+      // également leurs propres contrôles.
+      const hideCommonToolControls = editingActivity?.activity_type === "quiz"
+        || tool.supportsCommonFlowSettings === false;
       host.innerHTML = `
         <div class="cfg-tool-settings-stack personal-activity-tool-settings-stack">
-          ${hideCommonQuizControls ? "" : `
+          ${hideCommonToolControls ? "" : `
             <div class="super-admin-level-common-row personal-activity-common-row">
               ${renderLevelTimingBlock(draft)}
               ${renderLevelInstructionBlock(draft, tool)}
@@ -471,7 +474,7 @@ export function createPersonalActivityEditorController({
           <div id="personalActivitySpecificSettings"></div>
         </div>
       `;
-      if (!hideCommonQuizControls) {
+      if (!hideCommonToolControls) {
         bindLevelTimingBlock(host);
         bindLevelInstructionBlock(host);
       }
@@ -481,7 +484,7 @@ export function createPersonalActivityEditorController({
       } else {
         settingsHost.innerHTML = `<div class="dashboard-activity-empty-state">Cet outil n’a aucun réglage spécifique.</div>`;
       }
-      if (!hideCommonQuizControls) {
+      if (!hideCommonToolControls) {
         bindInstructionPlaceholderRefresh(host, settingsHost, tool, settings);
       }
       host.querySelectorAll('input[type="number"]').forEach((input) => {

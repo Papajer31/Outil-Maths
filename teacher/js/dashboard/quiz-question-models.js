@@ -1,6 +1,6 @@
 const RESPONSE_WIDGET_TYPES = new Set(["answer", "verified-answer", "qcm-text", "selection-words", "categories", "done"]);
-const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "numeric-keypad", "qcm-text", "selection-words"]);
-const SERIES_STATIC_WIDGET_TYPES = new Set(["numeric-keypad"]);
+const SERIES_ALLOWED_WIDGET_TYPES = new Set(["text", "answer", "numeric-keypad", "alphabet-keyboard", "qcm-text", "selection-words"]);
+const SERIES_STATIC_WIDGET_TYPES = new Set(["numeric-keypad", "alphabet-keyboard"]);
 
 export const QUESTION_MODELS = Object.freeze([
   {
@@ -83,6 +83,66 @@ export const QUESTION_MODELS = Object.freeze([
         columnSpan: 12,
         rowSpan: 1,
         visibility: "correction"
+      }
+    ]
+  },
+  {
+    id: "text-alphabet",
+    icon: "keyboard",
+    title: "Réponse avec clavier alphabétique",
+    description: "Consigne, texte central, réponse textuelle et clavier alphabétique.",
+    widgets: [
+      {
+        type: "text",
+        label: "Consigne",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Consigne de la question",
+        correctionPlaceholder: "Consigne de la question",
+        column: 1,
+        row: 1,
+        columnSpan: 12,
+        rowSpan: 1,
+        visibility: "both"
+      },
+      {
+        type: "text",
+        label: "Texte",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Saisissez le texte",
+        correctionPlaceholder: "Saisissez le texte",
+        column: 1,
+        row: 2,
+        columnSpan: 12,
+        rowSpan: 4,
+        visibility: "both",
+        textAlign: "center",
+        verticalAlign: "middle"
+      },
+      {
+        type: "answer",
+        label: "Réponse de l’élève",
+        questionText: "",
+        correctionText: "",
+        questionPlaceholder: "Réponse de l’élève",
+        correctionPlaceholder: "Saisissez la réponse attendue",
+        column: 3,
+        row: 6,
+        columnSpan: 8,
+        rowSpan: 1,
+        visibility: "both",
+        textAlign: "center",
+        verticalAlign: "middle"
+      },
+      {
+        type: "alphabet-keyboard",
+        label: "Clavier alphabétique",
+        column: 1,
+        row: 7,
+        columnSpan: 12,
+        rowSpan: 2,
+        visibility: "question"
       }
     ]
   },
@@ -285,7 +345,7 @@ function isVisibleInCorrection(widget = {}){
 function getIndicatorForWidget(widget = {}){
   if (widget.type === "answer" || widget.type === "verified-answer") return "RÉPONSE";
   if (widget.type === "done") return "TERMINÉ";
-  if (widget.type === "numeric-keypad") return "CLAVIER";
+  if (widget.type === "numeric-keypad" || widget.type === "alphabet-keyboard") return "CLAVIER";
   if (widget.type === "qcm-text") return "QCM";
   if (widget.type === "selection-words") return "SÉLECTION";
   if (widget.type === "categories") return "CATÉGORIES";

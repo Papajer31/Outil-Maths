@@ -22,6 +22,7 @@ const btnLaunch = document.getElementById("btnTeacherToolsLaunch");
 const btnChromeToggle = document.getElementById("btnTeacherToolsChromeToggle");
 const btnPageMenu = document.getElementById("btnTeacherToolsPageMenu");
 const btnWidgets = document.getElementById("btnTeacherToolsWidgets");
+const btnAnnotations = document.getElementById("btnTeacherToolsAnnotations");
 const widgetsDrawer = document.getElementById("teacherToolsWidgetsDrawer");
 const widgetsList = document.getElementById("teacherToolsWidgetsList");
 const btnWidgetsClose = document.getElementById("btnTeacherToolsWidgetsClose");
@@ -181,19 +182,11 @@ function renderWidgetsMenu(){
     ? `En cours · ${String(Math.floor(timerRemaining / 60)).padStart(2,"0")}:${String(timerRemaining % 60).padStart(2,"0")}`
     : "Compte à rebours déplaçable";
   widgetsList.innerHTML = `
-    <button class="ttp-widget-menu-row${widgets.annotations.visible ? " is-active" : ""}" type="button" data-widget-menu="annotations" aria-pressed="${widgets.annotations.visible ? "true" : "false"}">
-      <span class="ttp-widget-menu-icon"><span class="ttp-material-icon" aria-hidden="true">edit_note</span></span>
-      <span class="ttp-widget-menu-copy"><strong>Annotations</strong><small>Écrire ou dessiner sur la page.</small></span>
-      <span class="ttp-widget-menu-switch" aria-hidden="true"></span>
-    </button>
     <button class="ttp-widget-menu-row${widgets.timer.visible ? " is-active" : ""}" type="button" data-widget-menu="timer" aria-pressed="${widgets.timer.visible ? "true" : "false"}">
       <span class="ttp-widget-menu-icon"><span class="ttp-material-icon" aria-hidden="true">timer</span></span>
       <span class="ttp-widget-menu-copy"><strong>Minuteur</strong><small>${escapeHtml(timerStatus)}</small></span>
       <span class="ttp-widget-menu-switch" aria-hidden="true"></span>
     </button>`;
-  widgetsList.querySelector('[data-widget-menu="annotations"]')?.addEventListener("click", () => {
-    applyLocalWidgetAction("annotations", "set-visible", { visible: !normalizeOverlayWidgetsState(workspace.widgets).annotations.visible });
-  });
   widgetsList.querySelector('[data-widget-menu="timer"]')?.addEventListener("click", () => {
     applyLocalWidgetAction("timer", "set-visible", { visible: !normalizeOverlayWidgetsState(workspace.widgets).timer.visible });
   });
@@ -201,6 +194,10 @@ function renderWidgetsMenu(){
 
 function renderWidgets(){
   renderWidgetsMenu();
+  const annotationsVisible = normalizeOverlayWidgetsState(workspace.widgets).annotations.visible === true;
+  btnAnnotations?.setAttribute("aria-pressed", annotationsVisible ? "true" : "false");
+  btnAnnotations?.setAttribute("aria-label", annotationsVisible ? "Masquer les annotations" : "Afficher les annotations");
+  btnAnnotations?.setAttribute("title", annotationsVisible ? "Masquer les annotations" : "Annotations");
   timerOverlayProjector.render();
 }
 
@@ -398,6 +395,12 @@ channel = createTeacherToolsChannel({
   teacherSpaceId,
   channelId,
   onMessage(message){
+    if (message?.type === "dashboard-ready") {
+      if (workspaceBootstrapped) send("projector-workspace", { workspace: clonePlain(workspace), bootstrapped:true });
+      send("projector-ready");
+      send("request-workspace");
+      return;
+    }
     if (message?.type === "workspace-state") { handleWorkspaceState(message.workspace); return; }
     if (message?.type === "close-projector") window.close();
   }
@@ -410,6 +413,22 @@ btnLaunch?.addEventListener("click", async () => {
 btnChromeToggle?.addEventListener("click", () => setProjectionChromeVisible(!projectionChromeVisible));
 btnPageMenu?.addEventListener("click", () => { setPageDrawerOpen(!pageDrawerOpen); setWidgetsDrawerOpen(false); setAppControlsOpen(false); });
 btnWidgets?.addEventListener("click", () => { setWidgetsDrawerOpen(!widgetsDrawerOpen); setPageDrawerOpen(false); setAppControlsOpen(false); });
+btnAnnotations?.addEventListener("click", () => {
+  const visible = normalizeOverlayWidgetsState(workspace.widgets).annotations.visible === true;
+  if (visible) {
+    applyLocalWidgetAction("annotations", "set-visible", { visible: false });
+    return;
+  }
+
+  applyLocalWidgetAction("annotations", "set-visible", { visible: true });
+  const page = activePage();
+  if (!page) return;
+  const surface = normalizeSurfaceState(page.surface);
+  if (surface.annotations?.enabled === true) return;
+  page.surface = applySurfaceAction(surface, "annotations:set-enabled", { enabled: true });
+  annotationProjector.render(page.surface.annotations);
+  send("surface-action", { pageId: page.id, action: "annotations:set-enabled", payload: { enabled: true } });
+});
 btnWidgetsClose?.addEventListener("click", () => setWidgetsDrawerOpen(false));
 btnPageDrawerClose?.addEventListener("click", () => setPageDrawerOpen(false));
 btnPageAdd?.addEventListener("click", () => setAppCatalogOpen(true));

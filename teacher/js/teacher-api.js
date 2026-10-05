@@ -1972,6 +1972,7 @@ const QUIZ_SUMMARY_FIELDS = "id, teacher_space_id, folder_id, title, schema_vers
 const RESOURCE_FOLDER_FIELDS = "id, teacher_space_id, parent_id, name, metadata, display_order, is_system, created_at, updated_at";
 const RESOURCE_FIELDS = "id, teacher_space_id, folder_id, title, resource_type, storage_bucket, storage_path, mime_type, size_bytes, width, height, duration_seconds, alt_text, tags, metadata, display_order, is_system, created_at, updated_at";
 const TEACHER_RESOURCE_BUCKET = "teacher-resources";
+const TEACHER_TABLEAU_BUCKET = "teacher-tableau";
 const SYSTEM_IMAGE_BUCKET = "images";
 
 function normalizePositiveTeacherSpaceId(value) {
@@ -2514,6 +2515,121 @@ function sanitizeStorageFileName(value, fallback = "resource") {
     .replace(/-+/g, "-")
     .replace(/^[-.]+|[-.]+$/g, "");
   return safe || fallback;
+}
+
+const TEACHER_TABLEAU_WORKSPACE_FIELDS = "teacher_space_id, workspace_version, workspace, assets, created_at, updated_at";
+
+export async function getTeacherTableauWorkspaceForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const { data, error } = await supabase
+    .from("teacher_tableau_workspaces")
+    .select(TEACHER_TABLEAU_WORKSPACE_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    teacherSpaceId: Number(data.teacher_space_id),
+    workspaceVersion: Math.max(1, Math.trunc(Number(data.workspace_version) || 1)),
+    workspace: data.workspace && typeof data.workspace === "object" && !Array.isArray(data.workspace) ? cloneJsonValue(data.workspace) : {},
+    assets: data.assets && typeof data.assets === "object" && !Array.isArray(data.assets) ? cloneJsonValue(data.assets) : {},
+    createdAt: data.created_at || null,
+    updatedAt: data.updated_at || null
+  };
+}
+
+export async function saveTeacherTableauWorkspaceForSpace(teacherSpaceId, {
+  workspace,
+  assets = {},
+  workspaceVersion = 1
+} = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const safeWorkspace = workspace && typeof workspace === "object" && !Array.isArray(workspace) ? cloneJsonValue(workspace) : {};
+  const safeAssets = assets && typeof assets === "object" && !Array.isArray(assets) ? cloneJsonValue(assets) : {};
+  const { data, error } = await supabase
+    .from("teacher_tableau_workspaces")
+    .upsert({
+      teacher_space_id: spaceId,
+      workspace_version: Math.max(1, Math.trunc(Number(workspaceVersion) || 1)),
+      workspace: safeWorkspace,
+      assets: safeAssets
+    }, { onConflict: "teacher_space_id" })
+    .select(TEACHER_TABLEAU_WORKSPACE_FIELDS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function uploadTeacherTableauAsset(teacherSpaceId, file, { name = "asset" } = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  if (!(file instanceof Blob)) throw new Error("Fichier du Tableau invalide.");
+  const user = await getCurrentUser();
+  if (!user?.id) throw new Error("Utilisateur non connecté.");
+  const assetId = globalThis.crypto?.randomUUID?.();
+  if (!assetId) throw new Error("Impossible de générer l’identifiant du fichier.");
+  const safeName = sanitizeStorageFileName(name, "asset");
+  const storagePath = `${user.id}/${spaceId}/${assetId}-${safeName}`;
+  const mimeType = String(file.type || "application/octet-stream").trim() || "application/octet-stream";
+  const { error } = await supabase.storage
+    .from(TEACHER_TABLEAU_BUCKET)
+    .upload(storagePath, file, {
+      contentType: mimeType,
+      cacheControl: "3600",
+      upsert: false
+    });
+  if (error) throw error;
+  return {
+    id: assetId,
+    bucket: TEACHER_TABLEAU_BUCKET,
+    path: storagePath,
+    name: safeName,
+    mimeType,
+    sizeBytes: Math.max(0, Number(file.size) || 0)
+  };
+}
+
+export async function createTeacherTableauAssetSignedUrl(asset, expiresInSeconds = 86400) {
+  const bucket = String(asset?.bucket || asset?.storage_bucket || TEACHER_TABLEAU_BUCKET).trim() || TEACHER_TABLEAU_BUCKET;
+  const path = String(asset?.path || asset?.storage_path || "").trim();
+  if (!path) return "";
+  const expiresIn = Math.max(60, Math.min(604800, Math.trunc(Number(expiresInSeconds) || 86400)));
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+  if (error) throw error;
+  return String(data?.signedUrl || "");
+}
+
+export async function cleanupTeacherTableauAssetsForSpace(teacherSpaceId, {
+  keepPaths = [],
+  removePaths = [],
+  exact = false
+} = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const user = await getCurrentUser();
+  if (!user?.id) throw new Error("Utilisateur non connecté.");
+  const prefix = `${user.id}/${spaceId}/`;
+  const safeKeep = new Set((Array.isArray(keepPaths) ? keepPaths : [])
+    .map((path) => String(path || "").trim())
+    .filter((path) => path.startsWith(prefix)));
+  const explicit = (Array.isArray(removePaths) ? removePaths : [])
+    .map((path) => String(path || "").trim())
+    .filter((path) => path.startsWith(prefix) && !safeKeep.has(path));
+
+  let pathsToRemove = explicit;
+  if (!exact) {
+    const folder = `${user.id}/${spaceId}`;
+    const { data, error } = await supabase.storage.from(TEACHER_TABLEAU_BUCKET).list(folder, { limit: 1000 });
+    if (error) throw error;
+    const discovered = (Array.isArray(data) ? data : [])
+      .filter((item) => item?.name)
+      .map((item) => `${folder}/${item.name}`)
+      .filter((path) => !safeKeep.has(path));
+    pathsToRemove = Array.from(new Set([...explicit, ...discovered]));
+  }
+
+  if (!pathsToRemove.length) return true;
+  const { error: removeError } = await supabase.storage.from(TEACHER_TABLEAU_BUCKET).remove(pathsToRemove);
+  if (removeError) throw removeError;
+  return true;
 }
 
 export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}) {

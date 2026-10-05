@@ -1,0 +1,40 @@
+.copy-config-root{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.copy-config-timers-row{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:16px;
+}
+
+.copy-config-timer-widget{
+  min-width:0;
+}
+
+.copy-config-text-group{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+}
+
+.copy-config-textarea{
+  min-height:190px;
+}
+
+.copy-config-text-meta{
+  display:flex;
+  justify-content:flex-end;
+  color:var(--muted,#667085);
+  font-size:14px;
+  font-weight:700;
+}
+
+@media (max-width:760px){
+  .copy-config-timers-row{
+    grid-template-columns:1fr;
+  }
+}
