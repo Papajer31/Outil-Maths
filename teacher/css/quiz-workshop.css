@@ -1067,6 +1067,7 @@
   --quiz-editor-font-normal:18px;
   --quiz-editor-font-large:24px;
   --quiz-editor-font-huge:30px;
+  --quiz-editor-font-maximal:30px;
   position:relative;
   width:880px;
   height:640px;

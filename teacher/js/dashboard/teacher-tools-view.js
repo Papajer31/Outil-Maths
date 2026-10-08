@@ -17,6 +17,14 @@ import { applyOverlayWidgetAction, getTimerRemainingMs, normalizeOverlayWidgetsS
 import { createWorkspacePersistence } from "../teacher-tools/workspace-persistence.js";
 import { createWorkspaceSessionDraftStore } from "../teacher-tools/workspace-session-draft.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
+import {
+  imageEntriesFromPasteEvent,
+  prepareImageFilePayload,
+  prepareImageUrlPayload,
+  readImageEntriesFromClipboard
+} from "../teacher-tools/apps/image/source.js";
+import { MULTI_IMAGES_MAX_IMAGES } from "../teacher-tools/apps/multi-images/model.js";
+import { IMAGE_LABELS_MAX_IMAGES } from "../teacher-tools/apps/image-labels/model.js";
 
 const WORKSPACE_VERSION = 5;
 
@@ -69,7 +77,7 @@ function normalizePage(raw = {}){
   return {
     id: String(raw.id || createPageId(tool.id)),
     toolId: tool.id,
-    label: String(raw.label || tool.label),
+    label: rawToolId === "labels" && String(raw.label || "").trim() === "Étiquettes" ? tool.label : String(raw.label || tool.label),
     icon: String(raw.icon || tool.icon || "widgets"),
     state: raw.state && typeof raw.state === "object" ? raw.state : (tool.createInitialState?.() || {}),
     surface: normalizeSurfaceState(raw.surface)
@@ -102,7 +110,10 @@ export function createTeacherToolsViewController({
   getCurrentStudents,
   listCatalogActivitiesForTeacherSpace,
   listPedagogicalNodesForTeacher,
+  listTeacherActivitiesForSpace,
+  listTeacherActivityFoldersForSpace,
   listResourcesForSpace,
+  listResourceFoldersForSpace,
   uploadResourceForSpace,
   createResourceSignedUrl,
   getTeacherTableauWorkspaceForSpace,
@@ -119,6 +130,7 @@ export function createTeacherToolsViewController({
   let channelTeacherSpaceId = "";
   let projectorWindow = null;
   let projectorConnected = false;
+  let projectorChromeVisible = true;
   let appControlSession = null;
   let backgroundPanelSession = null;
   let backgroundPanelOpen = false;
@@ -131,11 +143,15 @@ export function createTeacherToolsViewController({
   let isSaving = false;
   let draftSaveTimer = 0;
   let draftSaveEpoch = 0;
+  let clipboardImportVersion = 0;
+  let fileDropDepth = 0;
 
   const persistence = createWorkspacePersistence({
     uploadAsset: uploadTeacherTableauAsset,
     createAssetSignedUrl: createTeacherTableauAssetSignedUrl,
-    cleanupAssets: cleanupTeacherTableauAssetsForSpace
+    cleanupAssets: cleanupTeacherTableauAssetsForSpace,
+    listResourcesForSpace,
+    createResourceSignedUrl
   });
   const sessionDraft = createWorkspaceSessionDraftStore();
 
@@ -442,6 +458,11 @@ export function createTeacherToolsViewController({
           renderHeaderStatus();
           return;
         }
+        if (message?.type === "projector-chrome-visibility") {
+          projectorChromeVisible = message.visible !== false;
+          renderHeaderStatus();
+          return;
+        }
         if (message?.type === "select-page") {
           selectPage(message.pageId, { sync: false });
           return;
@@ -476,6 +497,13 @@ export function createTeacherToolsViewController({
   }
 
   function syncProjector(){ send("workspace-state", { workspace: cloneWorkspaceForProjector() }); }
+
+  function toggleProjectorChrome(){
+    if (!projectorConnected) return;
+    projectorChromeVisible = !projectorChromeVisible;
+    renderHeaderStatus();
+    send("set-projector-chrome-visibility", { visible: projectorChromeVisible });
+  }
 
   function openProjector(){
     const spaceId = teacherSpaceId();
@@ -593,14 +621,295 @@ export function createTeacherToolsViewController({
   function addPage(toolId){
     const tool = getTeacherTool(toolId);
     if (!tool) return;
-    // Une page est une instance indépendante : un même type de mini-app peut
-    // donc être ajouté plusieurs fois au Tableau, avec son propre état.
+    if (tool.singleton === true) {
+      const existing = workspace.pages.find((page) => page.toolId === tool.id);
+      if (existing) {
+        selectPage(existing.id);
+        showToast?.(`La page « ${tool.label} » est déjà ouverte.`);
+        return;
+      }
+    }
+    // Une page est une instance indépendante sauf si la mini-app se déclare singleton.
     const page = createPage(tool);
     workspace = normalizeWorkspace({ ...workspace, selectedPageId: page.id, pages: [...workspace.pages, page] });
     markDirty();
     renderView();
     syncProjector();
   }
+
+  function resolveClipboardTargetPage(toolId){
+    const safeToolId = String(toolId || "").trim();
+    if (!safeToolId) return { tool: null, page: null };
+    const tool = getTeacherTool(safeToolId);
+    if (!tool) return { tool: null, page: null };
+    const page = selectedPage()?.toolId === safeToolId
+      ? selectedPage()
+      : [...workspace.pages].reverse().find((item) => item.toolId === safeToolId) || null;
+    return { tool, page };
+  }
+
+  function commitClipboardPage({ page, existingPage, result, errorMessage } = {}){
+    if (result?.error) throw new Error(result.error);
+    if (!result?.patch?.state) throw new Error(errorMessage || "Impossible d’afficher les images collées.");
+    const updatedPage = { ...page, ...result.patch };
+    const pages = existingPage
+      ? workspace.pages.map((item) => item.id === existingPage.id ? updatedPage : item)
+      : [...workspace.pages, updatedPage];
+    workspace = normalizeWorkspace({ ...workspace, pages, selectedPageId: updatedPage.id });
+    markDirty();
+    renderView();
+    syncProjector();
+  }
+
+  async function preparePastedImagePayloads(entries, { version, limit = Number.POSITIVE_INFINITY } = {}){
+    const rawEntries = Array.from(entries || []).filter(Boolean);
+    const numericLimit = Number(limit);
+    const safeLimit = Number.isFinite(numericLimit)
+      ? Math.max(0, Math.trunc(numericLimit))
+      : Number.POSITIVE_INFINITY;
+    const payloads = [];
+
+    for (let index = 0; index < Math.min(rawEntries.length, safeLimit); index += 1) {
+      const entry = rawEntries[index];
+      try {
+        let payload;
+        if (entry.file) {
+          payload = await prepareImageFilePayload(entry.file);
+        } else if (entry.source?.startsWith("data:image/")) {
+          // Un <img src="data:…"> collé depuis un éditeur doit devenir une
+          // image locale persistable, et non une URL base64 conservée en état.
+          const response = await fetch(entry.source);
+          if (!response.ok) throw new Error("Image intégrée illisible.");
+          const blob = await response.blob();
+          const type = String(blob.type || "image/png");
+          const extension = type === "image/jpeg" ? "jpg" : (type.split("/")[1] || "png").split("+")[0];
+          payload = await prepareImageFilePayload(new File([blob], `Image collée ${index + 1}.${extension}`, { type }));
+        } else if (entry.source) {
+          payload = await prepareImageUrlPayload(entry.source);
+        } else {
+          continue;
+        }
+        if (version !== clipboardImportVersion || !isTableauVisible()) return null;
+        // Renommer les captures tout en conservant le nom des fichiers copiés.
+        if (entry.source || !entry.file?.name || /^image collée/i.test(entry.file.name)) {
+          payload.imageName = `Image collée ${index + 1}`;
+        }
+        payloads.push(payload);
+      } catch (error) {
+        if (version === clipboardImportVersion) {
+          showToast?.(`Image ${index + 1} : ${error?.message || "impossible à charger"}`, { isError: true });
+        }
+      }
+    }
+
+    return {
+      payloads,
+      ignoredCount: Math.max(0, rawEntries.length - safeLimit)
+    };
+  }
+
+  /**
+   * Dans Multimages, un collage reste dans Multimages et ajoute les images.
+   * Hors de Multimages : 1 image -> Image ; 2+ images -> Multimages.
+   * On ne prétend pas pouvoir séparer un presse-papiers déjà aplati en bitmap.
+   */
+  async function importPastedImages(entries){
+    const rawEntries = Array.from(entries || []).filter(Boolean);
+    if (!rawEntries.length) return;
+    const version = ++clipboardImportVersion;
+    try {
+      const activeImageLabels = selectedPage()?.toolId === "image-labels";
+      if (activeImageLabels) {
+        const { tool, page } = resolveClipboardTargetPage("image-labels");
+        if (!tool || !page) throw new Error("L’application Étiquettes Images est indisponible.");
+        const existingCount = page.state?.items?.length || 0;
+        const limit = Math.max(0, IMAGE_LABELS_MAX_IMAGES - existingCount);
+        if (!limit) throw new Error(`Limite : ${IMAGE_LABELS_MAX_IMAGES} images.`);
+        const prepared = await preparePastedImagePayloads(rawEntries, { version, limit });
+        if (!prepared || version !== clipboardImportVersion || !isTableauVisible()) return;
+        if (!prepared.payloads.length) throw new Error("Impossible d’ajouter ces images.");
+        const result = tool.applyAction?.({ action:"add-images", payload:{ images:prepared.payloads }, state:page.state });
+        commitClipboardPage({
+          page,
+          existingPage:page,
+          result,
+          errorMessage:"Impossible d’ajouter ces images à Étiquettes Images."
+        });
+        if (prepared.ignoredCount > 0) showToast?.(`Certaines images n’ont pas été ajoutées : limite à ${IMAGE_LABELS_MAX_IMAGES}.`);
+        return;
+      }
+
+      const activeMultiImages = selectedPage()?.toolId === "multi-images";
+      const useMultiImages = activeMultiImages || rawEntries.length > 1;
+
+      if (!useMultiImages) {
+        const prepared = await preparePastedImagePayloads(rawEntries, { version, limit: 1 });
+        if (!prepared || version !== clipboardImportVersion || !isTableauVisible()) return;
+        const payload = prepared.payloads[0];
+        if (!payload) throw new Error("Impossible de coller cette image.");
+        payload.imageName = "Image collée";
+
+        const { tool, page } = resolveClipboardTargetPage("image");
+        if (!tool) throw new Error("L’application Image est indisponible.");
+        const nextPage = page || createPage(tool);
+        const result = tool.applyAction?.({ action: "set-image", payload, state: nextPage.state });
+        commitClipboardPage({
+          page: nextPage,
+          existingPage: page,
+          result,
+          errorMessage: "Impossible d’afficher l’image collée."
+        });
+        return;
+      }
+
+      const { tool, page } = resolveClipboardTargetPage("multi-images");
+      if (!tool) throw new Error("L’application Multimages est indisponible.");
+      const nextPage = page || createPage(tool);
+      // Dans une page Multimages déjà active, Ctrl + V est un ajout et ne
+      // détruit pas les images précédentes. Hors de cette page, on remplace.
+      const append = Boolean(activeMultiImages && page);
+      const existingCount = append ? (nextPage.state?.images?.length || 0) : 0;
+      const limit = Math.max(0, MULTI_IMAGES_MAX_IMAGES - existingCount);
+      if (!limit) throw new Error(`Limite : ${MULTI_IMAGES_MAX_IMAGES} images.`);
+      const prepared = await preparePastedImagePayloads(rawEntries, { version, limit });
+      if (!prepared || version !== clipboardImportVersion || !isTableauVisible()) return;
+      if (!prepared.payloads.length) throw new Error("Impossible de coller ces images.");
+      if (prepared.ignoredCount > 0) {
+        showToast?.(`Certaines images n’ont pas été collées : limite à ${MULTI_IMAGES_MAX_IMAGES}.`);
+      }
+      let result = tool.applyAction?.({
+        action: append ? "add-images" : "set-images",
+        payload: { images: prepared.payloads },
+        state: nextPage.state
+      });
+      if (result?.patch?.state) {
+        result = {
+          ...result,
+          patch: {
+            ...result.patch,
+            state: { ...result.patch.state, mode: "board", activeIndex: -1 }
+          }
+        };
+      }
+      commitClipboardPage({
+        page: nextPage,
+        existingPage: page,
+        result,
+        errorMessage: "Impossible d’afficher les images collées."
+      });
+    } catch (error) {
+      if (version === clipboardImportVersion) {
+        showToast?.(error?.message || "Impossible de coller ces images.", { isError: true });
+      }
+    }
+  }
+
+  async function pasteImageFromClipboard(){
+    try {
+      const entries = await readImageEntriesFromClipboard();
+      await importPastedImages(entries);
+    } catch (error) {
+      showToast?.(error?.message || "Impossible de lire le presse-papiers.", { isError: true });
+    }
+  }
+
+  function isTableauVisible(){
+    return Boolean(view?.isConnected && host?.isConnected && !view.hidden && !view.classList.contains("hidden"));
+  }
+
+  function handleImagePaste(event){
+    if (!isTableauVisible() || event.defaultPrevented || pickerOverlay?.isConnected || closeConfirmOverlay?.isConnected) return;
+    const target = event.target;
+    // Ne jamais voler le collage destiné à un champ ou à un éditeur (Seyès, URL…).
+    if (target?.closest?.('input, textarea, select, [contenteditable], [role="textbox"], dialog, .modal')) return;
+    const entries = imageEntriesFromPasteEvent(event);
+    if (!entries.length) return; // Collage de texte ordinaire : ne rien modifier.
+    event.preventDefault();
+    void importPastedImages(entries);
+  }
+
+  document.addEventListener("paste", handleImagePaste);
+
+  function isLikelyImageFile(file){
+    const type = String(file?.type || "").toLowerCase();
+    if (type.startsWith("image/")) return true;
+    return /\.(png|jpe?g|webp|gif|bmp|svg|avif|ico)$/i.test(String(file?.name || ""));
+  }
+
+  function dragEventCarriesFiles(event){
+    const types = Array.from(event?.dataTransfer?.types || []).map((type) => String(type || ""));
+    return types.includes("Files") || types.includes("application/x-moz-file");
+  }
+
+  function getDroppedImageEntries(event){
+    const files = Array.from(event?.dataTransfer?.files || []).filter((file) => isLikelyImageFile(file));
+    return files.map((file) => ({ file }));
+  }
+
+  function getFileDropMessage(){
+    const toolId = selectedPage()?.toolId || "";
+    if (toolId === "image-labels") {
+      return "Dépose jusqu’à 100 images ici pour les ajouter à Étiquettes Images.";
+    }
+    if (toolId === "multi-images") {
+      return "Dépose les images ici pour les ajouter à Multimages.";
+    }
+    return "Dépose 1 image pour l’app Image, ou plusieurs images pour ouvrir Multimages.";
+  }
+
+  function setFileDropActive(active){
+    if (!host) return;
+    host.classList.toggle("is-file-drop-active", Boolean(active));
+    const overlay = host.querySelector("[data-file-drop-overlay]");
+    if (!overlay) return;
+    overlay.hidden = !active;
+    const message = overlay.querySelector("[data-file-drop-message]");
+    if (message) message.textContent = getFileDropMessage();
+  }
+
+  function clearFileDropState(){
+    fileDropDepth = 0;
+    setFileDropActive(false);
+  }
+
+  function handleHostDragEnter(event){
+    if (!isTableauVisible() || pickerOverlay?.isConnected || closeConfirmOverlay?.isConnected) return;
+    if (!dragEventCarriesFiles(event)) return;
+    fileDropDepth += 1;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    setFileDropActive(true);
+  }
+
+  function handleHostDragOver(event){
+    if (!isTableauVisible() || !dragEventCarriesFiles(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    if (!host?.classList.contains("is-file-drop-active")) setFileDropActive(true);
+  }
+
+  function handleHostDragLeave(event){
+    if (!dragEventCarriesFiles(event)) return;
+    fileDropDepth = Math.max(0, fileDropDepth - 1);
+    if (fileDropDepth === 0) setFileDropActive(false);
+  }
+
+  function handleHostDrop(event){
+    if (!isTableauVisible() || !dragEventCarriesFiles(event)) return;
+    event.preventDefault();
+    const entries = getDroppedImageEntries(event);
+    clearFileDropState();
+    if (!entries.length) {
+      showToast?.("Dépose un ou plusieurs fichiers image.", { isError: true });
+      return;
+    }
+    void importPastedImages(entries);
+  }
+
+  host?.addEventListener("dragenter", handleHostDragEnter);
+  host?.addEventListener("dragover", handleHostDragOver);
+  host?.addEventListener("dragleave", handleHostDragLeave);
+  host?.addEventListener("drop", handleHostDrop);
 
   function addBlankPage(){
     const page = createBlankPage();
@@ -800,6 +1109,16 @@ export function createTeacherToolsViewController({
     node.innerHTML = `<span class="dashboard-material-icon" aria-hidden="true">${projectorConnected ? "cast_connected" : "cast"}</span><span>${projectorConnected ? "Projection connectée" : "Projection non connectée"}</span>`;
     const button = host?.querySelector("#btnTeacherToolsOpenProjector span:last-child");
     if (button) button.textContent = projectorConnected ? "Afficher la projection" : "Ouvrir la projection";
+    const chromeButton = host?.querySelector("#btnTeacherToolsProjectorChrome");
+    if (chromeButton) {
+      chromeButton.disabled = !projectorConnected;
+      chromeButton.setAttribute("aria-pressed", projectorChromeVisible ? "false" : "true");
+      const label = projectorChromeVisible ? "Masquer les commandes de la projection" : "Afficher les commandes de la projection";
+      chromeButton.setAttribute("aria-label", label);
+      chromeButton.setAttribute("title", label);
+      const icon = chromeButton.querySelector(".dashboard-material-icon");
+      if (icon) icon.textContent = projectorChromeVisible ? "visibility" : "visibility_off";
+    }
     const closeButton = host?.querySelector("#btnTeacherToolsCloseProjector");
     if (closeButton) closeButton.disabled = !projectorConnected && !(projectorWindow && !projectorWindow.closed);
     renderSaveStatus();
@@ -808,7 +1127,7 @@ export function createTeacherToolsViewController({
   function pageListMarkup(){
     if (!workspace.pages.length) return `<div class="tt-page-list-empty-state"><span class="dashboard-material-icon" aria-hidden="true">dashboard_customize</span><strong>Aucune page</strong></div>`;
     return workspace.pages.map((page) => `
-      <div class="tt-widget-row tt-page-row${page.id === workspace.selectedPageId ? " is-selected" : ""}" data-page-row="${escapeAttr(page.id)}">
+      <div class="tt-widget-row tt-page-row${page.id === workspace.selectedPageId ? " is-selected" : ""}" data-page-row="${escapeAttr(page.id)}" draggable="true">
         <button class="tt-widget-select tt-page-select" type="button" data-select-page="${escapeAttr(page.id)}">
           <span class="dashboard-material-icon" aria-hidden="true">${escapeHtml(page.icon)}</span>
           <span class="tt-widget-row-main"><strong>${escapeHtml(page.label)}</strong><small>${page.id === workspace.selectedPageId ? "Affichée au tableau" : "Page ouverte"}</small></span>
@@ -817,9 +1136,97 @@ export function createTeacherToolsViewController({
       </div>`).join("");
   }
 
+  function reorderPage(pageId, insertionIndex){
+    const id = String(pageId || "").trim();
+    const fromIndex = workspace.pages.findIndex((page) => page.id === id);
+    if (fromIndex < 0) return;
+    const moved = workspace.pages[fromIndex];
+    const remaining = workspace.pages.filter((page) => page.id !== id);
+    const target = Math.max(0, Math.min(remaining.length, Math.trunc(Number(insertionIndex) || 0)));
+    const pages = remaining.slice();
+    pages.splice(target, 0, moved);
+    if (pages.every((page, index) => page.id === workspace.pages[index]?.id)) return;
+    workspace = normalizeWorkspace({ ...workspace, pages, selectedPageId:workspace.selectedPageId });
+    markDirty();
+    renderPageList();
+    syncProjector();
+  }
+
+  function bindPageListDnD(){
+    const list = host?.querySelector("[data-page-list]");
+    if (!list || workspace.pages.length < 2) return;
+    const rows = () => Array.from(list.querySelectorAll("[data-page-row]"));
+    const marker = document.createElement("div");
+    marker.className = "tt-page-drop-marker";
+    marker.hidden = true;
+    marker.setAttribute("aria-hidden", "true");
+    list.appendChild(marker);
+    let draggedId = "";
+    let insertionIndex = -1;
+
+    function clear(){
+      rows().forEach((row) => row.classList.remove("is-dragging"));
+      marker.hidden = true;
+      insertionIndex = -1;
+    }
+
+    function computeCandidate(clientY){
+      const remainingRows = rows().filter((row) => String(row.dataset.pageRow || "") !== draggedId);
+      if (!remainingRows.length) return { index:0, y:0 };
+      const listRect = list.getBoundingClientRect();
+      const candidates = remainingRows.map((row, index) => {
+        const rect = row.getBoundingClientRect();
+        return { index, screenY:rect.top, y:rect.top - listRect.top + list.scrollTop };
+      });
+      const lastRect = remainingRows[remainingRows.length - 1].getBoundingClientRect();
+      candidates.push({ index:remainingRows.length, screenY:lastRect.bottom, y:lastRect.bottom - listRect.top + list.scrollTop });
+      return candidates.reduce((best, candidate) => {
+        const distance = Math.abs(clientY - candidate.screenY);
+        return !best || distance < best.distance ? { ...candidate, distance } : best;
+      }, null);
+    }
+
+    rows().forEach((row) => {
+      row.addEventListener("dragstart", (event) => {
+        draggedId = String(row.dataset.pageRow || "").trim();
+        if (!draggedId) return;
+        row.classList.add("is-dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          try { event.dataTransfer.setData("text/plain", draggedId); } catch {}
+        }
+      });
+      row.addEventListener("dragend", () => { draggedId = ""; clear(); });
+    });
+
+    list.addEventListener("dragover", (event) => {
+      if (!draggedId) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      const candidate = computeCandidate(event.clientY);
+      if (!candidate) return;
+      insertionIndex = candidate.index;
+      marker.style.top = `${Math.round(candidate.y)}px`;
+      marker.hidden = false;
+    });
+    list.addEventListener("dragleave", (event) => {
+      if (!list.contains(event.relatedTarget)) marker.hidden = true;
+    });
+    list.addEventListener("drop", (event) => {
+      if (!draggedId) return;
+      event.preventDefault();
+      const id = draggedId;
+      const target = insertionIndex;
+      draggedId = "";
+      clear();
+      if (target >= 0) reorderPage(id, target);
+    });
+  }
+
   function bindPageList(){
     host?.querySelectorAll("[data-select-page]").forEach((button) => button.addEventListener("click", () => selectPage(button.dataset.selectPage)));
     host?.querySelectorAll("[data-close-page]").forEach((button) => button.addEventListener("click", () => removePage(button.dataset.closePage)));
+    bindPageListDnD();
   }
 
   function renderPageList(){
@@ -866,12 +1273,16 @@ export function createTeacherToolsViewController({
       getTeacherSpace: () => getCurrentTeacherSpace?.() || null,
       listCatalogActivitiesForTeacherSpace,
       listPedagogicalNodesForTeacher,
+      listTeacherActivitiesForSpace,
+      listTeacherActivityFoldersForSpace,
       listResourcesForSpace,
+      listResourceFoldersForSpace,
       uploadResourceForSpace,
       createResourceSignedUrl,
       showToast,
       openProjector,
-      syncProjector
+      syncProjector,
+      pasteImageFromClipboard
     }) || null;
   }
 
@@ -918,11 +1329,13 @@ export function createTeacherToolsViewController({
     workspace = normalizeWorkspace(workspace);
     const page = selectedPage();
     const supportsBackground = pageSupports(page, "background");
+    const fileDropActive = host.classList.contains("is-file-drop-active");
     host.innerHTML = `
       <div class="dashboard-config-header tt-header tt-app-header">
         <div class="dashboard-config-header-main tt-header-main"><div><div class="dashboard-section-title">Tableau</div><div class="tt-app-header-subtitle" data-page-count></div></div></div>
         <div class="dashboard-config-header-center tt-header-center"><div class="tt-projector-status" data-projector-status></div></div>
         <div class="dashboard-config-header-actions tt-header-actions">
+          <button id="btnTeacherToolsProjectorChrome" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Masquer les commandes de la projection" title="Masquer les commandes de la projection" disabled><span class="dashboard-material-icon" aria-hidden="true">visibility</span></button>
           <button id="btnTeacherToolsOpenProjector" class="btn primary" type="button"><span class="dashboard-material-icon" aria-hidden="true">open_in_new</span><span>Ouvrir la projection</span></button>
           <button id="btnTeacherToolsSaveProjector" class="btn" type="button" disabled><span class="dashboard-material-icon" aria-hidden="true">save</span><span>Enregistrer la projection</span></button>
           <button id="btnTeacherToolsCloseProjector" class="btn" type="button" disabled><span class="dashboard-material-icon" aria-hidden="true">close</span><span>Fermer la projection</span></button>
@@ -949,7 +1362,15 @@ export function createTeacherToolsViewController({
             <aside class="tt-surface-popover" data-background-panel hidden aria-label="Réglages du fond"></aside>
           </section>
         </div>
+      </div>
+      <div class="tt-file-drop-overlay" data-file-drop-overlay ${fileDropActive ? "" : "hidden"}>
+        <div class="tt-file-drop-card">
+          <span class="dashboard-material-icon" aria-hidden="true">add_photo_alternate</span>
+          <strong>Dépose les images ici</strong>
+          <span data-file-drop-message>${escapeHtml(getFileDropMessage())}</span>
+        </div>
       </div>`;
+    host.querySelector("#btnTeacherToolsProjectorChrome")?.addEventListener("click", toggleProjectorChrome);
     host.querySelector("#btnTeacherToolsOpenProjector")?.addEventListener("click", openProjector);
     host.querySelector("#btnTeacherToolsSaveProjector")?.addEventListener("click", () => { void saveWorkspace(); });
     host.querySelector("#btnTeacherToolsCloseProjector")?.addEventListener("click", () => { void requestCloseProjector(); });
@@ -971,6 +1392,12 @@ export function createTeacherToolsViewController({
     },
     refresh(){ renderControls(); if (backgroundPanelOpen) renderBackgroundPanel(); syncProjector(); },
     destroy(){
+      clipboardImportVersion += 1;
+      document.removeEventListener("paste", handleImagePaste);
+      host?.removeEventListener("dragenter", handleHostDragEnter);
+      host?.removeEventListener("dragover", handleHostDragOver);
+      host?.removeEventListener("dragleave", handleHostDragLeave);
+      host?.removeEventListener("drop", handleHostDrop);
       appControlSession?.destroy?.();
       backgroundPanelSession?.destroy?.();
       closePicker();

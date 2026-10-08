@@ -1,4 +1,8 @@
+import { activityTeacherTool } from "./apps/activity/tool.js";
+import { clockTeacherTool } from "./apps/clock/tool.js";
 import { imageTeacherTool } from "./apps/image/tool.js";
+import { imageLabelsTeacherTool } from "./apps/image-labels/tool.js";
+import { labelsTeacherTool } from "./apps/labels/tool.js";
 import { multiImagesTeacherTool } from "./apps/multi-images/tool.js";
 import { pdfTeacherTool } from "./apps/pdf/tool.js";
 import { randomStudentTeacherTool } from "./apps/random-student/tool.js";
@@ -8,7 +12,11 @@ import { seyesTeacherTool } from "./apps/seyes/tool.js";
 // Les anciennes restent dans le projet mais demeurent désactivées jusqu’à leur
 // reconstruction sur le contrat commun (page + surface).
 export const TEACHER_TOOLS = Object.freeze([
+  activityTeacherTool,
+  clockTeacherTool,
   imageTeacherTool,
+  imageLabelsTeacherTool,
+  labelsTeacherTool,
   multiImagesTeacherTool,
   pdfTeacherTool,
   randomStudentTeacherTool,

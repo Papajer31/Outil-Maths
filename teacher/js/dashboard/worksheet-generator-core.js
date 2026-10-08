@@ -19,6 +19,98 @@ export function getWorksheetLayout(perPage, landscape = false){
   return layouts[perPage] || layouts[6];
 }
 
+/**
+ * Géométrie unique des mots mêlés.
+ *
+ * Toutes les valeurs retournées utilisent la même unité que width/height
+ * (millimètres pour le PDF, unités du viewBox pour l’aperçu).
+ * L’aperçu et l’export PDF doivent impérativement passer par cette fonction
+ * afin de rester géométriquement identiques.
+ */
+export function computeWordSearchLayout({
+  width,
+  height,
+  perPage = 6,
+  wordCount = 0,
+  gridSize = 10,
+  showWordList = true
+} = {}){
+  const slotW = Math.max(0.001, Number(width) || 0.001);
+  const slotH = Math.max(0.001, Number(height) || 0.001);
+  const safePerPage = [1, 2, 4, 6].includes(Number(perPage)) ? Number(perPage) : 6;
+  const listRows = Math.max(1, Math.ceil(Math.max(0, Number(wordCount) || 0) / 3));
+  const safeGridSize = Math.max(2, Math.round(Number(gridSize) || 10));
+  const minSlot = Math.min(slotW, slotH);
+
+  const padFactor = safePerPage === 1 ? 0.035 : safePerPage === 2 ? 0.04 : safePerPage === 4 ? 0.045 : 0.055;
+  const listGapFactor = safePerPage === 1 ? 0.028 : safePerPage === 2 ? 0.030 : safePerPage === 4 ? 0.032 : 0.036;
+  const boardWidthFactor = safePerPage === 1 ? 0.82 : safePerPage === 2 || safePerPage === 4 ? 0.80 : 0.78;
+  const boardHeightFactor = safePerPage === 1 ? 0.60 : safePerPage === 2 || safePerPage === 4 ? 0.62 : 0.70;
+
+  const pad = minSlot * padFactor;
+  const x = pad;
+  const y = pad;
+  const w = Math.max(0.001, slotW - (pad * 2));
+  const h = Math.max(0.001, slotH - (pad * 2));
+  const listGap = showWordList ? minSlot * listGapFactor : 0;
+  const boardRowH = showWordList ? Math.min(w * boardWidthFactor, h * boardHeightFactor) : h;
+  const listH = showWordList ? Math.max(0, h - boardRowH - listGap) : 0;
+  const boardSide = Math.min(w, boardRowH);
+  const boardX = x + ((w - boardSide) / 2);
+  const boardY = y + ((boardRowH - boardSide) / 2);
+  const cell = boardSide / safeGridSize;
+  const cellFont = Math.min(cell * 0.58, minSlot * 0.036);
+  // Andika TT (Regular et SemiBold) : (ascent + descent) / 2000 après normalisation PDF.
+  // Utilisé par l’aperçu SVG pour placer exactement la même baseline que textBox() dans le PDF.
+  const fontBaselineOffsetFactor = 0.415;
+
+  const baseListFont = minSlot * 0.029;
+  const compactRowsDenominator = (listRows * 1.08) + (Math.max(0, listRows - 1) * 0.40);
+  const listFont = showWordList && compactRowsDenominator > 0
+    ? Math.min(baseListFont, listH / compactRowsDenominator)
+    : baseListFont;
+  const listLineH = listFont * 1.08;
+  const idealRowGap = Math.min(minSlot * 0.0115, listFont * 0.40);
+  const availableRowGap = listRows > 1
+    ? Math.max(0, (listH - (listRows * listLineH)) / (listRows - 1))
+    : 0;
+  const rowGap = listRows > 1 ? Math.min(idealRowGap, availableRowGap) : 0;
+  const rowStep = listLineH + rowGap;
+  const listY = y + boardRowH + listGap;
+  const listX = x + (w * 0.03);
+  const listW = w * 0.94;
+  const colW = listW / 3;
+
+  return {
+    slotW,
+    slotH,
+    minSlot,
+    pad,
+    x,
+    y,
+    w,
+    h,
+    listRows,
+    listGap,
+    listH,
+    listFont,
+    listLineH,
+    rowGap,
+    rowStep,
+    boardRowH,
+    boardSide,
+    boardX,
+    boardY,
+    cell,
+    cellFont,
+    fontBaselineOffsetFactor,
+    listX,
+    listY,
+    listW,
+    colW
+  };
+}
+
 export function clampInteger(value, min, max, fallback = min){
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
@@ -678,9 +770,17 @@ export function parseWordSearchWords(values){
   return words;
 }
 
-function wordSearchPlacementOptions(grid, word, directions){
+function wordSearchPlacementOptions(grid, word, directions, placements = []){
   const size = grid.length;
   const options = [];
+  const placementMembership = new Map();
+  placements.forEach((placement, placementIndex) => {
+    for (const [row, col] of placement.cells || []) {
+      const key = `${row}:${col}`;
+      if (!placementMembership.has(key)) placementMembership.set(key, []);
+      placementMembership.get(key).push(placementIndex);
+    }
+  });
   for (const [dr, dc] of directions) {
     for (let row = 0; row < size; row += 1) {
       for (let col = 0; col < size; col += 1) {
@@ -689,12 +789,23 @@ function wordSearchPlacementOptions(grid, word, directions){
         if (endRow < 0 || endRow >= size || endCol < 0 || endCol >= size) continue;
         let crossings = 0;
         let valid = true;
+        const sharedByPlacement = new Map();
         for (let index = 0; index < word.length; index += 1) {
           const r = row + (dr * index);
           const c = col + (dc * index);
           const existing = grid[r][c];
           if (existing && existing !== word[index]) { valid = false; break; }
-          if (existing === word[index]) crossings += 1;
+          if (existing === word[index]) {
+            crossings += 1;
+            for (const placementIndex of placementMembership.get(`${r}:${c}`) || []) {
+              const shared = (sharedByPlacement.get(placementIndex) || 0) + 1;
+              // Deux mots peuvent se croiser sur une lettre, mais jamais partager
+              // plusieurs cases : évite par exemple VACHE + CHEVAL -> VACHEVAL.
+              if (shared > 1) { valid = false; break; }
+              sharedByPlacement.set(placementIndex, shared);
+            }
+            if (!valid) break;
+          }
         }
         if (!valid) continue;
         const center = (size - 1) / 2;
@@ -767,7 +878,7 @@ function buildWordSearchCandidate(words, size, directionNames){
   const directions = normalizeWordSearchDirections(directionNames).map((name) => WORD_SEARCH_DIRECTION_VECTORS[name]);
   const ordered = [...words].sort((a,b) => b.normalized.length - a.normalized.length || Math.random() - .5);
   for (const item of ordered) {
-    const options = wordSearchPlacementOptions(grid, item.normalized, directions);
+    const options = wordSearchPlacementOptions(grid, item.normalized, directions, placements);
     if (!options.length) return null;
     const bestScore = options[0].score;
     const nearBest = options.filter((option) => option.score >= bestScore - 8);

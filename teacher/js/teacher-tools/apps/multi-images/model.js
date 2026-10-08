@@ -9,8 +9,13 @@ export const MULTI_IMAGES_BACKGROUND_COLOR = "color";
 export const MULTI_IMAGES_BACKGROUND_TRANSPARENT = "transparent";
 export const MULTI_IMAGES_BACKGROUND_WHITE = "white";
 export const MULTI_IMAGES_DEFAULT_BACKGROUND_COLOR = "#ffffff";
+export const MULTI_IMAGES_DEFAULT_GRID_COLOR = "#64748b";
 export const MULTI_IMAGES_MAX_IMAGES = 80;
 export const MULTI_IMAGES_GAP_DEFAULT = 10;
+export const MULTI_IMAGES_BOARD_LAYOUT_AUTO = "auto";
+export const MULTI_IMAGES_BOARD_LAYOUT_CUSTOM = "custom";
+export const MULTI_IMAGES_BOARD_DIMENSION_MIN = 1;
+export const MULTI_IMAGES_BOARD_DIMENSION_MAX = MULTI_IMAGES_MAX_IMAGES;
 
 const ownedMultiImageObjectUrls = new Map();
 const LEGACY_BACKGROUND_COLORS = Object.freeze({
@@ -93,15 +98,64 @@ export function normalizeMultiImagesGap(){
   return MULTI_IMAGES_GAP_DEFAULT;
 }
 
+export function normalizeMultiImagesBoardLayout(value){
+  return String(value || "").trim() === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM
+    ? MULTI_IMAGES_BOARD_LAYOUT_CUSTOM
+    : MULTI_IMAGES_BOARD_LAYOUT_AUTO;
+}
+
+function normalizeBoardDimension(value, fallback = MULTI_IMAGES_BOARD_DIMENSION_MIN){
+  return normalizeInteger(
+    value,
+    fallback,
+    MULTI_IMAGES_BOARD_DIMENSION_MIN,
+    MULTI_IMAGES_BOARD_DIMENSION_MAX
+  );
+}
+
+function ensureCustomGridCapacity({ rows, columns, count } = {}){
+  const safeRows = normalizeBoardDimension(rows);
+  const safeColumns = normalizeBoardDimension(columns);
+  const safeCount = Math.max(0, Math.trunc(Number(count) || 0));
+  if (!safeCount || safeRows * safeColumns >= safeCount) {
+    return { rows: safeRows, columns: safeColumns };
+  }
+  return {
+    rows: Math.min(
+      MULTI_IMAGES_BOARD_DIMENSION_MAX,
+      Math.max(safeRows, Math.ceil(safeCount / safeColumns))
+    ),
+    columns: safeColumns
+  };
+}
+
+function computeDefaultCustomGrid(count, ratio = 16 / 9){
+  const safeCount = Math.max(1, Math.trunc(Number(count) || 1));
+  const safeRatio = Number.isFinite(Number(ratio)) && Number(ratio) > 0 ? Number(ratio) : 16 / 9;
+  let best = { columns: safeCount, rows: 1, score: Number.POSITIVE_INFINITY };
+
+  for (let columns = 1; columns <= safeCount; columns += 1) {
+    const rows = Math.ceil(safeCount / columns);
+    const gridRatio = columns / rows;
+    const emptyCells = (columns * rows) - safeCount;
+    const score = Math.abs(Math.log(gridRatio / safeRatio)) + emptyCells * 0.055;
+    if (score < best.score) best = { columns, rows, score };
+  }
+
+  return { rows: best.rows, columns: best.columns };
+}
+
 export function normalizeMultiImageItem(rawItem = {}){
   const source = String(rawItem?.source || "").trim();
   if (!source) return null;
   return {
     id: String(rawItem?.id || "").trim() || createImageId(),
     source,
-    sourceKind: ["file", "url"].includes(String(rawItem?.sourceKind || "").trim())
+    sourceKind: ["file", "url", "resource"].includes(String(rawItem?.sourceKind || "").trim())
       ? String(rawItem.sourceKind).trim()
       : "",
+    resourceId: String(rawItem?.resourceId || "").trim(),
+    mimeType: String(rawItem?.mimeType || "").trim(),
     imageName: String(rawItem?.imageName || "Image").trim() || "Image",
     naturalWidth: Math.max(0, Math.trunc(Number(rawItem?.naturalWidth) || 0)),
     naturalHeight: Math.max(0, Math.trunc(Number(rawItem?.naturalHeight) || 0)),
@@ -120,6 +174,14 @@ export function normalizeMultiImagesList(rawImages = []){
 export function normalizeMultiImagesState(rawState = {}){
   const images = normalizeMultiImagesList(rawState.images);
   const mode = normalizeMultiImagesMode(rawState.mode);
+  const boardLayout = normalizeMultiImagesBoardLayout(rawState.boardLayout);
+  const baseBoardGrid = {
+    rows: normalizeBoardDimension(rawState.boardRows),
+    columns: normalizeBoardDimension(rawState.boardColumns)
+  };
+  const boardGrid = boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM
+    ? ensureCustomGridCapacity({ ...baseBoardGrid, count: images.length })
+    : baseBoardGrid;
   const hasExplicitActiveIndex = rawState.activeIndex !== null
     && rawState.activeIndex !== undefined
     && Number.isFinite(Number(rawState.activeIndex));
@@ -147,6 +209,10 @@ export function normalizeMultiImagesState(rawState = {}){
     gap: normalizeMultiImagesGap(rawState.gap),
     background: normalizeMultiImagesBackground(rawState.background),
     backgroundColor: normalizeMultiImagesBackgroundColor(rawState),
+    gridColor: normalizeColorPickerValue(rawState.gridColor, MULTI_IMAGES_DEFAULT_GRID_COLOR),
+    boardLayout,
+    boardRows: boardGrid.rows,
+    boardColumns: boardGrid.columns,
     activeIndex,
     updatedAt: Math.max(0, Math.trunc(Number(rawState.updatedAt) || 0))
   };
@@ -160,6 +226,9 @@ export function createInitialMultiImagesState(){
     gap: MULTI_IMAGES_GAP_DEFAULT,
     background: MULTI_IMAGES_BACKGROUND_COLOR,
     backgroundColor: MULTI_IMAGES_DEFAULT_BACKGROUND_COLOR,
+    boardLayout: MULTI_IMAGES_BOARD_LAYOUT_AUTO,
+    boardRows: MULTI_IMAGES_BOARD_DIMENSION_MIN,
+    boardColumns: MULTI_IMAGES_BOARD_DIMENSION_MIN,
     activeIndex: -1,
     updatedAt: 0
   });
@@ -191,7 +260,9 @@ function createItemFromPayload(payload = {}){
     source,
     sourceKind: isLocalBlob
       ? "file"
-      : (["file", "url"].includes(String(payload?.sourceKind || "").trim()) ? String(payload.sourceKind).trim() : "url"),
+      : (["file", "url", "resource"].includes(String(payload?.sourceKind || "").trim()) ? String(payload.sourceKind).trim() : "url"),
+    resourceId: String(payload?.resourceId || "").trim(),
+    mimeType: String(payload?.mimeType || "").trim(),
     imageName: String(payload?.imageName || "Image").trim() || "Image",
     naturalWidth: payload?.naturalWidth,
     naturalHeight: payload?.naturalHeight,
@@ -381,6 +452,67 @@ export function applyMultiImagesAction({ action, payload = {}, state } = {}){
     return { patch: { state: patchState(currentState, { mode, activeIndex }) } };
   }
 
+  if (safeAction === "set-board-layout") {
+    const boardLayout = normalizeMultiImagesBoardLayout(payload?.boardLayout);
+    let boardRows = currentState.boardRows;
+    let boardColumns = currentState.boardColumns;
+
+    if (boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM
+      && currentState.boardLayout !== MULTI_IMAGES_BOARD_LAYOUT_CUSTOM
+      && currentState.images.length
+      && boardRows * boardColumns < currentState.images.length) {
+      const defaultGrid = computeDefaultCustomGrid(currentState.images.length);
+      boardRows = defaultGrid.rows;
+      boardColumns = defaultGrid.columns;
+    }
+
+    return {
+      patch: {
+        state: patchState(currentState, { boardLayout, boardRows, boardColumns })
+      }
+    };
+  }
+
+  if (safeAction === "set-board-rows") {
+    const boardRows = normalizeBoardDimension(payload?.boardRows, currentState.boardRows);
+    const minimumColumns = currentState.images.length
+      ? Math.ceil(currentState.images.length / boardRows)
+      : MULTI_IMAGES_BOARD_DIMENSION_MIN;
+    const boardColumns = Math.min(
+      MULTI_IMAGES_BOARD_DIMENSION_MAX,
+      Math.max(currentState.boardColumns, minimumColumns)
+    );
+    return {
+      patch: {
+        state: patchState(currentState, {
+          boardLayout: MULTI_IMAGES_BOARD_LAYOUT_CUSTOM,
+          boardRows,
+          boardColumns
+        })
+      }
+    };
+  }
+
+  if (safeAction === "set-board-columns") {
+    const boardColumns = normalizeBoardDimension(payload?.boardColumns, currentState.boardColumns);
+    const minimumRows = currentState.images.length
+      ? Math.ceil(currentState.images.length / boardColumns)
+      : MULTI_IMAGES_BOARD_DIMENSION_MIN;
+    const boardRows = Math.min(
+      MULTI_IMAGES_BOARD_DIMENSION_MAX,
+      Math.max(currentState.boardRows, minimumRows)
+    );
+    return {
+      patch: {
+        state: patchState(currentState, {
+          boardLayout: MULTI_IMAGES_BOARD_LAYOUT_CUSTOM,
+          boardRows,
+          boardColumns
+        })
+      }
+    };
+  }
+
   if (safeAction === "open-gallery") {
     if (!currentState.images.length) return null;
     const activeIndex = normalizeInteger(payload?.activeIndex, 0, 0, currentState.images.length - 1);
@@ -400,6 +532,10 @@ export function applyMultiImagesAction({ action, payload = {}, state } = {}){
 
   if (safeAction === "set-background-color") {
     return { patch: { state: patchState(currentState, { backgroundColor: payload?.backgroundColor }) } };
+  }
+
+  if (safeAction === "set-grid-color") {
+    return { patch: { state: patchState(currentState, { gridColor: payload?.gridColor }) } };
   }
 
   if (safeAction === "set-active-index") {

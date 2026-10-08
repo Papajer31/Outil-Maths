@@ -83,6 +83,7 @@ export function createShuttleMotion(element) {
       if (target && Math.hypot(point.x - target.x, point.y - target.y) < 0.01) return;
       target = { ...point }; queue.push(target); run();
     },
+    isIdle() { return !running && !queue.length; },
     whenIdle() { return !running && !queue.length ? Promise.resolve() : new Promise(resolve => idleWaiters.push(resolve)); },
     setPaused(value) {
       paused = value;

@@ -715,8 +715,9 @@ export function renderSessionView(root){
     if (!engine || exitConfirmOpen) return;
 
     if (command === "pause") {
-      if (engine.getUiState?.().pauseAllowed === true && !engine.isPaused?.()) {
-        engine.pauseForInterruption?.();
+      const force = message?.force === true;
+      if ((force || engine.getUiState?.().pauseAllowed === true) && !engine.isPaused?.()) {
+        engine.pauseForInterruption?.({ force });
       }
       sendProjectedStatus();
       return;
@@ -1041,13 +1042,15 @@ export function renderSessionView(root){
     if (els.btnNextTool) els.btnNextTool.disabled = !ui.canGoNextTool;
     if (els.btnProjectedRestart) els.btnProjectedRestart.disabled = !String(ui.currentInstanceId || "").trim();
 
+    const adaptiveAvailable = item?.adaptiveAvailable === true;
+    if (els.projectedTeacherLevelBlock) els.projectedTeacherLevelBlock.hidden = !adaptiveAvailable;
     const level = Math.max(1, Math.min(5, Math.trunc(Number(item?.level) || 3)));
     els.projectedLevelButtons?.forEach?.((button) => {
       const buttonLevel = Math.trunc(Number(button.dataset.projectedLevel));
-      const active = buttonLevel === level;
+      const active = adaptiveAvailable && buttonLevel === level;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", active ? "true" : "false");
-      button.disabled = !item;
+      button.disabled = !item || !adaptiveAvailable;
     });
   }
 
@@ -1059,7 +1062,7 @@ export function renderSessionView(root){
     const playlist = getProjectedPlaylistMeta();
     const item = index >= 0 ? playlist[index] : null;
     const instanceId = String(ui.currentInstanceId || item?.instanceId || "").trim();
-    if (!item || !instanceId) return false;
+    if (!item || !instanceId || item.adaptiveAvailable !== true) return false;
 
     const previousLevel = Math.max(1, Math.min(5, Math.trunc(Number(item.level) || 3)));
     if (previousLevel === nextLevel) {

@@ -62,11 +62,15 @@ function normalizeStroke(raw = {}){
   const width = tool === "eraser"
     ? clamp(raw.width, MIN_ANNOTATION_ERASER_WIDTH, MAX_ANNOTATION_ERASER_WIDTH, fallbackWidth)
     : clamp(raw.width, MIN_ANNOTATION_WIDTH, MAX_ANNOTATION_WIDTH, fallbackWidth);
+  const scrollX = Number(raw.scrollX);
+  const scrollY = Number(raw.scrollY);
   return {
     id: String(raw.id || `stroke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
     tool,
     color: normalizeColor(raw.color),
     width,
+    scrollX: Number.isFinite(scrollX) ? scrollX : 0,
+    scrollY: Number.isFinite(scrollY) ? scrollY : 0,
     points
   };
 }

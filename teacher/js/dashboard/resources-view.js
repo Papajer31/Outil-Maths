@@ -1200,6 +1200,9 @@ export function createResourcesViewController({
   function render(){
     updateStorageQuota();
     if (!list) return;
+    // A background reload must not replace a screen opened in the shared host.
+    if (view?.classList.contains("is-lexical-bank-open")
+      || view?.classList.contains("is-worksheet-generator-open")) return;
     if (personalLoadError) {
       list.classList.add("dashboard-explorer-host");
       list.innerHTML = `<div class="dashboard-activity-empty-state">${escapeHtml(personalLoadError)}</div>`;

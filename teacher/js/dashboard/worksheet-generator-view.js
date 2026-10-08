@@ -1,5 +1,6 @@
 import {
   WORKSHEET_LAYOUTS,
+  computeWordSearchLayout,
   clampInteger,
   generateMagicSquareWorksheet,
   generateNumberMysteryWorksheet,
@@ -390,56 +391,88 @@ function renderNumberMysteryCard(exercise, { showSolutions = false } = {}){
   `;
 }
 
-function renderWordSearchSolutionContours(placements, size){
-  const contours = (placements || []).map((placement) => {
+function renderWordSearchSolutionContours(placements, layout, size){
+  const cell = layout.boardSide / size;
+  return (placements || []).map((placement) => {
     const cells = Array.isArray(placement?.cells) ? placement.cells : [];
     const first = cells[0];
     const last = cells.at(-1);
     if (!Array.isArray(first) || !Array.isArray(last)) return "";
 
-    const startRow = Number(first[0]) || 0;
-    const startColumn = Number(first[1]) || 0;
-    const endRow = Number(last[0]) || 0;
-    const endColumn = Number(last[1]) || 0;
-    const deltaX = endColumn - startColumn;
-    const deltaY = endRow - startRow;
-    const centerX = (startColumn + endColumn + 1) / 2;
-    const centerY = (startRow + endRow + 1) / 2;
-    const length = Math.hypot(deltaX, deltaY) + 0.84;
+    const startX = layout.boardX + ((Number(first[1]) + 0.5) * cell);
+    const startY = layout.boardY + ((Number(first[0]) + 0.5) * cell);
+    const endX = layout.boardX + ((Number(last[1]) + 0.5) * cell);
+    const endY = layout.boardY + ((Number(last[0]) + 0.5) * cell);
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    const centerX = (startX + endX) / 2;
+    const centerY = (startY + endY) / 2;
+    const length = Math.hypot(deltaX, deltaY) + (cell * 0.84);
+    const height = cell * 0.84;
     const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
     const x = centerX - (length / 2);
-    const y = centerY - 0.42;
-    const number = (value) => Number(value.toFixed(4));
-
-    return `<rect x="${number(x)}" y="${number(y)}" width="${number(length)}" height=".84" rx=".16" transform="rotate(${number(angle)} ${number(centerX)} ${number(centerY)})"></rect>`;
+    const y = centerY - (height / 2);
+    const rx = cell * 0.1596;
+    return `<rect x="${escapeAttr(x)}" y="${escapeAttr(y)}" width="${escapeAttr(length)}" height="${escapeAttr(height)}" rx="${escapeAttr(rx)}" transform="rotate(${escapeAttr(angle)} ${escapeAttr(centerX)} ${escapeAttr(centerY)})"></rect>`;
   }).join("");
-
-  if (!contours) return "";
-  return `<svg class="dashboard-word-search-solution-contours" viewBox="0 0 ${escapeAttr(size)} ${escapeAttr(size)}" aria-hidden="true" focusable="false">${contours}</svg>`;
 }
 
-function renderWordSearchCard(exercise, { showSolutions = false, showWordList = true } = {}){
-  const size = Number(exercise?.gridSize) || 10;
+function renderWordSearchCard(exercise, {
+  showSolutions = false,
+  showWordList = true,
+  perPage = 6,
+  slotWidth = 100,
+  slotHeight = 100
+} = {}){
+  const size = Math.max(2, Number(exercise?.gridSize) || 10);
   const words = Array.isArray(exercise?.words) ? exercise.words : [];
-  const wordListRows = Math.max(1, Math.ceil(words.length / 3));
-  const wordListHtml = words.map((word, index) => {
-    const column = Math.min(3, Math.floor(index / wordListRows) + 1);
-    const row = (index % wordListRows) + 1;
-    return `<span style="grid-column:${column};grid-row:${row}">${escapeHtml(word)}</span>`;
-  }).join("");
+  const layout = computeWordSearchLayout({
+    width:slotWidth,
+    height:slotHeight,
+    perPage,
+    wordCount:words.length,
+    gridSize:size,
+    showWordList
+  });
+  const cell = layout.cell;
+  const cellFont = layout.cellFont;
+  const grid = Array.isArray(exercise?.grid) ? exercise.grid : [];
+  const gridSvg = Array.from({ length:size }, (_, row) =>
+    Array.from({ length:size }, (_, col) => {
+      const x = layout.boardX + (col * cell);
+      const y = layout.boardY + (row * cell);
+      const cx = x + (cell / 2);
+      const baselineY = y + (cell / 2) + (cellFont * layout.fontBaselineOffsetFactor);
+      return `
+        <rect class="dashboard-word-search-grid-cell" x="${escapeAttr(x)}" y="${escapeAttr(y)}" width="${escapeAttr(cell)}" height="${escapeAttr(cell)}"></rect>
+        <text class="dashboard-word-search-grid-letter" x="${escapeAttr(cx)}" y="${escapeAttr(baselineY)}" font-size="${escapeAttr(cellFont)}">${escapeHtml(String(grid[row]?.[col] ?? ""))}</text>`;
+    }).join("")
+  ).join("");
+
+  const wordListSvg = showWordList ? words.map((word, index) => {
+    const col = Math.min(2, Math.floor(index / layout.listRows));
+    const row = index % layout.listRows;
+    const x = layout.listX + (col * layout.colW) + (layout.colW / 2);
+    const y = layout.listY + (row * layout.rowStep) + (layout.listLineH / 2)
+      + (layout.listFont * layout.fontBaselineOffsetFactor);
+    return `<text class="dashboard-word-search-list-word" x="${escapeAttr(x)}" y="${escapeAttr(y)}" font-size="${escapeAttr(layout.listFont)}">${escapeHtml(word)}</text>`;
+  }).join("") : "";
+
+  const contours = showSolutions ? renderWordSearchSolutionContours(exercise?.placements, layout, size) : "";
+
   return `
     <article class="dashboard-word-search-card ${showWordList ? "has-word-list" : ""} ${showSolutions ? "is-solution" : ""}">
-      <div class="dashboard-word-search-board-wrap">
-        <div class="dashboard-word-search-board" style="--word-search-size:${escapeAttr(size)}" role="table" aria-label="Grille de mots mêlés">
-          ${(exercise?.grid || []).flatMap((row, rowIndex) => (row || []).map((letter, colIndex) => `
-            <div class="dashboard-word-search-cell" role="cell">${escapeHtml(letter)}</div>
-          `)).join("")}
-          ${showSolutions ? renderWordSearchSolutionContours(exercise?.placements, size) : ""}
-        </div>
-      </div>
-      ${showWordList ? `
-        <div class="dashboard-word-search-word-list" style="--word-search-list-rows:${escapeAttr(wordListRows)}">${wordListHtml}</div>
-      ` : ""}
+      <svg
+        class="dashboard-word-search-svg"
+        viewBox="0 0 ${escapeAttr(layout.slotW)} ${escapeAttr(layout.slotH)}"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label="Grille de mots mêlés"
+      >
+        ${gridSvg}
+        ${contours ? `<g class="dashboard-word-search-solution-contours" fill="none" stroke-width="${escapeAttr(cell * 0.075)}">${contours}</g>` : ""}
+        ${wordListSvg}
+      </svg>
     </article>
   `;
 }
@@ -685,6 +718,7 @@ function renderWorksheetSlot(exercise, index, layout, {
   showSolutions = false,
   showSums = true,
   showWordList = true,
+  perPage = 6,
   slotWidth = 100,
   slotHeight = 100
 } = {}){
@@ -696,7 +730,7 @@ function renderWorksheetSlot(exercise, index, layout, {
   const card = generatorId === PENTOMINO_GENERATOR_ID
     ? renderPentominoCard(exercise, { showSolutions, slotWidth, slotHeight })
     : generatorId === WORD_SEARCH_GENERATOR_ID
-      ? renderWordSearchCard(exercise, { showSolutions, showWordList })
+      ? renderWordSearchCard(exercise, { showSolutions, showWordList, slotWidth, slotHeight, perPage })
       : generatorId === NUMBER_MYSTERY_GENERATOR_ID
         ? renderNumberMysteryCard(exercise, { showSolutions })
         : renderMagicSquareCard(exercise, { showSolutions, showSums });
@@ -777,6 +811,7 @@ function renderWorksheetPages(exercises, {
           showSolutions,
           showSums,
           showWordList,
+          perPage:safePerPage,
           slotWidth:printMetrics.slotWidthMm,
           slotHeight:printMetrics.slotHeightMm
         })).join("")}

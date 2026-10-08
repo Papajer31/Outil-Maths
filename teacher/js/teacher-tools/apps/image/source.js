@@ -156,6 +156,105 @@ export function loadImageDimensions(source){
   });
 }
 
+const IMAGE_CLIPBOARD_EXTENSIONS = Object.freeze({
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp"
+});
+
+/** Plusieurs fichiers peuvent être présents dans files alors que items n'en expose qu'un. */
+export function imageFilesFromPasteEvent(event){
+  const clipboard = event?.clipboardData;
+  if (!clipboard) return [];
+
+  const itemFiles = [];
+  for (const item of Array.from(clipboard.items || [])) {
+    if (item.kind !== "file" || !String(item.type || "").startsWith("image/")) continue;
+    const file = item.getAsFile?.();
+    if (file) itemFiles.push(file);
+  }
+  const directFiles = Array.from(clipboard.files || [])
+    .filter((file) => String(file?.type || "").startsWith("image/"));
+  return directFiles.length > itemFiles.length ? directFiles : itemFiles;
+}
+
+export function imageFileFromPasteEvent(event){
+  return imageFilesFromPasteEvent(event)[0] || null;
+}
+
+/**
+ * Certains éditeurs copient plusieurs images dans du HTML, mais ne livrent
+ * qu'une vignette bitmap dans le presse-papiers. Dans ce cas on récupère les
+ * images distinctes du HTML (URL web ou image intégrée data:).
+ */
+function imageSourcesFromClipboardHtml(html){
+  if (!html || typeof DOMParser === "undefined") return [];
+  try {
+    const document = new DOMParser().parseFromString(String(html), "text/html");
+    return Array.from(document.querySelectorAll("img[src]"))
+      .map((image) => String(image.getAttribute("src") || "").trim())
+      .filter((src) => /^https?:\/\//i.test(src) || /^data:image\/[\w.+-]+(?:;[^,]*)?,/i.test(src));
+  } catch {
+    return [];
+  }
+}
+
+function selectClipboardImageEntries(files, html){
+  const fileEntries = (Array.isArray(files) ? files : []).map((file) => ({ file }));
+  const htmlEntries = imageSourcesFromClipboardHtml(html).map((source) => ({ source }));
+  // Ne jamais préférer une représentation HTML incomplète aux fichiers directs.
+  return htmlEntries.length >= 2 && htmlEntries.length > fileEntries.length
+    ? htmlEntries
+    : fileEntries;
+}
+
+/** À appeler pendant paste : la lecture du DataTransfer ne peut pas attendre. */
+export function imageEntriesFromPasteEvent(event){
+  const clipboard = event?.clipboardData;
+  if (!clipboard) return [];
+  const html = typeof clipboard.getData === "function" ? clipboard.getData("text/html") : "";
+  return selectClipboardImageEntries(imageFilesFromPasteEvent(event), html);
+}
+
+/** Bouton Coller : Clipboard API disponible sur HTTPS, avec autorisation du navigateur. */
+export async function readImageEntriesFromClipboard(){
+  if (typeof navigator === "undefined" || typeof navigator.clipboard?.read !== "function") {
+    throw new Error("Lecture du presse-papiers indisponible. Utilise Ctrl + V dans le Tableau.");
+  }
+  const items = await navigator.clipboard.read();
+  const files = [];
+  let html = "";
+  for (const item of items) {
+    const mime = Array.from(item.types || []).find((type) => String(type).startsWith("image/"));
+    if (mime) {
+      const blob = await item.getType(mime);
+      const extension = IMAGE_CLIPBOARD_EXTENSIONS[mime] || "png";
+      files.push(new File([blob], `Image collée ${files.length + 1}.${extension}`, { type: mime }));
+    }
+    if (item.types?.includes("text/html")) {
+      try { html += await (await item.getType("text/html")).text(); } catch {}
+    }
+  }
+  const entries = selectClipboardImageEntries(files, html);
+  if (!entries.length) throw new Error("Le presse-papiers ne contient pas d’image.");
+  return entries;
+}
+
+export async function readImageFilesFromClipboard(){
+  const entries = await readImageEntriesFromClipboard();
+  const files = entries.map((entry) => entry.file).filter(Boolean);
+  if (!files.length) throw new Error("Le presse-papiers ne contient pas de fichier image.");
+  return files;
+}
+
+export async function readImageFileFromClipboard(){
+  const files = await readImageFilesFromClipboard();
+  return files[0] || null;
+}
+
 export async function prepareImageFilePayload(file){
   if (!file) throw new Error("Choisis un fichier image.");
   if (!String(file.type || "").startsWith("image/")) {
@@ -192,5 +291,20 @@ export async function prepareImageUrlPayload(value){
     imageName: source,
     naturalWidth: dimensions.naturalWidth,
     naturalHeight: dimensions.naturalHeight
+  };
+}
+
+export async function prepareImageResourcePayload(resourceAsset){
+  const source = String(resourceAsset?.url || resourceAsset?.src || "").trim();
+  const resourceId = String(resourceAsset?.resourceId || resourceAsset?.resource_id || "").trim();
+  if (!source || !resourceId) throw new Error("Ressource image indisponible.");
+  return {
+    source,
+    sourceKind:"resource",
+    resourceId,
+    imageName:String(resourceAsset?.label || resourceAsset?.title || "Image").trim() || "Image",
+    naturalWidth:Math.max(0, Number(resourceAsset?.width) || 0),
+    naturalHeight:Math.max(0, Number(resourceAsset?.height) || 0),
+    mimeType:String(resourceAsset?.mimeType || resourceAsset?.mime_type || "image/*")
   };
 }

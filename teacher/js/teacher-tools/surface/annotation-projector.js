@@ -36,6 +36,8 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
   let colorMenuOpen = false;
   let noteLauncherPosition = normalizeLauncherPosition(launcherPosition);
   let suppressToggleClick = false;
+  let scrollTarget = null;
+  let draftScroll = { x:0, y:0 };
 
   function normalizeLauncherPosition(value){
     const x = Number(value?.x);
@@ -54,6 +56,13 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     return layer?.getContext?.("2d") || null;
   }
 
+  function getScroll(){
+    return {
+      x: Math.max(0, Number(scrollTarget?.scrollLeft) || 0),
+      y: Math.max(0, Number(scrollTarget?.scrollTop) || 0)
+    };
+  }
+
   function normalizedPoint(event){
     const rect = getRect();
     return {
@@ -62,11 +71,12 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     };
   }
 
-  function cssPoint(point){
+  function cssPoint(point, stroke = null){
     const rect = getRect();
+    const scroll = getScroll();
     return {
-      x: (Number(point?.x) || 0) * rect.width,
-      y: (Number(point?.y) || 0) * rect.height
+      x: (Number(point?.x) || 0) * rect.width + (Number(stroke?.scrollX) || 0) - scroll.x,
+      y: (Number(point?.y) || 0) * rect.height + (Number(stroke?.scrollY) || 0) - scroll.y
     };
   }
 
@@ -113,7 +123,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     const isEraser = stroke.tool === "eraser";
     const minDim = Math.max(1, Math.min(rect.width, rect.height));
     const lineWidth = Math.max(isEraser ? 10 : 2, (Number(stroke.width) || 0.0045) * minDim);
-    const first = cssPoint(points[0]);
+    const first = cssPoint(points[0], stroke);
 
     ctx.save();
     ctx.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
@@ -134,7 +144,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
     for (let index = 1; index < points.length; index += 1) {
-      const point = cssPoint(points[index]);
+      const point = cssPoint(points[index], stroke);
       ctx.lineTo(point.x, point.y);
     }
     ctx.stroke();
@@ -145,6 +155,19 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     resizeCanvas();
     clearCanvas();
     state.strokes.forEach(drawStroke);
+  }
+
+  function onScroll(){
+    renderStrokes();
+  }
+
+  function setScrollTarget(nextTarget){
+    const next = nextTarget && typeof nextTarget.addEventListener === "function" ? nextTarget : null;
+    if (scrollTarget === next) return;
+    scrollTarget?.removeEventListener?.("scroll", onScroll);
+    scrollTarget = next;
+    scrollTarget?.addEventListener?.("scroll", onScroll, { passive:true });
+    renderStrokes();
   }
 
   function ensureEraserCursor(){
@@ -388,6 +411,8 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
       tool,
       color: state.color,
       width: tool === "eraser" ? state.eraserWidth : state.width,
+      scrollX: draftScroll.x,
+      scrollY: draftScroll.y,
       points: previous ? [previous, next] : [next]
     });
   }
@@ -402,6 +427,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     renderToolbar();
     try { layer?.setPointerCapture?.(event.pointerId); } catch {}
     const point = normalizedPoint(event);
+    draftScroll = getScroll();
     draftPoints = [point];
     if (draftTool !== "line") drawDraftSegment(null, point);
     updateEraserCursor(event, true);
@@ -424,7 +450,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
       if (draftPoints.length === 1 || Math.hypot(dx, dy) >= MIN_POINT_DISTANCE_PX) {
         draftPoints = [start, next];
         renderStrokes();
-        drawStroke({ tool: "line", color: state.color, width: state.width, points: draftPoints });
+        drawStroke({ tool: "line", color: state.color, width: state.width, scrollX:draftScroll.x, scrollY:draftScroll.y, points: draftPoints });
       }
     } else {
       const prev = draftPoints[draftPoints.length - 1];
@@ -451,6 +477,8 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
           tool: draftTool,
           color: state.color,
           width: draftTool === "eraser" ? state.eraserWidth : state.width,
+          scrollX: draftScroll.x,
+          scrollY: draftScroll.y,
           points: draftPoints
         }
       });
@@ -459,6 +487,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     }
     activePointerId = null;
     draftPoints = [];
+    draftScroll = { x:0, y:0 };
     updateEraserCursor(event, false);
     event.preventDefault();
     event.stopPropagation();
@@ -468,6 +497,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     if (event.pointerId !== activePointerId) return;
     activePointerId = null;
     draftPoints = [];
+    draftScroll = { x:0, y:0 };
     updateEraserCursor(event, false);
     renderStrokes();
   }
@@ -487,6 +517,7 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
   render(state);
   return {
     render,
+    setScrollTarget,
     setLauncherPosition(next){
       noteLauncherPosition = normalizeLauncherPosition(next);
       applyToolbarPosition();
@@ -494,6 +525,8 @@ export function createAnnotationProjector({ stage, layer, toolbar, onAction, lau
     destroy(){
       resizeObserver?.disconnect?.();
       resizeObserver = null;
+      scrollTarget?.removeEventListener?.("scroll", onScroll);
+      scrollTarget = null;
       layer?.removeEventListener("pointerdown", onPointerDown);
       layer?.removeEventListener("pointermove", onPointerMove);
       layer?.removeEventListener("pointerup", finishPointer);

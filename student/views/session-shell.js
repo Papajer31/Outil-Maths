@@ -225,6 +225,7 @@ export function getSessionShellRefs(root) {
     projectedTeacherDock: root.querySelector("#projectedTeacherDock"),
     projectedTeacherActivityTitle: root.querySelector("#projectedTeacherActivityTitle"),
     projectedTeacherActivityPosition: root.querySelector("#projectedTeacherActivityPosition"),
+    projectedTeacherLevelBlock: root.querySelector(".projected-teacher-level-block"),
     projectedLevelButtons: Array.from(root.querySelectorAll("[data-projected-level]")),
     manualActionBtn: root.querySelector("#btnManualAction"),
     viewport: root.querySelector("#sessionViewport"),

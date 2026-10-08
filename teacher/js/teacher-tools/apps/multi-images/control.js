@@ -1,4 +1,8 @@
 import {
+  MULTI_IMAGES_BOARD_DIMENSION_MAX,
+  MULTI_IMAGES_BOARD_DIMENSION_MIN,
+  MULTI_IMAGES_BOARD_LAYOUT_AUTO,
+  MULTI_IMAGES_BOARD_LAYOUT_CUSTOM,
   MULTI_IMAGES_MAX_IMAGES,
   MULTI_IMAGES_MODE_BOARD,
   MULTI_IMAGES_MODE_GALLERY,
@@ -7,15 +11,44 @@ import {
 } from "./model.js";
 import {
   prepareImageFilePayload,
+  prepareImageResourcePayload,
   prepareImageUrlPayload
 } from "../image/source.js";
 import { escapeAttr, escapeHtml } from "../../../dashboard/text-utils.js";
 import { createColorPicker } from "../../../../../shared/color-picker.js";
+import { openToolAssetPicker } from "../../../../../shared/tool-assets/asset-picker.js";
+import { loadTeacherResourceAssets } from "../../../../../shared/tool-assets/resource-assets.js";
 
 function getDimensionsLabel(image){
   return image?.naturalWidth && image?.naturalHeight
     ? `${image.naturalWidth} × ${image.naturalHeight}`
     : "dimensions inconnues";
+}
+
+function renderBoardDimensionStepper({ id, label, value } = {}){
+  const safeId = String(id || "").trim();
+  const safeValue = Math.max(
+    MULTI_IMAGES_BOARD_DIMENSION_MIN,
+    Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(value) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+  );
+  const action = safeId === "rows" ? "set-board-rows" : "set-board-columns";
+  const payloadKey = safeId === "rows" ? "boardRows" : "boardColumns";
+  const inputId = `ttMultiImagesBoard${safeId.charAt(0).toUpperCase()}${safeId.slice(1)}`;
+
+  return `
+    <div class="tt-multi-images-grid-stepper-field">
+      <span class="tt-multi-images-grid-stepper-label">${escapeHtml(label)}</span>
+      <div class="tv-stepper tv-stepper-no-inline-label tt-multi-images-grid-stepper">
+        <button class="tv-stepper-btn" type="button" data-multi-images-grid-action="${escapeAttr(action)}" data-multi-images-grid-key="${escapeAttr(payloadKey)}" data-multi-images-grid-value="${safeValue - 1}" aria-label="Diminuer ${escapeAttr(label)}" ${safeValue <= MULTI_IMAGES_BOARD_DIMENSION_MIN ? "disabled" : ""}>
+          <span class="tv-stepper-icon" aria-hidden="true">remove</span>
+        </button>
+        <input id="${escapeAttr(inputId)}" class="tv-input tv-input-stepper" type="number" min="${MULTI_IMAGES_BOARD_DIMENSION_MIN}" max="${MULTI_IMAGES_BOARD_DIMENSION_MAX}" step="1" value="${safeValue}" inputmode="numeric" data-multi-images-grid-input="${escapeAttr(action)}" data-multi-images-grid-key="${escapeAttr(payloadKey)}" aria-label="${escapeAttr(label)}">
+        <button class="tv-stepper-btn" type="button" data-multi-images-grid-action="${escapeAttr(action)}" data-multi-images-grid-key="${escapeAttr(payloadKey)}" data-multi-images-grid-value="${safeValue + 1}" aria-label="Augmenter ${escapeAttr(label)}" ${safeValue >= MULTI_IMAGES_BOARD_DIMENSION_MAX ? "disabled" : ""}>
+          <span class="tv-stepper-icon" aria-hidden="true">add</span>
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 function renderThumb(image, index, state){
@@ -31,7 +64,16 @@ function renderThumb(image, index, state){
   `;
 }
 
-export function createMultiImagesControlPanel({ host, getWidget, updateWidget, showToast } = {}){
+export function createMultiImagesControlPanel({
+  host,
+  getWidget,
+  updateWidget,
+  showToast,
+  getTeacherSpace,
+  listResourcesForSpace,
+  listResourceFoldersForSpace,
+  createResourceSignedUrl
+} = {}){
   function getCurrentState(){
     return normalizeMultiImagesState(getWidget?.()?.state);
   }
@@ -105,6 +147,46 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
       if (input) input.value = "";
     } catch (error) {
       showToast?.(error?.message || "Impossible de charger cette URL d'image.", { isError: true });
+    }
+  }
+
+
+  async function addImagesFromResources(){
+    const state = getCurrentState();
+    const availableSlots = Math.max(0, MULTI_IMAGES_MAX_IMAGES - state.images.length);
+    if (availableSlots <= 0) {
+      showToast?.(`Limite : ${MULTI_IMAGES_MAX_IMAGES} images.`, { isError: true });
+      return;
+    }
+    const teacherSpaceId = Number(getTeacherSpace?.()?.id);
+    if (!Number.isSafeInteger(teacherSpaceId) || teacherSpaceId <= 0) {
+      showToast?.("Les ressources sont indisponibles pour cet espace.", { isError:true });
+      return;
+    }
+    try {
+      const selection = await openToolAssetPicker({
+        type:"image",
+        title:"Ajouter des images",
+        multiple:true,
+        confirmLabel:"Ajouter",
+        loadAssets:() => loadTeacherResourceAssets({
+          teacherSpaceId,
+          type:"image",
+          listResourcesForSpace,
+          listResourceFoldersForSpace,
+          createResourceSignedUrl
+        }),
+        emptyMessage:"Aucune image disponible dans ce dossier."
+      });
+      const assets = Array.isArray(selection) ? selection.slice(0, availableSlots) : [];
+      if (!assets.length) return;
+      if (selection.length > availableSlots) {
+        showToast?.(`Certaines images n’ont pas été ajoutées : limite à ${MULTI_IMAGES_MAX_IMAGES}.`);
+      }
+      const payloads = await Promise.all(assets.map((asset) => prepareImageResourcePayload(asset)));
+      commitAction("add-images", { images: payloads });
+    } catch (error) {
+      showToast?.(error?.message || "Impossible d’importer ces images.", { isError:true });
     }
   }
 
@@ -246,9 +328,18 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
             <span>Ajouter</span>
             <input id="ttMultiImagesAddInput" type="file" accept="image/*" multiple>
           </label>
+          <button id="ttMultiImagesPickResources" class="tt-widget-action-btn" type="button">
+            <span class="dashboard-material-icon" aria-hidden="true">photo_library</span>
+            <span>Ressources</span>
+          </button>
           <div class="tt-multi-images-color-control">
             <div id="ttMultiImagesBackgroundColorPicker" class="tt-multi-images-color-picker-slot"></div>
           </div>
+          ${state.mode === MULTI_IMAGES_MODE_BOARD ? `
+            <div class="tt-multi-images-color-control" title="Couleur de la grille du tableau">
+              <div id="ttMultiImagesGridColorPicker" class="tt-multi-images-color-picker-slot"></div>
+            </div>
+          ` : ""}
           <button id="ttMultiImagesShuffle" class="tt-widget-action-btn" type="button" ${count > 1 ? "" : "disabled"}>
             <span class="dashboard-material-icon" aria-hidden="true">shuffle</span>
             <span>Mélanger</span>
@@ -273,15 +364,30 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
         <div class="tt-multi-images-settings-card">
           <span class="tt-multi-images-settings-label">Affichage</span>
           <div class="tt-multi-images-mode-group" role="group" aria-label="Mode d’affichage">
-            <button class="tt-widget-action-btn tt-multi-images-mode-btn${state.mode === MULTI_IMAGES_MODE_BOARD ? " is-active" : ""}" type="button" data-multi-images-mode="${MULTI_IMAGES_MODE_BOARD}" aria-pressed="${state.mode === MULTI_IMAGES_MODE_BOARD ? "true" : "false"}">
-              <span class="dashboard-material-icon" aria-hidden="true">grid_view</span>
-              <span>Tableau</span>
-            </button>
             <button class="tt-widget-action-btn tt-multi-images-mode-btn${state.mode === MULTI_IMAGES_MODE_GALLERY ? " is-active" : ""}" type="button" data-multi-images-mode="${MULTI_IMAGES_MODE_GALLERY}" aria-pressed="${state.mode === MULTI_IMAGES_MODE_GALLERY ? "true" : "false"}">
               <span class="dashboard-material-icon" aria-hidden="true">view_carousel</span>
               <span>Galerie</span>
             </button>
+            <button class="tt-widget-action-btn tt-multi-images-mode-btn${state.mode === MULTI_IMAGES_MODE_BOARD ? " is-active" : ""}" type="button" data-multi-images-mode="${MULTI_IMAGES_MODE_BOARD}" aria-pressed="${state.mode === MULTI_IMAGES_MODE_BOARD ? "true" : "false"}">
+              <span class="dashboard-material-icon" aria-hidden="true">grid_view</span>
+              <span>Tableau</span>
+            </button>
           </div>
+          ${state.mode === MULTI_IMAGES_MODE_BOARD ? `
+            <div class="tt-multi-images-layout-row">
+              <span class="tt-multi-images-settings-label">Disposition</span>
+              <div class="tt-multi-images-layout-group" role="group" aria-label="Disposition du tableau">
+                <button class="tt-widget-action-btn tt-multi-images-layout-btn${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_AUTO ? " is-active" : ""}" type="button" data-multi-images-board-layout="${MULTI_IMAGES_BOARD_LAYOUT_AUTO}" aria-pressed="${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_AUTO ? "true" : "false"}">Automatique</button>
+                <button class="tt-widget-action-btn tt-multi-images-layout-btn${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? " is-active" : ""}" type="button" data-multi-images-board-layout="${MULTI_IMAGES_BOARD_LAYOUT_CUSTOM}" aria-pressed="${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? "true" : "false"}">Personnalisée</button>
+              </div>
+              ${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? `
+                <div class="tt-multi-images-grid-controls" aria-label="Dimensions du tableau">
+                  ${renderBoardDimensionStepper({ id:"rows", label:"Lignes", value:state.boardRows })}
+                  ${renderBoardDimensionStepper({ id:"columns", label:"Colonnes", value:state.boardColumns })}
+                </div>
+              ` : ""}
+            </div>
+          ` : ""}
         </div>
 
         ${activeImage ? `
@@ -295,7 +401,7 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
         ` : `
           <div class="tt-multi-images-empty-card">
             <strong>Aucune image sélectionnée.</strong>
-            <span>Choisis plusieurs images locales ou ajoute des URL une par une.</span>
+            <span>Choisis plusieurs images locales, ajoute des ressources du site ou des URL une par une.</span>
           </div>
         `}
 
@@ -315,6 +421,7 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
       addImagesFromFiles(event.currentTarget.files);
       event.currentTarget.value = "";
     });
+    host.querySelector("#ttMultiImagesPickResources")?.addEventListener("click", () => { void addImagesFromResources(); });
     host.querySelector("#ttMultiImagesLoadUrl")?.addEventListener("click", addImageFromUrl);
     host.querySelector("#ttMultiImagesUrlInput")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") addImageFromUrl();
@@ -324,6 +431,33 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
         mode: button.dataset.multiImagesMode
       }));
     });
+    host.querySelectorAll("[data-multi-images-board-layout]").forEach((button) => {
+      button.addEventListener("click", () => commitAction("set-board-layout", {
+        boardLayout: button.dataset.multiImagesBoardLayout
+      }));
+    });
+    host.querySelectorAll("[data-multi-images-grid-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.multiImagesGridAction;
+        const key = button.dataset.multiImagesGridKey;
+        const value = Math.max(
+          MULTI_IMAGES_BOARD_DIMENSION_MIN,
+          Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(button.dataset.multiImagesGridValue) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+        );
+        commitAction(action, { [key]: value });
+      });
+    });
+    host.querySelectorAll("[data-multi-images-grid-input]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const action = input.dataset.multiImagesGridInput;
+        const key = input.dataset.multiImagesGridKey;
+        const value = Math.max(
+          MULTI_IMAGES_BOARD_DIMENSION_MIN,
+          Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(input.value) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+        );
+        commitAction(action, { [key]: value });
+      });
+    });
     createColorPicker({
       host: host.querySelector("#ttMultiImagesBackgroundColorPicker"),
       value: state.backgroundColor,
@@ -332,6 +466,16 @@ export function createMultiImagesControlPanel({ host, getWidget, updateWidget, s
       popup: true,
       onChange(value){
         commitAction("set-background-color", { backgroundColor: value }, { renderAfter: false });
+      }
+    });
+    createColorPicker({
+      host: host.querySelector("#ttMultiImagesGridColorPicker"),
+      value: state.gridColor,
+      label: "Grille",
+      headerLabel: "",
+      popup: true,
+      onChange(value){
+        commitAction("set-grid-color", { gridColor: value }, { renderAfter: false });
       }
     });
     host.querySelector("#ttMultiImagesShuffle")?.addEventListener("click", () => commitAction("shuffle-images"));

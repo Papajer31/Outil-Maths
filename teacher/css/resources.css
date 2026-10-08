@@ -517,27 +517,27 @@ button.dashboard-resource-detail-tag:focus-visible{
 /* =========================================================
    Banque lexicale — Ressources > Mots
    ========================================================= */
-.dashboard-resources-view.is-lexical-bank-open .dashboard-resource-storage-quota,
-.dashboard-resources-view.is-lexical-bank-open .dashboard-resources-header .dashboard-config-header-actions{
+.dashboard-resources-view.is-lexical-bank-open .dashboard-resources-header{
   display:none;
 }
 
+.dashboard-resources-view.is-lexical-bank-open > .dashboard-content-scroll{
+  padding:0;
+  overflow:hidden;
+  scrollbar-gutter:auto;
+}
+
 .dashboard-lexical-bank-view{
-  min-height:100%;
+  min-width:0;
+  min-height:0;
+  height:100%;
   display:flex;
   flex-direction:column;
   background:rgba(11,14,20,.34);
 }
 
-.dashboard-lexical-toolbar{
+.dashboard-lexical-header{
   flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding:12px 16px;
-  border-bottom:1px solid rgba(255,255,255,.09);
-  background:rgba(20,24,32,.96);
 }
 
 .dashboard-lexical-toolbar-main,
@@ -550,16 +550,17 @@ button.dashboard-resource-detail-tag:focus-visible{
 
 .dashboard-lexical-toolbar-main{
   flex:1 1 auto;
+  justify-content:flex-start;
 }
 
 .dashboard-lexical-search{
-  min-width:220px;
+  min-width:140px;
   max-width:430px;
   flex:1 1 340px;
   display:flex;
   align-items:center;
   gap:8px;
-  min-height:38px;
+  min-height:42px;
   padding:0 10px;
   border:1px solid rgba(255,255,255,.14);
   border-radius:9px;
@@ -583,7 +584,9 @@ button.dashboard-resource-detail-tag:focus-visible{
 }
 
 .dashboard-lexical-filter{
-  min-height:38px;
+  flex:0 0 auto;
+  width:auto;
+  min-height:42px;
   padding:0 32px 0 10px;
   border:1px solid rgba(255,255,255,.14);
   border-radius:9px;
@@ -713,8 +716,12 @@ button.dashboard-resource-detail-tag:focus-visible{
 
 .dashboard-lexical-table td.is-entry{
   color:#fff;
-  font-size:14px;
-  font-weight:800;
+  font-size:18px;
+  font-weight:600;
+}
+
+.dashboard-lexical-table td.is-entry.has-imagier-image{
+  color:var(--warn, #ffb020);
 }
 
 .dashboard-lexical-table td.is-code{
@@ -819,10 +826,24 @@ button.dashboard-resource-detail-tag:focus-visible{
   white-space:pre-line;
 }
 
-@media (max-width:1100px){
-  .dashboard-lexical-toolbar{
-    align-items:stretch;
-    flex-direction:column;
+@media (max-width:1500px){
+  .dashboard-lexical-header.dashboard-config-header{
+    grid-template-columns:minmax(0,1fr) auto;
+    padding:12px 16px;
+    gap:10px 16px;
+  }
+  .dashboard-lexical-header .dashboard-config-header-center{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+}
+
+@media (max-width:820px){
+  .dashboard-lexical-header.dashboard-config-header{
+    grid-template-columns:minmax(0,1fr);
+  }
+  .dashboard-lexical-header .dashboard-config-header-actions{
+    grid-row:3;
   }
   .dashboard-lexical-toolbar-main,
   .dashboard-lexical-toolbar-actions{
@@ -830,6 +851,34 @@ button.dashboard-resource-detail-tag:focus-visible{
   }
   .dashboard-lexical-search{
     max-width:none;
+  }
+  .dashboard-lexical-header .dashboard-lexical-toolbar-actions{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    width:100%;
+  }
+  .dashboard-lexical-toolbar-actions .dashboard-lexical-count{
+    grid-column:1 / -1;
+  }
+  .dashboard-lexical-toolbar-actions .dashboard-header-action-btn{
+    min-width:0;
+    padding:0 8px;
+    font-size:14px;
+  }
+}
+
+@media (max-width:600px){
+  .dashboard-lexical-header .dashboard-lexical-toolbar-main{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .dashboard-lexical-header .dashboard-lexical-search{
+    grid-column:1 / -1;
+  }
+  .dashboard-lexical-header .dashboard-lexical-filter{
+    min-width:0;
+    width:100%;
+    font-size:13px;
   }
 }
 
@@ -1906,47 +1955,26 @@ button.dashboard-resource-detail-tag:focus-visible{
 .dashboard-word-search-direction-icon{font-size:23px; color:#f0f3f9;}
 
 .dashboard-word-search-card{
-  --word-search-board-row:min(78cqw,70cqh);
-  width:100cqw; height:100cqh; min-width:0; min-height:0; box-sizing:border-box;
-  padding:min(5.5cqw,5.5cqh); display:grid; grid-template-rows:var(--word-search-board-row) minmax(0,1fr);
-  align-items:stretch; justify-items:stretch; gap:min(4cqw,4cqh);
-  color:#101216; background:#fff; container-type:size; overflow:hidden;
+  width:100%; height:100%; min-width:0; min-height:0; box-sizing:border-box;
+  display:block; color:#101216; background:#fff; overflow:hidden;
 }
-.dashboard-word-search-card:not(.has-word-list){grid-template-rows:minmax(0,1fr);}
-.dashboard-worksheet-page[data-per-page="1"] .dashboard-word-search-card{--word-search-board-row:min(82cqw,60cqh); padding:min(5cqw,5cqh); gap:min(5cqw,5cqh);}
-.dashboard-worksheet-page[data-per-page="2"] .dashboard-word-search-card{--word-search-board-row:min(80cqw,62cqh); padding:min(5cqw,5cqh); gap:min(5cqw,5cqh);}
-.dashboard-worksheet-page[data-per-page="4"] .dashboard-word-search-card{--word-search-board-row:min(80cqw,62cqh); padding:min(5cqw,5cqh); gap:min(5cqw,5cqh);}
-.dashboard-worksheet-page[data-per-page="6"] .dashboard-word-search-card{--word-search-board-row:min(66cqw,60cqh); gap:min(2.5cqw,2.5cqh);}
-.dashboard-word-search-board-wrap{
-  min-width:0; min-height:0; width:100%; height:100%; display:grid; place-items:center;
-  container-type:size;
+.dashboard-word-search-svg{
+  display:block; width:100%; height:100%; overflow:hidden;
+  font-family:"Andika Classroom",Andika,Arial,sans-serif;
 }
-.dashboard-word-search-board{
-  position:relative;
-  width:min(100cqw,100cqh); height:min(100cqw,100cqh); aspect-ratio:1;
-  display:grid; grid-template-columns:repeat(var(--word-search-size),minmax(0,1fr));
-  grid-template-rows:repeat(var(--word-search-size),minmax(0,1fr));
-  border:1px solid #777; box-shadow:none; container-type:size;
+.dashboard-word-search-grid-cell{
+  fill:#fff; stroke:#777; stroke-width:.1235;
 }
-.dashboard-word-search-cell{
-  position:relative; z-index:1;
-  display:grid; place-items:center; min-width:0; min-height:0; box-sizing:border-box;
-  border-right:1px solid #999; border-bottom:1px solid #999;
-  font-family:"Andika Classroom",Andika,Arial,sans-serif; font-weight:600;
-  font-size:clamp(6px,calc(58cqw / var(--word-search-size)),23px); line-height:1;
+.dashboard-word-search-grid-letter{
+  fill:#101216; font-weight:600; text-anchor:middle;
 }
 .dashboard-word-search-solution-contours{
-  position:absolute; inset:0; z-index:2; width:100%; height:100%; overflow:visible;
-  fill:none; stroke:#14833b; stroke-width:.075; pointer-events:none;
+  stroke:#14833b; pointer-events:none;
 }
-.dashboard-word-search-word-list{
-  width:94%; height:100%; min-height:0; justify-self:center; display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(var(--word-search-list-rows),max-content);
-  align-content:space-between; row-gap:0; column-gap:min(2.2cqw,2.2cqh);
-  font-family:"Andika Classroom",Andika,Arial,sans-serif;
-  font-size:clamp(7px,min(2.9cqw,2.9cqh),21px); line-height:1.08; text-align:center;
+.dashboard-word-search-list-word{
+  fill:#101216; font-weight:400; text-anchor:middle;
 }
-.dashboard-word-search-word-list span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
 .dashboard-worksheet-orientation-row.is-forced{opacity:.48;}
 .dashboard-worksheet-orientation-row.is-forced .dashboard-toggle{cursor:not-allowed;}
 

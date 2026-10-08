@@ -8,12 +8,24 @@ import {
 import {
   formatImageZoom,
   prepareImageFilePayload,
+  prepareImageResourcePayload,
   prepareImageUrlPayload
 } from "./source.js";
 import { escapeAttr, escapeHtml } from "../../../dashboard/text-utils.js";
 import { renderActionButton } from "../../ui/controls.js";
+import { openToolAssetPicker } from "../../../../../shared/tool-assets/asset-picker.js";
+import { loadTeacherResourceAssets } from "../../../../../shared/tool-assets/resource-assets.js";
 
-export function createImageControlPanel({ host, getWidget, updateWidget, showToast } = {}){
+export function createImageControlPanel({
+  host,
+  getWidget,
+  updateWidget,
+  getTeacherSpace,
+  listResourcesForSpace,
+  listResourceFoldersForSpace,
+  createResourceSignedUrl,
+  showToast
+} = {}){
   function getCurrentState(){
     return normalizeImageState(getWidget?.()?.state);
   }
@@ -54,6 +66,33 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
     }
   }
 
+  async function setImageFromResources(){
+    const teacherSpaceId = Number(getTeacherSpace?.()?.id);
+    if (!Number.isSafeInteger(teacherSpaceId) || teacherSpaceId <= 0) {
+      showToast?.("Les ressources sont indisponibles pour cet espace.", { isError:true });
+      return;
+    }
+    try {
+      const asset = await openToolAssetPicker({
+        type:"image",
+        title:"Choisir une image",
+        loadAssets:() => loadTeacherResourceAssets({
+          teacherSpaceId,
+          type:"image",
+          listResourcesForSpace,
+          listResourceFoldersForSpace,
+          createResourceSignedUrl
+        }),
+        emptyMessage:"Aucune image disponible dans ce dossier."
+      });
+      if (!asset) return;
+      const payload = await prepareImageResourcePayload(asset);
+      commitAction("set-image", payload);
+    } catch (error) {
+      showToast?.(error?.message || "Impossible d’importer cette image.", { isError:true });
+    }
+  }
+
   function render(){
     if (!host) return;
     const state = getCurrentState();
@@ -78,6 +117,10 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
             <span>Choisir une image</span>
             <input id="ttImageFileInput" type="file" accept="image/*">
           </label>
+          <button id="ttImagePickResource" class="tt-widget-action-btn" type="button">
+            <span class="dashboard-material-icon" aria-hidden="true">photo_library</span>
+            <span>Ressources</span>
+          </button>
           <label class="tt-widget-action-toggle tt-image-proportions-toggle">
             <input id="ttImagePreserveProportions" type="checkbox" ${state.preserveProportions ? "checked" : ""}>
             <span class="tt-widget-action-toggle-track" aria-hidden="true"></span>
@@ -107,7 +150,7 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
         ` : `
           <div class="tt-image-empty-card">
             <strong>Aucune image sélectionnée.</strong>
-            <span>Choisis une image locale ou colle l’URL directe d’une image.</span>
+            <span>Choisis une image locale, une ressource du site ou colle l’URL directe d’une image.</span>
           </div>
         `}
       </section>
@@ -118,6 +161,7 @@ export function createImageControlPanel({ host, getWidget, updateWidget, showToa
       setImageFromFile(file);
       event.currentTarget.value = "";
     });
+    host.querySelector("#ttImagePickResource")?.addEventListener("click", () => { void setImageFromResources(); });
     host.querySelector("#ttImageLoadUrl")?.addEventListener("click", setImageFromUrl);
     host.querySelector("#ttImageUrlInput")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") setImageFromUrl();

@@ -77,7 +77,9 @@ function normalizeAssetManifest(raw = {}){
 export function createWorkspacePersistence({
   uploadAsset,
   createAssetSignedUrl,
-  cleanupAssets
+  cleanupAssets,
+  listResourcesForSpace,
+  createResourceSignedUrl
 } = {}){
   const liveSourceAssets = new Map();
 
@@ -104,6 +106,39 @@ export function createWorkspacePersistence({
     const workspace = clonePlain(record?.workspace || {});
     const manifest = normalizeAssetManifest(record?.assets);
     const signedById = new Map();
+    const resourceSignedById = new Map();
+    let resourceRowsPromise = null;
+
+    async function getResourceRows(){
+      if (!resourceRowsPromise) {
+        resourceRowsPromise = typeof listResourcesForSpace === "function"
+          ? Promise.resolve(listResourcesForSpace(record?.teacherSpaceId)).catch((error) => {
+              console.warn("Impossible de charger les ressources du Tableau.", error);
+              return [];
+            })
+          : Promise.resolve([]);
+      }
+      return await resourceRowsPromise;
+    }
+
+    async function resolveResourceSource(resourceId, fallbackSource = ""){
+      const id = String(resourceId || "").trim();
+      if (!id) return String(fallbackSource || "").trim();
+      if (!resourceSignedById.has(id)) {
+        try {
+          const resources = await getResourceRows();
+          const resource = (Array.isArray(resources) ? resources : []).find((item) => String(item?.id || "") === id);
+          const signed = resource && typeof createResourceSignedUrl === "function"
+            ? await createResourceSignedUrl(resource, 86400)
+            : "";
+          resourceSignedById.set(id, String(signed || ""));
+        } catch (error) {
+          console.warn("Impossible de restaurer une ressource du Tableau.", error);
+          resourceSignedById.set(id, "");
+        }
+      }
+      return resourceSignedById.get(id) || String(fallbackSource || "").trim();
+    }
 
     async function resolvePlaceholder(value){
       const id = assetIdFromPlaceholder(value);
@@ -131,6 +166,9 @@ export function createWorkspacePersistence({
       }
       if (!value || typeof value !== "object") return value;
 
+      if (value.sourceKind === "resource" && value.resourceId) {
+        value.source = await resolveResourceSource(value.resourceId, value.source);
+      }
       if (value.sourceKind === "file" && typeof value.source === "string" && isAssetPlaceholder(value.source)) {
         value.source = await resolvePlaceholder(value.source);
       }
@@ -141,7 +179,7 @@ export function createWorkspacePersistence({
       }
 
       for (const key of Object.keys(value)) {
-        if (key === "source" && value.sourceKind === "file") continue;
+        if (key === "source" && ["file", "resource"].includes(value.sourceKind)) continue;
         if (key === "backgroundImageSource" && value.backgroundImageKind === "file") continue;
         value[key] = await walk(value[key]);
       }
@@ -193,6 +231,11 @@ export function createWorkspacePersistence({
       }
       if (!value || typeof value !== "object") return value;
 
+      if (value.sourceKind === "resource" && value.resourceId) {
+        // Une ressource du site reste référencée par son identifiant. L'URL signée
+        // est volontairement retirée de la sauvegarde et sera régénérée au chargement.
+        value.source = "";
+      }
       if (value.sourceKind === "file" && typeof value.source === "string" && value.source) {
         value.source = await persistSource(value.source, value, "fichier");
       }
@@ -203,7 +246,7 @@ export function createWorkspacePersistence({
       }
 
       for (const key of Object.keys(value)) {
-        if (key === "source" && value.sourceKind === "file") continue;
+        if (key === "source" && ["file", "resource"].includes(value.sourceKind)) continue;
         if (key === "backgroundImageSource" && value.backgroundImageKind === "file") continue;
         value[key] = await walk(value[key]);
       }

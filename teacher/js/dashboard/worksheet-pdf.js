@@ -1,5 +1,6 @@
 import {
   getWorksheetLayout,
+  computeWordSearchLayout,
   paginateWorksheetItems,
   PENTOMINO_SHAPES,
   PENTOMINO_NAMES
@@ -745,28 +746,21 @@ function drawNumberMystery(painter, exercise, slot, { showSolutions }){
 
 function drawWordSearch(painter, exercise, slot, { showSolutions, showWordList = true, perPage = 6 }){
   const size = Math.max(2, Number(exercise?.gridSize) || 10);
-  const padFactor = Number(perPage) === 1 ? 0.035 : Number(perPage) === 2 ? 0.04 : Number(perPage) === 4 ? 0.045 : 0.055;
-  const pad = Math.min(slot.w, slot.h) * padFactor;
-  const x = slot.x + pad;
-  const y = slot.y + pad;
-  const w = slot.w - (pad * 2);
-  const h = slot.h - (pad * 2);
   const words = Array.isArray(exercise?.words) ? exercise.words : [];
-  const listRows = Math.max(1, Math.ceil(words.length / 3));
-  const minSlot = Math.min(slot.w, slot.h);
-  const listFont = minSlot * 0.029;
-  const listLineH = listFont * 1.08;
-  const listGapFactor = Number(perPage) === 1 ? 0.007 : Number(perPage) === 2 ? 0.008 : Number(perPage) === 4 ? 0.009 : 0.012;
-  const listGap = showWordList ? minSlot * listGapFactor : 0;
-  const boardWidthFactor = Number(perPage) === 1 ? 0.82 : Number(perPage) === 2 || Number(perPage) === 4 ? 0.80 : 0.78;
-  const boardHeightFactor = Number(perPage) === 1 ? 0.60 : Number(perPage) === 2 || Number(perPage) === 4 ? 0.62 : 0.70;
-  const boardRowH = showWordList ? Math.min(w * boardWidthFactor, h * boardHeightFactor) : h;
-  const listH = showWordList ? Math.max(0, h - boardRowH - listGap) : 0;
-  const boardSide = Math.min(w, boardRowH);
-  const boardX = x + ((w - boardSide) / 2);
-  const boardY = y + ((boardRowH - boardSide) / 2);
-  const cell = boardSide / size;
+  const layout = computeWordSearchLayout({
+    width:slot.w,
+    height:slot.h,
+    perPage,
+    wordCount:words.length,
+    gridSize:size,
+    showWordList
+  });
+  const boardX = slot.x + layout.boardX;
+  const boardY = slot.y + layout.boardY;
+  const cell = layout.cell;
+  const cellFont = layout.cellFont;
   const grid = Array.isArray(exercise?.grid) ? exercise.grid : [];
+
   for (let row = 0; row < size; row += 1) {
     for (let col = 0; col < size; col += 1) {
       const cx = boardX + (col * cell);
@@ -778,12 +772,13 @@ function drawWordSearch(painter, exercise, slot, { showSolutions, showWordList =
       });
       painter.textBox(String(grid[row]?.[col] ?? ""), cx, cy, cell, cell, {
         font:"semibold",
-        sizeMm:Math.min(cell * 0.58, Math.min(slot.w, slot.h) * 0.036),
+        sizeMm:cellFont,
         color:BLACK,
         align:"center"
       });
     }
   }
+
   if (showSolutions) {
     for (const placement of exercise?.placements || []) {
       const cells = Array.isArray(placement?.cells) ? placement.cells : [];
@@ -799,20 +794,25 @@ function drawWordSearch(painter, exercise, slot, { showSolutions, showWordList =
       );
     }
   }
+
   if (!showWordList) return;
-  const listY = y + boardRowH + listGap;
-  const listX = x + (w * 0.03);
-  const listW = w * 0.94;
-  const colW = listW / 3;
-  const rowStep = listRows > 1 ? Math.max(0, (listH - listLineH) / (listRows - 1)) : 0;
+  const listX = slot.x + layout.listX;
+  const listY = slot.y + layout.listY;
   words.forEach((word, index) => {
-    const col = Math.min(2, Math.floor(index / listRows));
-    const row = index % listRows;
-    painter.textBox(String(word), listX + (col * colW), listY + (row * rowStep), colW, listLineH, {
-      font:"regular",
-      sizeMm:listFont,
-      align:"center"
-    });
+    const col = Math.min(2, Math.floor(index / layout.listRows));
+    const row = index % layout.listRows;
+    painter.textBox(
+      String(word),
+      listX + (col * layout.colW),
+      listY + (row * layout.rowStep),
+      layout.colW,
+      layout.listLineH,
+      {
+        font:"regular",
+        sizeMm:layout.listFont,
+        align:"center"
+      }
+    );
   });
 }
 

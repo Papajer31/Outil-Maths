@@ -1,5 +1,9 @@
+@import url("../js/teacher-tools/apps/activity/activity.css");
 @import url("../../shared/color-picker.css");
+@import url("../js/teacher-tools/apps/clock/clock.css");
 @import url("../js/teacher-tools/apps/image/image.css");
+@import url("../js/teacher-tools/apps/image-labels/image-labels.css");
+@import url("../js/teacher-tools/apps/labels/labels.css");
 @import url("../js/teacher-tools/apps/multi-images/multi-images.css");
 @import url("../js/teacher-tools/apps/pdf/pdf.css");
 @import url("../js/teacher-tools/apps/random-student/random-student.css");
@@ -523,3 +527,41 @@ button{touch-action:manipulation}
 .ttp-stage.is-chrome-hidden .ttp-quick-actions,
 .ttp-stage.is-chrome-hidden .ttp-note-toolbar,
 .ttp-stage.is-chrome-hidden .ttp-app-overlay-controls{display:none !important}
+
+/* TABLEAU — navigation cyclique des pages */
+.ttp-page-cycle{
+  position:absolute;
+  z-index:50;
+  right:max(14px,env(safe-area-inset-right));
+  bottom:max(14px,env(safe-area-inset-bottom));
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:7px;
+  border-radius:18px;
+  background:rgba(15,23,42,.58);
+  backdrop-filter:blur(12px);
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+}
+.ttp-page-cycle[hidden]{display:none}
+.ttp-page-cycle-btn,
+.ttp-page-cycle-current{
+  width:54px;
+  height:54px;
+  border:0;
+  border-radius:13px;
+  display:grid;
+  place-items:center;
+  color:#fff;
+  background:rgba(15,23,42,.86);
+}
+.ttp-page-cycle-btn{cursor:pointer}
+.ttp-page-cycle-btn:active{background:#1f7a4a}
+.ttp-page-cycle-btn:disabled{opacity:.34;cursor:default}
+.ttp-page-cycle-current{background:rgba(255,255,255,.11)}
+.ttp-page-cycle-current .ttp-material-icon{font-size:26px}
+.ttp-stage.is-chrome-hidden .ttp-page-cycle{display:none !important}
+@media (max-width:760px){
+  .ttp-page-cycle{right:8px;bottom:8px}
+  .ttp-page-cycle-btn,.ttp-page-cycle-current{width:50px;height:50px}
+}

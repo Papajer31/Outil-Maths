@@ -110,6 +110,7 @@ import { createSystemImagesImportDialog } from "./dashboard/system-images-import
 import { openCatalogTestRunner } from "./dashboard/catalog-test-runner.js";
 import { filterQuizSnapshotBySelection, getDefaultSettings as getDefaultQuizSettings, getQuizTestIssues, normalizeQuizRuntimeSettings } from "../../tools/quiz/model.js";
 import { normalizeCatalogActivity } from "../../shared/catalogue.js";
+import { listPublicImageAssetsInSystemFolder } from "../../shared/public-api.js";
 import {
   applyContextualHelpPreference,
   getContextualHelpEnabled,
@@ -1001,11 +1002,13 @@ lexicalBankViewController = createLexicalBankViewController({
   host: resourcesList,
   getIsSuperAdmin: () => currentUserIsSuperAdmin,
   listLexicalEntries,
+  listImagierImages: () => listPublicImageAssetsInSystemFolder("Imagier"),
   saveLexicalEntryAsAdmin,
   deleteLexicalEntryAsAdmin,
   upsertLexicalEntriesAsAdmin,
   showToast: showDashboardShareToast,
   onBack: () => {
+    resourcesViewController?.render?.();
     void resourcesViewController?.refresh?.({ forceRefresh:true });
   }
 });
@@ -1077,7 +1080,10 @@ teacherToolsViewController = createTeacherToolsViewController({
   getCurrentStudents: () => currentStudents,
   listCatalogActivitiesForTeacherSpace,
   listPedagogicalNodesForTeacher,
+  listTeacherActivitiesForSpace,
+  listTeacherActivityFoldersForSpace,
   listResourcesForSpace,
+  listResourceFoldersForSpace,
   uploadResourceForSpace,
   createResourceSignedUrl,
   getTeacherTableauWorkspaceForSpace,

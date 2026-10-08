@@ -28,7 +28,7 @@ const MAX_QUESTION_TIMER_SECONDS = 300;
 const VARIANT_DRAW_MODES = new Set(["in_order", "random"]);
 const DEFAULT_VARIANT_DRAW_MODE = "in_order";
 const QCM_LAYOUTS = new Set(["auto", "row", "column", "grid"]);
-const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge"]);
+const QUIZ_FONT_SIZES = new Set(["small", "normal", "large", "huge", "maximal"]);
 const QCM_MIN_CHOICES = 2;
 const QCM_DEFAULT_CHOICES = 4;
 const QCM_MAX_CHOICES = 6;
@@ -2179,7 +2179,95 @@ export function createQuizWorkshopViewController({
 
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
+    scheduleMaximalEditorTextFit();
     window.requestAnimationFrame(positionTextToolbar);
+  }
+
+  function getMaximalEditorFitTargets(widgetNode){
+    if (!widgetNode) return [];
+    return Array.from(widgetNode.querySelectorAll(
+      ".quiz-workshop-canvas-widget-content, .quiz-workshop-qcm-choice-text, .quiz-workshop-selection-words-text"
+    )).filter((target) => String(target.textContent || "").trim());
+  }
+
+  function getMaximalEditorFitHost(target, widgetNode){
+    if (target?.classList?.contains("quiz-workshop-qcm-choice-text")) {
+      return target.closest(".quiz-workshop-qcm-choice") || widgetNode;
+    }
+    if (target?.classList?.contains("quiz-workshop-selection-words-text")) {
+      return target.closest(".quiz-workshop-selection-words-correction") || widgetNode;
+    }
+    return target?.closest?.(".quiz-workshop-canvas-widget-content-shell") || widgetNode;
+  }
+
+  function maximalEditorTextFits(target, host, tolerance = 1){
+    if (!target || !host) return true;
+    let availableWidth = host.clientWidth;
+    let availableHeight = host.clientHeight;
+
+    if (target.classList.contains("quiz-workshop-selection-words-text")) {
+      const hint = host.querySelector(".quiz-workshop-selection-words-hint");
+      if (hint) {
+        const hostStyle = window.getComputedStyle(host);
+        const gap = parseFloat(hostStyle.rowGap || hostStyle.gap) || 0;
+        availableHeight = Math.max(0, availableHeight - hint.offsetHeight - gap);
+      }
+    }
+
+    return target.scrollWidth <= availableWidth + tolerance
+      && target.scrollHeight <= availableHeight + tolerance;
+  }
+
+  function fitMaximalEditorTarget(target, host){
+    if (!target || !host) return;
+    const rect = host.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return;
+
+    const upperBound = Math.max(12, Math.ceil(Math.max(rect.width, rect.height) * 2));
+    let low = 6;
+    let high = upperBound;
+    let best = 6;
+
+    while (low <= high) {
+      const candidate = Math.floor((low + high) / 2);
+      target.style.fontSize = `${candidate}px`;
+      if (maximalEditorTextFits(target, host)) {
+        best = candidate;
+        low = candidate + 1;
+      } else {
+        high = candidate - 1;
+      }
+    }
+
+    target.style.fontSize = `${best}px`;
+    target.dataset.quizMaximalFittedFontSize = String(best);
+  }
+
+  function fitMaximalEditorTextWidgets(widgetNode = null){
+    const widgets = widgetNode
+      ? [widgetNode]
+      : Array.from(canvas?.querySelectorAll?.('[data-quiz-widget-id][data-quiz-font-size="maximal"]') || []);
+
+    widgets.forEach((node) => {
+      if (!node || node.dataset.quizFontSize !== "maximal") return;
+      getMaximalEditorFitTargets(node).forEach((target) => {
+        fitMaximalEditorTarget(target, getMaximalEditorFitHost(target, node));
+      });
+    });
+  }
+
+  function clearMaximalEditorTextFit(widgetNode){
+    if (!widgetNode) return;
+    widgetNode.querySelectorAll(
+      ".quiz-workshop-canvas-widget-content, .quiz-workshop-qcm-choice-text, .quiz-workshop-selection-words-text"
+    ).forEach((target) => {
+      target.style.removeProperty("font-size");
+      delete target.dataset.quizMaximalFittedFontSize;
+    });
+  }
+
+  function scheduleMaximalEditorTextFit(widgetNode = null){
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => fitMaximalEditorTextWidgets(widgetNode)));
   }
 
   function getVisibleWidgetHtml(widget){
@@ -3329,6 +3417,7 @@ export function createQuizWorkshopViewController({
           class="quiz-workshop-canvas-widget quiz-workshop-canvas-widget--${escapeHtml(widget.type)}${isSelected ? " is-selected" : ""}${isEditing ? " is-editing" : ""}${isMoving ? " is-moving" : ""}${isResizing ? " is-resizing" : ""}${widgetView.visibilityMode === "hidden" ? " is-hidden-in-view" : ""}${widgetView.visibilityMode === "correct" ? " is-visible-if-correct" : ""}${widgetView.visibilityMode === "incorrect" ? " is-visible-if-incorrect" : ""}"
           style="${getWidgetStyle(widgetView)}"
           data-quiz-widget-id="${escapeHtml(widget.id)}"
+          data-quiz-font-size="${escapeHtml(normalizeQuizFontSize(widgetView.fontSize))}"
           tabindex="0"
           aria-label="Bloc ${escapeHtml(widget.label)}${widgetView.visibilityMode === "hidden" ? ", masqué dans cette vue" : widgetView.visibilityMode === "correct" ? ", affiché si la réponse est correcte" : widgetView.visibilityMode === "incorrect" ? ", affiché si la réponse est incorrecte" : ""}"
         >
@@ -5089,6 +5178,8 @@ export function createQuizWorkshopViewController({
     if (!editor) return;
     syncWidgetFromEditor(editor);
     updateEditorEmptyState(editor);
+    const widgetNode = editor.closest("[data-quiz-widget-id]");
+    if (widgetNode?.dataset.quizFontSize === "maximal") scheduleMaximalEditorTextFit(widgetNode);
   }
 
   function handleDrawerFocusIn(event){
@@ -5444,6 +5535,11 @@ export function createQuizWorkshopViewController({
     markLayoutAsCustom();
     const widgetNode = canvas?.querySelector(`[data-quiz-widget-id="${CSS.escape(widget.id)}"]`);
     widgetNode?.style.setProperty("--quiz-widget-font-size", `var(--quiz-editor-font-${normalized})`);
+    if (widgetNode) {
+      widgetNode.dataset.quizFontSize = normalized;
+      clearMaximalEditorTextFit(widgetNode);
+      if (normalized === "maximal") scheduleMaximalEditorTextFit(widgetNode);
+    }
     updateToolbarState();
     restoreCurrentSelection();
   }

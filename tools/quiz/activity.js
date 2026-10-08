@@ -468,6 +468,9 @@ function renderCurrentView(state){
   state.canvasEl.innerHTML = state.currentQuestion.widgets
     .map((widget) => renderWidget(state, widget, mode))
     .join("");
+  // Un bloc « Maximal » ne doit jamais être peint avec sa taille CSS de repli.
+  // On le masque dans le même tour JS que son insertion, avant le premier paint.
+  markRuntimeMaximalFitPending(state);
 
   state.answerInputEl = state.canvasEl.querySelector("[data-quiz-runtime-answer-input]");
   if (state.answerInputEl) {
@@ -555,6 +558,9 @@ function patchCorrectionView(state){
   bindRuntimeLabels(state);
   if (needsImageHydration) hydrateRuntimeImages(state);
   if (needsAudioHydration) hydrateRuntimeAudios(state);
+  // Les remplacements de la vue Correction peuvent eux aussi introduire un
+  // nouveau texte Maximal : même garde anti-flash avant tout recalcul.
+  markRuntimeMaximalFitPending(state);
   scheduleRuntimeTextFit(state);
   if (needsQcmFit) scheduleRuntimeQcmFit(state);
   return true;
@@ -2801,10 +2807,24 @@ function bindRuntimeLabels(state){
   });
 }
 
+function markRuntimeMaximalFitPending(state){
+  const targets = Array.from(state.canvasEl?.querySelectorAll?.(
+    "[data-quiz-runtime-text-fit], [data-quiz-runtime-qcm-fit]"
+  ) || []);
+  targets.forEach((target) => {
+    const host = target.closest(".quiz-runtime-widget");
+    if (!host || !isRuntimeMaximalFont(host)) return;
+    target.classList.add("is-maximal-fit-pending");
+  });
+}
+
 function scheduleRuntimeTextFit(state){
   const fit = () => fitRuntimeTextWidgets(state);
   state.textFitTimers.forEach((timer) => window.clearTimeout(timer));
   state.textFitTimers = [];
+  // Forcer une première mesure immédiatement : getBoundingClientRect déclenche
+  // le layout mais reste dans le même tour JS, donc avant le premier paint.
+  fit();
   window.requestAnimationFrame(() => window.requestAnimationFrame(fit));
   [120, 420].forEach((delay) => {
     const timer = window.setTimeout(fit, delay);
@@ -2815,6 +2835,38 @@ function scheduleRuntimeTextFit(state){
     state.textResizeObserver = new ResizeObserver(fit);
     state.textResizeObserver.observe(state.root);
   }
+}
+
+function isRuntimeMaximalFont(host){
+  return String(host?.style?.getPropertyValue?.("--quiz-runtime-font-size-key") || "").trim() === "maximal";
+}
+
+function fitRuntimeTextTargetMaximal(target, host){
+  if (!target || !host) return;
+  const hostRect = host.getBoundingClientRect();
+  if (!hasUsableRuntimeFitBounds(hostRect, 16)) return;
+
+  const upperBound = Math.max(12, Math.ceil(Math.max(hostRect.width, hostRect.height) * 2));
+  let low = 6;
+  let high = upperBound;
+  let best = 6;
+
+  while (low <= high) {
+    const candidate = Math.floor((low + high) / 2);
+    target.style.fontSize = `${candidate}px`;
+    if (runtimeTextFits(target, host)) {
+      best = candidate;
+      low = candidate + 1;
+    } else {
+      high = candidate - 1;
+    }
+  }
+
+  target.style.fontSize = `${best}px`;
+  target.classList.toggle("is-overflowing", !runtimeTextFits(target, host));
+  target.dataset.quizRuntimeFittedFontSize = String(best);
+  // Révéler seulement après application de la taille définitive.
+  target.classList.remove("is-maximal-fit-pending");
 }
 
 function fitRuntimeTextWidgets(state){
@@ -2833,6 +2885,11 @@ function fitRuntimeTextWidgets(state){
     if (!host) return;
     const hostRect = host.getBoundingClientRect();
     if (!hasUsableRuntimeFitBounds(hostRect, 16)) return;
+
+    if (isRuntimeMaximalFont(host)) {
+      fitRuntimeTextTargetMaximal(target, host);
+      return;
+    }
 
     const targetSize = resolveRuntimeTargetFontSize(host, target);
     const minimumSize = Math.min(12, targetSize);
@@ -2944,7 +3001,7 @@ function resolveRuntimeTargetFontSize(host, target){
   }
 
   const declaredTarget = String(host.style.getPropertyValue("--quiz-runtime-target-font-size") || "");
-  const semanticMatch = declaredTarget.match(/--runtime-font-(small|normal|large|huge)/);
+  const semanticMatch = declaredTarget.match(/--runtime-font-(small|normal|large|huge|maximal)/);
   if (semanticMatch) {
     const runtimeSize = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue(`--runtime-font-${semanticMatch[1]}`));
     if (Number.isFinite(runtimeSize) && runtimeSize > 0) return Math.max(1, Math.floor(runtimeSize));
@@ -2970,6 +3027,8 @@ function scheduleRuntimeQcmFit(state){
   const fit = () => fitRuntimeQcmChoices(state);
   state.qcmFitTimers.forEach((timer) => window.clearTimeout(timer));
   state.qcmFitTimers = [];
+  // Même principe que pour les autres textes : tenter le fit avant le paint.
+  fit();
   window.requestAnimationFrame(() => window.requestAnimationFrame(fit));
   // Le tout premier rendu peut intervenir avant que le conteneur du runtime
   // ait atteint sa taille finale. Une seconde passe évite de conserver une
@@ -2985,6 +3044,36 @@ function scheduleRuntimeQcmFit(state){
   }
 }
 
+function qcmRuntimeTextFits(target, tolerance = 2){
+  return target.scrollHeight <= target.clientHeight + tolerance
+    && target.scrollWidth <= target.clientWidth + tolerance;
+}
+
+function fitRuntimeQcmTargetMaximal(target){
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  if (rect.width < 8 || rect.height < 8) return;
+  const upperBound = Math.max(12, Math.ceil(Math.max(rect.width, rect.height) * 2));
+  let low = 6;
+  let high = upperBound;
+  let best = 6;
+
+  while (low <= high) {
+    const candidate = Math.floor((low + high) / 2);
+    target.style.fontSize = `${candidate}px`;
+    if (qcmRuntimeTextFits(target)) {
+      best = candidate;
+      low = candidate + 1;
+    } else {
+      high = candidate - 1;
+    }
+  }
+
+  target.style.fontSize = `${best}px`;
+  target.classList.toggle("is-overflowing", !qcmRuntimeTextFits(target));
+  target.classList.remove("is-maximal-fit-pending");
+}
+
 function fitRuntimeQcmChoices(state){
   const targets = Array.from(state.canvasEl?.querySelectorAll?.("[data-quiz-runtime-qcm-fit]") || []);
   targets.forEach((target) => {
@@ -2995,22 +3084,28 @@ function fitRuntimeQcmChoices(state){
     if (Number.isFinite(retainedSize)) {
       target.style.fontSize = `${retainedSize}px`;
       target.classList.toggle("is-overflowing", target.scrollHeight > target.clientHeight + 2 || target.scrollWidth > target.clientWidth + 2);
+      target.classList.remove("is-maximal-fit-pending");
       return;
     }
     const hostRect = host.getBoundingClientRect();
     if (hostRect.width < 8 || hostRect.height < 8) return;
     const widgetHost = host.closest(".quiz-runtime-widget") || host;
+    if (isRuntimeMaximalFont(widgetHost)) {
+      fitRuntimeQcmTargetMaximal(target);
+      const fitted = Number.parseFloat(target.style.fontSize) || 0;
+      if (choiceId && fitted > 0) state.qcmChoiceFontSizes.set(choiceId, fitted);
+      return;
+    }
     const targetSize = resolveRuntimeTargetFontSize(widgetHost, target);
     const minimumSize = Math.min(10, targetSize);
     let best = targetSize;
     target.style.fontSize = `${best}px`;
-    while (best > minimumSize && (target.scrollHeight > target.clientHeight + 2 || target.scrollWidth > target.clientWidth + 2)) {
+    while (best > minimumSize && !qcmRuntimeTextFits(target)) {
       best = Math.max(minimumSize, best - 2);
       target.style.fontSize = `${best}px`;
     }
     if (choiceId) state.qcmChoiceFontSizes.set(choiceId, best);
-    const stillOverflows = target.scrollHeight > target.clientHeight + 2 || target.scrollWidth > target.clientWidth + 2;
-    target.classList.toggle("is-overflowing", stillOverflows);
+    target.classList.toggle("is-overflowing", !qcmRuntimeTextFits(target));
   });
 }
 
@@ -3208,14 +3303,15 @@ function getResponseUi(context = {}){
 
 function normalizeRuntimeFontSize(value){
   const safe = String(value || "normal").trim().toLowerCase();
-  return ["small", "normal", "large", "huge"].includes(safe) ? safe : "normal";
+  return ["small", "normal", "large", "huge", "maximal"].includes(safe) ? safe : "normal";
 }
 
 const RUNTIME_FONT_FALLBACKS = Object.freeze({
   small:32,
   normal:48,
   large:64,
-  huge:80
+  huge:80,
+  maximal:80
 });
 
 function getWidgetStyle(view){

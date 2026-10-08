@@ -32,6 +32,10 @@ const pageList = document.getElementById("teacherToolsPageList");
 const btnPageAdd = document.getElementById("btnTeacherToolsPageAdd");
 const btnPageFullscreen = document.getElementById("btnTeacherToolsPageFullscreen");
 const btnPageClose = document.getElementById("btnTeacherToolsPageClose");
+const pageCycle = document.getElementById("teacherToolsPageCycle");
+const btnPagePrev = document.getElementById("btnTeacherToolsPagePrev");
+const btnPageNext = document.getElementById("btnTeacherToolsPageNext");
+const pageCycleIcon = document.getElementById("teacherToolsPageCycleIcon");
 const appCatalog = document.getElementById("teacherToolsAppCatalog");
 const appCatalogGrid = document.getElementById("teacherToolsAppCatalogGrid");
 const btnAppCatalogClose = document.getElementById("btnTeacherToolsAppCatalogClose");
@@ -52,6 +56,7 @@ let widgetsDrawerOpen = false;
 let appCatalogOpen = false;
 let projectionChromeVisible = true;
 let workspaceBootstrapped = false;
+let renderedPageSnapshot = null;
 
 function escapeHtml(value){
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -97,7 +102,7 @@ function normalizeWorkspace(raw = {}){
       return {
         id: String(page.id || ""),
         toolId: tool.id,
-        label: String(page.label || tool.label),
+        label: rawToolId === "labels" && String(page.label || "").trim() === "Étiquettes" ? tool.label : String(page.label || tool.label),
         icon: String(page.icon || tool.icon || "widgets"),
         state: page.state && typeof page.state === "object" ? page.state : {},
         surface: normalizeSurfaceState(page.surface)
@@ -116,6 +121,35 @@ function normalizeWorkspace(raw = {}){
 
 function activePage(){ return workspace.pages.find((page) => page.id === workspace.selectedPageId) || null; }
 function send(type, payload = {}){ channel?.send(type, payload); }
+
+function deactivateRenderedPage(nextPageId = ""){
+  const previous = renderedPageSnapshot;
+  if (!previous?.id || previous.id === String(nextPageId || "")) return;
+  const tool = getTeacherTool(previous.toolId);
+  try { tool?.onProjectorDeactivate?.({ page:previous, pageId:previous.id, host:appHost }); } catch (error) { console.warn(error); }
+  if (!workspace.pages.some((page) => page.id === previous.id)) {
+    try { tool?.disposeProjector?.({ page:previous, pageId:previous.id, host:appHost }); } catch (error) { console.warn(error); }
+  }
+}
+
+function selectPageLocally(pageId, { notify = true } = {}){
+  const id = String(pageId || "").trim();
+  if (!id || id === workspace.selectedPageId || !workspace.pages.some((page) => page.id === id)) return;
+  workspace = { ...workspace, selectedPageId:id };
+  setPageDrawerOpen(false);
+  setAppControlsOpen(false);
+  render();
+  if (notify) send("select-page", { pageId:id });
+}
+
+function cyclePage(delta){
+  const pages = workspace.pages;
+  if (pages.length < 2) return;
+  const index = pages.findIndex((page) => page.id === workspace.selectedPageId);
+  const start = index >= 0 ? index : 0;
+  const nextIndex = (start + Number(delta || 0) + pages.length) % pages.length;
+  selectPageLocally(pages[nextIndex]?.id);
+}
 
 const backgroundProjector = createSurfaceBackgroundProjector({ stage, starfieldHost });
 const annotationProjector = createAnnotationProjector({
@@ -249,7 +283,7 @@ function setAppControlsOpen(open){
   btnAppControls?.setAttribute("aria-expanded", appControlsOpen ? "true" : "false");
 }
 
-function setProjectionChromeVisible(visible){
+function setProjectionChromeVisible(visible, { notify = true } = {}){
   projectionChromeVisible = visible !== false;
   stage?.classList.toggle("is-chrome-hidden", !projectionChromeVisible);
 
@@ -277,6 +311,29 @@ function setProjectionChromeVisible(visible){
     const icon = btnChromeToggle.querySelector(".ttp-material-icon");
     if (icon) icon.textContent = projectionChromeVisible ? "visibility" : "visibility_off";
   }
+
+  const page = activePage();
+  const tool = page ? getTeacherTool(page.toolId) : null;
+  try {
+    tool?.onProjectorChromeVisibilityChange?.({
+      page,
+      pageId:page?.id || "",
+      host:appHost,
+      visible:projectionChromeVisible
+    });
+  } catch (error) {
+    console.warn(error);
+  }
+
+  if (notify) send("projector-chrome-visibility", { visible: projectionChromeVisible });
+}
+
+async function ensureFullscreen(){
+  if (document.fullscreenElement) return true;
+  try {
+    await document.documentElement.requestFullscreen?.();
+  } catch {}
+  return Boolean(document.fullscreenElement);
 }
 
 async function toggleFullscreen(){
@@ -299,13 +356,7 @@ function renderNavigation(){
         </div>`).join("")
       : `<div class="ttp-page-list-empty">Aucune page</div>`;
     pageList.querySelectorAll("[data-page-id]").forEach((button) => button.addEventListener("click", () => {
-      const id = String(button.dataset.pageId || "");
-      if (!workspace.pages.some((item) => item.id === id)) return;
-      workspace = { ...workspace, selectedPageId: id };
-      setPageDrawerOpen(false);
-      setAppControlsOpen(false);
-      render();
-      send("select-page", { pageId: id });
+      selectPageLocally(button.dataset.pageId);
     }));
     pageList.querySelectorAll("[data-page-close]").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -314,6 +365,16 @@ function renderNavigation(){
       send("close-page", { pageId: id });
     }));
   }
+  if (pageCycle) pageCycle.hidden = workspace.pages.length === 0;
+  if (pageCycleIcon) {
+    const icon = pageCycleIcon.querySelector(".ttp-material-icon");
+    if (icon) icon.textContent = page?.icon || "crop_square";
+    pageCycleIcon.setAttribute("title", page?.label || "Page active");
+    pageCycleIcon.setAttribute("aria-label", page?.label || "Page active");
+  }
+  if (btnPagePrev) btnPagePrev.disabled = workspace.pages.length < 2;
+  if (btnPageNext) btnPageNext.disabled = workspace.pages.length < 2;
+
   const tool = page ? getTeacherTool(page.toolId) : null;
   btnAppControls.disabled = !tool;
   if (appControlsTitle) appControlsTitle.textContent = tool ? page.label : "Application";
@@ -327,12 +388,14 @@ function renderActiveApp(){
     quickActionsHost.hidden = true;
   }
   if (!page) {
+    annotationProjector.setScrollTarget(null);
     appHost.innerHTML = `<div class="ttp-empty-workspace"><span class="ttp-material-icon" aria-hidden="true">dashboard_customize</span><strong>Aucune page</strong></div>`;
     if (appControlsContent) appControlsContent.innerHTML = "";
     return;
   }
   const tool = getTeacherTool(page.toolId);
   if (!tool) {
+    annotationProjector.setScrollTarget(null);
     appHost.innerHTML = "";
     if (appControlsContent) appControlsContent.innerHTML = "";
     return;
@@ -340,13 +403,20 @@ function renderActiveApp(){
   const sendAction = (action, payload = {}) => {
     send("app-action", { pageId: page.id, action, payload });
   };
+  if (appControlsContent) appControlsContent.innerHTML = "";
   tool.renderProjector?.({
     host: appHost,
     chromeHost: appControlsContent,
     state: page.state,
     page,
-    sendAction
+    sendAction,
+    chromeVisible: projectionChromeVisible,
+    setProjectionChromeVisible: (visible) => setProjectionChromeVisible(visible),
+    requestFullscreen: ensureFullscreen
   });
+  annotationProjector.setScrollTarget(
+    page.toolId === "seyes" ? appHost.querySelector(".ttp-seyes-sheet") : null
+  );
   if (quickActionsHost && typeof tool.renderQuickActions === "function") {
     tool.renderQuickActions({ host: quickActionsHost, state: page.state, page, sendAction });
     quickActionsHost.hidden = !quickActionsHost.children.length && !quickActionsHost.textContent.trim();
@@ -366,9 +436,14 @@ function renderSurface(){
 }
 
 function render(){
+  const nextPage = activePage();
+  deactivateRenderedPage(nextPage?.id || "");
   renderNavigation();
-  renderSurface();
+  // L’application est rendue avant les annotations afin que Seyès puisse
+  // fournir son conteneur scrollable au projecteur de notes.
   renderActiveApp();
+  renderedPageSnapshot = nextPage ? clonePlain(nextPage) : null;
+  renderSurface();
   renderWidgets();
 }
 
@@ -385,6 +460,12 @@ function handleWorkspaceState(next){
     workspaceBootstrapped = true;
   }
 
+  const incomingIds = new Set(incoming.pages.map((page) => page.id));
+  workspace.pages.filter((page) => !incomingIds.has(page.id)).forEach((page) => {
+    const tool = getTeacherTool(page.toolId);
+    try { tool?.disposeProjector?.({ page, pageId:page.id, host:appHost }); } catch (error) { console.warn(error); }
+  });
+
   workspace = incoming;
   const page = activePage();
   if (!page || !getTeacherTool(page.toolId)) setAppControlsOpen(false);
@@ -398,10 +479,15 @@ channel = createTeacherToolsChannel({
     if (message?.type === "dashboard-ready") {
       if (workspaceBootstrapped) send("projector-workspace", { workspace: clonePlain(workspace), bootstrapped:true });
       send("projector-ready");
+      send("projector-chrome-visibility", { visible: projectionChromeVisible });
       send("request-workspace");
       return;
     }
     if (message?.type === "workspace-state") { handleWorkspaceState(message.workspace); return; }
+    if (message?.type === "set-projector-chrome-visibility") {
+      setProjectionChromeVisible(message.visible);
+      return;
+    }
     if (message?.type === "close-projector") window.close();
   }
 });
@@ -431,6 +517,8 @@ btnAnnotations?.addEventListener("click", () => {
 });
 btnWidgetsClose?.addEventListener("click", () => setWidgetsDrawerOpen(false));
 btnPageDrawerClose?.addEventListener("click", () => setPageDrawerOpen(false));
+btnPagePrev?.addEventListener("click", () => cyclePage(-1));
+btnPageNext?.addEventListener("click", () => cyclePage(1));
 btnPageAdd?.addEventListener("click", () => setAppCatalogOpen(true));
 btnAppCatalogClose?.addEventListener("click", () => setAppCatalogOpen(false));
 appCatalog?.addEventListener("click", (event) => { if (event.target === appCatalog) setAppCatalogOpen(false); });

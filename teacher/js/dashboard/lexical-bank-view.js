@@ -202,11 +202,23 @@ function formatCount(value){
   return new Intl.NumberFormat("fr-FR").format(Math.max(0, Number(value) || 0));
 }
 
+function normalizeImagierWordSlug(value){
+  return String(value || "")
+    .trim()
+    .normalize("NFC")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/[’']/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function createLexicalBankViewController({
   view,
   host,
   getIsSuperAdmin,
   listLexicalEntries,
+  listImagierImages,
   saveLexicalEntryAsAdmin,
   deleteLexicalEntryAsAdmin,
   upsertLexicalEntriesAsAdmin,
@@ -215,6 +227,7 @@ export function createLexicalBankViewController({
   onChanged
 } = {}){
   let entries = [];
+  let imagierWordSlugs = new Set();
   let isLoading = false;
   let loadError = "";
   let search = "";
@@ -229,15 +242,9 @@ export function createLexicalBankViewController({
     return getIsSuperAdmin?.() === true;
   }
 
-  function getTitleElement(){
-    return view?.querySelector?.(".dashboard-section-title") || null;
-  }
-
   function setOpenState(nextOpen){
     isOpen = nextOpen === true;
     view?.classList.toggle("is-lexical-bank-open", isOpen);
-    const title = getTitleElement();
-    if (title) title.textContent = isOpen ? "Mots" : "Ressources";
   }
 
   async function reload(){
@@ -246,7 +253,18 @@ export function createLexicalBankViewController({
     loadError = "";
     render();
     try {
-      entries = (await listLexicalEntries()).map(normalizeEntry);
+      const [lexicalRows, imagierImages] = await Promise.all([
+        listLexicalEntries(),
+        Promise.resolve().then(() => listImagierImages?.() || []).catch((error) => {
+          console.warn("Impossible de charger les correspondances de l’imagier.", error);
+          return [];
+        })
+      ]);
+      entries = lexicalRows.map(normalizeEntry);
+      imagierWordSlugs = new Set((Array.isArray(imagierImages) ? imagierImages : [])
+        .filter((image) => image?.is_active !== false)
+        .map((image) => normalizeImagierWordSlug(image?.word_slug))
+        .filter(Boolean));
     } catch (error) {
       console.error("Impossible de charger la banque lexicale.", error);
       loadError = error?.message || "Impossible de charger la banque lexicale.";
@@ -303,15 +321,17 @@ export function createLexicalBankViewController({
     `;
   }
 
-  function renderToolbar(){
+  function renderHeader(){
     const categories = getCategories();
     return `
-      <div class="dashboard-lexical-toolbar">
-        <div class="dashboard-lexical-toolbar-main">
-          <button class="btn dashboard-btn-with-icon" type="button" data-lexical-action="back">
+      <header class="dashboard-config-header dashboard-explorer-header dashboard-lexical-header">
+        <div class="dashboard-config-header-main">
+          <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-lexical-action="back" title="Retour aux ressources" aria-label="Retour aux ressources">
             <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
-            <span>Ressources</span>
           </button>
+          <div class="dashboard-section-title">Mots</div>
+        </div>
+        <div class="dashboard-config-header-center dashboard-lexical-toolbar-main">
           <label class="dashboard-lexical-search">
             <span class="dashboard-material-icon" aria-hidden="true">search</span>
             <input type="search" data-lexical-search value="${escapeAttr(search)}" placeholder="Rechercher un mot…" autocomplete="off">
@@ -325,22 +345,22 @@ export function createLexicalBankViewController({
             ${categories.map((category) => `<option value="${escapeAttr(category)}" ${categoryFilter === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}
           </select>
         </div>
-        <div class="dashboard-lexical-toolbar-actions">
+        <div class="dashboard-config-header-actions dashboard-lexical-toolbar-actions">
           <span class="dashboard-lexical-count">${formatCount(entries.length)} mot${entries.length > 1 ? "s" : ""}</span>
-          <button class="btn dashboard-btn-with-icon" type="button" data-lexical-action="export" ${entries.length ? "" : "disabled"}>
+          <button class="btn dashboard-btn-with-icon dashboard-header-action-btn" type="button" data-lexical-action="export" ${entries.length ? "" : "disabled"}>
             <span class="dashboard-material-icon" aria-hidden="true">download</span><span>Exporter XLSX</span>
           </button>
           ${isAdmin() ? `
-            <button class="btn dashboard-btn-with-icon" type="button" data-lexical-action="import" ${pendingImport ? "disabled" : ""}>
+            <button class="btn dashboard-btn-with-icon dashboard-header-action-btn" type="button" data-lexical-action="import" ${pendingImport ? "disabled" : ""}>
               <span class="dashboard-material-icon" aria-hidden="true">upload_file</span><span>Importer XLSX</span>
             </button>
-            <button class="btn primary dashboard-btn-with-icon" type="button" data-lexical-action="add">
+            <button class="btn primary dashboard-btn-with-icon dashboard-header-action-btn" type="button" data-lexical-action="add">
               <span class="dashboard-material-icon" aria-hidden="true">add</span><span>Ajouter un mot</span>
             </button>
             <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-lexical-file hidden>
           ` : ""}
         </div>
-      </div>
+      </header>
     `;
   }
 
@@ -370,7 +390,7 @@ export function createLexicalBankViewController({
           <tbody>
             ${filtered.map((entry) => `
               <tr data-lexical-id="${escapeAttr(entry.id || "")}" tabindex="0" role="button" aria-label="Ouvrir ${escapeAttr(entry.entry)}">
-                <td class="is-entry">${escapeHtml(entry.entry)}</td>
+                <td class="is-entry${imagierWordSlugs.has(normalizeImagierWordSlug(entry.entry_key || entry.entry)) ? " has-imagier-image" : ""}">${escapeHtml(entry.entry)}</td>
                 <td>${escapeHtml(entry.category)}</td>
                 <td><span class="dashboard-lexical-level-pill">${escapeHtml(entry.lexical_level)}</span></td>
                 <td class="is-cgp"><span class="dashboard-lexical-cgp-pill">${getLexicalEntryCgpComplexity(entry)}</span></td>
@@ -390,7 +410,7 @@ export function createLexicalBankViewController({
     host.classList.remove("dashboard-explorer-host");
     host.innerHTML = `
       <div class="dashboard-lexical-bank-view">
-        ${renderToolbar()}
+        ${renderHeader()}
         <div class="dashboard-lexical-content">${renderTable()}</div>
       </div>
     `;

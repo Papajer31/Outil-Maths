@@ -93,9 +93,11 @@ export function normalizeImageState(rawState = {}){
 
   return {
     source,
-    sourceKind: ["file", "url"].includes(String(rawState.sourceKind || "").trim())
+    sourceKind: ["file", "url", "resource"].includes(String(rawState.sourceKind || "").trim())
       ? String(rawState.sourceKind).trim()
       : "",
+    resourceId: String(rawState.resourceId || "").trim(),
+    mimeType: String(rawState.mimeType || "").trim(),
     imageName: String(rawState.imageName || "").trim(),
     naturalWidth: Math.max(0, Math.trunc(Number(rawState.naturalWidth) || 0)),
     naturalHeight: Math.max(0, Math.trunc(Number(rawState.naturalHeight) || 0)),
@@ -156,10 +158,12 @@ export function applyImageAction({ action, payload = {}, state } = {}){
           sourceKind: isLocalBlob
             ? "file"
             : (
-              ["file", "url"].includes(String(payload?.sourceKind || "").trim())
+              ["file", "url", "resource"].includes(String(payload?.sourceKind || "").trim())
                 ? String(payload.sourceKind).trim()
                 : "url"
             ),
+          resourceId: String(payload?.resourceId || "").trim(),
+          mimeType: String(payload?.mimeType || "").trim(),
           imageName: String(payload?.imageName || "Image").trim(),
           naturalWidth: payload?.naturalWidth,
           naturalHeight: payload?.naturalHeight,

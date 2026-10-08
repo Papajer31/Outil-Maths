@@ -3299,6 +3299,7 @@ export async function listImagierAudioEntriesAsAdmin() {
       label: word,
       text: word,
       imageSlug,
+      wordSlug,
       imageUrl: String(urlData?.publicUrl || "").trim(),
       imagierFolderId: String(resource?.folder_id || imagierRoot.id),
       imagierFolderPath: buildFolderPath(resource?.folder_id),

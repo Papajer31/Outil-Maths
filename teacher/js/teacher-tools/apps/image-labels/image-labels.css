@@ -1,0 +1,79 @@
+/* ========================================
+   MINI-APP TABLEAU — ÉTIQUETTES IMAGES
+   Le panneau reprend volontairement les styles
+   structurels de l’app Étiquettes Texte.
+======================================== */
+
+.tt-image-labels-file-btn input{
+  display:none;
+}
+
+.tt-image-labels-depth-bar{
+  justify-content:flex-start;
+}
+
+.tt-image-labels-depth-label{
+  color:rgba(255,255,255,.68);
+  font-size:13px;
+  font-weight:900;
+}
+
+/* La ligne d’objet, la sélection, l’œil et les actions viennent de
+   .tt-labels-object-* ; seules la miniature et sa géométrie diffèrent. */
+.tt-image-labels-select.tt-labels-object-select{
+  grid-template-columns:44px 26px minmax(0, 1fr);
+}
+
+.tt-image-labels-thumb{
+  width:44px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.09);
+  background:
+    linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.055) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.055) 75%),
+    rgba(0,0,0,.16);
+  background-position:0 0, 6px 6px;
+  background-size:12px 12px;
+}
+
+.tt-image-labels-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+}
+
+.tt-image-labels-name{
+  min-width:0;
+}
+
+@media (max-width: 1100px){
+  .tt-image-labels-depth-bar{
+    overflow-x:auto;
+  }
+}
+
+.ttp-image-labels-root,.ttp-image-labels-layer{position:absolute;inset:0;overflow:hidden}
+.ttp-image-labels-layer{touch-action:none;user-select:none}
+.ttp-image-label-item{position:absolute;border:0;background:transparent;padding:0;margin:0;display:block;cursor:grab;touch-action:none;transform:none;outline:none}
+.ttp-image-label-item.is-dragging{cursor:grabbing}
+.ttp-image-label-item img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.ttp-image-label-item.is-selected::after{content:"";position:absolute;inset:-3px;border:2px solid rgba(245,158,11,.95);border-radius:5px;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.8)}
+.ttp-image-labels-selection-box{position:absolute;border:1px solid rgba(37,99,235,.9);background:rgba(59,130,246,.12);pointer-events:none;z-index:100000}
+.ttp-image-labels-selection-box[hidden]{display:none}
+.ttp-image-labels-group-box{position:absolute;border:2px solid rgba(245,158,11,.95);border-radius:6px;pointer-events:none;z-index:99990;box-shadow:0 0 0 1px rgba(255,255,255,.8)}
+.ttp-image-labels-group-box.is-single{border-color:transparent;box-shadow:none}
+.ttp-image-labels-layer.has-multi-selection .ttp-image-label-item.is-selected::after{display:none}
+.ttp-image-labels-group-box[hidden]{display:none}
+.ttp-image-labels-resize-handle{position:absolute;width:13px;height:13px;border-radius:50%;border:2px solid #fff;background:#f59e0b;box-shadow:0 1px 4px rgba(15,23,42,.3);pointer-events:auto;padding:0}
+.ttp-image-labels-resize-handle.is-nw{left:-7px;top:-7px;cursor:nwse-resize}.ttp-image-labels-resize-handle.is-ne{right:-7px;top:-7px;cursor:nesw-resize}.ttp-image-labels-resize-handle.is-sw{left:-7px;bottom:-7px;cursor:nesw-resize}.ttp-image-labels-resize-handle.is-se{right:-7px;bottom:-7px;cursor:nwse-resize}
+.ttp-image-labels-drop-zones{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:12px;z-index:100100;pointer-events:none}
+.ttp-image-labels-drop-target{min-width:132px;height:66px;border-radius:16px;border:2px dashed rgba(100,116,139,.22);background:rgba(255,255,255,.12);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;gap:8px;color:rgba(51,65,85,.22);opacity:.15;transition:opacity .12s ease,border-color .12s ease,background .12s ease,color .12s ease,transform .12s ease;pointer-events:auto}
+.ttp-image-labels-drop-target[hidden]{display:none}
+.ttp-image-labels-drop-target.is-drop-near{opacity:.55;color:rgba(51,65,85,.72);border-color:rgba(100,116,139,.55);background:rgba(255,255,255,.62)}
+.ttp-image-labels-drop-target.is-drop-hot{opacity:1;transform:scale(1.04);background:rgba(255,255,255,.94)}
+.ttp-image-labels-drop-target.is-duplicate.is-drop-hot{border-color:#2563eb;color:#1d4ed8}.ttp-image-labels-drop-target.is-group.is-drop-hot{border-color:#d97706;color:#b45309}.ttp-image-labels-drop-target.is-delete.is-drop-hot{border-color:#dc2626;color:#b91c1c}
+.ttp-image-labels-drop-target .ttp-material-icon{font-size:24px}.ttp-image-labels-drop-target strong{font-size:.82rem}

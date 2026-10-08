@@ -36,6 +36,11 @@
   text-wrap: balance;
 }
 
+[data-quiz-runtime-text-fit].is-maximal-fit-pending,
+[data-quiz-runtime-qcm-fit].is-maximal-fit-pending {
+  visibility:hidden !important;
+}
+
 .quiz-runtime-widget-content {
   width: 100%;
   min-width: 0;

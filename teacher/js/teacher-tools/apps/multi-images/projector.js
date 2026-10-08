@@ -1,4 +1,8 @@
 import {
+  MULTI_IMAGES_BOARD_DIMENSION_MAX,
+  MULTI_IMAGES_BOARD_DIMENSION_MIN,
+  MULTI_IMAGES_BOARD_LAYOUT_AUTO,
+  MULTI_IMAGES_BOARD_LAYOUT_CUSTOM,
   MULTI_IMAGES_MAX_IMAGES,
   MULTI_IMAGES_MODE_BOARD,
   MULTI_IMAGES_MODE_GALLERY,
@@ -39,15 +43,59 @@ function computeBestGrid(count, ratio){
   return best;
 }
 
+function syncBoardSelectionFrame(cell){
+  if (!cell) return;
+  const image = cell.querySelector?.(".ttp-multi-images-img");
+  const naturalWidth = Number(image?.naturalWidth) || 0;
+  const naturalHeight = Number(image?.naturalHeight) || 0;
+  const rect = cell.getBoundingClientRect?.();
+  const cellWidth = Number(rect?.width) || 0;
+  const cellHeight = Number(rect?.height) || 0;
+
+  if (!naturalWidth || !naturalHeight || !cellWidth || !cellHeight) {
+    cell.style.removeProperty("--ttp-multi-images-selection-width");
+    cell.style.removeProperty("--ttp-multi-images-selection-height");
+    return;
+  }
+
+  const scale = Math.min(cellWidth / naturalWidth, cellHeight / naturalHeight);
+  const renderedWidth = Math.max(0, naturalWidth * scale);
+  const renderedHeight = Math.max(0, naturalHeight * scale);
+  cell.style.setProperty("--ttp-multi-images-selection-width", `${renderedWidth}px`);
+  cell.style.setProperty("--ttp-multi-images-selection-height", `${renderedHeight}px`);
+}
+
+function syncBoardSelectionFrames(root){
+  root?.querySelectorAll?.(".ttp-multi-images-board-cell").forEach(syncBoardSelectionFrame);
+}
+
 function syncBoardGrid(root){
   const board = root?.querySelector?.(".ttp-multi-images-board");
   if (!board) return;
   const count = Number(board.dataset.count) || 1;
+  const layout = String(board.dataset.layout || MULTI_IMAGES_BOARD_LAYOUT_AUTO);
+
+  if (layout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM) {
+    const columns = Math.max(
+      MULTI_IMAGES_BOARD_DIMENSION_MIN,
+      Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(board.dataset.columns) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+    );
+    const rows = Math.max(
+      MULTI_IMAGES_BOARD_DIMENSION_MIN,
+      Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(board.dataset.rows) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+    );
+    board.style.setProperty("--ttp-multi-images-columns", String(columns));
+    board.style.setProperty("--ttp-multi-images-rows", String(rows));
+    syncBoardSelectionFrames(root);
+    return;
+  }
+
   const rect = board.getBoundingClientRect?.();
   const ratio = rect?.width && rect?.height ? rect.width / rect.height : 16 / 9;
   const grid = computeBestGrid(count, ratio);
   board.style.setProperty("--ttp-multi-images-columns", String(grid.columns));
   board.style.setProperty("--ttp-multi-images-rows", String(grid.rows));
+  syncBoardSelectionFrames(root);
 }
 
 function bindBoardResize(root){
@@ -333,7 +381,11 @@ function syncExistingBoard({ host, state } = {}){
   viewer.style.setProperty("--ttp-multi-images-fit", getImageObjectFit(state));
   viewer.style.setProperty("--ttp-multi-images-gap", `${state.gap}px`);
   viewer.style.setProperty("--ttp-multi-images-background", state.backgroundColor);
+  viewer.style.setProperty("--ttp-multi-images-grid-color", state.gridColor);
   board.dataset.count = String(state.images.length);
+  board.dataset.layout = state.boardLayout;
+  board.dataset.rows = String(state.boardRows);
+  board.dataset.columns = String(state.boardColumns);
 
   board.querySelectorAll("[data-multi-images-board-index]").forEach((cell) => {
     const index = Math.trunc(Number(cell.dataset.multiImagesBoardIndex) || 0);
@@ -423,6 +475,27 @@ function bindBoardCellSelection(cell, sendAction){
   });
 }
 
+function renderProjectorGridStepper({ id, label, value } = {}){
+  const safeId = String(id || "").trim();
+  const safeValue = Math.max(
+    MULTI_IMAGES_BOARD_DIMENSION_MIN,
+    Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(value) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+  );
+  const action = safeId === "rows" ? "set-board-rows" : "set-board-columns";
+  const payloadKey = safeId === "rows" ? "boardRows" : "boardColumns";
+
+  return `
+    <div class="ttp-multi-images-grid-stepper">
+      <span class="ttp-multi-images-grid-stepper-label">${escapeHtml(label)}</span>
+      <div class="ttp-multi-images-grid-stepper-control">
+        <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-multi-images-grid-action="${escapeAttr(action)}" data-multi-images-grid-key="${escapeAttr(payloadKey)}" data-multi-images-grid-value="${safeValue - 1}" aria-label="Diminuer ${escapeAttr(label)}" ${safeValue <= MULTI_IMAGES_BOARD_DIMENSION_MIN ? "disabled" : ""}>remove</button>
+        <span class="ttp-multi-images-grid-stepper-value">${escapeHtml(safeValue)}</span>
+        <button class="ttp-widget-icon-btn ttp-material-icon" type="button" data-widget-action data-multi-images-grid-action="${escapeAttr(action)}" data-multi-images-grid-key="${escapeAttr(payloadKey)}" data-multi-images-grid-value="${safeValue + 1}" aria-label="Augmenter ${escapeAttr(label)}" ${safeValue >= MULTI_IMAGES_BOARD_DIMENSION_MAX ? "disabled" : ""}>add</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderChromeControls({ chromeHost, state, sendAction } = {}){
   if (!chromeHost) return;
   const count = state.images.length;
@@ -440,6 +513,23 @@ function renderChromeControls({ chromeHost, state, sendAction } = {}){
       </div>`
     : `<span class="ttp-multi-images-config-count">${escapeHtml(count)} image${count > 1 ? "s" : ""}</span>`;
 
+  const boardLayoutControls = state.mode === MULTI_IMAGES_MODE_BOARD
+    ? `
+      <div class="ttp-multi-images-config-row">
+        <span class="ttp-multi-images-config-label">Disposition</span>
+        <div class="ttp-multi-images-mode-switch" role="group" aria-label="Disposition du tableau">
+          <button class="ttp-widget-action-btn${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_AUTO ? " is-active" : ""}" type="button" data-widget-action data-multi-images-board-layout="${MULTI_IMAGES_BOARD_LAYOUT_AUTO}" aria-pressed="${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_AUTO ? "true" : "false"}">Automatique</button>
+          <button class="ttp-widget-action-btn${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? " is-active" : ""}" type="button" data-widget-action data-multi-images-board-layout="${MULTI_IMAGES_BOARD_LAYOUT_CUSTOM}" aria-pressed="${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? "true" : "false"}">Personnalisée</button>
+        </div>
+      </div>
+      ${state.boardLayout === MULTI_IMAGES_BOARD_LAYOUT_CUSTOM ? `
+        <div class="ttp-multi-images-config-row ttp-multi-images-grid-controls" aria-label="Dimensions du tableau">
+          ${renderProjectorGridStepper({ id:"rows", label:"Lignes", value:state.boardRows })}
+          ${renderProjectorGridStepper({ id:"columns", label:"Colonnes", value:state.boardColumns })}
+        </div>
+      ` : ""}`
+    : "";
+
   chromeHost.innerHTML = `
     <div class="ttp-multi-images-config">
       <div class="ttp-multi-images-config-row">
@@ -453,6 +543,7 @@ function renderChromeControls({ chromeHost, state, sendAction } = {}){
           </button>
         </div>
       </div>
+      ${boardLayoutControls}
       <div class="ttp-multi-images-config-row">
         ${galleryControls}
         <button class="ttp-widget-action-btn" type="button" data-widget-action data-multi-images-action="shuffle" title="Mélanger l’ordre des images" aria-label="Mélanger l’ordre des images" ${count > 1 ? "" : "disabled"}>
@@ -464,6 +555,20 @@ function renderChromeControls({ chromeHost, state, sendAction } = {}){
 
   chromeHost.querySelectorAll("[data-multi-images-mode]").forEach((button) => {
     button.addEventListener("click", () => sendAction?.("set-mode", { mode: button.dataset.multiImagesMode }));
+  });
+  chromeHost.querySelectorAll("[data-multi-images-board-layout]").forEach((button) => {
+    button.addEventListener("click", () => sendAction?.("set-board-layout", { boardLayout: button.dataset.multiImagesBoardLayout }));
+  });
+  chromeHost.querySelectorAll("[data-multi-images-grid-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.multiImagesGridAction;
+      const key = button.dataset.multiImagesGridKey;
+      const value = Math.max(
+        MULTI_IMAGES_BOARD_DIMENSION_MIN,
+        Math.min(MULTI_IMAGES_BOARD_DIMENSION_MAX, Math.trunc(Number(button.dataset.multiImagesGridValue) || MULTI_IMAGES_BOARD_DIMENSION_MIN))
+      );
+      sendAction?.(action, { [key]: value });
+    });
   });
   chromeHost.querySelector("[data-multi-images-action='previous']")?.addEventListener("click", () => sendAction?.("previous-image"));
   chromeHost.querySelector("[data-multi-images-action='next']")?.addEventListener("click", () => sendAction?.("next-image"));
@@ -537,8 +642,8 @@ function renderBoard({ host, state, sendAction } = {}){
   if (syncExistingBoard({ host, state })) return;
   disconnectBoardResize(host);
   host.innerHTML = `
-    <section class="ttp-multi-images-viewer mode-board" style="--ttp-multi-images-fit:${escapeAttr(getImageObjectFit(state))}; --ttp-multi-images-gap:${escapeAttr(state.gap)}px; --ttp-multi-images-background:${escapeAttr(state.backgroundColor)};">
-      <div class="ttp-multi-images-board" data-count="${escapeAttr(state.images.length)}" data-images-signature="${escapeAttr(getBoardImagesSignature(state))}">
+    <section class="ttp-multi-images-viewer mode-board" style="--ttp-multi-images-fit:${escapeAttr(getImageObjectFit(state))}; --ttp-multi-images-gap:${escapeAttr(state.gap)}px; --ttp-multi-images-background:${escapeAttr(state.backgroundColor)}; --ttp-multi-images-grid-color:${escapeAttr(state.gridColor)};">
+      <div class="ttp-multi-images-board" data-count="${escapeAttr(state.images.length)}" data-layout="${escapeAttr(state.boardLayout)}" data-rows="${escapeAttr(state.boardRows)}" data-columns="${escapeAttr(state.boardColumns)}" data-images-signature="${escapeAttr(getBoardImagesSignature(state))}">
         ${state.images.map((image, index) => `
           <figure class="ttp-multi-images-board-cell${index === state.activeIndex ? " is-active" : ""}" role="button" tabindex="0" aria-pressed="${index === state.activeIndex ? "true" : "false"}" data-multi-images-board-index="${index}" title="${escapeAttr(image.imageName || `Image ${index + 1}`)}">
             <img class="ttp-multi-images-img" src="${escapeAttr(image.source)}" alt="${escapeAttr(image.imageName || "Image projetée")}" data-image-id="${escapeAttr(image.id)}">
@@ -553,10 +658,13 @@ function renderBoard({ host, state, sendAction } = {}){
     bindBoardCellSelection(button, sendAction);
   });
   host.querySelectorAll(".ttp-multi-images-img").forEach((imageNode) => {
+    const cell = imageNode.closest?.(".ttp-multi-images-board-cell");
+    imageNode.addEventListener("load", () => syncBoardSelectionFrame(cell), { once: true });
     imageNode.addEventListener("error", () => {
       const imageId = imageNode.dataset.imageId;
       sendAction?.("set-image-error", { imageId, message: "Impossible de charger l’image." });
     }, { once: true });
+    if (imageNode.complete && imageNode.naturalWidth > 0) syncBoardSelectionFrame(cell);
   });
 
   bindBoardResize(host);
