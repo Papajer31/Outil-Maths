@@ -9,7 +9,8 @@ import {
   SURFACE_BACKGROUND_SCOPE_SHARED,
   createInitialSurfaceState,
   applySurfaceAction,
-  normalizeSurfaceState
+  normalizeSurfaceState,
+  resolveSurfaceBackground
 } from "../teacher-tools/surface/state.js";
 import { createSurfaceBackgroundPanel } from "../teacher-tools/surface/background-control.js";
 import { normalizeSceneBackgroundState } from "../teacher-tools/widgets/background/tool.js";
@@ -25,12 +26,26 @@ import {
 } from "../teacher-tools/apps/image/source.js";
 import { MULTI_IMAGES_MAX_IMAGES } from "../teacher-tools/apps/multi-images/model.js";
 import { IMAGE_LABELS_MAX_IMAGES } from "../teacher-tools/apps/image-labels/model.js";
+import { createTableauPageCreationUi } from "../creations/tableau-page-ui.js";
 
 const WORKSPACE_VERSION = 5;
 
 function clonePlain(value){
   try { if (typeof structuredClone === "function") return structuredClone(value); } catch {}
   return JSON.parse(JSON.stringify(value ?? null));
+}
+
+
+function normalizePageCreationLink(raw = null){
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const resourceId = String(raw.resourceId || "").trim();
+  const type = String(raw.type || "").trim();
+  if (!resourceId || !type) return null;
+  return {
+    resourceId,
+    type,
+    title:String(raw.title || "").trim()
+  };
 }
 
 function createPageId(toolId = "page"){
@@ -45,7 +60,8 @@ function createPage(tool){
     label: tool.label,
     icon: tool.icon,
     state: tool.createInitialState?.() || {},
-    surface: createInitialSurfaceState()
+    surface: createInitialSurfaceState(),
+    creation:null
   };
 }
 
@@ -56,7 +72,8 @@ function createBlankPage(){
     label: "Page vierge",
     icon: "crop_square",
     state: {},
-    surface: createInitialSurfaceState()
+    surface: createInitialSurfaceState(),
+    creation:null
   };
 }
 
@@ -69,7 +86,8 @@ function normalizePage(raw = {}){
       label: String(raw.label || "Page vierge"),
       icon: String(raw.icon || "crop_square"),
       state: {},
-      surface: normalizeSurfaceState(raw.surface)
+      surface: normalizeSurfaceState(raw.surface),
+      creation:normalizePageCreationLink(raw.creation)
     };
   }
   const tool = getTeacherTool(rawToolId);
@@ -80,7 +98,8 @@ function normalizePage(raw = {}){
     label: rawToolId === "labels" && String(raw.label || "").trim() === "Étiquettes" ? tool.label : String(raw.label || tool.label),
     icon: String(raw.icon || tool.icon || "widgets"),
     state: raw.state && typeof raw.state === "object" ? raw.state : (tool.createInitialState?.() || {}),
-    surface: normalizeSurfaceState(raw.surface)
+    surface: normalizeSurfaceState(raw.surface),
+    creation:normalizePageCreationLink(raw.creation)
   };
 }
 
@@ -132,6 +151,7 @@ export function createTeacherToolsViewController({
   let projectorConnected = false;
   let projectorChromeVisible = true;
   let appControlSession = null;
+  let pageCreationSession = null;
   let backgroundPanelSession = null;
   let backgroundPanelOpen = false;
   let pickerOverlay = null;
@@ -450,7 +470,7 @@ export function createTeacherToolsViewController({
         if (message?.type === "projector-ready" || message?.type === "request-workspace") {
           projectorConnected = true;
           renderHeaderStatus();
-          syncProjector();
+          void ensureWorkspaceLoaded().then(syncProjector);
           return;
         }
         if (message?.type === "projector-closed") {
@@ -516,6 +536,7 @@ export function createTeacherToolsViewController({
       showToast?.("Le navigateur ne permet pas d’ouvrir le canal de projection.", { isError: true });
       return;
     }
+    if (projectorWindow?.closed) projectorConnected = false;
     if (projectorWindow && !projectorWindow.closed) {
       try { projectorWindow.focus(); } catch {}
       syncProjector();
@@ -524,6 +545,13 @@ export function createTeacherToolsViewController({
     if (projectorConnected) {
       try { projectorWindow = window.open("", "teacherToolsProjector"); } catch {}
       if (projectorWindow && !projectorWindow.closed) {
+        // The close notification can arrive after the user clicks Reopen.
+        // A named window recreated by window.open starts on about:blank.
+        try {
+          if (projectorWindow.location.href === "about:blank") {
+            projectorWindow.location.replace(buildTeacherToolsProjectorUrl({ teacherSpaceId:spaceId, channelId }));
+          }
+        } catch {}
         try { projectorWindow.focus(); } catch {}
         syncProjector();
         return;
@@ -540,7 +568,7 @@ export function createTeacherToolsViewController({
     }
     try { projectorWindow.focus(); } catch {}
     renderHeaderStatus();
-    window.setTimeout(syncProjector, 160);
+    window.setTimeout(() => { void ensureWorkspaceLoaded().then(syncProjector); }, 160);
   }
 
   function closeProjectorNow(){
@@ -635,6 +663,35 @@ export function createTeacherToolsViewController({
     markDirty();
     renderView();
     syncProjector();
+  }
+
+  async function addCreationResource(resource){
+    const spaceId = teacherSpaceId();
+    if (!spaceId) throw new Error("Espace enseignant introuvable.");
+    const { loadTujerCreation } = await import("../creations/service.js");
+    const loaded = await loadTujerCreation({ teacherSpaceId:spaceId, resource, hydrate:true });
+    const pagePayload = loaded?.payload?.page;
+    if (!pagePayload || typeof pagePayload !== "object") throw new Error("Cette création ne contient pas de page Tableau.");
+    const tool = getTeacherTool(pagePayload.toolId);
+    if (!tool) throw new Error("La mini-app associée à cette création n’est pas disponible.");
+    const page = normalizePage({
+      ...pagePayload,
+      id:createPageId(tool.id),
+      label:String(pagePayload.label || tool.label),
+      icon:String(pagePayload.icon || tool.icon || "widgets"),
+      creation:{
+        resourceId:String(resource?.id || ""),
+        type:String(loaded?.descriptor?.type || loaded?.document?.creationType || ""),
+        title:String(loaded?.document?.title || resource?.title || tool.label)
+      }
+    });
+    if (!page) throw new Error("Impossible de restaurer cette création.");
+    workspace = normalizeWorkspace({ ...workspace, selectedPageId:page.id, pages:[...workspace.pages, page] });
+    markDirty();
+    renderView();
+    syncProjector();
+    showToast?.(`« ${page.creation?.title || page.label} » ajouté au Tableau.`);
+    return page;
   }
 
   function resolveClipboardTargetPage(toolId){
@@ -953,6 +1010,7 @@ export function createTeacherToolsViewController({
     if (!changed) return;
     markDirty();
     if (renderPanel) renderControls();
+    else if (selectedPage()?.id === id) appControlSession?.update?.(getPage(id));
     if (sync) syncProjector();
   }
 
@@ -969,7 +1027,7 @@ export function createTeacherToolsViewController({
       showToast?.(String(result.error), { isError: true });
       return;
     }
-    if (result.patch) updatePage(page.id, result.patch, { renderPanel: true, sync: true });
+    if (result.patch) updatePage(page.id, result.patch, { renderPanel: result.renderPanel !== false, sync: true });
     if (result.message) showToast?.(String(result.message), { isError: result.isError === true });
   }
 
@@ -1250,12 +1308,38 @@ export function createTeacherToolsViewController({
     }
   }
 
+  function renderPageCreationActions(page, tool){
+    const actionsHost = host?.querySelector("[data-page-creation-actions]");
+    if (!actionsHost) return;
+    if (pageCreationSession?.pageId !== page?.id || !tool?.creationType) {
+      pageCreationSession?.ui.destroy();
+      pageCreationSession = null;
+    }
+    actionsHost.hidden = !tool?.creationType;
+    if (!tool?.creationType || !page) { actionsHost.replaceChildren(); return; }
+    if (!pageCreationSession) {
+      pageCreationSession = { pageId:page.id, ui:createTableauPageCreationUi({
+        getWidget:() => getPage(page.id),
+        updateWidget:(patch = {}, options = {}) => updatePage(page.id, patch, options),
+        getTeacherSpace:() => getCurrentTeacherSpace?.() || null,
+        getResolvedPageBackground:() => {
+          const current = getPage(page.id);
+          return current ? resolveSurfaceBackground(current.surface, workspace.sharedBackground) : null;
+        },
+        listResourcesForSpace, showToast,
+        type:tool.creationType, toolId:tool.id, label:tool.label, icon:tool.icon
+      }) };
+    }
+    pageCreationSession.ui.render(actionsHost);
+  }
+
   function renderControls(){
     appControlSession?.destroy?.();
     appControlSession = null;
     const appHost = host?.querySelector("[data-app-control]");
     const page = selectedPage();
     const tool = page ? getTeacherTool(page.toolId) : null;
+    renderPageCreationActions(page, tool);
     if (!appHost) return;
     if (!page) {
       appHost.innerHTML = `<div class="dashboard-activity-empty-state">Ajoute une page pour commencer.</div>`;
@@ -1271,6 +1355,10 @@ export function createTeacherToolsViewController({
       updateWidget: (patch = {}, options = {}) => updatePage(page.id, patch, options),
       getStudents: () => getCurrentStudents?.() || [],
       getTeacherSpace: () => getCurrentTeacherSpace?.() || null,
+      getResolvedPageBackground: () => {
+        const currentPage = getPage(page.id);
+        return currentPage ? resolveSurfaceBackground(currentPage.surface, workspace.sharedBackground) : null;
+      },
       listCatalogActivitiesForTeacherSpace,
       listPedagogicalNodesForTeacher,
       listTeacherActivitiesForSpace,
@@ -1350,7 +1438,7 @@ export function createTeacherToolsViewController({
           <div class="dashboard-activity-splitter" role="separator" aria-orientation="vertical"></div>
           <section class="dashboard-activity-tiles-pane panel tt-board-pane tt-board-control-pane tt-app-control-pane" aria-label="Contrôles">
             <div class="tt-board-pane-header tt-app-control-header">
-              <div class="tt-board-pane-title"><span class="dashboard-material-icon" data-active-app-icon aria-hidden="true">${escapeHtml(page?.icon || "tune")}</span><span data-active-app-label>${escapeHtml(page?.label || "Contrôles")}</span></div>
+              <div class="tt-board-pane-title"><span class="dashboard-material-icon" data-active-app-icon aria-hidden="true">${escapeHtml(page?.icon || "tune")}</span><span data-active-app-label>${escapeHtml(page?.label || "Contrôles")}</span><span class="tt-page-creation-actions" data-page-creation-actions hidden></span></div>
               <div class="tt-board-header-right"><div class="tt-board-actions">
                 <button class="tt-board-action-btn tt-background-panel-toggle${backgroundPanelOpen && supportsBackground ? " is-active" : ""}" type="button" data-toggle-background aria-expanded="${backgroundPanelOpen && supportsBackground ? "true" : "false"}" ${supportsBackground ? "" : "disabled"}><span class="dashboard-material-icon" aria-hidden="true">wallpaper</span><span>Fond</span></button>
                 <button class="tt-board-action-btn is-danger" type="button" data-close-active ${page ? "" : "disabled"}><span class="dashboard-material-icon" aria-hidden="true">close</span><span>Fermer la page</span></button>
@@ -1385,6 +1473,18 @@ export function createTeacherToolsViewController({
   }
 
   return {
+    openProjection(){
+      // window.open doit être déclenché directement depuis l’événement utilisateur.
+      openProjector();
+    },
+    async openTool(toolId){
+      await ensureWorkspaceLoaded();
+      addPage(toolId);
+    },
+    async addCreationResource(resource){
+      await ensureWorkspaceLoaded();
+      return await addCreationResource(resource);
+    },
     async render(){
       await ensureWorkspaceLoaded();
       renderView();
@@ -1399,6 +1499,7 @@ export function createTeacherToolsViewController({
       host?.removeEventListener("dragleave", handleHostDragLeave);
       host?.removeEventListener("drop", handleHostDrop);
       appControlSession?.destroy?.();
+      pageCreationSession?.ui.destroy();
       backgroundPanelSession?.destroy?.();
       closePicker();
       closeCloseConfirmOverlay();

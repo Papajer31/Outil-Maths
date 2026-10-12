@@ -18,8 +18,6 @@ import {
   buildCatalogActivityConfig,
   findCatalogActivity,
   filterEffectivelyActivePedagogicalNodes,
-  getCatalogActivities,
-  getPedagogicalNodes,
   normalizeCatalogDifficultyLevel,
   normalizeCatalogRuntimeContext,
   normalizeCatalogActivity,
@@ -57,16 +55,13 @@ export async function listPublicActivitiesForSpace(accessCode) {
   const availableActivities = catalogActivities.filter((activity) => activeFolderIds.has(String(activity.pedagogical_node_id || activity.folder_id || "")));
   if (!code) return availableActivities;
 
-  let visibilityRows = [];
-  try {
-    const { data, error } = await supabase.rpc("get_catalog_visibility_for_space", {
-      p_access_code: code
-    });
-    if (error) throw error;
-    visibilityRows = Array.isArray(data) ? data : [];
-  } catch {
-    visibilityRows = [];
+  const { data, error } = await supabase.rpc("get_catalog_visibility_for_space", {
+    p_access_code: code
+  });
+  if (error) {
+    throw new Error("Visibilité des activités momentanément indisponible (Supabase).", { cause: error });
   }
+  const visibilityRows = Array.isArray(data) ? data : [];
 
   return sortCatalogActivities(applyCatalogVisibility(availableActivities, visibilityRows))
     .filter((activity) => activity?.is_visible !== false);
@@ -82,21 +77,17 @@ export async function listPublicCatalogActivities() {
 }
 
 async function listPublishedCatalogActivities() {
-  try {
-    const { data, error } = await supabase
-      .from("catalog_activities")
-      .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
-      .eq("status", "published")
-      .order("pedagogical_node_id", { ascending: true })
-      .order("adventure_tier", { ascending: true })
-      .order("display_order", { ascending: true })
-      .order("title", { ascending: true });
+  const { data, error } = await supabase
+    .from("catalog_activities")
+    .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .eq("status", "published")
+    .order("pedagogical_node_id", { ascending: true })
+    .order("adventure_tier", { ascending: true })
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
 
-    if (error) throw error;
-    return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
-  } catch {
-    return getCatalogActivities();
-  }
+  if (error) throw new Error("Catalogue momentanément indisponible (Supabase).", { cause: error });
+  return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
 }
 
 function normalizeImageAssetSlug(value) {
@@ -244,10 +235,8 @@ export async function listPublicPedagogicalNodesForSpace(accessCode) {
     return filterEffectivelyActivePedagogicalNodes(
       sortPedagogicalNodes(rows.map((folder, index) => normalizePedagogicalNode(normalizeFolderRecord(folder, index), index)))
     );
-  } catch (err) {
-    console.warn("Arborescence publique en base indisponible, utilisation du secours local.", err);
-    return filterEffectivelyActivePedagogicalNodes(getPedagogicalNodes())
-      .map((folder, index) => normalizeFolderRecord(folder, index));
+  } catch (error) {
+    throw new Error("Arborescence pédagogique momentanément indisponible (Supabase).", { cause: error });
   }
 }
 

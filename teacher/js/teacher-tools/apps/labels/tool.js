@@ -12,6 +12,7 @@ export const labelsTeacherTool = defineTeacherTool({
   id: "labels",
   label: "Étiquettes Texte",
   icon: "label",
+  creationType: "tableau.page.labels-text",
   description: "Créer, mettre en forme et déplacer librement des étiquettes texte sur le Tableau.",
   surface: {
     background: true,

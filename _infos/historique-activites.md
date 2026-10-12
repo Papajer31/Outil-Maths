@@ -1,64 +1,23 @@
-# Contrat d’exécution et historique des activités
+# Historique des activités — contrat sémantique
 
-Dernière mise à jour : 2026-08-30.
+Dernière mise à jour : 2026-10-10.
 
-## Périmètre du premier socle
+## Principe
 
-Le runtime élève produit désormais un historique commun pour les activités individuelles lancées depuis :
+L’historique détaillé ne cherche plus à déduire ce qui s’est passé à partir du DOM de l’outil.
+Chaque outil choisit explicitement les informations pédagogiques qu’il souhaite conserver et les envoie au moteur commun sous forme de cellules typées.
 
-- `exploration` ;
-- `mission` ;
-- `adventure` lorsque ce mode sera activé plus tard.
+Il n’existe volontairement :
 
-Le mode Aventure n’est pas encore affiché et aucun calcul de jauge de compétence n’est réalisé dans ce patch. Le champ `points_awarded` existe déjà mais vaut donc `0` pour le moment.
+- aucun repli DOM ;
+- aucun renderer spécifique par outil dans le dashboard ;
+- aucune rétrocompatibilité avec les anciens snapshots détaillés.
 
-Les séances de groupe, les tests Catalogue, les projections et les sessions partagées ne créent pas encore de détail individuel : l’attribution fiable à un élève devra être traitée séparément.
+Le patch SQL `64_history_semantic_table_reset.sql` supprime les anciennes tentatives et verrouille la base sur ce nouveau contrat. La progression Exploration existante est figée en baseline avant la purge ; les états Aventure et Missions ne sont pas remis à zéro.
 
-## Tentative d’activité
+## Contrat d’un outil
 
-Une tentative correspond au lancement d’une activité Catalogue pour un élève identifié.
-
-Elle contient notamment :
-
-- l’activité et son contexte de lancement ;
-- l’étape de Mission éventuelle ;
-- l’outil exécuté ;
-- le niveau de départ et le niveau final ;
-- le nombre de questions répondues, justes et fausses ;
-- la durée active ;
-- un instantané compact des réglages de passation ;
-- un statut : `running`, `completed`, `interrupted` ou `abandoned`.
-
-Les statuts ont le sens suivant :
-
-- `running` : tentative ouverte ;
-- `completed` : fin normale de l’activité, y compris fin par temps prévu ;
-- `abandoned` : l’élève a explicitement choisi de quitter ou de changer d’activité avant la fin ;
-- `interrupted` : coupure non volontaire ou tentative laissée ouverte. Une ancienne tentative `running` est automatiquement classée `interrupted` au prochain lancement de l’élève.
-
-Un identifiant client UUID rend l’ouverture idempotente et évite de créer deux tentatives si une même requête est rejouée.
-
-## Résultat d’une question
-
-Chaque question produit une ligne indépendante contenant :
-
-- son index dans la tentative ;
-- le niveau réellement présenté ;
-- le niveau obtenu après la réponse ;
-- le résultat `correct`, `incorrect` ou `unanswered` ;
-- les points attribués ;
-- le temps actif de réponse, hors correction et hors pause explicite ;
-- un instantané de la question ;
-- un instantané de la réponse de l’élève ;
-- un instantané de la correction.
-
-Le niveau est propre au couple élève–activité et enregistré après chaque réponse. Si la dernière question est ratée, la baisse est sauvegardée immédiatement et devient le niveau de départ de la prochaine tentative de cette même activité. Un autre outil ou une autre activité conserve son propre niveau indépendant.
-
-Une question abandonnée avant validation est enregistrée `unanswered` et ne modifie pas le niveau.
-
-## Instantanés
-
-Le contrat runtime accepte un hook optionnel :
+Le runtime peut exposer :
 
 ```js
 getHistorySnapshot(stage, container, context)
@@ -66,80 +25,119 @@ getHistorySnapshot(stage, container, context)
 
 `stage` vaut `question`, `answer` ou `correction`.
 
-Un outil peut ainsi retourner un objet sémantique correspondant exactement à ses données générées. Sans hook spécifique, le moteur utilise un repli DOM compact qui conserve :
+Le snapshot attendu possède uniquement une clé racine `history` :
 
-- le texte visible ;
-- les champs et valeurs ;
-- les choix et leurs états ;
-- les métadonnées des images et audios ;
-- les dimensions des canevas.
+```js
+{
+  history: {
+    columns: [
+      { key: "question", label: "Question" },
+      { key: "answer", label: "Réponse de l’élève", role: "answer" },
+      { key: "expected", label: "Attendu" }
+    ],
+    cells: {
+      question: { type: "text", value: "68" }
+    }
+  }
+}
+```
 
-Aucun HTML complet, fichier binaire, image en base64, URL temporaire signée ou capture d’écran n’est conservé. Chaque instantané et chaque configuration sont limités en taille pour protéger la base.
+Les colonnes sont généralement déclarées au stade `question`. Les stades `answer` et `correction` peuvent n’envoyer que les cellules qui leur appartiennent. Le renderer enseignant fusionne les trois snapshots pour produire une ligne unique. Une colonne peut aussi fournir une petite `legend` structurée dans son en-tête lorsque le sens des états visuels doit rester lisible sans ajouter une colonne dédiée.
 
-Les outils très graphiques pourront progressivement ajouter leur hook sémantique sans changer le schéma ni le moteur commun.
+## Colonnes communes
 
-## Écriture et résilience
+Le moteur ajoute automatiquement :
 
-L’ordre d’écriture est garanti pour une tentative :
+- à gauche : une colonne fine sans en-tête avec le numéro de la question ;
+- à droite : la durée active de la question.
 
-1. ouverture de la tentative ;
-2. enregistrement séquentiel de chaque question ;
-3. finalisation de la tentative.
+Toutes les colonnes intermédiaires sont définies par l’outil.
 
-La progression d’Exploration est mise à jour à chaque question juste ou fausse, sans attendre la fermeture de l’activité. Les compteurs cumulés sont appliqués une seule fois lors de la finalisation, ou lors du classement automatique d’une tentative interrompue.
+Une colonne portant `role: "answer"` est automatiquement colorée selon l’issue réelle enregistrée par le runtime :
 
-Une tentative Mission est acceptée uniquement si :
+- vert : `correct` ;
+- rouge : `incorrect` ;
+- neutre : `unanswered`.
 
-- la Mission est active ;
-- l’étape correspond à l’activité lancée ;
-- la Mission appartient au même espace enseignant ;
-- elle est attribuée à l’élève ou à sa classe.
+L’outil ne renvoie donc jamais lui-même un ✓/✗ uniquement pour colorer sa réponse.
 
-## Tables et RPC
+## Types de cellules disponibles
 
-Tables actives :
+Le moteur commun connaît actuellement :
+
+- `text` : texte ou nombre rendu comme texte ;
+- `tokens` : suite d’éléments courts, avec tonalités optionnelles `accent`, `muted`, `correct`, `incorrect` ;
+- `image` : image avec `src`, `alt` et libellé facultatif ;
+- `audio` : source audio avec lecteur compact ;
+- `result` : ✓ / ✗ lorsque l’outil a réellement besoin d’un résultat binaire comme donnée autonome ;
+- `sequence` : suite ordonnée d’éléments reproduisant leur écriture (`script` / `cursive`) et un état visuel éventuel (`correct`, `missed`, `wrong`, `neutral`).
+
+Un nouveau type ne doit être ajouté que lorsqu’un outil concret en a réellement besoin.
+
+## Affichage enseignant
+
+Une tentative reste affichée sous forme de carte compacte avec :
+
+- date et heure ;
+- contexte (Exploration / Aventure / Mission) ;
+- nom de l’activité ;
+- score ;
+- durée totale.
+
+À l’ouverture, le détail devient un tableau unique et compact. Il n’y a plus une carte séparée « Question / Réponse / Correction » pour chaque question.
+
+Si un outil n’a pas encore été raccordé au nouveau contrat, la tentative peut être enregistrée mais son détail affiche simplement :
+
+> Historique détaillé non disponible pour cet outil.
+
+## Premier outil raccordé
+
+`Nombres en lettres` est l’outil pilote du nouveau système.
+
+Son tableau est :
+
+|  | Question | Réponse de l’élève | Attendu | Temps |
+|---:|---|---|---|---:|
+| 1 | 68 | soixante-huit | soixante-huit | 9 s |
+| 2 | 47 | quarante sept | quarante-sept | 17 s |
+
+La cellule « Réponse de l’élève » porte seule la coloration de réussite/erreur.
+
+## Stockage
+
+Les tables restent :
 
 - `student_activity_sessions` : une ligne par tentative ;
 - `student_activity_session_questions` : une ligne par question ;
-- `student_activity_progress` : niveau courant et compteurs légers d’Exploration.
+- `student_activity_progress` : progression Exploration courante ;
+- `student_activity_progress_baseline` : part de progression antérieure aux tentatives actuellement conservées.
 
-RPC publiques :
+Chaque question conserve encore trois JSON séparés :
 
-- `start_student_activity_attempt` ;
-- `record_student_activity_attempt_question` ;
-- `finish_student_activity_attempt`.
+- `question_snapshot` ;
+- `answer_snapshot` ;
+- `correction_snapshot`.
 
-L’ancienne RPC `record_student_activity_session` est conservée uniquement pour sécuriser le déploiement d’un ancien onglet déjà ouvert. Le nouveau client ne l’utilise plus.
+Ce découpage permet de capturer les données exactement au bon moment tout en affichant ensuite une seule ligne fusionnée.
 
-## Consultation enseignant
+## Méthode de migration des outils
 
-L’onglet `Classe` exploite désormais cet historique directement : un clic sur un élève remplace l’ancien placeholder de notes par une chronologie de ses tentatives. La liste peut être filtrée par période, mode, discipline et activité. Un clic sur une tentative déplie, dans le même écran, le détail question / réponse de l’élève / correction. Les anciennes tentatives qui ne possèdent que le résumé léger restent visibles mais sont signalées comme dépourvues de détail par question.
+Les outils sont raccordés un par un.
 
-L’interface lit les instantanés sauvegardés au moment de l’exécution et ne reconstruit jamais les anciennes questions à partir de la configuration actuelle de l’activité.
+Pour chaque outil, on décide d’abord pédagogiquement :
 
-## Étapes ultérieures
+1. quelles colonnes l’enseignant doit voir ;
+2. quelle donnée remplit chaque colonne ;
+3. quel type de cellule convient ;
+4. quelle colonne joue le rôle de réponse de l’élève.
 
-Ce socle ne comprend pas encore :
+Ensuite seulement le hook `getHistorySnapshot()` est adapté. Aucun code d’affichage spécifique à l’outil ne doit être ajouté dans le dashboard.
 
-- l’archivage des anciens détails ;
-- la purge annuelle ;
-- les scores et jauges Aventure décrits dans `aventure.md` ;
-- la matrice exacte de points et le vieillissement ;
-- l’attribution détaillée en séance de groupe ;
-- les hooks sémantiques particuliers des outils qui en auront besoin.
+## Jauges
 
-## Contrôle fin des tentatives (patch 37)
+L’historique et les jauges restent deux couches distinctes :
 
-L’historique et la progression sont désormais deux dimensions séparées pour `exploration` et `mission`.
+- l’historique répond à « qu’a fait l’élève ? » ;
+- la jauge répond à « où en est l’élève sur cet objectif/palier ? ».
 
-Chaque tentative peut recevoir trois actions côté enseignant :
-
-- **Supprimer de l’historique** : masque la trace sans modifier aucun état pédagogique. La ligne technique reste en base afin de permettre un recalcul exact ultérieur.
-- **Réinitialiser les effets** : conserve la trace mais annule son effet pédagogique. En Exploration, `student_activity_progress` est reconstruit à partir des autres tentatives. En Mission, l’étape ciblée et toutes les suivantes redeviennent à faire et leurs effets adaptatifs sont annulés.
-- **Supprimer totalement** : applique la réinitialisation précédente puis supprime physiquement la tentative ciblée et ses instantanés de questions.
-
-Les tentatives encore visibles dont les effets ont été annulés portent le marqueur `progress_voided_at` et sont signalées dans l’interface par **Effets réinitialisés**.
-
-`student_activity_progress_baseline` conserve uniquement la part d’anciens agrégats qui n’est plus explicable par les sessions encore présentes. Cette compatibilité est nécessaire parce que le patch 33 pouvait supprimer physiquement une trace sans modifier sa progression. Les recalculs futurs peuvent ainsi rester stables même si des suppressions ont eu lieu avant le patch 37.
-
-La réinitialisation fine d’Aventure n’est volontairement pas traitée ici : elle nécessitera la reconstruction cohérente des jauges et passages Aventure.
+La refonte des jauges d’évaluation viendra après le raccordement fiable des outils, afin que toute évolution d’une jauge puisse être expliquée par des traces lisibles.

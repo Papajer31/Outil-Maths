@@ -1,5 +1,3 @@
-import { captureSemanticDomHistorySnapshot } from "./activity-history.js";
-
 const TOOL_ACTIVITY_MODES = Object.freeze(["individual", "group"]);
 const TOOL_ACTIVITY_MODE_LABELS = Object.freeze({
   individual: "Individuel",
@@ -702,13 +700,14 @@ function normalizeRuntimeWrapper(runtime, context = {}, tool = null) {
     };
   }
 
-  // Contrat optionnel d’historique riche. Les outils peuvent retourner un
-  // instantané structuré pour question / answer / correction. Le moteur
-  // utilise sinon un instantané DOM générique.
-  normalized.getHistorySnapshot = (stage = "question", container = null, maybeContext = context) => {
-    if (getHistorySnapshot) return getHistorySnapshot(stage, container, maybeContext);
-    return captureSemanticDomHistorySnapshot(container, stage);
-  };
+  // Contrat optionnel d’historique sémantique. Aucun repli DOM : tant qu’un
+  // outil n’a pas défini explicitement son historique, il n’enregistre pas de
+  // détail de question.
+  if (getHistorySnapshot) {
+    normalized.getHistorySnapshot = (stage = "question", container = null, maybeContext = context) => {
+      return getHistorySnapshot(stage, container, maybeContext);
+    };
+  }
 
   return normalized;
 }
@@ -779,13 +778,6 @@ function createLegacyToolRuntime(tool, context = {}) {
 
       return false;
     },
-    getHistorySnapshot(stage = "question", container = currentContainer, maybeContext = context) {
-      const targetContainer = container ?? currentContainer;
-      if (typeof safeTool.getHistorySnapshot === "function") {
-        return safeTool.getHistorySnapshot(stage, targetContainer, maybeContext);
-      }
-      return captureSemanticDomHistorySnapshot(targetContainer, stage);
-    },
     unmount(container = currentContainer, maybeContext = context) {
       const targetContainer = container ?? currentContainer;
       try {
@@ -798,6 +790,13 @@ function createLegacyToolRuntime(tool, context = {}) {
       return undefined;
     }
   };
+
+  if (typeof safeTool.getHistorySnapshot === "function") {
+    runtime.getHistorySnapshot = (stage = "question", container = currentContainer, maybeContext = context) => {
+      const targetContainer = container ?? currentContainer;
+      return safeTool.getHistorySnapshot(stage, targetContainer, maybeContext);
+    };
+  }
 
   runtime.nextQuestion = (containerOrContext, maybeContext = context) => runtime.next(containerOrContext, maybeContext);
 

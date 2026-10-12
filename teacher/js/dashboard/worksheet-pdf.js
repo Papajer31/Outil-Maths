@@ -1,3 +1,4 @@
+import { buildPaperGeometry, normalizePaperConfig, getPaperPageSize } from "./printable-paper.js";
 import {
   getWorksheetLayout,
   computeWordSearchLayout,
@@ -374,6 +375,19 @@ class PagePainter {
       "S",
       "Q"
     );
+  }
+
+  dot(xMm, yMm, radiusMm, color){
+    // Cercle vectoriel : quatre arcs de Bézier, sans bitmap ni police embarquée.
+    const x=mm(xMm), y=this.heightPt-mm(yMm), r=mm(radiusMm);
+    const k=.552284749831*r;
+    this.commands.push("q", rgbFill(color),
+      `${num(x+r)} ${num(y)} m`,
+      `${num(x+r)} ${num(y+k)} ${num(x+k)} ${num(y+r)} ${num(x)} ${num(y+r)} c`,
+      `${num(x-k)} ${num(y+r)} ${num(x-r)} ${num(y+k)} ${num(x-r)} ${num(y)} c`,
+      `${num(x-r)} ${num(y-k)} ${num(x-k)} ${num(y-r)} ${num(x)} ${num(y-r)} c`,
+      `${num(x+k)} ${num(y-r)} ${num(x+r)} ${num(y-k)} ${num(x+r)} ${num(y)} c`,
+      "f", "Q");
   }
 
   rect(xMm, yMm, wMm, hMm, { stroke = BLACK, fill = null, widthPt = 0.75 } = {}){
@@ -1491,4 +1505,52 @@ export async function downloadPentominoMaterialPdf({ type = "grids", cellSizeMm 
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function paperHexToRgb(value){
+  const hex=String(value).replace("#", "");
+  if(!/^[0-9a-f]{6}$/i.test(hex)) return BLACK;
+  return [0,2,4].map((i)=>Number.parseInt(hex.slice(i,i+2),16)/255);
+}
+
+/** PDF A4 purement vectoriel utilisant la même géométrie que l'aperçu et les tuiles. */
+export function buildPrintablePaperPdfBytes(options = {}){
+  const config=normalizePaperConfig(options);
+  const page=getPaperPageSize(config);
+  const geometry=buildPaperGeometry(config);
+  const store=new PdfObjectStore();
+  const catalogId=store.reserve();
+  const pagesRootId=store.reserve();
+  const painter=new PagePainter(page.width,page.height,{});
+  for (const fill of geometry.fills || []) {
+    painter.rect(fill.x, fill.y, fill.width, fill.height, { stroke:null, fill:paperHexToRgb(fill.color) });
+  }
+  for (const line of geometry.lines) {
+    painter.line(line.x1,line.y1,line.x2,line.y2,{color:paperHexToRgb(line.color),widthPt:line.widthPt});
+  }
+  for (const dot of geometry.dots) painter.dot(dot.x,dot.y,dot.r,paperHexToRgb(dot.color));
+  const contentId=store.addStream("",painter.toBytes());
+  const pageIds=[store.add(
+    `<< /Type /Page /Parent ${pagesRootId} 0 R `
+    + `/MediaBox [0 0 ${num(mm(page.width))} ${num(mm(page.height))}] `
+    + `/Resources << >> /Contents ${contentId} 0 R >>`
+  )];
+  store.set(pagesRootId,`<< /Type /Pages /Kids [${pageIds.map((id)=>`${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`);
+  store.set(catalogId,`<< /Type /Catalog /Pages ${pagesRootId} 0 R >>`);
+  const infoId=store.add(`<< /Title ${pdfUnicodeString("Papiers et lignages")} /Creator ${pdfLiteralString("Tujer")} >>`);
+  return store.build(catalogId,infoId);
+}
+
+export async function downloadPrintablePaperPdf(options={}){
+  const config=normalizePaperConfig(options);
+  const bytes=buildPrintablePaperPdfBytes(config);
+  const url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=`papiers-lignages-${config.kind}.pdf`;
+  link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),1500);
 }

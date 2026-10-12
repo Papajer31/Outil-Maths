@@ -1054,29 +1054,112 @@ function teardownState(state, container) {
 }
 
 function getSommeDifferenceHistorySnapshot(state, stage = "question") {
-  const q = state.currentQuestion;
-  if (!q) return { kind:"operation", prompt:"" };
-  const safeStage = String(stage || "question").toLowerCase();
-  const facts = [
-    { label:String(q.topCharacter?.name || "Collection 1"), value:`${q.topCount} ${q.object?.plural || "objets"}` },
-    { label:String(q.bottomCharacter?.name || "Collection 2"), value:`${q.bottomCount} ${q.object?.plural || "objets"}` }
-  ];
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const responseMode = state.currentSettings.responseMode;
+
   if (safeStage === "question") {
-    return { schemaVersion:2, kind:"operation", prompt:String(q.instruction || ""), facts };
-  }
-  const student = state.studentAnswerSnapshot || captureAnswerSnapshot(state);
-  if (safeStage === "answer") {
-    if (student?.mode === RESPONSE_MODES.CHOOSE_CALCULATION) {
-      const ids = new Set(Array.isArray(student.choiceIds) ? student.choiceIds : []);
-      const selected = (q.calculationChoices || []).filter((c) => ids.has(c.id)).map((c) => c.expression);
-      return { schemaVersion:2, kind:"choices", values:selected, prompt:"Calcul(s) choisi(s)" };
+    const instruction = String(question.instruction || "Écris le bon calcul.").trim() || "Écris le bon calcul.";
+    const topCount = Number(question.topCount) || 0;
+    const bottomCount = Number(question.bottomCount) || 0;
+    const aids = [];
+    if (responseMode === RESPONSE_MODES.PROPOSED) {
+      aids.push({ text:"Opérateur donné", tone:"accent" });
     }
-    return { schemaVersion:2, kind:"value", value:snapshotToExpression(student), prompt:"Réponse de l’élève" };
+    if (responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+      aids.push({ text:"Calculs proposés", tone:"accent" });
+    }
+
+    return {
+      history: {
+        columns: [
+          { key:"situation", label:"Situation" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" },
+          { key:"aids", label:"Aides" }
+        ],
+        cells: {
+          situation: {
+            type:"text",
+            value:`${instruction} → Collections : ${topCount} et ${bottomCount}`
+          },
+          aids: {
+            type:"tokens",
+            items:aids,
+            emptyText:""
+          }
+        }
+      }
+    };
   }
-  if (state.currentSettings.responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
-    return { schemaVersion:2, kind:"choices", values:(q.calculationChoices || []).filter((c) => c.isCorrect).map((c) => c.expression), prompt:"Réponse(s) correcte(s)" };
+
+  const student = state.studentAnswerSnapshot || captureAnswerSnapshot(state);
+
+  if (safeStage === "answer") {
+    if (responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+      return {
+        history: {
+          cells: {
+            answer: {
+              type:"tokens",
+              items:getCalculationChoiceExpressions(question, student?.choiceIds)
+                .map((text) => ({ text, tone:"default" })),
+              emptyText:""
+            }
+          }
+        }
+      };
+    }
+
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:snapshotToExpression(student)
+          }
+        }
+      }
+    };
   }
-  return { schemaVersion:2, kind:"value", value:String(q.correctOperation?.expression || snapshotToExpression(buildCorrectionSnapshot(q))), prompt:"Correction" };
+
+  if (responseMode === RESPONSE_MODES.CHOOSE_CALCULATION) {
+    return {
+      history: {
+        cells: {
+          expected: {
+            type:"tokens",
+            items:(Array.isArray(question.calculationChoices) ? question.calculationChoices : [])
+              .filter((choice) => choice?.isCorrect === true)
+              .map((choice) => ({ text:String(choice.expression || ""), tone:"default" }))
+              .filter((item) => item.text),
+            emptyText:""
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:String(question.correctOperation?.expression || snapshotToExpression(buildCorrectionSnapshot(question)))
+        }
+      }
+    }
+  };
+}
+
+function getCalculationChoiceExpressions(question, choiceIds) {
+  const selected = new Set((Array.isArray(choiceIds) ? choiceIds : []).map((id) => String(id || "")));
+  return (Array.isArray(question?.calculationChoices) ? question.calculationChoices : [])
+    .filter((choice) => selected.has(String(choice?.id || "")))
+    .map((choice) => String(choice?.expression || "").trim())
+    .filter(Boolean);
 }
 
 function createEmptyAnswerParts() {

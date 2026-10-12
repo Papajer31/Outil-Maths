@@ -75,6 +75,10 @@ Il n’existe plus de manifeste statique. Les banques pédagogiques sont chargé
 
 ## Tableau enseignant
 
+La Fusée est une mini-app singleton enregistrée dans `teacher/js/teacher-tools/apps/fusee/`. Elle héberge la préparation existante dans le panneau principal du Tableau et le runtime existant dans sa popup de projection. Les deux écrans de `games/fusee/` utilisent `tableau-bridge.js` pour échanger avec leur parent, avec vérification de l’origine, de la fenêtre et de l’identifiant de page. Aucun second popup de jeu n’est ouvert depuis le Tableau.
+
+La préparation et le snapshot de partie, incluant le checkpoint de question, sont stockés dans l’état de la page et suivent la sauvegarde du Tableau. Au premier ajout, les données locales de l’ancien jeu peuvent être reprises. Le runtime reste attaché à la projection lorsqu’une autre page est affichée ; il est masqué et suspendu, puis propose de reprendre la mission au retour. L’accès direct au jeu reste compatible avec son fonctionnement autonome.
+
 La scène contient notamment son arrière-plan et son verrouillage. L’arrière-plan est exposé comme widget système obligatoire, mais reste stocké dans `scene.background` et n’est pas envoyé à la projection comme widget manipulable.
 
 ## Historique de l’architecture

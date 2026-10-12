@@ -55,6 +55,9 @@ export function createActivity(initialContext = {}) {
       if (!state.studentSelectionSnapshot) {
         state.studentSelectionSnapshot = new Set(state.selectedIds);
       }
+      if (!state.studentGuideSnapshot) {
+        state.studentGuideSnapshot = state.guideLines.map((line) => ({ ...line }));
+      }
       state.lastEvaluation = evaluateSelection(state.currentQuestion, [...state.studentSelectionSnapshot]);
       state.phaseMode = "answer";
       state.guideLines = [];
@@ -113,6 +116,7 @@ function createRuntimeState(initialContext) {
     lastQuestionKey: "",
     selectedIds: new Set(),
     studentSelectionSnapshot: null,
+    studentGuideSnapshot: null,
     lastEvaluation: null,
     guideLines: [],
     activeGuide: null,
@@ -208,6 +212,7 @@ function loadNextQuestion(state) {
   state.lastQuestionKey = questionKey(nextQuestion);
   state.selectedIds = new Set();
   state.studentSelectionSnapshot = null;
+  state.studentGuideSnapshot = null;
   state.lastEvaluation = null;
   state.guideLines = [];
   state.activeGuide = null;
@@ -602,6 +607,7 @@ function clientToBoardPoint(svg, clientX, clientY) {
 
 function submitCurrentAnswer(state) {
   state.studentSelectionSnapshot = new Set(state.selectedIds);
+  state.studentGuideSnapshot = state.guideLines.map((line) => ({ ...line }));
   state.lastEvaluation = evaluateSelection(state.currentQuestion, [...state.studentSelectionSnapshot]);
 
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
@@ -635,29 +641,67 @@ function getStudentSelection(state) {
 
 function getPointsAlignesHistorySnapshot(state, stage = "question") {
   const question = state.currentQuestion;
-  if (!question) {
-    return { schemaVersion: 2, kind: "geometry-point-selection", prompt: "", points: [] };
-  }
-  const safeStage = String(stage || "question").toLowerCase();
-  const studentSelection = getStudentSelection(state);
-  return {
-    schemaVersion: 2,
-    kind: "geometry-point-selection",
-    prompt: String(question.prompt || ""),
-    mode: String(question.mode || ""),
-    board: { width: BOARD.width, height: BOARD.height },
+  if (!question) return {};
+  const isQuestion = String(stage || "question").trim().toLowerCase() === "question";
+  const mode = String(question.mode || MODES.GROUPS);
+  const expectedIds = (question.expectedIds || []).map(String);
+  const selectedIds = isQuestion ? [] : [...getStudentSelection(state)].map(String);
+  const expectedSet = new Set(expectedIds);
+  const found = selectedIds.filter((id) => expectedSet.has(id)).length;
+  const errors = selectedIds.filter((id) => !expectedSet.has(id)).length;
+  const requestedGroups = mode === MODES.GROUPS ? Math.max(1, Math.floor(expectedIds.length / 3)) : 0;
+
+  const preview = {
+    type: "points-aligned",
+    view: isQuestion ? "question" : "selection",
+    width: BOARD.width,
+    height: BOARD.height,
+    mode,
     points: question.points.map((point) => ({
       id: String(point.id || ""),
-      x: Number(point.x) / BOARD.width,
-      y: Number(point.y) / BOARD.height,
+      x: Number(point.x),
+      y: Number(point.y),
       label: String(point.label || ""),
-      selectable: point.selectable !== false,
-      reference: point.role === "reference"
+      selectable: point.selectable !== false
     })),
-    selectedIds: safeStage === "question" ? [] : [...studentSelection],
-    expectedIds: safeStage === "correction" ? [...(question.expectedIds || [])] : [],
-    helperLines: safeStage === "question" ? [] : state.guideLines.map((line) => ({ ...line }))
+    selectedIds,
+    expectedIds: isQuestion ? [] : expectedIds,
+    helperLines: isQuestion ? [] : (state.studentGuideSnapshot || state.guideLines).map((line) => ({ ...line })),
+    solutionLines: isQuestion ? [] : getSolutionLines(question).map((line) => ({
+      x1: line.x1 / BOARD.width,
+      y1: line.y1 / BOARD.height,
+      x2: line.x2 / BOARD.width,
+      y2: line.y2 / BOARD.height
+    }))
   };
+
+  if (isQuestion) {
+    const subject = mode === MODES.WITH_AB
+      ? "Alignés avec A et B"
+      : mode === MODES.DOUBLE_ALIGNMENT
+        ? "Commun à AB et CD"
+        : requestedGroups > 1 ? `${requestedGroups} groupes de 3 points` : "3 points alignés";
+    const expected = mode === MODES.GROUPS && requestedGroups > 1
+      ? `${requestedGroups} groupes (${expectedIds.length} points)`
+      : `${expectedIds.length} point${expectedIds.length > 1 ? "s" : ""}`;
+    return { history: {
+      columns: [
+        { key: "question", label: "Question", compact: true },
+        { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true },
+        { key: "expected", label: "Attendu", compact: true }
+      ],
+      cells: {
+        question: { type: "text", value: subject, preview },
+        expected: { type: "text", value: expected }
+      }
+    }};
+  }
+
+  const summary = `${found}/${expectedIds.length} correct${found > 1 ? "s" : ""}`
+    + (errors ? ` · ${errors} erreur${errors > 1 ? "s" : ""}` : "");
+  return { history: { cells: {
+    answer: { type: "text", value: summary, preview }
+  }}};
 }
 
 function syncValidationState(state) {
@@ -683,6 +727,7 @@ function teardownState(state, container) {
   state.currentQuestion = null;
   state.selectedIds.clear();
   state.studentSelectionSnapshot = null;
+  state.studentGuideSnapshot = null;
   state.lastEvaluation = null;
   state.guideLines = [];
   state.activeGuide = null;

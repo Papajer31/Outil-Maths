@@ -76,6 +76,8 @@ Le document complet d’un Quiz est stocké en `jsonb` dans `quizzes.document`. 
 
 Les ressources personnelles utilisent `resource_folders`, `resources` et le bucket privé `teacher-resources`. Le rôle `resource_folders.metadata.system_role = "recordings"` retrouve le dossier automatique des enregistrements même s’il est renommé ou déplacé. Le Quiz conserve l’UUID de la ressource, jamais son chemin Storage.
 
+Le socle **Créations Tujer** utilise deux dossiers personnels gérés automatiquement : `Créations Tujer` (`tujer_creations_root`) et `Mes fichiers locaux` (`tujer_local_files_root`). Les créations natives sont des ressources `creation` contenant un JSON versionné. Les PDF locaux pérennisés sont des ressources `document`; les images/audio conservent leur type habituel. `tujer_creation_resource_refs` lie une création à ses ressources personnelles dépendantes afin qu’un fichier encore utilisé ne puisse pas être supprimé. Les sous-dossiers propres aux outils sont créés à la demande grâce à des rôles stables dans `resource_folders.metadata`.
+
 ## Images pédagogiques système
 
 Le bucket public `images` stocke les fichiers sous `bank/<slug>/<empreinte>.<extension>`. Chaque `image_assets` est lié par `resource_id` à une ressource système affichée sous `Ressources système > Images`.

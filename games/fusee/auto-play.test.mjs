@@ -170,8 +170,8 @@ test('les six planètes sont fixes et la question est toujours pour l’élève 
   const game = createGame(4, () => 0);
   assert.equal(Object.values(game.board.nodes).filter(node => node.type === 'planet').length, 6);
   assert.equal(JSON.stringify(PLANETS.map(p => [p.key, p.asset])), JSON.stringify([
-    ['eau','Pla1.png'], ['oxygene','Pla2.png'], ['carburant','Pla3.png'],
-    ['provisions','Pla4.png'], ['merchant','Pla5.png'], ['outils','Pla6.png']
+    ['eau','Pla1.webp'], ['oxygene','Pla2.webp'], ['carburant','Pla3.webp'],
+    ['provisions','Pla4.webp'], ['merchant','Pla5.webp'], ['outils','Pla6.webp']
   ]));
   game.active = 2;
   game.players[0].questions = 4;

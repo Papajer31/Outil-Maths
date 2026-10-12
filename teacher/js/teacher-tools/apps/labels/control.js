@@ -119,7 +119,6 @@ function renderLabelsList(state){
 export function createLabelsControlPanel({ host, getWidget, updateWidget, showToast } = {}){
   let markupHelpPointerHandler = null;
   let markupHelpKeyHandler = null;
-
   function getCurrentState(){
     return normalizeLabelsState(getWidget?.()?.state);
   }

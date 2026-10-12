@@ -4,6 +4,7 @@ import {
   evaluateTargetedCalculationResponse,
   evaluateTokenBoxesResponse,
   formatSelection,
+  formatTargetedStep,
   getTargetedRequiredStepCount,
   hasDuplicateResponseLines,
   normalizeBoxIds,
@@ -19,6 +20,7 @@ import {
   resolveQuestionInstructionText,
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
+import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
 
 let stylesInjected = false;
 const TARGETED_STEP_EQUALS_DELAY_MS = 500;
@@ -85,6 +87,10 @@ export function createActivity(initialContext = {}) {
       };
     },
 
+    getHistorySnapshot(stage = "question") {
+      return buildCalculCibleHistorySnapshot(state, stage);
+    },
+
     getShellAnswerDisplayState(container, context = state.latestContext) {
       state.container = container || state.container;
       state.latestContext = context ?? state.latestContext;
@@ -120,6 +126,221 @@ export function createActivity(initialContext = {}) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+
+function buildCalculCibleHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question || !isTargetedQuestion(question)) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key: "target", label: "Cible", compact: true, align: "center" },
+    { key: "numbers", label: "Nombres de départ", compact: true },
+    { key: "path", label: "Chemin / correction", fill: true }
+  ];
+
+  if (safeStage === "question") {
+    const numbers = Array.isArray(question.initialNumbers) ? question.initialNumbers : question.numbers;
+    return {
+      history: {
+        columns,
+        cells: {
+          target: { type: "tokens", items: [{ text: String(question.target ?? ""), tone: "accent" }] },
+          numbers: {
+            type: "tokens",
+            items: (Array.isArray(numbers) ? numbers : []).map((value) => ({ text: String(value), tone: "default" }))
+          }
+        }
+      }
+    };
+  }
+
+  const submitted = cloneTargetedSteps(
+    state.answerRevealed && state.submittedTargetedSteps.length
+      ? state.submittedTargetedSteps
+      : state.targetedSteps
+  );
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          path: {
+            type: "calculation_path",
+            student: submitted.map((step) => ({ text: formatTargetedStep(step), state: "neutral" })),
+            correction: [],
+            branchAfter: submitted.length - 1
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "correction") {
+    const correction = buildCalculCibleHistoryCorrection(question, submitted);
+    return {
+      history: {
+        cells: {
+          path: {
+            type: "calculation_path",
+            student: correction.student,
+            correction: correction.correction,
+            branchAfter: correction.branchAfter
+          }
+        }
+      }
+    };
+  }
+
+  return {};
+}
+
+function buildCalculCibleHistoryCorrection(question, submittedSteps = []) {
+  const safeSteps = Array.isArray(submittedSteps) ? submittedSteps : [];
+  const target = Number(question?.target);
+  const required = getTargetedRequiredStepCount(question);
+  const finalResult = safeSteps.length ? Number(safeSteps.at(-1)?.result) : Number.NaN;
+  const isFullyCorrect = safeSteps.length === required && finalResult === target;
+
+  if (isFullyCorrect) {
+    return {
+      student: safeSteps.map((step) => ({ text: formatTargetedStep(step), state: "correct" })),
+      correction: [],
+      branchAfter: safeSteps.length - 1
+    };
+  }
+
+  const prefixStates = buildTargetedPrefixStates(question, safeSteps);
+  let viablePrefix = -1;
+  let continuation = [];
+
+  for (let prefixLength = prefixStates.length - 1; prefixLength >= 0; prefixLength -= 1) {
+    const stateAtPrefix = prefixStates[prefixLength];
+    if (!stateAtPrefix) continue;
+    const solution = solveCalculCibleContinuation(stateAtPrefix.tiles, target, getAllowedCalculationOps(question));
+    if (!solution) continue;
+    viablePrefix = prefixLength;
+    continuation = solution;
+    break;
+  }
+
+  // prefixStates[0] correspond à zéro calcul élève. viablePrefix est donc le
+  // nombre de calculs initiaux conservables, pas l'indice du dernier calcul.
+  const viableStepCount = Math.max(0, viablePrefix);
+  const student = safeSteps.map((step, index) => ({
+    text: formatTargetedStep(step),
+    state: index < viableStepCount ? "correct" : "wrong"
+  }));
+
+  return {
+    student,
+    correction: continuation.map((step) => ({ text: formatTargetedStep(step), state: "missed" })),
+    branchAfter: viableStepCount - 1
+  };
+}
+
+function buildTargetedPrefixStates(question, steps = []) {
+  const initial = createTargetedInitialTiles(question).map((tile) => ({
+    value: Number(tile.value),
+    sourceIds: [...(tile.sourceIds ?? [])].map(String)
+  }));
+  const states = [{ tiles: initial }];
+  let active = initial;
+
+  for (const step of Array.isArray(steps) ? steps : []) {
+    const next = applyHistoryTargetedStep(active, step);
+    if (!next) break;
+    active = next;
+    states.push({ tiles: active });
+  }
+
+  return states;
+}
+
+function applyHistoryTargetedStep(activeTiles = [], step = null) {
+  if (!step) return null;
+  const op = normalizeCalcOp(step.op);
+  if (!op) return null;
+
+  const leftSources = [...(step.leftSources ?? step.leftSourceIds ?? [])].map(String).sort();
+  const rightSources = [...(step.rightSources ?? step.rightSourceIds ?? [])].map(String).sort();
+  const sourceKey = (ids) => ids.join("+");
+  const leftKey = sourceKey(leftSources);
+  const rightKey = sourceKey(rightSources);
+
+  let leftIndex = activeTiles.findIndex((tile) => sourceKey([...(tile.sourceIds ?? [])].map(String).sort()) === leftKey);
+  let rightIndex = activeTiles.findIndex((tile, index) => index !== leftIndex && sourceKey([...(tile.sourceIds ?? [])].map(String).sort()) === rightKey);
+
+  if (leftIndex < 0 || rightIndex < 0) {
+    leftIndex = activeTiles.findIndex((tile) => Number(tile.value) === Number(step.leftValue));
+    rightIndex = activeTiles.findIndex((tile, index) => index !== leftIndex && Number(tile.value) === Number(step.rightValue));
+  }
+  if (leftIndex < 0 || rightIndex < 0) return null;
+
+  const left = activeTiles[leftIndex];
+  const right = activeTiles[rightIndex];
+  const result = calculate(left.value, op, right.value);
+  if (!isAllowedTargetedCalculationResult(result, null)) return null;
+  if (Number.isFinite(Number(step.result)) && Number(step.result) !== Number(result)) return null;
+
+  const next = activeTiles.filter((_, index) => index !== leftIndex && index !== rightIndex).map((tile) => ({
+    value: Number(tile.value),
+    sourceIds: [...(tile.sourceIds ?? [])]
+  }));
+  next.push({
+    value: Number(result),
+    sourceIds: [...(left.sourceIds ?? []), ...(right.sourceIds ?? [])].map(String)
+  });
+  return next;
+}
+
+function solveCalculCibleContinuation(activeTiles = [], target, allowedOps = ["+", "-", "×"]) {
+  const start = (Array.isArray(activeTiles) ? activeTiles : []).map((tile) => ({ value: Number(tile.value) }));
+  if (!start.length || !Number.isFinite(Number(target))) return null;
+  const ops = [...new Set((Array.isArray(allowedOps) ? allowedOps : []).map(normalizeCalcOp).filter(Boolean))];
+  const memo = new Set();
+
+  function keyFor(nodes) {
+    return nodes.map((node) => Number(node.value)).sort((a, b) => a - b).join(",");
+  }
+
+  function walk(nodes) {
+    if (nodes.length === 1) return Number(nodes[0].value) === Number(target) ? [] : null;
+    const key = keyFor(nodes);
+    if (memo.has(key)) return null;
+    memo.add(key);
+
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = Number(nodes[i].value);
+        const b = Number(nodes[j].value);
+        const candidates = [];
+        if (ops.includes("+")) candidates.push([a, "+", b]);
+        if (ops.includes("×")) candidates.push([a, "×", b]);
+        if (ops.includes("-")) {
+          candidates.push(a >= b ? [a, "-", b] : [b, "-", a]);
+        }
+        if (ops.includes("÷")) {
+          if (b !== 0 && Number.isInteger(a) && Number.isInteger(b) && a % b === 0) candidates.push([a, "÷", b]);
+          if (a !== 0 && Number.isInteger(a) && Number.isInteger(b) && b % a === 0 && a !== b) candidates.push([b, "÷", a]);
+        }
+
+        for (const [left, op, right] of candidates) {
+          const result = calculate(left, op, right);
+          if (!isAllowedTargetedCalculationResult(result, null)) continue;
+          const next = nodes.filter((_, index) => index !== i && index !== j).map((node) => ({ value: Number(node.value) }));
+          next.push({ value: Number(result) });
+          const tail = walk(next);
+          if (!tail) continue;
+          return [{ leftValue: left, rightValue: right, op, result }, ...tail];
+        }
+      }
+    }
+    return null;
+  }
+
+  return walk(start);
 }
 
 function createRuntimeState(initialContext = {}) {
@@ -735,7 +956,7 @@ function renderTargetedStudentSteps(state, { readOnly = false } = {}) {
           data-nc-calc-back="${index}"
           ${backEnabled ? "" : "disabled"}
           aria-label="Revenir en arrière"
-        ><span class="nc-material-icon" aria-hidden="true">undo</span></button>
+        >${renderMaterialIcon("undo", { className: "nc-material-icon" })}</button>
       `;
 
     return `
@@ -816,7 +1037,7 @@ function renderTargetedBackPlaceholder() {
       disabled
       aria-hidden="true"
       tabindex="-1"
-    ><span class="nc-material-icon" aria-hidden="true">undo</span></button>
+    >${renderMaterialIcon("undo", { className: "nc-material-icon" })}</button>
   `;
 }
 

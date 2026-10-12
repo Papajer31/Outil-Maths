@@ -1,5 +1,12 @@
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import { openDashboardConfirmDialog } from "./confirm-dialog.js";
+import { renderActivityHistoryTable } from "./history-table-renderer.js";
+import { createDecimalHistoryPreviewUrl } from "./decimal-history-preview.js";
+import { createNumberLineHistoryPreviewUrl } from "./number-line-history-preview.js";
+import { createCollectionTracePreviewUrl } from "./collection-history-preview.js";
+import { createMillimetreHistoryPreviewUrl, getMillimetreHistoryDialogSize } from "./millimetre-history-preview.js";
+import { createPointsAlignedHistoryPreviewUrl } from "./points-aligned-history-preview.js";
+import { createMotCacheHistoryPreviewUrl, getMotCacheHistoryDialogSize } from "./mot-cache-history-preview.js";
 
 const PERIOD_OPTIONS = Object.freeze([
   ["today", "Aujourd’hui"],
@@ -61,450 +68,16 @@ function getAttemptStatusLabel(value) {
   return "Terminée";
 }
 
-function getQuestionOutcomeMeta(question) {
-  const outcome = String(question?.outcome || "unanswered").trim().toLowerCase();
-  if (outcome === "correct") return { label: "Réussie", className: "is-correct", icon: "check_circle" };
-  if (outcome === "incorrect") return { label: "Erreur", className: "is-incorrect", icon: "cancel" };
-  return { label: "Sans réponse", className: "is-unanswered", icon: "remove_circle" };
-}
-
-function normalizeSnapshotText(value, maxLength = 1800) {
-  const safe = String(value || "")
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  if (safe.length <= maxLength) return safe;
-  return `${safe.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}
-
-function uniqueStrings(values = []) {
-  const seen = new Set();
-  return values
-    .map((value) => normalizeSnapshotText(value, 700))
-    .filter(Boolean)
-    .filter((value) => {
-      const key = value.toLocaleLowerCase("fr-FR");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-function getSnapshotFieldSummary(snapshot) {
-  const fields = Array.isArray(snapshot?.fields) ? snapshot.fields : [];
-  const values = fields.flatMap((field) => {
-    const value = normalizeSnapshotText(field?.value, 500);
-    const checked = field?.checked === true;
-    if (!value && !checked) return [];
-    const label = normalizeSnapshotText(field?.label || field?.name || "", 160);
-    if (checked && !value) return [label || "Sélectionné"];
-    return [label ? `${label} : ${value}` : value];
-  });
-  return uniqueStrings(values);
-}
-
-function choiceLooksSelected(choice, stage) {
-  if (choice?.pressed === true || choice?.selected === true || choice?.checked === true) return true;
-  const classes = Array.isArray(choice?.classes) ? choice.classes.join(" ").toLowerCase() : "";
-  if (stage === "correction") return /correct/.test(classes);
-  return /selected|active|answer|response/.test(classes) && !/incorrect/.test(classes);
-}
-
-function getSnapshotChoiceSummary(snapshot, stage) {
-  const choices = Array.isArray(snapshot?.choices) ? snapshot.choices : [];
-  return uniqueStrings(
-    choices
-      .filter((choice) => choiceLooksSelected(choice, stage))
-      .map((choice) => choice?.text || choice?.ariaLabel || "")
-  );
-}
-
-function getCustomSnapshotSummary(snapshot) {
-  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || snapshot.source !== "tool") return [];
-
-  if (Number(snapshot.schemaVersion || snapshot.version || 0) >= 2) {
-    const lines = [];
-    const prompt = normalizeSnapshotText(snapshot.prompt, 1500);
-    const meta = normalizeSnapshotText(snapshot.meta, 300);
-    const value = normalizeSnapshotText(snapshot.value, 1200);
-    if (prompt) lines.push(prompt);
-    if (meta) lines.push(meta);
-    if (value) lines.push(value);
-    if (Array.isArray(snapshot.facts)) {
-      snapshot.facts.forEach((fact) => {
-        const label = normalizeSnapshotText(fact?.label, 240);
-        const factValue = normalizeSnapshotText(fact?.value, 700);
-        if (factValue) lines.push(label ? `${label} : ${factValue}` : factValue);
-      });
-    }
-    if (Array.isArray(snapshot.values)) {
-      snapshot.values.forEach((item) => {
-        const text = normalizeSnapshotText(item, 700);
-        if (text) lines.push(text);
-      });
-    }
-    if (lines.length) return uniqueStrings(lines);
-  }
-
-  const ignored = new Set([
-    "version", "schemaVersion", "source", "stage", "kind", "text", "fields", "choices", "media", "canvases", "truncated", "originalLength", "topLevelKeys"
-  ]);
-  const lines = [];
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (ignored.has(key) || value == null) continue;
-    if (["string", "number", "boolean"].includes(typeof value)) {
-      const text = normalizeSnapshotText(value, 500);
-      if (text) lines.push(`${humanizeHistoryKey(key)} : ${text}`);
-    } else if (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) {
-      const text = normalizeSnapshotText(value.join(" · "), 700);
-      if (text) lines.push(`${humanizeHistoryKey(key)} : ${text}`);
-    }
-  }
-  return uniqueStrings(lines);
-}
-
-function humanizeHistoryKey(key) {
-  const labels = {
-    responseType:"Type de réponse", attemptCount:"Essais", hintCount:"Indices", timedOut:"Temps écoulé",
-    audioPlayCount:"Écoutes audio", maskedTextViewCount:"Affichages du texte masqué",
-    maskedTextVisibleDurationMs:"Durée d’affichage du texte masqué"
-  };
-  return labels[key] || String(key || "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
-}
-
-function getSnapshotMediaSummary(snapshot) {
-  const media = Array.isArray(snapshot?.media) ? snapshot.media : [];
-  return uniqueStrings(media.map((item) => item?.alt || item?.title || item?.ariaLabel || ""));
-}
-
-function getSnapshotStageSummary(snapshot, stage) {
-  const custom = getCustomSnapshotSummary(snapshot);
-
-  if (stage === "answer") {
-    const structured = uniqueStrings([
-      ...getSnapshotFieldSummary(snapshot),
-      ...getSnapshotChoiceSummary(snapshot, stage),
-      ...custom
-    ]);
-    if (structured.length) return structured;
-  } else if (stage === "correction") {
-    // Une saisie conserve souvent la réponse de l'élève pendant la correction :
-    // on ne doit donc surtout pas relire les valeurs des champs comme corrigé.
-    const structured = uniqueStrings([
-      ...getSnapshotChoiceSummary(snapshot, stage),
-      ...custom
-    ]);
-    if (structured.length) return structured;
-  } else {
-    const text = normalizeSnapshotText(snapshot?.text, 1800);
-    const media = getSnapshotMediaSummary(snapshot);
-    const structured = uniqueStrings([text, ...media, ...custom]);
-    if (structured.length) return structured;
-  }
-
-  const text = normalizeSnapshotText(snapshot?.text, 1800);
-  if (text) return [text];
-
-  const canvases = Array.isArray(snapshot?.canvases) ? snapshot.canvases : [];
-  if (canvases.length) return ["Réponse visuelle enregistrée dans la zone de travail."];
-  return [];
-}
-
-function renderOccurrenceSelectionSnapshot(snapshot, stage) {
-  const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
-  if (!items.length) return "";
-
-  const selectedIds = new Set((Array.isArray(snapshot?.selectedIds) ? snapshot.selectedIds : []).map(String));
-  const expectedIds = new Set((Array.isArray(snapshot?.expectedIds) ? snapshot.expectedIds : []).map(String));
-  const prompt = normalizeSnapshotText(snapshot?.prompt, 600);
-  const target = normalizeSnapshotText(snapshot?.target, 120);
-
-  const tokens = items.map((item) => {
-    const id = String(item?.id || "");
-    const selected = selectedIds.has(id);
-    const expected = stage === "correction" ? (expectedIds.has(id) || item?.expected === true) : item?.expected === true;
-    const classes = ["dashboard-history-occurrence-token"];
-
-    if (stage === "answer") {
-      if (selected) classes.push("is-selected");
-      else classes.push("is-muted");
-    } else if (stage === "correction") {
-      if (expected && selected) classes.push("is-correct");
-      else if (expected) classes.push("is-missed");
-      else if (selected) classes.push("is-incorrect");
-      else classes.push("is-muted");
-    }
-
-    return `<span class="${classes.join(" ")}">${escapeHtml(item?.text || "")}</span>`;
-  }).join("");
-
-  let intro = "";
-  if (stage === "question") {
-    intro = prompt ? `<div class="dashboard-history-occurrence-prompt">${escapeHtml(prompt)}</div>` : "";
-  } else if (stage === "answer") {
-    intro = `<div class="dashboard-history-occurrence-summary">${selectedIds.size} sélection${selectedIds.size > 1 ? "s" : ""}</div>`;
-  } else if (stage === "correction") {
-    intro = target ? `<div class="dashboard-history-occurrence-summary">Occurrences attendues de « ${escapeHtml(target)} »</div>` : "";
-  }
-
-  const legend = stage === "correction" ? `
-    <div class="dashboard-history-occurrence-legend">
-      <span><i class="is-correct"></i>Correcte</span>
-      <span><i class="is-missed"></i>Oubliée</span>
-      <span><i class="is-incorrect"></i>Incorrecte</span>
-    </div>
-  ` : "";
-
-  return `${intro}<div class="dashboard-history-occurrence-sequence">${tokens}</div>${legend}`;
-}
-
-function renderNumberWordsSnapshot(snapshot, stage, outcome) {
-  const value = normalizeSnapshotText(snapshot?.value, 1200);
-  const prompt = normalizeSnapshotText(snapshot?.prompt, 700);
-  const directionLabel = normalizeSnapshotText(snapshot?.directionLabel, 120);
-  const valueLabel = normalizeSnapshotText(snapshot?.valueLabel, 160);
-  const outcomeName = String(outcome?.className || "");
-
-  if (stage === "question") {
-    return `
-      ${prompt ? `<div class="dashboard-history-visual-prompt">${escapeHtml(prompt)}</div>` : ""}
-      <div class="dashboard-history-visual-toolbar">
-        ${directionLabel ? `<span class="dashboard-history-visual-badge">${escapeHtml(directionLabel)}</span>` : ""}
-      </div>
-      <div class="dashboard-history-value-card is-source">
-        ${valueLabel ? `<div class="dashboard-history-value-card-label">${escapeHtml(valueLabel)}</div>` : ""}
-        <div class="dashboard-history-value-card-value">${escapeHtml(value || "—")}</div>
-      </div>
-    `;
-  }
-
-  let statusClass = "is-student";
-  let statusIcon = "";
-  let statusText = "";
-  if (stage === "correction") {
-    statusClass = "is-expected";
-    statusIcon = "check_circle";
-    statusText = "Attendu";
-  } else if (outcomeName === "is-correct") {
-    statusClass = "is-correct";
-    statusIcon = "check_circle";
-    statusText = "Correct";
-  } else if (outcomeName === "is-incorrect") {
-    statusClass = "is-incorrect";
-    statusIcon = "cancel";
-    statusText = "Réponse donnée";
-  } else {
-    statusClass = "is-unanswered";
-    statusIcon = "remove_circle";
-    statusText = "Sans réponse";
-  }
-
-  return `
-    <div class="dashboard-history-value-card ${statusClass}">
-      <div class="dashboard-history-value-card-head">
-        <div class="dashboard-history-value-card-label">${escapeHtml(valueLabel || statusText)}</div>
-        ${statusIcon ? `<span class="dashboard-history-value-status ${statusClass}"><span class="dashboard-material-icon" aria-hidden="true">${statusIcon}</span>${escapeHtml(statusText)}</span>` : ""}
-      </div>
-      <div class="dashboard-history-value-card-value">${escapeHtml(value || "—")}</div>
-    </div>
-  `;
-}
-
-function normalizeHistoryComparableText(value) {
-  return normalizeSnapshotText(value, 1600).toLocaleLowerCase("fr-FR");
-}
-
-function renderSommeDifferenceSnapshot(snapshot, stage, outcome, correctionSnapshot = null) {
-  const prompt = normalizeSnapshotText(snapshot?.prompt, 700);
-
-  if (stage === "question") {
-    const facts = Array.isArray(snapshot?.facts) ? snapshot.facts : [];
-    return `
-      ${prompt ? `<div class="dashboard-history-visual-prompt">${escapeHtml(prompt)}</div>` : ""}
-      ${facts.length ? `
-        <div class="dashboard-history-operation-facts">
-          ${facts.map((fact) => {
-            const label = normalizeSnapshotText(fact?.label, 180);
-            const value = normalizeSnapshotText(fact?.value, 300);
-            return `
-              <div class="dashboard-history-operation-fact">
-                ${label ? `<div class="dashboard-history-operation-fact-label">${escapeHtml(label)}</div>` : ""}
-                <div class="dashboard-history-operation-fact-value">${escapeHtml(value || "—")}</div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      ` : ""}
-    `;
-  }
-
-  const values = snapshot?.kind === "choices"
-    ? (Array.isArray(snapshot?.values) ? snapshot.values : [])
-    : [snapshot?.value];
-  const safeValues = uniqueStrings(values);
-  const expectedValues = new Set(
-    (correctionSnapshot?.kind === "choices"
-      ? (Array.isArray(correctionSnapshot?.values) ? correctionSnapshot.values : [])
-      : [correctionSnapshot?.value])
-      .map(normalizeHistoryComparableText)
-      .filter(Boolean)
-  );
-
-  if (!safeValues.length) {
-    return `<div class="dashboard-history-operation-empty">Aucune réponse</div>`;
-  }
-
-  if (snapshot?.kind === "choices") {
-    return `
-      <div class="dashboard-history-operation-choices">
-        ${safeValues.map((value) => {
-          let className = "is-student";
-          if (stage === "correction") className = "is-expected";
-          else if (expectedValues.has(normalizeHistoryComparableText(value))) className = "is-correct";
-          else if (outcome?.className === "is-incorrect") className = "is-incorrect";
-          else if (outcome?.className === "is-correct") className = "is-correct";
-          else if (outcome?.className === "is-unanswered") className = "is-unanswered";
-          return `<span class="dashboard-history-operation-choice ${className}">${escapeHtml(value)}</span>`;
-        }).join("")}
-      </div>
-    `;
-  }
-
-  let statusClass = "is-student";
-  let statusIcon = "";
-  let statusText = "";
-  if (stage === "correction") {
-    statusClass = "is-expected";
-    statusIcon = "check_circle";
-    statusText = "Attendu";
-  } else if (outcome?.className === "is-correct") {
-    statusClass = "is-correct";
-    statusIcon = "check_circle";
-    statusText = "Correct";
-  } else if (outcome?.className === "is-incorrect") {
-    statusClass = "is-incorrect";
-    statusIcon = "cancel";
-    statusText = "Réponse donnée";
-  } else {
-    statusClass = "is-unanswered";
-    statusIcon = "remove_circle";
-    statusText = "Sans réponse";
-  }
-
-  return `
-    <div class="dashboard-history-operation-value ${statusClass}">
-      <div class="dashboard-history-operation-expression">${escapeHtml(safeValues[0])}</div>
-      ${statusIcon ? `<span class="dashboard-history-value-status ${statusClass}"><span class="dashboard-material-icon" aria-hidden="true">${statusIcon}</span>${escapeHtml(statusText)}</span>` : ""}
-    </div>
-  `;
-}
-
-function renderSpecialSnapshotContent(snapshot, stage, outcome, { questionSnapshot = null, correctionSnapshot = null } = {}) {
-  if (snapshot?.kind === "occurrence-selection") {
-    return renderOccurrenceSelectionSnapshot(snapshot, stage);
-  }
-  if (snapshot?.kind === "number-words") {
-    return renderNumberWordsSnapshot(snapshot, stage, outcome);
-  }
-  if (questionSnapshot?.kind === "operation") {
-    return renderSommeDifferenceSnapshot(snapshot, stage, outcome, correctionSnapshot);
-  }
-  return "";
-}
-
-function renderSnapshotBlock(title, snapshot, stage, emptyText, { outcome = null, questionSnapshot = null, correctionSnapshot = null } = {}) {
-  const specialContent = renderSpecialSnapshotContent(snapshot, stage, outcome, { questionSnapshot, correctionSnapshot });
-  const lines = specialContent ? [] : getSnapshotStageSummary(snapshot, stage);
-  return `
-    <div class="dashboard-history-snapshot dashboard-history-snapshot--${escapeAttr(stage)}${specialContent ? " dashboard-history-snapshot--special" : ""}">
-      <div class="dashboard-history-snapshot-title">${escapeHtml(title)}</div>
-      <div class="dashboard-history-snapshot-content">
-        ${specialContent || (lines.length
-          ? lines.map((line) => `<div class="dashboard-history-snapshot-line">${escapeHtml(line)}</div>`).join("")
-          : `<div class="dashboard-history-snapshot-empty">${escapeHtml(emptyText)}</div>`)}
-      </div>
-    </div>
-  `;
-}
-
-function getComparableSnapshotValue(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") return "";
-  return normalizeSnapshotText(snapshot.value, 1600).toLocaleLowerCase("fr-FR");
-}
-
-function canFoldRedundantCorrection(question, outcome) {
-  if (outcome?.className !== "is-correct") return false;
-  const answer = question?.answer_snapshot;
-  const correction = question?.correction_snapshot;
-
-  if (answer?.kind === "number-words" && correction?.kind === "number-words") {
-    const answerValue = getComparableSnapshotValue(answer);
-    const correctionValue = getComparableSnapshotValue(correction);
-    return Boolean(answerValue && correctionValue && answerValue === correctionValue);
-  }
-
-  if (question?.question_snapshot?.kind === "operation") {
-    const answerValues = answer?.kind === "choices"
-      ? uniqueStrings(Array.isArray(answer?.values) ? answer.values : []).map(normalizeHistoryComparableText).sort()
-      : [normalizeHistoryComparableText(answer?.value)].filter(Boolean);
-    const correctionValues = correction?.kind === "choices"
-      ? uniqueStrings(Array.isArray(correction?.values) ? correction.values : []).map(normalizeHistoryComparableText).sort()
-      : [normalizeHistoryComparableText(correction?.value)].filter(Boolean);
-    return Boolean(
-      answerValues.length
-      && answerValues.length === correctionValues.length
-      && answerValues.every((value, index) => value === correctionValues[index])
-    );
-  }
-
-  return false;
-}
-
-function renderQuestion(question, index) {
-  const outcome = getQuestionOutcomeMeta(question);
-  const foldCorrection = canFoldRedundantCorrection(question, outcome);
-  return `
-    <article class="dashboard-history-question ${outcome.className}">
-      <header class="dashboard-history-question-header">
-        <div class="dashboard-history-question-title">Question ${index + 1}</div>
-        <div class="dashboard-history-question-meta">
-          <span class="dashboard-history-question-outcome ${outcome.className}">
-            <span class="dashboard-material-icon" aria-hidden="true">${outcome.icon}</span>
-            ${escapeHtml(outcome.label)}
-          </span>
-          <span>${escapeHtml(formatDuration(question?.duration_ms))}</span>
-        </div>
-      </header>
-      <div class="dashboard-history-question-grid${foldCorrection ? " dashboard-history-question-grid--two" : ""}">
-        ${renderSnapshotBlock("Question", question?.question_snapshot, "question", "Question non enregistrée.", {
-          outcome,
-          questionSnapshot: question?.question_snapshot,
-          correctionSnapshot: question?.correction_snapshot
-        })}
-        ${renderSnapshotBlock(foldCorrection ? "Réponse correcte" : "Réponse de l’élève", question?.answer_snapshot, "answer", "Aucune réponse lisible dans l’instantané.", {
-          outcome,
-          questionSnapshot: question?.question_snapshot,
-          correctionSnapshot: question?.correction_snapshot
-        })}
-        ${foldCorrection ? "" : renderSnapshotBlock("Correction", question?.correction_snapshot, "correction", "Correction non enregistrée.", {
-          outcome,
-          questionSnapshot: question?.question_snapshot,
-          correctionSnapshot: question?.correction_snapshot
-        })}
-      </div>
-    </article>
-  `;
-}
-
 function renderAttemptDetails(attempt) {
   const questions = Array.isArray(attempt?.questions) ? attempt.questions : [];
-  if (!questions.length) {
+  const showLevel = attempt?.metadata_json?.catalogAdaptive === true;
+  const table = renderActivityHistoryTable(questions, { formatDuration, showLevel });
+
+  if (!table) {
     return `
       <div class="dashboard-history-attempt-details">
-        <div class="dashboard-history-legacy-note">
-          Cette tentative a été enregistrée avant l’historique détaillé : le résumé est disponible, mais pas le détail des questions.
+        <div class="dashboard-history-unavailable">
+          Historique détaillé non disponible pour cet outil.
         </div>
       </div>
     `;
@@ -512,9 +85,7 @@ function renderAttemptDetails(attempt) {
 
   return `
     <div class="dashboard-history-attempt-details">
-      <div class="dashboard-history-questions">
-        ${questions.map((question, index) => renderQuestion(question, index)).join("")}
-      </div>
+      ${table}
     </div>
   `;
 }
@@ -814,10 +385,180 @@ export async function mountStudentHistoryView({
         </div>
       </section>
     </div>
+
+    <dialog class="dashboard-history-image-dialog" data-history-image-dialog aria-label="Aperçu de l’image">
+      <img data-history-image-dialog-image alt="" />
+    </dialog>
   `;
 
   host.querySelector("[data-history-back]")?.addEventListener("click", () => {
     onBack?.();
+  });
+
+  const imageDialog = host.querySelector("[data-history-image-dialog]");
+  const imageDialogImage = imageDialog?.querySelector("[data-history-image-dialog-image]");
+  let currentDecimalPreviewUrl = "";
+  let currentNumberLinePreviewUrl = "";
+  let currentCollectionTracePreviewUrl = "";
+  let currentMillimetrePreviewUrl = "";
+  let currentPointsAlignedPreviewUrl = "";
+  let currentMotCachePreviewUrl = "";
+  const releaseGeneratedPreviewUrls = () => {
+    if (currentDecimalPreviewUrl) URL.revokeObjectURL(currentDecimalPreviewUrl);
+    if (currentNumberLinePreviewUrl) URL.revokeObjectURL(currentNumberLinePreviewUrl);
+    if (currentCollectionTracePreviewUrl) URL.revokeObjectURL(currentCollectionTracePreviewUrl);
+    if (currentMillimetrePreviewUrl) URL.revokeObjectURL(currentMillimetrePreviewUrl);
+    if (currentPointsAlignedPreviewUrl) URL.revokeObjectURL(currentPointsAlignedPreviewUrl);
+    if (currentMotCachePreviewUrl) URL.revokeObjectURL(currentMotCachePreviewUrl);
+    currentDecimalPreviewUrl = "";
+    currentNumberLinePreviewUrl = "";
+    currentCollectionTracePreviewUrl = "";
+    currentMillimetrePreviewUrl = "";
+    currentPointsAlignedPreviewUrl = "";
+    currentMotCachePreviewUrl = "";
+  };
+  const resetHistoryDialogPresentation = () => {
+    if (!(imageDialog instanceof HTMLDialogElement)) return;
+    imageDialog.style.removeProperty("background");
+    imageDialog.style.removeProperty("width");
+    imageDialog.style.removeProperty("height");
+    imageDialog.style.removeProperty("padding");
+    imageDialog.setAttribute("aria-label", "Aperçu de l’image");
+  };
+  const closeImageDialog = () => {
+    if (!(imageDialog instanceof HTMLDialogElement)) return;
+    if (imageDialog.open) imageDialog.close();
+  };
+
+  imageDialog?.addEventListener("click", (event) => {
+    if (event.target === imageDialog) closeImageDialog();
+  });
+  imageDialog?.addEventListener("close", () => {
+    if (!(imageDialogImage instanceof HTMLImageElement)) return;
+    imageDialogImage.removeAttribute("src");
+    imageDialogImage.alt = "";
+    releaseGeneratedPreviewUrls();
+    resetHistoryDialogPresentation();
+  });
+
+  host.addEventListener("click", async (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const imageTrigger = target?.closest("[data-history-image-preview]");
+    const decimalTrigger = target?.closest("[data-history-decimal-preview]");
+    const numberLineTrigger = target?.closest("[data-history-number-line-preview]");
+    const collectionTraceTrigger = target?.closest("[data-history-collection-trace-preview]");
+    const millimetreTrigger = target?.closest("[data-history-mm-preview]");
+    const pointsAlignedTrigger = target?.closest("[data-history-points-preview]");
+    const motCacheTrigger = target?.closest("[data-history-mot-cache-preview]");
+    const trigger = motCacheTrigger || pointsAlignedTrigger || millimetreTrigger || collectionTraceTrigger || numberLineTrigger || decimalTrigger || imageTrigger;
+    if (!(trigger instanceof HTMLElement) || !host.contains(trigger)) return;
+    if (!(imageDialog instanceof HTMLDialogElement) || !(imageDialogImage instanceof HTMLImageElement)) return;
+
+    event.preventDefault();
+    let src = "";
+    let alt = "Image proposée";
+
+    resetHistoryDialogPresentation();
+    if (motCacheTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(motCacheTrigger.dataset.historyMotCachePreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentMotCachePreviewUrl = createMotCacheHistoryPreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu Mot caché indisponible.", error);
+        currentMotCachePreviewUrl = "";
+      }
+      src = currentMotCachePreviewUrl;
+      alt = preview?.view === "selection" ? "Sélection de l’élève et correction" : "Grille proposée à l’élève";
+      const dialogSize = getMotCacheHistoryDialogSize(preview, {
+        maxWidth: window.innerWidth - 40, maxHeight: window.innerHeight - 40
+      });
+      imageDialog.style.width = `${dialogSize.width}px`;
+      imageDialog.style.height = `${dialogSize.height}px`;
+      imageDialog.style.padding = "0";
+    } else if (pointsAlignedTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(pointsAlignedTrigger.dataset.historyPointsPreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentPointsAlignedPreviewUrl = createPointsAlignedHistoryPreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu Points alignés indisponible.", error);
+        currentPointsAlignedPreviewUrl = "";
+      }
+      src = currentPointsAlignedPreviewUrl;
+      alt = preview?.view === "selection" ? "Sélection de l’élève et correction" : "Figure présentée à l’élève";
+      imageDialog.style.width = "min(940px, calc(100vw - 40px))";
+      imageDialog.style.height = "min(540px, calc(100vh - 40px))";
+      imageDialog.style.padding = "10px";
+    } else if (millimetreTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(millimetreTrigger.dataset.historyMmPreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentMillimetrePreviewUrl = await createMillimetreHistoryPreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu M. Millimètre indisponible.", error);
+        currentMillimetrePreviewUrl = "";
+      }
+      src = currentMillimetrePreviewUrl;
+      alt = preview?.mode === "build" ? "Construction de l’élève" : "Mesure de l’énoncé";
+      const dialogSize = getMillimetreHistoryDialogSize(preview, {
+        maxWidth: window.innerWidth - 40, maxHeight: window.innerHeight - 40
+      });
+      imageDialog.style.width = `${dialogSize.width}px`;
+      imageDialog.style.height = `${dialogSize.height}px`;
+      imageDialog.style.padding = "0";
+    } else if (collectionTraceTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(collectionTraceTrigger.dataset.historyCollectionTracePreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentCollectionTracePreviewUrl = await createCollectionTracePreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu du tracé de l’élève indisponible.", error);
+        currentCollectionTracePreviewUrl = "";
+      }
+      src = currentCollectionTracePreviewUrl;
+      alt = "Tracé de l’élève sur les collections";
+      imageDialog.style.background = "#0c0e13";
+      imageDialog.style.width = "min(720px, calc(100vw - 40px))";
+      imageDialog.style.height = "min(440px, calc(100vh - 40px))";
+      imageDialog.style.padding = "10px";
+    } else if (numberLineTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(numberLineTrigger.dataset.historyNumberLinePreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentNumberLinePreviewUrl = await createNumberLineHistoryPreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu de droite numérique indisponible.", error);
+        currentNumberLinePreviewUrl = "";
+      }
+      src = currentNumberLinePreviewUrl;
+      alt = "Droite numérique de la question";
+    } else if (decimalTrigger) {
+      let preview = null;
+      try { preview = JSON.parse(String(decimalTrigger.dataset.historyDecimalPreview || "")); } catch { preview = null; }
+      releaseGeneratedPreviewUrls();
+      try {
+        currentDecimalPreviewUrl = await createDecimalHistoryPreviewUrl(preview);
+      } catch (error) {
+        console.warn("Aperçu de représentation indisponible.", error);
+        currentDecimalPreviewUrl = "";
+      }
+      src = currentDecimalPreviewUrl;
+      alt = "Représentation de la question";
+    } else {
+      src = String(imageTrigger?.dataset.historyImageSrc || "").trim();
+      alt = String(imageTrigger?.dataset.historyImageAlt || "Image proposée").trim() || "Image proposée";
+    }
+
+    if (!src) return;
+    imageDialogImage.src = src;
+    imageDialogImage.alt = alt;
+    if (!imageDialog.open) imageDialog.showModal();
   });
 
   let history = [];

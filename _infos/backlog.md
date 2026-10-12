@@ -1,6 +1,6 @@
 # Backlog consolidé
 
-Dernière mise à jour : 2026-08-14.
+Dernière revue globale : 2026-08-14. Mise à jour ciblée : 2026-10-11 (Catalogue).
 
 ## Priorité principale — Aventure
 
@@ -28,12 +28,12 @@ Après le MVP : vieillissement au-dessus de 40, rangs de maîtrise, reporting en
 - [ ] Ajouter **Texte flash** et **Image flash** en réutilisant les moteurs existants.
 - [ ] Conserver l’Audio normal ; ne pas créer d’Audio flash sans besoin clair.
 
-## Exploration et catalogue de secours
+## Exploration — Supabase source unique
 
 - [x] Ajouter la projection élève sans dupliquer l’arborescence : libellé court, nœuds transparents et dossiers de niveau masqués automatiquement.
 - [x] Ajouter les réglages super-admin `Nom pour les élèves` et `Afficher cette étape dans Exploration`.
-- [ ] Vérifier régulièrement la cohérence entre `tools/registry.js`, `shared/catalogue.js` et Supabase.
-- [ ] Décider si `reperage-graphemes`, `dictee-muette`, `nuage-lettres`, `nombres-lettres`, `conjugaison` ou `quiz` doivent rejoindre le secours local.
+- [x] Supprimer les listes de secours locales d’activités et de dossiers pédagogiques ; Supabase est la seule source de vérité.
+- [ ] Vérifier en navigateur le chargement normal ainsi que les messages d’indisponibilité et le bouton « Réessayer ».
 
 ## Tableau
 

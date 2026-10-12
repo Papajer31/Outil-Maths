@@ -84,6 +84,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getCollectionHistorySnapshot(state, stage);
+    },
+
     getAnswerState() {
       if (!state.currentQuestion) return { answered: false, correct: false };
       const evaluation = state.answerRevealed
@@ -472,6 +476,100 @@ function revealAnswer(state) {
     scheduleCollectionCloudOverlapCheck(state.root);
   }
   syncValidateState(state);
+}
+
+
+function getCollectionHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key: "situation", label: "Situation", fill: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer", compact: true },
+          { key: "expected", label: "Attendu", compact: true }
+        ],
+        cells: {
+          situation: {
+            type: "text",
+            value: getCollectionHistorySituation(question)
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const submitted = state.submittedAnswer || state.selectedAnswer || "";
+    return {
+      history: {
+        cells: {
+          answer: {
+            type: "text",
+            value: getCollectionHistoryAnswer(question, submitted)
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type: "text",
+          value: getCollectionHistoryAnswer(question, question.correctAnswer)
+        }
+      }
+    }
+  };
+}
+
+function getCollectionHistorySituation(question) {
+  const target = Math.max(0, Number(question?.targetCount) || 0);
+  const shown = Math.max(0, Number(question?.shownCount) || 0);
+
+  if (question?.mode === COLLECTION_MODES.VERIFY) {
+    return `La collection est-elle correcte ? → Nombre : ${target} · Collection : ${shown} objet${shown > 1 ? "s" : ""}`;
+  }
+  if (question?.mode === COLLECTION_MODES.MATCH_COLLECTION) {
+    return `Retrouve la même collection → Collection modèle : ${target} objet${target > 1 ? "s" : ""}`;
+  }
+  if (question?.mode === COLLECTION_MODES.NUMBER_TO_COLLECTION) {
+    return `Trouve la collection du nombre → Nombre : ${target}`;
+  }
+  if (question?.mode === COLLECTION_MODES.NUMBER_LINE) {
+    const values = Array.isArray(question?.numberLine?.values) ? question.numberLine.values : [];
+    const first = values.length ? values[0] : "";
+    const last = values.length ? values[values.length - 1] : "";
+    const line = first !== "" && last !== "" ? ` · File : ${first} à ${last}` : "";
+    return `Trouve le nombre sur la file → Collection : ${target} objet${target > 1 ? "s" : ""}${line}`;
+  }
+  return `Écris le nombre → Collection : ${target} objet${target > 1 ? "s" : ""}`;
+}
+
+function getCollectionHistoryAnswer(question, rawAnswer) {
+  const answer = String(rawAnswer || "").trim();
+  if (!answer) return "";
+
+  if (question?.mode === COLLECTION_MODES.VERIFY) {
+    if (answer === ANSWERS.YES) return "Oui";
+    if (answer === ANSWERS.NO) return "Non";
+    return answer;
+  }
+
+  if (question?.mode === COLLECTION_MODES.MATCH_COLLECTION || question?.mode === COLLECTION_MODES.NUMBER_TO_COLLECTION) {
+    const choice = (Array.isArray(question?.choices) ? question.choices : [])
+      .find((item) => String(item?.id || "") === answer);
+    if (!choice) return "";
+    const count = Math.max(0, Number(choice.count) || 0);
+    return `${count} objet${count > 1 ? "s" : ""}`;
+  }
+
+  return answer;
 }
 
 function syncValidateState(state) {

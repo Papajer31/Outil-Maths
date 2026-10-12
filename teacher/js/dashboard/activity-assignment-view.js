@@ -63,7 +63,7 @@ export function createActivityAssignmentViewController({
     }
 
     if (forceRefresh || loadedSpaceId !== spaceId) {
-      view.innerHTML = `<div class="dashboard-activity-empty-state">Chargement des activités attribuées…</div>`;
+      view.innerHTML = `<div class="dashboard-activity-empty-state">Chargement des missions…</div>`;
       await refreshData();
       loadedSpaceId = spaceId;
     }
@@ -102,7 +102,7 @@ export function createActivityAssignmentViewController({
       assignments = Array.isArray(results[7]) ? results[7] : [];
     } catch (error) {
       console.error(error);
-      loadError = error?.message || "Impossible de charger les activités attribuées.";
+      loadError = error?.message || "Impossible de charger les missions.";
       assignments = [];
     }
   }
@@ -118,21 +118,25 @@ export function createActivityAssignmentViewController({
       : null;
     view.innerHTML = `
       <div class="activity-assignment-shell">
-        <div class="activity-assignment-header">
-          <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back" title="Retour aux activités" aria-label="Retour aux activités">
-            <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
-          </button>
-          <div class="dashboard-section-title">Activités attribuées</div>
-          <div class="activity-assignment-header-spacer"></div>
-          <button class="btn primary dashboard-btn-with-icon" type="button" data-action="open-assignment-drawer">
-            <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
-            <span>Attribuer des activités</span>
-          </button>
-        </div>
+        <header class="dashboard-config-header dashboard-explorer-header activity-assignment-header">
+          <div class="dashboard-config-header-main">
+            <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back" title="Retour à l’accueil" aria-label="Retour à l’accueil">
+              <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
+            </button>
+            <div class="dashboard-section-title">Missions</div>
+          </div>
+          <div class="dashboard-config-header-center" aria-hidden="true"></div>
+          <div class="dashboard-config-header-actions">
+            <button class="btn primary dashboard-btn-with-icon dashboard-header-action-btn" type="button" data-action="open-assignment-drawer">
+              <span class="dashboard-material-icon" aria-hidden="true">assignment_ind</span>
+              <span>Attribuer des activités</span>
+            </button>
+          </div>
+        </header>
 
         ${loadError ? `<div class="modal-message error">${escapeHtml(loadError)}<br><small>Vérifie que les migrations SQL 49, 50, 54 et 60 ont bien été appliquées.</small></div>` : ""}
 
-        <section class="activity-assignment-overview">
+        <section class="panel dashboard-activity-tiles-pane activity-assignment-overview">
           ${renderCurrentAssignments()}
         </section>
 
@@ -1185,6 +1189,14 @@ export function createActivityAssignmentViewController({
 
   return {
     render,
+    async openNewAssignment() {
+      if (loadedSpaceId !== String(getCurrentTeacherSpace?.()?.id || "") || !view?.querySelector(".activity-assignment-shell")) {
+        await render({ forceRefresh:true });
+      }
+      if (!getCurrentTeacherSpace?.()?.id) return;
+      openAssignmentDrawer();
+      renderView();
+    },
     async open(preselect = null) {
       await render({ forceRefresh:loadedSpaceId !== String(getCurrentTeacherSpace?.()?.id || ""), preselect });
     },

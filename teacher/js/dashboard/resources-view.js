@@ -9,6 +9,7 @@ import { openDashboardNameDialog } from "./name-overlay.js";
 import { resolveQuizImageSourceUrl } from "../../../shared/quiz-local-image-store.js";
 import { invalidateQuizAudioResourceUrl, resolveQuizAudioSourceUrl } from "../../../shared/quiz-audio-source.js";
 import { openAudioRecorderDialog } from "./audio-recorder-dialog.js";
+import { normalizeLexicalKey } from "../../../shared/lexical-bank.js";
 
 const RESOURCE_ROOT_PERSONAL = "__resource_root_personal";
 const RESOURCE_ROOT_SYSTEM = "__resource_root_system";
@@ -20,6 +21,7 @@ const RESOURCE_GENERATOR_MAGIC_SQUARE = "__resource_generator_magic_square";
 const RESOURCE_GENERATOR_NUMBER_MYSTERY = "__resource_generator_number_mystery";
 const RESOURCE_GENERATOR_WORD_SEARCH = "__resource_generator_word_search";
 const RESOURCE_GENERATOR_PENTOMINO = "__resource_generator_pentomino";
+const RESOURCE_GENERATOR_PAPER = "__resource_generator_printable_paper";
 const SYSTEM_IMAGES_ROOT_ROLE = "system_images_root";
 const SYSTEM_IMAGES_UNCLASSIFIED_ROLE = "system_images_unclassified";
 const MAX_RESOURCE_FILE_SIZE = 25 * 1024 * 1024;
@@ -30,6 +32,13 @@ const RESOURCE_ALPHABETIC_COLLATOR = new Intl.Collator("fr", {
   numeric: true,
   ignorePunctuation: true
 });
+
+function normalizeImagierLexicalKey(value){
+  return normalizeLexicalKey(value)
+    .replace(/'/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 function compareResourceAlphabetically(a, b, labelSelector){
   const selectLabel = typeof labelSelector === "function" ? labelSelector : (item) => String(item?.name || item?.title || "");
@@ -143,6 +152,16 @@ function createSystemVirtualFolders(){
       is_virtual_root: true,
       resource_type: "generator",
       generator_id: "pentomino"
+    },
+    {
+      id: RESOURCE_GENERATOR_PAPER,
+      parent_id: RESOURCE_SYSTEM_GENERATORS,
+      name: "Papiers et lignages",
+      display_order: 4,
+      is_system: true,
+      is_virtual_root: true,
+      resource_type: "generator",
+      generator_id: "printable-paper"
     }
   ];
 }
@@ -162,6 +181,7 @@ export function createResourcesViewController({
   createResourceFolderForSpace,
   createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
+  ensureTujerResourceFoundationForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -171,9 +191,11 @@ export function createResourcesViewController({
   deleteResource,
   createResourceSignedUrl,
   getLexicalEntriesCount,
+  listLexicalEntries,
   onOpenLexicalBank,
   onOpenGenerator,
-  onImportSystemImages
+  onImportSystemImages,
+  onOpenCreation
 } = {}){
   let personalFolders = [];
   let personalResources = [];
@@ -188,6 +210,7 @@ export function createResourcesViewController({
   let draggedNode = null;
   let resourceDropTarget = null;
   let lexicalEntryCount = null;
+  let lexicalWordKeys = null;
   const collapsedFolderIds = new Set();
   const knownFolderIds = new Set();
 
@@ -232,10 +255,48 @@ export function createResourcesViewController({
       && String(resource?.metadata?.image_asset_slug || "").trim() !== "";
   }
 
+  function isImagierImageResource(resource){
+    if (resource?.is_system !== true || resource?.type !== "image") return false;
+    const rootId = getSystemImagesRootId();
+    if (!rootId) return false;
+    let folderId = normalizeTreeId(resource.actual_folder_id ?? resource.folder_id);
+    const visited = new Set();
+    while (folderId && !visited.has(folderId)) {
+      visited.add(folderId);
+      const folder = databaseSystemFolders.find((item) => String(item.id) === folderId);
+      if (!folder) return false;
+      const parentId = normalizeTreeId(folder.parent_id);
+      if (parentId === rootId && RESOURCE_ALPHABETIC_COLLATOR.compare(String(folder.name || "").trim(), "Imagier") === 0) return true;
+      folderId = parentId;
+    }
+    return false;
+  }
+
+  function isMissingLexicalWord(resource){
+    return lexicalWordKeys !== null
+      && isImagierImageResource(resource)
+      && !lexicalWordKeys.has(normalizeImagierLexicalKey(resource.title));
+  }
+
   function isLockedSystemFolder(folder){
     const role = String(folder?.metadata?.system_role || "");
     return role === SYSTEM_IMAGES_ROOT_ROLE || role === SYSTEM_IMAGES_UNCLASSIFIED_ROLE;
   }
+  function isTujerManagedPersonalFolder(folder){
+    return folder?.is_system !== true
+      && String(folder?.metadata?.managed_by || "") === "tujer"
+      && folder?.metadata?.locked === true;
+  }
+
+  function getTujerManagedFolderIcon(folder){
+    const role = String(folder?.metadata?.system_role || "");
+    if (role === "tujer_creations_root") return "deployed_code";
+    if (role === "tujer_local_files_root") return "folder_copy";
+    if (String(folder?.metadata?.tujer_root || "") === "creations") return "folder_special";
+    if (String(folder?.metadata?.tujer_root || "") === "local-files") return "folder_copy";
+    return "folder";
+  }
+
 
   function isEmptySystemUnclassifiedFolder(folder){
     if (String(folder?.metadata?.system_role || "") !== SYSTEM_IMAGES_UNCLASSIFIED_ROLE) return false;
@@ -252,6 +313,7 @@ export function createResourcesViewController({
 
   function canManageFolder(folder){
     if (!folder || folder.is_virtual_root === true) return false;
+    if (isTujerManagedPersonalFolder(folder)) return false;
     if (folder.is_system !== true) return true;
     return getIsSuperAdmin?.() === true
       && (folder.managed_system_image === true || isDatabaseSystemImageFolder(folder))
@@ -262,6 +324,15 @@ export function createResourcesViewController({
     if (!resource) return false;
     if (resource.is_system !== true) return true;
     return getIsSuperAdmin?.() === true && isDatabaseSystemImageResource(resource);
+  }
+
+  function isTujerManagedPersonalResource(resource){
+    return resource?.is_system !== true
+      && (Boolean(resource?.metadata?.tujer_creation) || Boolean(resource?.metadata?.tujer_local_file));
+  }
+
+  function canMoveResource(resource){
+    return canManageResource(resource) && !isTujerManagedPersonalResource(resource);
   }
 
   function getPersonalStorageUsage(){
@@ -290,7 +361,7 @@ export function createResourcesViewController({
   async function reloadRemoteState(){
     personalLoadError = "";
     const teacherSpaceId = getTeacherSpaceId();
-    const [folderRows, resourceRows, lexicalCount] = await Promise.all([
+    const [folderRows, resourceRows, lexicalCount, lexicalRows] = await Promise.all([
       listResourceFoldersForSpace?.(teacherSpaceId),
       listResourcesForSpace?.(teacherSpaceId),
       typeof getLexicalEntriesCount === "function"
@@ -298,9 +369,19 @@ export function createResourcesViewController({
             console.warn("Banque lexicale indisponible dans Ressources.", error);
             return null;
           })
-        : Promise.resolve(null)
+        : Promise.resolve(null),
+      Promise.resolve().then(() => listLexicalEntries?.() ?? null).catch((error) => {
+        console.warn("Impossible de vérifier les correspondances lexicales de l’imagier.", error);
+        return null;
+      })
     ]);
     lexicalEntryCount = Number.isFinite(Number(lexicalCount)) ? Math.max(0, Number(lexicalCount)) : null;
+    lexicalWordKeys = Array.isArray(lexicalRows)
+      ? new Set(lexicalRows.filter((entry) => entry?.is_active !== false)
+        .flatMap((entry) => [entry.entry_key, entry.entry, entry.masc_sing, entry.fem_sing, entry.masc_plur, entry.fem_plur])
+        .map(normalizeImagierLexicalKey)
+        .filter(Boolean))
+      : null;
     const allFolders = Array.isArray(folderRows) ? folderRows : [];
     const allResources = Array.isArray(resourceRows) ? resourceRows : [];
     personalFolders = allFolders.filter((folder) => folder?.is_system !== true);
@@ -445,7 +526,8 @@ export function createResourcesViewController({
     const safeId = normalizeTreeId(folderId);
     if (!safeId || safeId === RESOURCE_ROOT_PERSONAL) return null;
     const folder = treeState.folderById.get(safeId);
-    return folder?.is_system === true ? undefined : safeId;
+    if (folder?.is_system === true || isTujerManagedPersonalFolder(folder)) return undefined;
+    return safeId;
   }
 
   function getSystemImageTargetFolderId(folderId = currentOpenFolderId, treeState = buildTreeState()){
@@ -576,6 +658,10 @@ export function createResourcesViewController({
       onOpenGenerator?.("pentomino");
       return;
     }
+    if (nextFolderId === RESOURCE_GENERATOR_PAPER) {
+      onOpenGenerator?.("printable-paper");
+      return;
+    }
     currentOpenFolderId = nextFolderId;
     if (currentOpenFolderId) expandFolderPath(currentOpenFolderId);
     render();
@@ -597,7 +683,7 @@ export function createResourcesViewController({
 
   function countResourcesInFolder(folderId, treeState){
     if (String(folderId || "") === RESOURCE_SYSTEM_WORDS) return lexicalEntryCount ?? 0;
-    if (String(folderId || "") === RESOURCE_SYSTEM_GENERATORS) return 4;
+    if (String(folderId || "") === RESOURCE_SYSTEM_GENERATORS) return 5;
     let count = (treeState.activityChildren.get(String(folderId)) || []).length;
     for (const child of treeState.folderChildren.get(String(folderId)) || []) {
       count += countResourcesInFolder(child.id, treeState);
@@ -633,7 +719,7 @@ export function createResourcesViewController({
           <span class="dashboard-material-icon" aria-hidden="true">${isCollapsed ? "chevron_right" : "expand_more"}</span>
         </button>
         <button class="dashboard-activity-tree-main" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folderId)}">
-          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">${folderId === RESOURCE_SYSTEM_WORDS ? "menu_book" : (folderId === RESOURCE_SYSTEM_GENERATORS ? "widgets" : (folderId === RESOURCE_GENERATOR_MAGIC_SQUARE ? "grid_view" : (folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : "folder")))))}</span>
+          <span class="dashboard-material-icon dashboard-activity-tree-node-icon" aria-hidden="true">${folderId === RESOURCE_SYSTEM_WORDS ? "menu_book" : (folderId === RESOURCE_SYSTEM_GENERATORS ? "widgets" : (folderId === RESOURCE_GENERATOR_MAGIC_SQUARE ? "grid_view" : (folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : (folderId === RESOURCE_GENERATOR_PAPER ? "description" : getTujerManagedFolderIcon(folder)))))))}</span>
           <span class="dashboard-activity-tree-node-label">${escapeHtml(folder.name || "")}</span>
         </button>
       </div>
@@ -646,8 +732,8 @@ export function createResourcesViewController({
     const folderId = String(folder.id || "");
     const isWordsShortcut = folderId === RESOURCE_SYSTEM_WORDS;
     const isGeneratorsFolder = folderId === RESOURCE_SYSTEM_GENERATORS;
-    const isGeneratorShortcut = folderId === RESOURCE_GENERATOR_MAGIC_SQUARE || folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY || folderId === RESOURCE_GENERATOR_WORD_SEARCH || folderId === RESOURCE_GENERATOR_PENTOMINO;
-    const generatorIcon = folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : "grid_view"));
+    const isGeneratorShortcut = folderId === RESOURCE_GENERATOR_MAGIC_SQUARE || folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY || folderId === RESOURCE_GENERATOR_WORD_SEARCH || folderId === RESOURCE_GENERATOR_PENTOMINO || folderId === RESOURCE_GENERATOR_PAPER;
+    const generatorIcon = folderId === RESOURCE_GENERATOR_NUMBER_MYSTERY ? "help_outline" : (folderId === RESOURCE_GENERATOR_WORD_SEARCH ? "grid_on" : (folderId === RESOURCE_GENERATOR_PENTOMINO ? "extension" : (folderId === RESOURCE_GENERATOR_PAPER ? "description" : "grid_view")));
     const countLabel = isWordsShortcut
       ? (lexicalEntryCount == null ? "Banque lexicale" : `${resourceCount} mot${resourceCount > 1 ? "s" : ""}`)
       : isGeneratorsFolder
@@ -672,7 +758,7 @@ export function createResourcesViewController({
       <article class="dashboard-activity-tile dashboard-activity-tile--folder dashboard-resource-folder-tile" data-node-type="folder" data-node-id="${escapeAttr(folder.id)}" ${isManageable ? 'draggable="true"' : ""}>
         <button class="dashboard-activity-tile-surface dashboard-activity-tile-surface--folder" type="button" data-action="open-folder" data-folder-id="${escapeAttr(folder.id)}">
           <span class="dashboard-resource-folder-topline">
-            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">${isWordsShortcut ? "menu_book" : (isGeneratorsFolder ? "widgets" : (isGeneratorShortcut ? generatorIcon : "folder"))}</span>
+            <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">${isWordsShortcut ? "menu_book" : (isGeneratorsFolder ? "widgets" : (isGeneratorShortcut ? generatorIcon : getTujerManagedFolderIcon(folder)))}</span>
             <span class="dashboard-resource-folder-count">${escapeHtml(countLabel)}</span>
           </span>
           <span class="dashboard-activity-tile-title">${escapeHtml(folder.name || "")}</span>
@@ -708,11 +794,15 @@ export function createResourcesViewController({
 
   function renderResourceTile(resource){
     const resourceId = String(resource.id || "");
+    const missingLexicalWord = isMissingLexicalWord(resource);
     const isAudio = resource.type === "audio";
     const isSeyes = resource.type === "seyes";
-    const isImage = !isAudio && !isSeyes;
-    const typeLabel = isAudio ? "Audio" : (isSeyes ? "Seyès" : "Image");
+    const isCreation = resource.type === "creation";
+    const isDocument = resource.type === "document";
+    const isImage = resource.type === "image";
+    const typeLabel = isAudio ? "Audio" : (isSeyes ? "Seyès" : (isCreation ? "Création Tujer" : (isDocument ? "Document" : "Image")));
     const isManageable = canManageResource(resource);
+    const isDraggable = canMoveResource(resource);
     const preview = isImage
       ? `<img class="dashboard-resource-preview-image" src="${escapeAttr(resource.url || "")}" alt="${escapeAttr(resource.alt || resource.title || "Image")}" loading="lazy">`
       : (isAudio ? `
@@ -721,7 +811,7 @@ export function createResourcesViewController({
         </span>
       ` : `
         <span class="dashboard-resource-document-preview" aria-hidden="true">
-          <span class="dashboard-material-icon">edit_note</span>
+          <span class="dashboard-material-icon">${isCreation ? escapeHtml(resource?.metadata?.tujer_creation?.icon || "deployed_code") : (isSeyes ? "edit_note" : "description")}</span>
         </span>
       `);
     const actions = !isManageable
@@ -743,14 +833,14 @@ export function createResourcesViewController({
       `;
 
     return `
-      <article class="dashboard-resource-tile ${isImage ? "is-image" : (isAudio ? "is-audio" : "is-document")}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${isManageable ? 'draggable="true"' : ""}>
+      <article class="dashboard-resource-tile ${isImage ? "is-image" : (isAudio ? "is-audio" : "is-document")}" data-node-type="resource" data-node-id="${escapeAttr(resourceId)}" ${isDraggable ? 'draggable="true"' : ""}>
         <button class="dashboard-resource-tile-surface" type="button" data-action="open-resource" data-resource-id="${escapeAttr(resourceId)}">
           <span class="dashboard-resource-preview">
             <span class="dashboard-resource-type-pill">${typeLabel}</span>
             ${preview}
           </span>
           <span class="dashboard-resource-tile-body">
-            <span class="dashboard-resource-tile-title">${escapeHtml(resource.title || "Ressource")}</span>
+            <span class="dashboard-resource-tile-title${missingLexicalWord ? " is-missing-lexical-word" : ""}"${missingLexicalWord ? ` title="Absent de la banque lexicale"` : ""}>${escapeHtml(resource.title || "Ressource")}</span>
             <span class="dashboard-resource-tile-meta">${escapeHtml(getResourceSubtitle(resource))}</span>
           </span>
         </button>
@@ -1028,7 +1118,7 @@ export function createResourcesViewController({
 
     if (source.type === "resource") {
       const resource = sourceRecord;
-      if (!canManageResource(resource)) return;
+      if (!canMoveResource(resource)) return;
       if (normalizeTreeId(resource.folder_id) === normalizeTreeId(targetFolderId)) {
         clearResourceDropMarkers();
         return;
@@ -1083,7 +1173,7 @@ export function createResourcesViewController({
       return;
     }
     const sourceRecord = getDraggedRecord({ type, id });
-    const manageable = type === "folder" ? canManageFolder(sourceRecord) : canManageResource(sourceRecord);
+    const manageable = type === "folder" ? canManageFolder(sourceRecord) : canMoveResource(sourceRecord);
     if (!sourceRecord || !manageable) {
       event.preventDefault();
       return;
@@ -1234,10 +1324,15 @@ export function createResourcesViewController({
   function updateRenderedResourceTitle(resourceId, title){
     if (!list) return;
     const safeId = String(resourceId || "");
+    const resource = [...personalResources, ...databaseSystemResources].find((item) => String(item.id) === safeId);
+    const missingLexicalWord = isMissingLexicalWord(resource);
     list.querySelectorAll("[data-node-type='resource'][data-node-id]").forEach((element) => {
       if (String(element.dataset.nodeId || "") !== safeId) return;
       element.querySelectorAll(".dashboard-resource-tile-title").forEach((label) => {
         label.textContent = title || "Ressource";
+        label.classList.toggle("is-missing-lexical-word", missingLexicalWord);
+        if (missingLexicalWord) label.title = "Absent de la banque lexicale";
+        else label.removeAttribute("title");
       });
     });
   }
@@ -1720,7 +1815,9 @@ export function createResourcesViewController({
       showToast?.(isSystem ? "Image système supprimée." : "Ressource supprimée.");
     } catch (error) {
       const message = String(error?.code || "") === "23503"
-        ? "Cette image est encore utilisée par un quiz et ne peut pas être supprimée."
+        ? (isSystem
+          ? "Cette image est encore utilisée et ne peut pas être supprimée."
+          : "Cette ressource est encore utilisée par une création ou un quiz et ne peut pas être supprimée.")
         : (error?.message || "Suppression impossible.");
       showToast?.(message, { isError: true });
     }
@@ -1749,6 +1846,10 @@ export function createResourcesViewController({
     const url = await resolveResourceUrl(resource).catch(() => "");
     const isAudio = detailResource.type === "audio";
     const isSeyes = detailResource.type === "seyes";
+    const isCreation = detailResource.type === "creation";
+    const isDocument = detailResource.type === "document";
+    const creationType = String(detailResource?.metadata?.tujer_creation?.type || "").trim();
+    const canOpenCreation = isCreation && typeof onOpenCreation === "function" && creationType.startsWith("tableau.page.");
     const preview = isAudio
       ? (url
         ? `
@@ -1763,9 +1864,13 @@ export function createResourcesViewController({
         : `<div class="dashboard-resource-detail-unavailable">Audio indisponible.</div>`)
       : (isSeyes
         ? `<div class="dashboard-resource-detail-document"><span class="dashboard-material-icon" aria-hidden="true">edit_note</span><strong>Document Seyès</strong><span>Ouvre-le depuis la mini-app Seyès du Tableau.</span></div>`
-        : (url
-          ? `<img class="dashboard-resource-detail-image" src="${escapeAttr(url)}" alt="${escapeAttr(resource.alt || resource.title || "Image")}">`
-          : `<div class="dashboard-resource-detail-unavailable">Image indisponible.</div>`));
+        : (isCreation
+          ? `<div class="dashboard-resource-detail-document"><span class="dashboard-material-icon" aria-hidden="true">${escapeHtml(detailResource?.metadata?.tujer_creation?.icon || "deployed_code")}</span><strong>${escapeHtml(detailResource?.metadata?.tujer_creation?.label || "Création Tujer")}</strong><span>${canOpenCreation ? "Ajoute cette création comme nouvelle page dans le Tableau courant." : "Cette création sera ouverte depuis l’outil Tujer correspondant."}</span></div>`
+          : (isDocument
+            ? `<div class="dashboard-resource-detail-document"><span class="dashboard-material-icon" aria-hidden="true">description</span><strong>Document</strong><span>Fichier personnel conservé dans Mes ressources.</span></div>`
+            : (url
+              ? `<img class="dashboard-resource-detail-image" src="${escapeAttr(url)}" alt="${escapeAttr(resource.alt || resource.title || "Image")}">`
+              : `<div class="dashboard-resource-detail-unavailable">Image indisponible.</div>`))));
     const dimensions = detailResource.width && detailResource.height
       ? `${detailResource.width} × ${detailResource.height} pixels`
       : "Dimensions indisponibles";
@@ -1803,10 +1908,11 @@ export function createResourcesViewController({
             <span class="dashboard-material-icon" aria-hidden="true">close</span>
           </button>
         </div>
-        <div class="dashboard-resource-detail-preview${isAudio ? " is-audio" : (isSeyes ? " is-document" : "")}">${preview}</div>
+        <div class="dashboard-resource-detail-preview${isAudio ? " is-audio" : ((isSeyes || isCreation || isDocument) ? " is-document" : "")}">${preview}</div>
+        ${canOpenCreation ? `<div class="modal-actions"><button class="btn primary" type="button" data-resource-open-creation><span class="dashboard-material-icon" aria-hidden="true">add</span><span>Ajouter au Tableau</span></button></div>` : ""}
         <dl class="dashboard-resource-detail-properties${showTechnicalProperties ? "" : " is-system"}">
-          <div><dt>Type</dt><dd>${isAudio ? "Audio" : (isSeyes ? "Document Seyès" : "Image")}</dd></div>
-          ${showTechnicalProperties && !isSeyes ? `
+          <div><dt>Type</dt><dd>${isAudio ? "Audio" : (isSeyes ? "Document Seyès" : (isCreation ? "Création Tujer" : (isDocument ? "Document" : "Image")))}</dd></div>
+          ${showTechnicalProperties && !isSeyes && !isCreation ? `
             <div><dt>${isAudio ? "Durée" : "Dimensions"}</dt><dd>${escapeHtml(isAudio ? duration : dimensions)}</dd></div>
             <div><dt>Poids</dt><dd>${escapeHtml(size)}</dd></div>
           ` : ""}
@@ -1849,6 +1955,17 @@ export function createResourcesViewController({
     };
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay || event.target.closest('[data-action="close"]')) close();
+      const openCreationButton = event.target.closest("[data-resource-open-creation]");
+      if (openCreationButton && canOpenCreation) {
+        openCreationButton.disabled = true;
+        void Promise.resolve(onOpenCreation?.(detailResource)).then(() => {
+          close();
+        }).catch((error) => {
+          openCreationButton.disabled = false;
+          showToast?.(error?.message || "Impossible d’ajouter cette création au Tableau.", { isError:true });
+        });
+        return;
+      }
       if (event.target.closest("[data-resource-audio-toggle]")) {
         if (player?.paused) void player.play?.();
         else player?.pause();
@@ -1921,22 +2038,41 @@ export function createResourcesViewController({
     void importResourceFiles(resourceFileInput.files);
   });
 
-  return {
-    async refresh({ forceRefresh = false } = {}){
-      personalLoadError = "";
-      try {
-        await reloadRemoteState();
-      } catch (error) {
-        console.error("Impossible de charger les ressources Supabase.", error);
-        personalLoadError = error?.message || "Impossible de charger les ressources personnelles.";
-        showToast?.(personalLoadError, { isError: true });
+  async function refresh({ forceRefresh = false } = {}){
+    personalLoadError = "";
+    try {
+      if (typeof ensureTujerResourceFoundationForSpace === "function") {
+        await ensureTujerResourceFoundationForSpace(getTeacherSpaceId());
       }
-      render();
-    },
+      await reloadRemoteState();
+    } catch (error) {
+      console.error("Impossible de charger les ressources Supabase.", error);
+      personalLoadError = error?.message || "Impossible de charger les ressources personnelles.";
+      showToast?.(personalLoadError, { isError: true });
+    }
+    render();
+  }
+
+  let externalRefreshTimer = 0;
+  const handleExternalResourceChange = (event) => {
+    const changedSpaceId = String(event?.detail?.teacherSpaceId || "").trim();
+    let currentSpaceId = "";
+    try { currentSpaceId = String(getTeacherSpaceId()); } catch {}
+    if (changedSpaceId && currentSpaceId && changedSpaceId !== currentSpaceId) return;
+    clearTimeout(externalRefreshTimer);
+    externalRefreshTimer = window.setTimeout(() => { void refresh({ forceRefresh:true }); }, 0);
+  };
+  window.addEventListener("tujer:resources-changed", handleExternalResourceChange);
+
+  return {
+    refresh,
     render,
     showExplorer(){
       currentOpenFolderId = RESOURCE_ROOT_SYSTEM;
       render();
+    },
+    openGeneratorsFolder(){
+      setCurrentFolder(RESOURCE_SYSTEM_GENERATORS);
     },
     getCurrentFolderId: () => currentOpenFolderId
   };

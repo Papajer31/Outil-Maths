@@ -82,6 +82,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getDicteeMuetteHistorySnapshot(state, stage);
+    },
+
     getShellAnswerDisplayState(container, context = state.latestContext) {
       state.container = container || state.container;
       syncRuntimeState(state, context ?? state.latestContext);
@@ -121,6 +125,7 @@ function createRuntimeState(initialContext = {}) {
     settings: normalizeSettings(initialContext?.settings),
     settingsKey: "",
     currentQuestion: null,
+    currentQuestionSettings: normalizeSettings(initialContext?.settings),
     lastQuestionKey: "",
     usedWordSlugs: new Set(),
     answerControl: null,
@@ -214,6 +219,7 @@ function loadNextQuestion(state) {
   }
 
   state.currentQuestion = nextQuestion;
+  state.currentQuestionSettings = normalizeSettings(state.settings);
   state.lastQuestionKey = questionKey(nextQuestion);
   state.usedWordSlugs.add(nextQuestion.slug);
   state.submittedAnswer = "";
@@ -438,6 +444,72 @@ function renderLetterSlotsMarkup(value, length, evaluation = null, feedbackMode 
     }
     return `<span class="dm-letter-slot${char ? " is-filled" : ""}${feedbackClass}">${escapeHtml(char || " ")}</span>`;
   }).join("");
+}
+
+function getDicteeMuetteHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    const imageUrl = getPublicImageAssetUrl(question?.imageStoragePath, { bucket: IMAGE_BUCKET });
+    const aids = [];
+    if (state.currentQuestionSettings?.inputStyle === INPUT_STYLES.BOXES) {
+      aids.push({ text:"Cases", tone:"accent" });
+    }
+    if (state.currentQuestionSettings?.highlightWordLetters === true) {
+      aids.push({ text:"Lettres surlignées", tone:"accent" });
+    }
+
+    return {
+      history: {
+        columns: [
+          { key:"image", label:"Image", align:"center", compact:true },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" },
+          { key:"aids", label:"Aides" }
+        ],
+        cells: {
+          image: {
+            type:"image",
+            src:imageUrl,
+            alt:String(question?.word || "Image"),
+            label:"Afficher l’image"
+          },
+          aids: {
+            type:"tokens",
+            items:aids,
+            emptyText:""
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:String(state.submittedAnswer || state.answerControl?.getValue?.() || "")
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:String(question?.word || "")
+        }
+      }
+    }
+  };
 }
 
 function submitCurrentAnswer(state) {

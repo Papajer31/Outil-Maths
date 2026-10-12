@@ -102,6 +102,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getDifferenceCollectionsHistorySnapshot(state, stage);
+    },
+
     getAnswerState() {
       if (!state.currentQuestion) return { answered: false, correct: false };
       const evaluation = state.answerRevealed
@@ -160,7 +164,8 @@ function createRuntimeState(initialContext = {}) {
     assistedLinks: [],
     activeAssistedLink: null,
     activeStroke: null,
-    activePointerId: null
+    activePointerId: null,
+    historyTracePreviewSnapshot: null
   };
 }
 
@@ -208,6 +213,7 @@ async function loadNextQuestion(state) {
   state.activeAssistedLink = null;
   state.activeStroke = null;
   state.activePointerId = null;
+  state.historyTracePreviewSnapshot = null;
   state.placedTokens = createEmptyPlacedTokens();
   state.nextPlacedTokenId = 1;
   state.activeTokenDrag = null;
@@ -1275,6 +1281,9 @@ function evaluateCurrentResponse(state, answer = "", placedTokens = state.placed
 }
 
 function requestReveal(state) {
+  if (!state.historyTracePreviewSnapshot && state.currentQuestion?.tokenMode === TOKEN_MODES.DISPLAYED) {
+    state.historyTracePreviewSnapshot = buildDifferenceCollectionsTracePreview(state, state.currentQuestion);
+  }
   const wasCorrect = evaluateCurrentResponse(state, state.selectedAnswer, state.placedTokens).isCorrect;
   const requested = state.latestContext?.services?.requestAnswerPhase?.({
     manual: false,
@@ -1288,6 +1297,9 @@ function requestReveal(state) {
 
 function revealAnswer(state) {
   if (!state.currentQuestion || state.answerRevealed) return;
+  if (!state.historyTracePreviewSnapshot && state.currentQuestion.tokenMode === TOKEN_MODES.DISPLAYED) {
+    state.historyTracePreviewSnapshot = buildDifferenceCollectionsTracePreview(state, state.currentQuestion);
+  }
   state.submittedAnswer = state.selectedAnswer || "";
   state.answerRevealed = true;
 
@@ -1630,6 +1642,245 @@ function teardownDrawing(state) {
 function destroyAnswerControl(state) {
   state.answerControl?.destroy?.();
   state.answerControl = null;
+}
+
+
+function getDifferenceCollectionsHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const mode = question.tokenMode || TOKEN_MODES.DISPLAYED;
+
+  if (safeStage === "question") {
+    if (mode === TOKEN_MODES.COMPLETE) {
+      return {
+        history: {
+          columns: [
+            { key: "situation", label: "Situation", compact: true },
+            { key: "answerExpected", label: "Réponse de l’élève / Attendu", role: "answer", fill: true },
+            { key: "aids", label: "Aides", compact: true }
+          ],
+          cells: {
+            situation: {
+              type: "text",
+              value: `Collections : ${Math.max(0, Number(question.smallCount) || 0)} et ${Math.max(0, Number(question.bigCount) || 0)}`
+            },
+            aids: buildDifferenceCollectionsHistoryAids(question)
+          }
+        }
+      };
+    }
+
+    if (mode === TOKEN_MODES.DISPLAYED) {
+      return {
+        history: {
+          columns: [
+            { key: "situation", label: "Situation", fill: true },
+            { key: "answer", label: "Réponse de l’élève", role: "answer", compact: true },
+            { key: "expected", label: "Attendu", compact: true },
+            { key: "aids", label: "Aides", compact: true }
+          ],
+          cells: {
+            situation: buildDifferenceCollectionsPairCell(question),
+            aids: buildDifferenceCollectionsHistoryAids(question)
+          }
+        }
+      };
+    }
+
+    // Pas de jetons : on conserve volontairement le rendu H21b.
+    return {
+      history: {
+        columns: [
+          { key: "situation", label: "Situation", fill: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer", compact: true },
+          { key: "expected", label: "Attendu", compact: true },
+          { key: "aids", label: "Aides", compact: true }
+        ],
+        cells: {
+          situation: {
+            type: "text",
+            value: `Collections : ${Math.max(0, Number(question.smallCount) || 0)} et ${Math.max(0, Number(question.bigCount) || 0)}`
+          },
+          aids: buildDifferenceCollectionsHistoryAids(question)
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const submitted = String(state.submittedAnswer || state.selectedAnswer || "").trim();
+
+    if (mode === TOKEN_MODES.COMPLETE) {
+      const tokens = state.answerRevealed ? state.studentPlacedTokensSnapshot : state.placedTokens;
+      return {
+        history: {
+          cells: {
+            answerExpected: buildDifferenceCollectionsCompleteCell(question, submitted, tokens)
+          }
+        }
+      };
+    }
+
+    const answerCell = { type: "text", value: submitted };
+    if (mode === TOKEN_MODES.DISPLAYED) {
+      const preview = state.historyTracePreviewSnapshot || buildDifferenceCollectionsTracePreview(state, question);
+      if (preview) answerCell.preview = preview;
+    }
+    return { history: { cells: { answer: answerCell } } };
+  }
+
+  if (mode === TOKEN_MODES.COMPLETE) return {};
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type: "text",
+          value: String(question.correctAnswer || question.difference || "").trim()
+        }
+      }
+    }
+  };
+}
+
+function buildDifferenceCollectionsPairCell(question) {
+  return {
+    type: "collection_pair",
+    smallCount: Math.max(0, Number(question?.smallCount) || 0),
+    bigCount: Math.max(0, Number(question?.bigCount) || 0)
+  };
+}
+
+function buildDifferenceCollectionsCompleteCell(question, submitted, placedTokens) {
+  const smallExpected = Math.max(0, Number(question?.smallCount) || 0);
+  const bigExpected = Math.max(0, Number(question?.bigCount) || 0);
+  const smallPlaced = Math.max(0, Math.min(LIMITS.maxCount, placedTokens?.small?.length || 0));
+  const bigPlaced = Math.max(0, Math.min(LIMITS.maxCount, placedTokens?.big?.length || 0));
+  const studentDifference = String(submitted || "").trim();
+  const expectedDifference = String(question?.correctAnswer || question?.difference || "").trim();
+  return {
+    type: "collection_complete",
+    smallPlaced,
+    bigPlaced,
+    smallExpected,
+    bigExpected,
+    studentDifference,
+    expectedDifference
+  };
+}
+
+function buildDifferenceCollectionsTracePreview(state, question) {
+  if (!question || question.tokenMode !== TOKEN_MODES.DISPLAYED) return null;
+  const scene = state.sceneEl;
+  const canvas = state.canvas;
+  const viewport = canvas?.getBoundingClientRect?.() || scene?.getBoundingClientRect?.();
+  const width = Number(viewport?.width) || 0;
+  const height = Number(viewport?.height) || 0;
+  if (!scene || !width || !height) return null;
+
+  const normalizeRect = (rect) => {
+    if (!rect) return null;
+    return {
+      x: roundHistoryUnit((rect.left - viewport.left) / width),
+      y: roundHistoryUnit((rect.top - viewport.top) / height),
+      w: roundHistoryUnit(rect.width / width),
+      h: roundHistoryUnit(rect.height / height)
+    };
+  };
+  const normalizePoint = (x, y) => ({
+    x: roundHistoryUnit(Number(x) / width),
+    y: roundHistoryUnit(Number(y) / height)
+  });
+
+  const characters = {};
+  ["small", "big"].forEach((role) => {
+    const el = scene.querySelector(`.comparaison-character--${role}`);
+    const rect = normalizeRect(el?.getBoundingClientRect?.());
+    if (rect) characters[role] = rect;
+  });
+
+  const tokens = {};
+  ["small", "big"].forEach((role) => {
+    tokens[role] = Array.from(scene.querySelectorAll(`.comparaison-token[data-token-role="${role}"]`))
+      .slice(0, LIMITS.maxCount)
+      .map((el) => {
+        const rect = el.getBoundingClientRect?.();
+        if (!rect) return null;
+        return {
+          x: roundHistoryUnit((rect.left + rect.width / 2 - viewport.left) / width),
+          y: roundHistoryUnit((rect.top + rect.height / 2 - viewport.top) / height),
+          r: roundHistoryUnit(Math.min(rect.width / width, rect.height / height) / 2)
+        };
+      })
+      .filter(Boolean);
+  });
+
+  const strokes = (Array.isArray(state.strokes) ? state.strokes : [])
+    .slice(0, 14)
+    .map((stroke) => simplifyHistoryStroke(stroke, width, height))
+    .filter((stroke) => stroke.length > 1);
+
+  const links = (Array.isArray(state.assistedLinks) ? state.assistedLinks : [])
+    .slice(0, 20)
+    .map((link) => {
+      const bigEl = getTokenElementById(state, "big", link.bigTokenId);
+      const smallEl = getTokenElementById(state, "small", link.smallTokenId);
+      const bigRect = bigEl?.getBoundingClientRect?.();
+      const smallRect = smallEl?.getBoundingClientRect?.();
+      if (!bigRect || !smallRect) return null;
+      return {
+        a: normalizePoint(bigRect.left + bigRect.width / 2 - viewport.left, bigRect.top + bigRect.height / 2 - viewport.top),
+        b: normalizePoint(smallRect.left + smallRect.width / 2 - viewport.left, smallRect.top + smallRect.height / 2 - viewport.top)
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    type: "collection-trace",
+    aspect: Math.round((width / height) * 1000) / 1000,
+    smallCount: Math.max(0, Number(question.smallCount) || 0),
+    bigCount: Math.max(0, Number(question.bigCount) || 0),
+    smallAssetId: String(question.smallAssetId || ""),
+    bigAssetId: String(question.bigAssetId || ""),
+    characters,
+    tokens,
+    strokes,
+    links
+  };
+}
+
+function simplifyHistoryStroke(stroke, width, height) {
+  const points = Array.isArray(stroke) ? stroke : [];
+  if (points.length < 2 || !width || !height) return [];
+  const maxPoints = 64;
+  const step = Math.max(1, Math.ceil(points.length / maxPoints));
+  const sampled = [];
+  points.forEach((point, index) => {
+    if (index % step !== 0 && index !== points.length - 1) return;
+    sampled.push({
+      x: roundHistoryUnit((Number(point?.x) || 0) / width),
+      y: roundHistoryUnit((Number(point?.y) || 0) / height)
+    });
+  });
+  return sampled.slice(0, maxPoints + 1);
+}
+
+function roundHistoryUnit(value) {
+  const safe = Math.max(-0.05, Math.min(1.05, Number(value) || 0));
+  return Math.round(safe * 10000) / 10000;
+}
+
+function buildDifferenceCollectionsHistoryAids(question) {
+  const items = [];
+  if (question?.tokenMode === TOKEN_MODES.DISPLAYED) {
+    items.push({ text: "Jetons affichés", tone: "default" });
+  }
+  if (question?.tokenMode !== TOKEN_MODES.NONE && question?.traceMode === TRACE_MODES.ASSISTED) {
+    items.push({ text: "Aide au tracé", tone: "default" });
+  }
+  return { type: "tokens", items, emptyText: "" };
 }
 
 function teardownState(state, container) {

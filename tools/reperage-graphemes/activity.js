@@ -101,6 +101,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getReperageGraphemesHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -485,6 +489,118 @@ function teardownState(state, container) {
   state.studentSelectionSnapshot = null;
   state.lastEvaluation = null;
   state.phaseMode = "idle";
+}
+
+function getReperageGraphemesHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key:"target", label:"Cible", compact:true, align:"center" },
+    {
+      key:"selection",
+      label:"Sélection / correction",
+      legend:[
+        { state:"correct", label:"Correct" },
+        { state:"missed", label:"Oublié" },
+        { state:"wrong", label:"Erreur" }
+      ]
+    },
+    { key:"aid", label:"Aide", compact:true }
+  ];
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns,
+        cells: {
+          target: {
+            type:"tokens",
+            items:[{ text:getHistoryTargetLabel(question.target), tone:"accent" }]
+          },
+          selection: {
+            type:"marked_words",
+            words:buildGraphemeHistoryWords(question, new Set(), { showMissed:false })
+          },
+          aid: {
+            type:"text",
+            value:isSpellingsHistoryAidVisible(state, question) ? "Graphies possibles" : "",
+            emptyText:""
+          }
+        }
+      }
+    };
+  }
+
+  const studentSelection = getStudentSelection(state);
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          selection: {
+            type:"marked_words",
+            words:buildGraphemeHistoryWords(question, studentSelection, { showMissed:false })
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        selection: {
+          type:"marked_words",
+          words:buildGraphemeHistoryWords(question, studentSelection, { showMissed:true })
+        }
+      }
+    }
+  };
+}
+
+function getHistoryTargetLabel(target) {
+  if (!target || typeof target !== "object") return "—";
+  if (String(target.kind || "").trim().toLowerCase() === "graphemic") {
+    return String(target.grapheme || target.label || "—").trim() || "—";
+  }
+  const sound = String(target.bubbleText || target.label || "").trim();
+  return sound ? `[${sound}]` : "—";
+}
+
+function isSpellingsHistoryAidVisible(state, question) {
+  const target = question?.target;
+  if (state.settings?.showPossibleSpellings !== true || !target?.id || target?.kind === "graphemic") return false;
+  const spellings = state.settings?.enabledSpellingsByTarget?.[target.id]
+    || target.spellings
+    || [];
+  return Array.isArray(spellings) && spellings.length > 0;
+}
+
+function buildGraphemeHistoryWords(question, selectedKeys, { showMissed = true } = {}) {
+  const selected = selectedKeys instanceof Set
+    ? selectedKeys
+    : new Set((Array.isArray(selectedKeys) ? selectedKeys : []).map((key) => String(key)));
+
+  return (Array.isArray(question?.words) ? question.words : []).map((word) => ({
+    prefix:String(word?.prefix || ""),
+    letters:(Array.isArray(word?.letters) ? word.letters : []).map((letter) => {
+      const key = makeSelectionKey(word.wordIndex, letter.letterIndex);
+      const selectable = letter?.selectable !== false;
+      const wasSelected = selectable && selected.has(key);
+      const isTarget = selectable && letter?.isTarget === true;
+      let itemState = "neutral";
+
+      if (isTarget && wasSelected) itemState = "correct";
+      else if (!isTarget && wasSelected) itemState = "wrong";
+      else if (isTarget && showMissed) itemState = "missed";
+
+      return {
+        text:String(letter?.text || ""),
+        state:itemState
+      };
+    })
+  }));
 }
 
 function injectActivityStyles() {

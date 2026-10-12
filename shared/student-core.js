@@ -2486,7 +2486,8 @@ export function createSessionEngine({
 
 
   function canRecordActivityHistory(item) {
-    if (!item || runMode === "projected-teacher") return false;
+    if (!item) return false;
+    if (runMode === "projected-teacher") return false;
     if (String(item.catalogContext || "").trim().toLowerCase() === "test") return false;
     if (!String(item.catalogActivityId || item.historySourceId || "").trim()) return false;
     return typeof onActivityAttemptStarted === "function";
@@ -4046,15 +4047,29 @@ export function createSessionEngine({
       nextQuestionActionUnlockTimer = null;
     }
 
-    const remainingMs = Math.max(0, nextQuestionActionLockedUntil - performance.now());
-    if (remainingMs <= 0) return;
+    const remainingMs = nextQuestionActionLockedUntil - performance.now();
+    if (remainingMs <= 0) {
+      refreshShellManualAction(session[currentToolIndex]);
+      return;
+    }
 
+    // IMPORTANT : ne jamais supposer qu'un setTimeout programmé au bord exact
+    // du verrou s'exécutera forcément après son expiration. Selon l'arrondi du
+    // délai / de performance.now(), le callback peut arriver une fraction de ms
+    // trop tôt. L'ancienne version ne reprogrammait alors rien et pouvait laisser
+    // « Question suivante » désactivé jusqu'à une reconstruction des contrôles
+    // (par exemple Quitter -> Non).
+    const delayMs = Math.max(1, Math.ceil(remainingMs) + 1);
     nextQuestionActionUnlockTimer = window.setTimeout(() => {
       nextQuestionActionUnlockTimer = null;
-      if (!isNextQuestionActionLocked()) {
-        refreshShellManualAction(session[currentToolIndex]);
+
+      if (isNextQuestionActionLocked()) {
+        scheduleNextQuestionActionUnlock();
+        return;
       }
-    }, remainingMs);
+
+      refreshShellManualAction(session[currentToolIndex]);
+    }, delayMs);
   }
 
   function setStatus(text, mood) {

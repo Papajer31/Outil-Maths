@@ -11,6 +11,7 @@ import {
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
 import { renderSimpleMarkupToHtml } from "../../shared/simple-markup.js";
+import { CONJUGATION_PERSONS, CONJUGATION_TENSES } from "./data/forms-core.js";
 
 let stylesInjected = false;
 
@@ -70,10 +71,52 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getConjugaisonHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+/** Historique compact : données du modèle, jamais la correction affichée après validation. */
+function getConjugaisonHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const phase = String(stage || "question").trim().toLowerCase();
+  if (phase === "question") {
+    const infinitive = String(question.infinitive || "").trim();
+    const tense = String(CONJUGATION_TENSES[question.tenseId]?.shortLabel || question.tenseId || "").trim();
+    const pronoun = String(CONJUGATION_PERSONS[question.personId]?.pronoun || question.personId || "").trim();
+    const agreement = String(question.agreement?.promptLabel || "").trim();
+    const instruction = [infinitive, tense, pronoun, agreement ? `accord : ${agreement}` : ""]
+      .filter(Boolean).join(" · ");
+
+    return { history: {
+      columns: [
+        { key: "question", label: "Question", compact: true },
+        { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true },
+        { key: "expected", label: "Attendu", compact: true }
+      ],
+      cells: {
+        question: { type: "text", value: instruction },
+        expected: { type: "text", value: String(question.expectedAnswer || "").trim() }
+      }
+    } };
+  }
+
+  if (phase !== "answer" && phase !== "correction") return {};
+  const submitted = state.showResponseBox
+    ? (state.answerRevealed ? String(state.submittedAnswer || "").trim() : getCurrentResponseValue(state))
+    : "";
+  // La réponse peut différer de « Attendu » tout en étant admise ; le résultat
+  // vert/rouge provient du moteur d'évaluation commun du runtime.
+  return { history: { cells: {
+    answer: { type: "text", value: submitted || "—" }
+  } } };
 }
 
 function createRuntimeState(initialContext = {}) {

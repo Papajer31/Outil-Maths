@@ -96,10 +96,58 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getMotCacheHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+function getMotCacheHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+  const isQuestion = String(stage || "question").toLowerCase() === "question";
+  const selection = isQuestion ? [] : (state.studentSelectionSnapshot || state.selection);
+  const indices = Array.isArray(selection) ? [...selection] : [];
+  const cells = Array.isArray(question.cells) ? question.cells : [];
+  const preview = {
+    type: "mot-cache",
+    view: isQuestion ? "question" : "selection",
+    rowCount: question.rowCount,
+    columnCount: question.columnCount,
+    letters: cells.map((cell) => String(cell?.text || "")),
+    selectedIndices: indices,
+    expectedIndices: isQuestion ? [] : [...(question.expectedIndices || [])]
+  };
+
+  if (isQuestion) {
+    const target = question.target || {};
+    const targetText = String(target.bubbleText || target.grapheme || "").trim();
+    const subject = targetText
+      ? (target.kind === "graphemic" ? `Graphème « ${targetText} »` : `Son « ${targetText} »`)
+      : "Mot caché";
+    return { history: {
+      columns: [
+        { key: "question", label: "Question", compact: true },
+        { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true },
+        { key: "expected", label: "Attendu", compact: true }
+      ],
+      cells: {
+        question: { type: "text", value: subject, preview },
+        expected: { type: "text", value: String(question.word || "") }
+      }
+    }};
+  }
+
+  // La réponse doit conserver l'ordre du geste, y compris en cas de sélection inversée.
+  // L'évaluation se fait en parallèle sur les indices des cases, pas sur le texte.
+  const written = indices.map((index) => String(cells[index]?.text || "")).join("");
+  return { history: { cells: {
+    answer: { type: "text", value: written || "—", preview }
+  }}};
 }
 
 function createRuntimeState(initialContext = {}) {

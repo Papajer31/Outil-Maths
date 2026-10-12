@@ -1,4 +1,11 @@
-import { TIMER_MODES, countCopyWords, normalizeSettings, tokenizeCopyText } from "./model.js";
+import {
+  TIMER_MODES,
+  countCopyWords,
+  getCopyWordCountThroughTokenIndex,
+  getCopyWordTokenByIndex,
+  normalizeSettings,
+  tokenizeCopyText
+} from "./model.js";
 import {
   ensureToolInstructionStyles,
   renderToolInstruction,
@@ -70,7 +77,7 @@ export function createActivity(initialContext = {}){
         return true;
       }
       if (state.stage === "verification" && Number.isInteger(state.selectedWordIndex)) {
-        state.validatedWordCount = state.selectedWordIndex + 1;
+        commitSelectedWord(state);
         finishVerification(state);
         return true;
       }
@@ -107,6 +114,7 @@ function createState(initialContext){
     maskedVisible:false,
     maskedMetric:{ count:0, durationMs:0, activeStartedAt:null, views:[] },
     selectedWordIndex:null,
+    validatedWordIndex:null,
     validatedWordCount:null,
     textFontPx:null,
     copyStartedAt:null,
@@ -138,6 +146,7 @@ function startCopyPhase(state){
   state.maskedVisible = false;
   state.maskedMetric = { count:0, durationMs:0, activeStartedAt:null, views:[] };
   state.selectedWordIndex = null;
+  state.validatedWordIndex = null;
   state.validatedWordCount = null;
   state.textFontPx = null;
   state.copyStartedAt = performance.now();
@@ -339,6 +348,7 @@ function startVerificationPhase(state){
   if (state.stage !== "verification-intro") return;
   state.stage = "verification";
   state.selectedWordIndex = null;
+  state.validatedWordIndex = null;
   state.validatedWordCount = null;
   state.verificationStartedAt = performance.now();
 
@@ -409,7 +419,15 @@ function updateVerificationWarning(state){
 
 function finishVerificationWithoutValidation(state){
   if (state.stage !== "verification") return;
-  state.validatedWordCount = null;
+  // Le clic sur un mot constitue déjà la réponse de l'élève. Le bouton « Valider »
+  // permet seulement de terminer la vérification avant la fin du chrono.
+  // Si le temps expire après la sélection, on conserve donc cette sélection au
+  // lieu de remplacer « Mots écrits » par une croix.
+  if (Number.isInteger(state.selectedWordIndex)) commitSelectedWord(state);
+  else {
+    state.validatedWordIndex = null;
+    state.validatedWordCount = null;
+  }
   finishVerification(state);
 }
 
@@ -429,8 +447,9 @@ function finishVerification(state){
 function renderSummary(state){
   setInstruction(state, "");
   const seconds = getVisibleSeconds(state);
-  const wordValue = Number.isInteger(state.validatedWordCount)
-    ? `<strong>${state.validatedWordCount}</strong>`
+  const writtenWordCount = getWrittenWordCount(state);
+  const wordValue = Number.isInteger(writtenWordCount)
+    ? `<strong>${writtenWordCount}</strong>`
     : `<span class="copy-summary-missing" role="img" aria-label="Valeur manquante">×</span>`;
 
   if (!state.stageEl) return;
@@ -467,38 +486,78 @@ function restartCommonTimer(state, durationSec){
 
 function buildHistorySnapshot(state, stage){
   const safeStage = String(stage || "question").toLowerCase();
-  const totalWords = countCopyWords(state.settings.text);
-  const visibleDurationMs = getVisibleDurationMs(state);
+  const text = String(state.settings.text || "").trim();
+  const totalWords = countCopyWords(text);
   const visibleSeconds = getVisibleSeconds(state);
-  const written = Number.isInteger(state.validatedWordCount) ? state.validatedWordCount : null;
+  const written = getWrittenWordCount(state);
+
+  const columns = [
+    { key:"text", label:"Texte", fill:true },
+    { key:"looks", label:"L’élève a regardé le texte…", align:"center", compact:true },
+    { key:"visible", label:"Temps d’affichage", align:"right", compact:true },
+    { key:"lastWord", label:"Dernier mot écrit", compact:true },
+    { key:"progress", label:"Progression", align:"right", compact:true }
+  ];
 
   if (safeStage === "question") {
     return {
-      schemaVersion:2,
-      kind:"copy-session",
-      prompt:String(state.settings.text || "").trim().slice(0, 6000),
-      meta:`Texte de copie · ${totalWords} mot${totalWords > 1 ? "s" : ""}`,
-      totalWordCount:totalWords
+      history:{
+        columns,
+        cells:{
+          text:{
+            type:"long_text",
+            value:text,
+            preview:buildCopyTextPreview(text)
+          }
+        }
+      }
     };
   }
 
   return {
-    schemaVersion:2,
-    kind:"copy-session",
-    meta:state.stage === "summary" ? "Bilan de copie" : "Copie interrompue avant le bilan",
-    facts:[
-      { label:"Regards pour copier", value:String(Math.max(0, state.maskedMetric.count)) },
-      { label:"Temps d’affichage", value:`${visibleSeconds} s` },
-      { label:"Mots écrits", value:written == null ? "✕" : String(written) },
-      { label:"Mots dans le texte", value:String(totalWords) }
-    ],
-    copyLookCount:Math.max(0, state.maskedMetric.count),
-    copyVisibleDurationMs:visibleDurationMs,
-    copyViewDurationsMs:state.maskedMetric.views.map((value) => Math.max(0, Math.round(Number(value) || 0))),
-    writtenWordCount:written,
-    totalWordCount:totalWords,
-    verificationCompleted:written != null
+    history:{
+      cells:{
+        looks:{ type:"text", value:`${Math.max(0, state.maskedMetric.count)} fois` },
+        visible:{ type:"text", value:`${visibleSeconds} s` },
+        lastWord:{ type:"text", value:getLastWrittenWord(state) || "✕" },
+        progress:{
+          type:"text",
+          value:Number.isInteger(written)
+            ? `${written} / ${totalWords} mots`
+            : `✕ / ${totalWords} mots`
+        }
+      }
+    }
   };
+}
+
+function commitSelectedWord(state){
+  if (!Number.isInteger(state.selectedWordIndex) || state.selectedWordIndex < 0) return;
+  state.validatedWordIndex = state.selectedWordIndex;
+  state.validatedWordCount = getCopyWordCountThroughTokenIndex(state.settings.text, state.selectedWordIndex);
+}
+
+function getWrittenWordCount(state){
+  if (Number.isInteger(state.validatedWordCount) && state.validatedWordCount >= 0) {
+    return state.validatedWordCount;
+  }
+  if (Number.isInteger(state.selectedWordIndex) && state.selectedWordIndex >= 0) {
+    return getCopyWordCountThroughTokenIndex(state.settings.text, state.selectedWordIndex);
+  }
+  return null;
+}
+
+function getLastWrittenWord(state){
+  const index = Number.isInteger(state.validatedWordIndex)
+    ? state.validatedWordIndex
+    : state.selectedWordIndex;
+  if (!Number.isInteger(index) || index < 0) return "";
+  return String(getCopyWordTokenByIndex(state.settings.text, index)?.text || "");
+}
+
+function buildCopyTextPreview(text){
+  const preview = String(text || "").replace(/\s+/gu, " ").trim();
+  return preview || "Afficher le texte";
 }
 
 function getVisibleDurationMs(state){

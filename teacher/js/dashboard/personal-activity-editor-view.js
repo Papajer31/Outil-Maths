@@ -205,7 +205,9 @@ export function createPersonalActivityEditorController({
       </div>
     `;
 
-    header.querySelector("[data-action='back-personal-activity']")?.addEventListener("click", () => onBack?.({ origin:editorOrigin, activity:clone(editingActivity) }));
+    header.querySelector("[data-action='back-personal-activity']")?.addEventListener("click", () => {
+      onBack?.({ origin:editorOrigin, activity:clone(editingActivity) });
+    });
     header.querySelector("[data-action='choose-personal-tool']")?.addEventListener("click", openToolPicker);
     header.querySelector("[data-action='edit-personal-content']")?.addEventListener("click", () => void editPersonalContent());
     header.querySelector(".personal-activity-title-input")?.addEventListener("input", (event) => {
@@ -949,16 +951,13 @@ export function createPersonalActivityEditorController({
   }
 
   async function test() {
-    let saved = editingActivity?.id ? editingActivity : null;
-    if (isDirty || !saved?.id) saved = await save({ quiet:true });
-    else {
-      const ok = await persistVisibleLevel();
-      if (!ok) return;
-      saved = await save({ quiet:true });
-    }
-    if (!saved?.id) return;
+    // Tester/projeter travaille exclusivement sur le brouillon courant.
+    // Aucune persistance ne doit avoir lieu ici : seul le bouton « Enregistrer »
+    // est autorisé à écrire la configuration de l’activité.
+    const ok = await persistVisibleLevel();
+    if (!ok) return;
 
-    const runtimeActivity = buildRuntimeActivity(saved);
+    const runtimeActivity = buildRuntimeActivity(editingActivity);
     if (!runtimeActivity) return;
     const space = getCurrentTeacherSpace?.();
     openCatalogTestRunner({
@@ -966,7 +965,7 @@ export function createPersonalActivityEditorController({
       activity:runtimeActivity,
       catalogActivities:[runtimeActivity],
       initialLevel:editingActivity.difficulty_mode === "adaptive" ? Number(activeLevel) : 3,
-      titleLabel:`Test · ${editingActivity.title}`,
+      titleLabel:`Test · ${editingActivity.title || "Activité"}`,
       showLevelSelector:editingActivity.difficulty_mode === "adaptive",
       showToast
     });

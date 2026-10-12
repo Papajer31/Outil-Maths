@@ -93,6 +93,10 @@ export function createOperationHoleActivity({ model, initialContext = {} } = {})
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getOperationHoleHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -430,6 +434,55 @@ function buildCorrectionSnapshot(state, question) {
     kind: "single",
     value: state.model.formatAnswerValue(question)
   };
+}
+
+function getOperationHoleHistorySnapshot(state, stage = "question") {
+  const q = state.currentQuestion;
+  if (!q) return {};
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key:"calculation", label:"Calcul" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer", compact:true },
+          { key:"expected", label:"Attendu", compact:true }
+        ],
+        cells: {
+          calculation: { type:"text", value:formatHistoryHoleCalculation(q) }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:String(state.studentAnswerSnapshot?.value ?? state.singleInput?.value ?? "").trim()
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: { type:"text", value:String(state.model.formatAnswerValue(q) ?? "") }
+      }
+    }
+  };
+}
+
+function formatHistoryHoleCalculation(question) {
+  const terms = Array.isArray(question?.terms) ? question.terms : ["", ""];
+  const first = Number(question?.missingIndex) === 0 ? "□" : formatMathValue(terms[0]);
+  const second = Number(question?.missingIndex) === 1 ? "□" : formatMathValue(terms[1]);
+  return `${first} ${question?.operatorSymbol || ""} ${second} = ${formatMathValue(question?.result ?? "")}`.trim();
 }
 
 function computeStoredEvaluation(state) {

@@ -94,6 +94,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getOrdreAlphabetiqueLettresHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       stopPhaseMonitor(state);
       teardownState(state, container || state.container);
@@ -122,6 +126,7 @@ function createRuntimeState(initialContext = {}) {
     answerOrder: [],
     drag: null,
     currentQuestion: null,
+    currentQuestionSettings: normalizeSettings(initialContext?.settings),
     lastQuestionId: null,
     visualHintRanges: new Map(),
     itemMetaByValue: new Map(),
@@ -267,6 +272,7 @@ async function loadNextQuestion(state, context = {}) {
   }
 
   const settings = normalizeSettings(context?.settings);
+  state.currentQuestionSettings = settings;
   const workspace = state.workspace;
   if (!workspace || !state.promptEl) return;
 
@@ -846,6 +852,58 @@ function requestReveal(state) {
     skipValidationReview: true,
     answerControlsDelayMs: getCorrectionAnimationDurationMs(state, isCorrect)
   });
+}
+
+function getOrdreAlphabetiqueLettresHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const toTokens = (values) => (Array.isArray(values) ? values : [])
+    .filter((value) => value != null && String(value).trim() !== "")
+    .map((value) => ({ text:String(value), tone:"default" }));
+
+  if (safeStage === "question") {
+    const alphabetShown = state.currentQuestionSettings?.showAlphabet === true;
+    return {
+      history: {
+        columns: [
+          { key:"letters", label:"Lettres proposées" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" },
+          { key:"alphabet", label:"Alphabet", align:"center" }
+        ],
+        cells: {
+          letters: { type:"tokens", items:toTokens(question.items) },
+          alphabet: {
+            type:"tokens",
+            items:[{
+              text:alphabetShown ? "Affiché" : "Masqué",
+              tone:alphabetShown ? "accent" : "muted"
+            }]
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: { type:"tokens", items:toTokens(state.answerOrder) }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: { type:"tokens", items:toTokens(question.answerItems) }
+      }
+    }
+  };
 }
 
 function getCorrectionAnimationDurationMs(state, isCorrect) {

@@ -96,7 +96,7 @@ async function mountPayload(payload) {
 
   const playlist = kind === "mission"
     ? buildMissionPlaylistMeta(runtimeConfig)
-    : buildPlaylistMeta(activity, runtimeConfig, initialLevel);
+    : buildPlaylistMeta(activity, runtimeConfig, initialLevel, showLevelSelector);
 
   applyStudentState({
     kind,
@@ -147,6 +147,7 @@ async function mountPayload(payload) {
   }
 }
 
+
 function buildRuntimeConfig({ activity, catalogActivities, level, runtimeConfigOptions }) {
   const runtimeConfig = buildCatalogActivityConfig(activity, {
     difficultyLevel: normalizeCatalogDifficultyLevel(level),
@@ -162,13 +163,14 @@ function buildRuntimeConfig({ activity, catalogActivities, level, runtimeConfigO
   return runtimeConfig;
 }
 
-function buildPlaylistMeta(activity, runtimeConfig, level) {
+function buildPlaylistMeta(activity, runtimeConfig, level, showLevelSelector) {
   const firstItem = runtimeConfig?.sequence?.[0] || null;
   return [{
     id: `catalog-test-${String(activity.id || "activity")}`,
     activityId: String(activity.id || ""),
     activityLabel: String(activity.config_name || activity.title || "Activité"),
     level: normalizeCatalogDifficultyLevel(level),
+    adaptiveAvailable: showLevelSelector === true,
     instanceId: String(firstItem?.instanceId || "")
   }];
 }

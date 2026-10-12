@@ -1,8 +1,7 @@
 import {
   CATALOG_ROOT_LABEL,
   PEDAGOGICAL_GRADE_LEVELS,
-  getPedagogicalNodeGradeLevel,
-  getPedagogicalNodes
+  getPedagogicalNodeGradeLevel
 } from "../../../shared/catalogue.js";
 import {
   escapeAttr,
@@ -10,6 +9,7 @@ import {
 } from "./text-utils.js";
 import { openCatalogTestRunner } from "./catalog-test-runner.js";
 import { createCatalogAdminViewController } from "./catalog-admin-view.js";
+import { createActivitySearchEntries, filterActivitySearchEntries } from "./activity-search.js";
 
 export function createActivitiesViewController({
   configHeader,
@@ -41,7 +41,7 @@ export function createActivitiesViewController({
   let currentRenderIsSuperAdmin = false;
   let catalogueChangeListenerAttached = false;
   let activeCatalogTestController = null;
-  let folders = getPedagogicalNodes();
+  let folders = [];
   let cachedTeacherCatalogFolders = null;
   let cachedAdminCatalogFolders = null;
   const collapsedFolderIds = new Set();
@@ -49,6 +49,7 @@ export function createActivitiesViewController({
   const EXPLORATION_GRADE_STORAGE_KEY = "dashboard:exploration:grade";
   const EXPLORATION_ALL_GRADES = "all";
   let selectedExplorationGrade = readStoredExplorationGrade();
+  let explorationSearchDialog = null;
 
   const catalogAdminViewController = createCatalogAdminViewController({
     header: configHeader,
@@ -265,6 +266,126 @@ export function createActivitiesViewController({
     }
   }
 
+  function closeExplorationSearch({ restoreFocus = true } = {}){
+    const dialog = explorationSearchDialog;
+    if (!dialog) return;
+    explorationSearchDialog = null;
+    dialog.close();
+    dialog.remove();
+    if (restoreFocus) configHeader?.querySelector("[data-action='search-exploration']")?.focus();
+  }
+
+  function getSearchEntries({ grade = selectedExplorationGrade } = {}){
+    return createActivitySearchEntries(getActivitiesForSelectedGrade(cachedRenderedCatalogActivities || [], grade), folders);
+  }
+
+  async function revealActivity(activityId){
+    const activity = (cachedRenderedCatalogActivities || []).find((item) => String(item.id) === String(activityId));
+    if (!activity) return;
+    closeExplorationSearch({ restoreFocus:false });
+    const grade = getActivityGradeLevel(activity);
+    if (selectedExplorationGrade !== EXPLORATION_ALL_GRADES && selectedExplorationGrade !== grade) {
+      selectedExplorationGrade = grade || EXPLORATION_ALL_GRADES;
+      try { localStorage.setItem(EXPLORATION_GRADE_STORAGE_KEY, selectedExplorationGrade); } catch {}
+    }
+    openFolder(getActivityFolderId(activity));
+    await renderActivitiesForSpace();
+    requestAnimationFrame(() => {
+      const target = configsList?.querySelector(`[data-exploration-activity-id="${CSS.escape(String(activity.id))}"]`);
+      if (!target) return;
+      target.classList.add("is-search-target");
+      target.focus({ preventScroll:true });
+      target.scrollIntoView({ block:"center", inline:"nearest" });
+      configsList.querySelector(".dashboard-activity-tree-row.is-selected")?.scrollIntoView({ block:"nearest" });
+    });
+  }
+
+  function openExplorationSearch(){
+    closeExplorationSearch({ restoreFocus:false });
+    const entries = getSearchEntries();
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "exploration-search-dialog";
+    dialog.setAttribute("aria-labelledby", "explorationSearchTitle");
+    dialog.innerHTML = `
+      <header class="exploration-search-heading">
+        <div>
+          <h2 id="explorationSearchTitle" class="modal-title">Rechercher une activité</h2>
+          <p class="exploration-search-scope">${selectedExplorationGrade === EXPLORATION_ALL_GRADES ? "Tous les niveaux" : `Niveau ${escapeHtml(selectedExplorationGrade)}`}</p>
+        </div>
+        <button class="dashboard-icon-btn dashboard-material-icon-btn" type="button" data-close-exploration-search aria-label="Fermer la recherche" title="Fermer">
+          <span class="dashboard-material-icon" aria-hidden="true">close</span>
+        </button>
+      </header>
+      <label class="exploration-search-field">
+        <span class="dashboard-material-icon" aria-hidden="true">search</span>
+        <input class="modal-text-input" type="search" aria-label="Rechercher une activité" placeholder="Rechercher une activité…" autocomplete="off" aria-controls="explorationSearchResults">
+      </label>
+      <p class="exploration-search-count" role="status" aria-live="polite" aria-atomic="true"></p>
+      <div id="explorationSearchResults" class="exploration-search-results"></div>
+    `;
+    const input = dialog.querySelector("input");
+    const results = dialog.querySelector(".exploration-search-results");
+    const renderResults = () => {
+      const matches = filterActivitySearchEntries(entries, input.value);
+      dialog.querySelector(".exploration-search-count").textContent = `${matches.length} activité${matches.length > 1 ? "s" : ""}`;
+      results.scrollTop = 0;
+      results.innerHTML = matches.length ? matches.map(({ activity, title, path }) => `
+        <button class="exploration-search-result" type="button" data-exploration-search-id="${escapeAttr(activity.id)}">
+          <span class="dashboard-material-icon" aria-hidden="true">extension</span>
+          <span class="exploration-search-result-copy"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(path)}</span></span>
+          <span class="dashboard-material-icon" aria-hidden="true">arrow_forward</span>
+        </button>
+      `).join("") : `<p class="dashboard-activity-empty-state">${input.value.trim() ? "Aucune activité ne correspond à cette recherche." : "Aucune activité disponible pour ce niveau."}</p>`;
+    };
+    input.addEventListener("input", renderResults);
+    dialog.querySelector("[data-close-exploration-search]").addEventListener("click", () => closeExplorationSearch());
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeExplorationSearch();
+      } else if (event.key === "Tab") {
+        const controls = dialog.querySelectorAll("button:not([disabled]), input:not([disabled])");
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeExplorationSearch();
+    });
+    dialog.addEventListener("close", () => {
+      if (explorationSearchDialog === dialog) closeExplorationSearch();
+    });
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) {
+        closeExplorationSearch();
+      }
+    });
+    results.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-exploration-search-id]");
+      if (!button) return;
+      const entry = entries.find(({ activity }) => String(activity.id) === button.dataset.explorationSearchId);
+      if (!entry) return;
+      await revealActivity(entry.activity.id);
+    });
+    explorationSearchDialog = dialog;
+    document.body.appendChild(dialog);
+    renderResults();
+    dialog.showModal();
+    input.focus();
+  }
+
   function renderConfigHeader({ isSuperAdmin = false } = {}){
     if (!configHeader) return;
     const breadcrumb = getBreadcrumb();
@@ -312,13 +433,18 @@ export function createActivitiesViewController({
     `).join("");
 
     configHeader.innerHTML = `
-      <div class="dashboard-config-header-main">
-        <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-activity-hub" title="Retour aux activités" aria-label="Retour aux activités">
+      <div class="dashboard-config-header-main dashboard-exploration-header-main">
+        <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-activity-hub" title="Retour à l’accueil" aria-label="Retour à l’accueil">
           <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
         </button>
         <div class="dashboard-section-title">Exploration</div>
-        <div class="dashboard-view-toggle dashboard-exploration-grade-tabs" role="group" aria-label="Filtrer Exploration par niveau">
-          ${gradeButtons}
+        <div class="dashboard-exploration-filters">
+          <div class="dashboard-view-toggle dashboard-exploration-grade-tabs" role="group" aria-label="Filtrer Exploration par niveau">
+            ${gradeButtons}
+          </div>
+          <button class="dashboard-icon-btn dashboard-material-icon-btn exploration-search-trigger" type="button" data-action="search-exploration" aria-label="Rechercher dans Exploration" title="Rechercher dans Exploration" aria-haspopup="dialog">
+            <span class="dashboard-material-icon" aria-hidden="true">search</span>
+          </button>
         </div>
       </div>
       <div class="dashboard-config-header-center">
@@ -332,6 +458,7 @@ export function createActivitiesViewController({
     `;
 
     configHeader.querySelector("[data-action='back-activity-hub']")?.addEventListener("click", () => onBackToActivityHub?.());
+    configHeader.querySelector("[data-action='search-exploration']")?.addEventListener("click", openExplorationSearch);
 
     configHeader.querySelectorAll("[data-action='open-root']").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -430,7 +557,7 @@ export function createActivitiesViewController({
     ].filter(Boolean).join(" ");
 
     return `
-      <article class="${tileClasses}" ${adminEnhancement?.attributes || ""}>
+      <article class="${tileClasses}" data-exploration-activity-id="${escapeAttr(activity.id)}" tabindex="-1" ${adminEnhancement?.attributes || ""}>
         ${adminEnhancement?.dragHandleHtml || ""}
         <div class="dashboard-activity-tile-surface dashboard-activity-tile-surface--activity" style="cursor:default;">
           <span class="dashboard-material-icon dashboard-activity-tile-icon" aria-hidden="true">extension</span>
@@ -475,7 +602,7 @@ export function createActivitiesViewController({
       : (description ? escapeHtml(description) : "Activité");
 
     return `
-      <article class="${rowClasses}" ${adminEnhancement?.attributes || ""}>
+      <article class="${rowClasses}" data-exploration-activity-id="${escapeAttr(activity.id)}" tabindex="-1" ${adminEnhancement?.attributes || ""}>
         <span class="dashboard-activity-row-rank" aria-label="Rang ${rank}">${rank}</span>
         ${adminEnhancement?.dragHandleHtml || ""}
         <span class="dashboard-material-icon dashboard-activity-row-icon" aria-hidden="true">extension</span>
@@ -734,6 +861,7 @@ export function createActivitiesViewController({
   }
 
   async function renderActivitiesForSpace({ forceRefresh = false } = {}){
+    closeExplorationSearch({ restoreFocus:false });
     attachCatalogueChangeListener();
     if (!configsList) return;
 
@@ -768,25 +896,38 @@ export function createActivitiesViewController({
       cleanupActiveCatalogTestController();
       configsList.innerHTML = `<div class="dashboard-activity-empty-state">Chargement d’Exploration…</div>`;
 
-      const [teacherActivities, adminActivities, teacherFolders, adminFolders] = await Promise.all([
-        needsTeacherActivities
-          ? listCatalogActivitiesForTeacherSpace?.(currentTeacherSpace.id)
-          : Promise.resolve(cachedTeacherCatalogActivities || []),
-        needsAdminActivities
-          ? listCatalogActivitiesForAdmin?.()
-          : Promise.resolve(cachedAdminCatalogActivities || []),
-        needsTeacherFolders
-          ? listPedagogicalNodesForTeacher?.()
-          : Promise.resolve(cachedTeacherCatalogFolders || []),
-        needsAdminFolders
-          ? listPedagogicalNodesForAdmin?.()
-          : Promise.resolve(cachedAdminCatalogFolders || [])
-      ]);
+      try {
+        const [teacherActivities, adminActivities, teacherFolders, adminFolders] = await Promise.all([
+          needsTeacherActivities
+            ? listCatalogActivitiesForTeacherSpace?.(currentTeacherSpace.id)
+            : Promise.resolve(cachedTeacherCatalogActivities || []),
+          needsAdminActivities
+            ? listCatalogActivitiesForAdmin?.()
+            : Promise.resolve(cachedAdminCatalogActivities || []),
+          needsTeacherFolders
+            ? listPedagogicalNodesForTeacher?.()
+            : Promise.resolve(cachedTeacherCatalogFolders || []),
+          needsAdminFolders
+            ? listPedagogicalNodesForAdmin?.()
+            : Promise.resolve(cachedAdminCatalogFolders || [])
+        ]);
 
-      if (needsTeacherActivities) cachedTeacherCatalogActivities = teacherActivities || [];
-      if (needsAdminActivities) cachedAdminCatalogActivities = adminActivities || [];
-      if (needsTeacherFolders) cachedTeacherCatalogFolders = teacherFolders || [];
-      if (needsAdminFolders) cachedAdminCatalogFolders = adminFolders || [];
+        if (needsTeacherActivities) cachedTeacherCatalogActivities = teacherActivities || [];
+        if (needsAdminActivities) cachedAdminCatalogActivities = adminActivities || [];
+        if (needsTeacherFolders) cachedTeacherCatalogFolders = teacherFolders || [];
+        if (needsAdminFolders) cachedAdminCatalogFolders = adminFolders || [];
+      } catch (error) {
+        console.error("Chargement d’Exploration impossible.", error);
+        configsList.innerHTML = `
+          <div class="dashboard-activity-empty-state is-error" style="flex-direction:column;gap:12px">
+            <span>Exploration est momentanément indisponible. Vérifie la connexion à Supabase.</span>
+            <button type="button" class="btn secondary" data-catalog-retry>Réessayer</button>
+          </div>`;
+        configsList.querySelector("[data-catalog-retry]")?.addEventListener("click", () => {
+          void renderActivitiesForSpace({ forceRefresh: true });
+        });
+        return;
+      }
     }
 
     if (!currentTeacherSpace?.id) {
@@ -794,8 +935,8 @@ export function createActivitiesViewController({
     }
 
     folders = isSuperAdmin
-      ? (cachedAdminCatalogFolders || getPedagogicalNodes())
-      : (cachedTeacherCatalogFolders || getPedagogicalNodes());
+      ? (cachedAdminCatalogFolders || [])
+      : (cachedTeacherCatalogFolders || []);
     syncKnownFolders();
 
     const activities = isSuperAdmin
@@ -852,6 +993,9 @@ export function createActivitiesViewController({
   }
 
   return {
+    closeSearch:closeExplorationSearch,
+    getSearchEntries,
+    revealActivity,
     renderRightPanel: renderActivitiesForSpace,
     renderActivitiesForSpace,
     buildActivityTreeState: () => ({ folderById: new Map(), folderChildren: new Map(), activityChildren: new Map() }),

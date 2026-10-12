@@ -32,7 +32,8 @@
         <header class="dashboard-header">
           <div class="dashboard-header-cell dashboard-header-left">
             <div class="dashboard-header-title-wrap">
-              <h1 class="dashboard-title">Tableau de bord</h1>
+              <button id="btnNavHome" class="dashboard-home-nav" type="button" aria-label="Accueil" title="Accueil"><span class="dashboard-material-icon" aria-hidden="true">home</span></button>
+              <h1 class="dashboard-title"><button id="btnDashboardTitleHome" class="dashboard-title-home" type="button" title="Retour à l’accueil">Tableau de bord</button></h1>
               <button id="btnDashboardHelp" class="dashboard-header-help-btn" type="button" aria-label="Aide du tableau de bord" aria-expanded="false">?</button>
             </div>
 
@@ -70,7 +71,17 @@
                 </button>
 
                 <button id="btnNavActivityHub" class="dashboard-nav-main dashboard-nav-main--header" type="button">
-                  <span class="dashboard-nav-label">Activités</span>
+                  <span class="dashboard-nav-label">Mes activités</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavCatalogue" class="dashboard-nav-main dashboard-nav-main--header" type="button">
+                  <span class="dashboard-nav-label">Exploration</span>
+                  <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
+                </button>
+
+                <button id="btnNavAssignments" class="dashboard-nav-main dashboard-nav-main--header" type="button" aria-label="Missions" title="Missions">
+                  <span class="dashboard-nav-label">Missions</span>
                   <span class="dashboard-material-icon dashboard-nav-chevron" aria-hidden="true">expand_more</span>
                 </button>
 
@@ -153,7 +164,7 @@
               </div>
             </div>
 
-            <div id="activityHubView" class="dashboard-content-view dashboard-explorer-view"></div>
+            <div id="homeView" class="dashboard-content-view dashboard-home-view hidden"></div>
 
             <div id="myActivitiesView" class="dashboard-content-view dashboard-explorer-view hidden">
               <div id="myActivitiesHeader" class="dashboard-config-header"></div>
@@ -167,7 +178,7 @@
               <div id="personalActivityEditorBody" class="dashboard-content-scroll dashboard-config-list"></div>
             </div>
 
-            <div id="activityAssignmentView" class="dashboard-content-view hidden"></div>
+            <div id="activityAssignmentView" class="dashboard-content-view dashboard-explorer-view hidden"></div>
 
             <div id="adventureView" class="dashboard-content-view hidden">
               <div id="adventureHeader" class="dashboard-config-header"></div>

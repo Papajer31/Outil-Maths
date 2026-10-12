@@ -160,6 +160,10 @@
   white-space:nowrap;
 }
 
+.dashboard-resource-tile-title.is-missing-lexical-word{
+  color:#ff6b6b;
+}
+
 .dashboard-resource-tile-meta{
   min-width:0;
   color:var(--muted);
@@ -2150,4 +2154,120 @@ button.dashboard-resource-detail-tag:focus-visible{
 
 @keyframes dashboardWorksheetGeneratingSpin{
   to{transform:rotate(360deg)}
+}
+
+/* Papiers et lignages : modèles repliables avec les mêmes contrôles que les générateurs. */
+.dashboard-paper-presets-group.is-collapsed { gap:0; }
+.dashboard-paper-presets-group.is-collapsed > :not(.dashboard-worksheet-settings-heading) { display:none; }
+/* Papiers et lignages : tuiles illustrées dans le layout commun des générateurs. */
+.dashboard-paper-presets{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.dashboard-paper-preset{
+  min-width:0;
+  padding:6px 4px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:5px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:9px;
+  background:rgba(255,255,255,.035);
+  color:#e8ecf7;
+  cursor:pointer;
+  font:inherit;
+  transition:background .15s,border-color .15s;
+}
+.dashboard-paper-preset:hover{
+  border-color:rgba(255,176,32,.45);
+  background:rgba(255,255,255,.065);
+}
+.dashboard-paper-preset.is-selected{
+  border-color:#ffb020;
+  background:rgba(255,176,32,.12);
+  box-shadow:inset 0 0 0 1px rgba(255,176,32,.3);
+}
+.dashboard-paper-preset:focus-visible{
+  outline:2px solid #ffb020;
+  outline-offset:2px;
+}
+.dashboard-paper-preset-thumb{
+  display:block;
+  width:56px;
+  height:68px;
+  background:#fff;
+  overflow:hidden;
+  box-shadow:0 2px 7px rgba(0,0,0,.27);
+}
+.dashboard-paper-preset-label{
+  display:block;
+  text-align:center;
+  font-size:11px;
+  font-weight:650;
+  line-height:1.2;
+  min-height:2.4em;
+}
+.dashboard-paper-page .dashboard-paper-svg,
+.dashboard-paper-preset-thumb .dashboard-paper-svg{
+  display:block;
+  width:100%;
+  height:100%;
+}
+/* Papiers et lignages : réglages contextuels, dans la charte des générateurs. */
+.dashboard-paper-slider-field{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  padding:7px 0;
+}
+.dashboard-paper-slider-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:13px;
+  font-weight:650;
+  color:var(--text,#e8ecf7);
+}
+.dashboard-paper-slider-heading output{
+  flex:none;
+  font-variant-numeric:tabular-nums;
+  font-weight:750;
+  color:#ffbd53;
+}
+.dashboard-paper-range{
+  width:100%;
+  height:22px;
+  margin:0;
+  accent-color:#ffb020;
+  cursor:pointer;
+}
+.dashboard-paper-fraction-field .tv-input-stepper{
+  min-width:4.5ch;
+  width:4.5ch;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.dashboard-paper-specific-settings[hidden],
+.dashboard-paper-slider-field[hidden],
+.dashboard-paper-fraction-field[hidden],
+.dashboard-paper-specific-settings [data-paper-band-vertical-row][hidden],
+.dashboard-paper-settings-group [data-paper-red-margin-row][hidden],
+[data-paper-red-margin-row][hidden]{display:none!important;}
+
+
+.dashboard-paper-choice-field{display:flex;flex-direction:column;gap:7px;padding:4px 0 8px}
+.dashboard-paper-choice-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.dashboard-paper-choice-button{min-width:0;padding:8px 10px;border:1px solid rgba(255,255,255,.14);border-radius:9px;background:rgba(255,255,255,.035);color:#e8ecf7;font:inherit;font-size:12px;font-weight:650;cursor:pointer;transition:background .15s,border-color .15s}
+.dashboard-paper-choice-button:hover{border-color:rgba(255,176,32,.45);background:rgba(255,255,255,.065)}
+.dashboard-paper-choice-button.is-selected{border-color:#ffb020;background:rgba(255,176,32,.12);box-shadow:inset 0 0 0 1px rgba(255,176,32,.3)}
+.dashboard-paper-choice-button:focus-visible{outline:2px solid #ffb020;outline-offset:2px}
+
+/* Les sélecteurs flex/grid des widgets Tujer peuvent prendre le pas sur
+   l'attribut hidden. Le panneau papier conserve ses nœuds DOM, mais ses
+   réglages non pertinents doivent rester réellement invisibles. */
+.dashboard-paper-specific-settings [hidden] {
+  display: none !important;
 }

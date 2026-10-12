@@ -91,6 +91,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getRecomposerHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardown(state, container || state.container);
     }
@@ -634,6 +638,79 @@ function canValidate(state) {
     && assignedTokens === totalTokens
     && state.zoneOrders.every((zone) => zone.length > 0)
     && phaseKind === "QUESTION";
+}
+
+function getRecomposerHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" }
+        ],
+        cells: {}
+      }
+    };
+  }
+
+  const studentOrders = cloneZoneOrders(state.studentZoneOrdersSnapshot || state.zoneOrders);
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:formatHistoryZoneOrders(question, studentOrders)
+          }
+        }
+      }
+    };
+  }
+
+  const correctionOrders = getHistoryCorrectionZoneOrders(state, studentOrders);
+  return {
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:formatHistoryZoneOrders(question, correctionOrders)
+        }
+      }
+    }
+  };
+}
+
+function getHistoryCorrectionZoneOrders(state, studentOrders) {
+  const expectedZones = cloneZoneOrders(state.currentQuestion?.expectedZones || []);
+  if (!expectedZones.length) return [];
+
+  const evaluation = state.lastEvaluation || evaluateZoneOrders(state.currentQuestion, studentOrders);
+  const mapping = Array.isArray(evaluation?.correctionExpectedIndexByZone)
+    ? evaluation.correctionExpectedIndexByZone
+    : [];
+
+  if (mapping.length !== expectedZones.length) return expectedZones;
+
+  return mapping.map((expectedIndex, zoneIndex) => {
+    const expected = expectedZones[expectedIndex];
+    return Array.isArray(expected) ? [...expected] : [...(expectedZones[zoneIndex] || [])];
+  });
+}
+
+function formatHistoryZoneOrders(question, zoneOrders = []) {
+  return (Array.isArray(zoneOrders) ? zoneOrders : [])
+    .map((zone) => (Array.isArray(zone) ? zone : [])
+      .map((tokenId) => getTokenLabel(question, tokenId))
+      .filter(Boolean)
+      .join(" · "))
+    .filter(Boolean)
+    .join(" / ");
 }
 
 function submitCurrentAnswer(state) {

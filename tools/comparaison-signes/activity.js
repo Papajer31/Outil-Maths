@@ -460,23 +460,107 @@ function getSubmittedAnswer(state) {
 
 function getHistorySnapshot(state, stage = "question") {
   const question = state.currentQuestion;
-  if (!question) return { schemaVersion: 2, kind: "comparison-collections", prompt: "" };
-  const safeStage = String(stage || "question").toLowerCase();
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    const aid = getHistoryAid(question);
+    return {
+      history: {
+        columns: [
+          { key:"situation", label:"Situation" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" },
+          { key:"aid", label:"Aide" }
+        ],
+        cells: {
+          situation: {
+            type:"text",
+            value:getHistorySituation(question)
+          },
+          aid: {
+            type:"text",
+            value:aid,
+            emptyText:""
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const submitted = state.studentAnswerSnapshot || getSubmittedAnswer(state);
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:getHistoryAnswerValue(question, submitted)
+          }
+        }
+      }
+    };
+  }
+
   return {
-    schemaVersion: 2,
-    kind: "comparison-collections",
-    prompt: question.instruction,
-    mode: question.mode,
-    leftCount: question.leftCount,
-    rightCount: question.rightCount,
-    leftRepresentation: question.leftRepresentation,
-    rightRepresentation: question.rightRepresentation,
-    layout: question.layout,
-    assetId: question.assetId,
-    assetLabel: question.assetLabel,
-    submittedAnswer: safeStage === "question" ? "" : state.studentAnswerSnapshot,
-    expectedAnswer: safeStage === "correction" ? question.correctAnswer : ""
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:getHistoryAnswerValue(question, question.correctAnswer)
+        }
+      }
+    }
   };
+}
+
+function getHistorySituation(question) {
+  const prefix = getHistoryInstruction(question?.mode);
+  const leftValue = Number(question?.leftCount) || 0;
+  const rightValue = Number(question?.rightCount) || 0;
+  const leftRepresentation = question?.leftRepresentation;
+  const rightRepresentation = question?.rightRepresentation;
+
+  if (leftRepresentation === rightRepresentation) {
+    const label = leftRepresentation === REPRESENTATIONS.COLLECTION ? "Collections" : "Nombres";
+    return `${prefix} → ${label} : ${leftValue} et ${rightValue}`;
+  }
+
+  const leftLabel = leftRepresentation === REPRESENTATIONS.COLLECTION ? "Collection" : "Nombre";
+  const rightLabel = rightRepresentation === REPRESENTATIONS.COLLECTION ? "Collection" : "Nombre";
+  return `${prefix} → ${leftLabel} : ${leftValue} et ${rightLabel} : ${rightValue}`;
+}
+
+function getHistoryInstruction(mode) {
+  if (mode === MODES.ORIENT_CROCODILE) return "Oriente le crocodile";
+  if (mode === MODES.CHOOSE_SYMBOL) return "Complète par < ou >";
+  return "Que va manger le crocodile ?";
+}
+
+function getHistoryAnswerValue(question, rawAnswer) {
+  const answer = String(rawAnswer || "").trim();
+  if (!answer) return "";
+  if (question?.mode === MODES.CHOOSE_SYMBOL) return answer;
+  if (answer === SIDES.LEFT || answer === CROCODILE_STATES.LEFT) {
+    return String(Number(question?.leftCount) || 0);
+  }
+  if (answer === SIDES.RIGHT || answer === CROCODILE_STATES.RIGHT) {
+    return String(Number(question?.rightCount) || 0);
+  }
+  return answer;
+}
+
+function getHistoryAid(question) {
+  const collectionCount = [question?.leftRepresentation, question?.rightRepresentation]
+    .filter((representation) => representation === REPRESENTATIONS.COLLECTION)
+    .length;
+  if (!collectionCount) return "";
+
+  if (question?.layout === LAYOUTS.CLOUD) {
+    return collectionCount > 1 ? "Collections en nuage" : "Collection en nuage";
+  }
+  return collectionCount > 1 ? "Collections rangées" : "Collection rangée";
 }
 
 function renderEmptyState(state) {

@@ -1,5 +1,6 @@
 import { activityTeacherTool } from "./apps/activity/tool.js";
 import { clockTeacherTool } from "./apps/clock/tool.js";
+import { fuseeTeacherTool } from "./apps/fusee/tool.js";
 import { imageTeacherTool } from "./apps/image/tool.js";
 import { imageLabelsTeacherTool } from "./apps/image-labels/tool.js";
 import { labelsTeacherTool } from "./apps/labels/tool.js";
@@ -14,6 +15,7 @@ import { seyesTeacherTool } from "./apps/seyes/tool.js";
 export const TEACHER_TOOLS = Object.freeze([
   activityTeacherTool,
   clockTeacherTool,
+  fuseeTeacherTool,
   imageTeacherTool,
   imageLabelsTeacherTool,
   labelsTeacherTool,

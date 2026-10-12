@@ -93,6 +93,10 @@ export function createActivity(initialContext = {}) {
       return applyShellAnswerDisplayMode(state, mode);
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getCalculationHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -337,6 +341,48 @@ function captureStudentAnswerSnapshot(state) {
 function buildCorrectionSnapshot(question) {
   return {
     value: String(question?.result ?? "")
+  };
+}
+
+function getCalculationHistorySnapshot(state, stage = "question") {
+  const q = state.currentQuestion;
+  if (!q) return {};
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key:"calculation", label:"Calcul" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer", compact:true },
+          { key:"expected", label:"Attendu", compact:true }
+        ],
+        cells: {
+          calculation: { type:"text", value:`${formatQuestion(q, state.numberDisplayMode)} =` }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:String(state.studentAnswerSnapshot?.value ?? state.input?.value ?? "").trim()
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: { type:"text", value:String(q.result ?? "") }
+      }
+    }
   };
 }
 

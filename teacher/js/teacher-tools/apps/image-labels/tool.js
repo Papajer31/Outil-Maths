@@ -7,6 +7,7 @@ export const imageLabelsTeacherTool = defineTeacherTool({
   id:"image-labels",
   label:"Étiquettes Images",
   icon:"collections",
+  creationType:"tableau.page.image-labels",
   description:"Placer, redimensionner, superposer et organiser librement des images sur le Tableau.",
   surface:{ background:true, snap:false, annotations:true },
   createInitialState(){ return createInitialImageLabelsState(); },

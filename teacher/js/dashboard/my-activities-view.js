@@ -128,7 +128,7 @@ export function createMyActivitiesViewController({
 
     header.innerHTML = `
       <div class="dashboard-config-header-main">
-        <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-activity-hub" title="Retour aux activités" aria-label="Retour aux activités">
+        <button class="dashboard-back-btn dashboard-material-icon-btn" type="button" data-action="back-activity-hub" title="Retour à l’accueil" aria-label="Retour à l’accueil">
           <span class="dashboard-material-icon" aria-hidden="true">arrow_back</span>
         </button>
         <div class="dashboard-section-title">Mes activités</div>

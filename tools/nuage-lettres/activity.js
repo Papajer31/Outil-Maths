@@ -103,10 +103,78 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getNuageLettresHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+/** Historique sémantique : conserve le tirage initial et l'ordre de réponse réel. */
+function getNuageLettresHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const lettersById = getLetterById(question);
+  const isQuestionStage = String(stage || "question").trim().toLowerCase() === "question";
+  const expectedWord = String(question.word || "").normalize("NFC");
+  const expectedLetterPills = (question.expectedLetterIds || [])
+    .map((id) => String(lettersById.get(String(id))?.text || ""))
+    .filter(Boolean)
+    .map((text) => ({ kind: "pill", text }));
+
+  if (isQuestionStage) {
+    // Le tirage reste celui de l'énoncé, indépendamment des déplacements à l'écran.
+    const offeredLetters = (question.shuffledLetterIds || [])
+      .map((id) => String(lettersById.get(String(id))?.text || ""))
+      .filter(Boolean);
+    return { history: {
+      columns: [
+        { key: "question", label: "Question", compact: true },
+        { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true },
+        { key: "expected", label: "Attendu", compact: true },
+        { key: "help", label: "Aide", compact: true }
+      ],
+      cells: {
+        question: { type: "tokens", items: offeredLetters.map((text) => ({ text })) },
+        expected: { type: "phrase", parts: expectedLetterPills },
+        help: { type: "text", value: state.settings.showFirstLetter ? "Première lettre" : "–" }
+      }
+    }};
+  }
+
+  // Après validation, le runtime peut afficher la correction à la place de la
+  // réponse : on lit exclusivement la sélection sauvegardée avant ce basculement.
+  const answerIds = normalizeAnswerIds(
+    question,
+    state.studentAnswerSnapshot ?? state.answerIds
+  );
+  const evaluation = state.lastEvaluation || evaluateAnswer(question, answerIds);
+  const expectedLetters = (question.expectedLetterIds || [])
+    .map((id) => String(lettersById.get(String(id))?.text || ""));
+  const items = answerIds.map((id, index) => {
+    const letter = String(lettersById.get(id)?.text || "");
+    const matchesPosition = letter.normalize("NFC").toLocaleLowerCase("fr-FR")
+      === String(expectedLetters[index] || "").normalize("NFC").toLocaleLowerCase("fr-FR");
+    return {
+      text: letter,
+      state: evaluation.isCorrect || matchesPosition ? "correct" : "wrong",
+      writing: "script"
+    };
+  });
+
+  return { history: { cells: {
+    answer: { type: "sequence", items },
+    ...(evaluation.isAlternativeAnagram
+      ? { expected: { type: "phrase", parts: [
+        ...expectedLetterPills,
+        { kind: "text", text: "· autre mot accepté" }
+      ] } }
+      : {})
+  } }};
 }
 
 function createRuntimeState(initialContext = {}) {

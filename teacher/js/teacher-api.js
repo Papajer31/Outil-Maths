@@ -14,8 +14,6 @@ import {
 import {
   applyCatalogVisibility,
   filterEffectivelyActivePedagogicalNodes,
-  getCatalogActivities,
-  getPedagogicalNodes,
   normalizeCatalogActivity,
   normalizePedagogicalNode,
   normalizeCatalogGradeLevel,
@@ -566,7 +564,7 @@ export async function listStudentActivityHistory(studentId, { limit = 250 } = {}
     pedagogicalNodes = await queryPedagogicalNodes();
   } catch (error) {
     console.warn("Arborescence indisponible pour qualifier l’historique élève.", error);
-    pedagogicalNodes = getPedagogicalNodes();
+    pedagogicalNodes = [];
   }
 
   const nodesById = new Map(pedagogicalNodes.map((node) => [String(node.id), node]));
@@ -833,10 +831,6 @@ function normalizeStudentCode(value) {
   return safe || null;
 }
 
-export function listPedagogicalNodes() {
-  return getPedagogicalNodes();
-}
-
 async function queryPedagogicalNodes() {
   const pageSize = 1000;
   const rows = [];
@@ -863,9 +857,8 @@ async function queryPedagogicalNodes() {
 export async function listPedagogicalNodesForTeacher() {
   try {
     return filterEffectivelyActivePedagogicalNodes(await queryPedagogicalNodes());
-  } catch (err) {
-    console.warn("Arborescence pédagogique en base indisponible, utilisation du secours local.", err);
-    return filterEffectivelyActivePedagogicalNodes(getPedagogicalNodes());
+  } catch (error) {
+    throw new Error("Arborescence pédagogique momentanément indisponible (Supabase).", { cause: error });
   }
 }
 
@@ -874,9 +867,8 @@ export async function listPedagogicalNodesForAdmin() {
     .filter((node) => !String(node?.id || "").startsWith("system-runtime"));
   try {
     return hideRuntimeNodes(await queryPedagogicalNodes());
-  } catch (err) {
-    console.warn("Arborescence pédagogique Admin indisponible, utilisation du secours local.", err);
-    return hideRuntimeNodes(getPedagogicalNodes());
+  } catch (error) {
+    throw new Error("Arborescence pédagogique momentanément indisponible (Supabase).", { cause: error });
   }
 }
 
@@ -946,23 +938,17 @@ export async function deletePedagogicalNodeAsAdmin(folderId) {
 }
 
 async function listPublishedCatalogActivities() {
-  try {
-    const { data, error } = await supabase
-      .from("catalog_activities")
-      .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
-      .eq("status", "published")
-      .order("pedagogical_node_id", { ascending: true })
-      .order("adventure_tier", { ascending: true })
-      .order("display_order", { ascending: true })
-      .order("title", { ascending: true });
+  const { data, error } = await supabase
+    .from("catalog_activities")
+    .select("id, pedagogical_node_id, tool_id, title, description, adventure_tier, display_order, status, default_visible, levels_json, created_at, updated_at")
+    .eq("status", "published")
+    .order("pedagogical_node_id", { ascending: true })
+    .order("adventure_tier", { ascending: true })
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
 
-    if (error) throw error;
-    return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
-  } catch (err) {
-    // Mode secours : utile hors Supabase ou avant application de la migration super-admin.
-    console.warn("Catalogue système en base indisponible, utilisation du catalogue de secours.", err);
-    return getCatalogActivities();
-  }
+  if (error) throw new Error("Catalogue momentanément indisponible (Supabase).", { cause: error });
+  return sortCatalogActivities((Array.isArray(data) ? data : []).map(normalizeCatalogActivity));
 }
 
 export async function listCatalogActivitiesForTeacherSpace(teacherSpaceId) {
@@ -1974,6 +1960,11 @@ const RESOURCE_FIELDS = "id, teacher_space_id, folder_id, title, resource_type, 
 const TEACHER_RESOURCE_BUCKET = "teacher-resources";
 const TEACHER_TABLEAU_BUCKET = "teacher-tableau";
 const SYSTEM_IMAGE_BUCKET = "images";
+export const TEACHER_RESOURCE_STORAGE_QUOTA_BYTES = 100 * 1024 * 1024;
+export const TUJER_CREATIONS_ROOT_ROLE = "tujer_creations_root";
+export const TUJER_LOCAL_FILES_ROOT_ROLE = "tujer_local_files_root";
+const TUJER_MANAGED_FOLDER_MARKER = "tujer";
+const TUJER_CREATION_MIME = "application/vnd.tujer.creation+json";
 
 function normalizePositiveTeacherSpaceId(value) {
   const id = Number(value);
@@ -2339,7 +2330,7 @@ function normalizeResourceRecord(row = {}, index = 0) {
     teacher_space_id: row.teacher_space_id == null ? null : Number(row.teacher_space_id),
     folder_id: row.folder_id ? String(row.folder_id) : null,
     title: cleanDisplayName(row.title) || "Ressource sans nom",
-    type: ["image", "audio", "seyes"].includes(String(row.resource_type || "image"))
+    type: ["image", "audio", "seyes", "document", "creation"].includes(String(row.resource_type || "image"))
       ? String(row.resource_type || "image")
       : "image",
     storage_bucket: String(row.storage_bucket || TEACHER_RESOURCE_BUCKET),
@@ -2365,15 +2356,27 @@ function normalizeResourceRecord(row = {}, index = 0) {
 
 export async function listResourceFoldersForSpace(teacherSpaceId) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
-  const { data, error } = await supabase
-    .from("resource_folders")
-    .select(RESOURCE_FOLDER_FIELDS)
-    .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
-    .order("is_system", { ascending: true })
-    .order("display_order", { ascending: true })
-    .order("name", { ascending: true });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map(normalizeResourceFolderRecord);
+  const pageSize = 1000;
+  const rows = [];
+  let total = null;
+  for (let from = 0; ; ) {
+    const { data, error, count } = await supabase
+      .from("resource_folders")
+      .select(RESOURCE_FOLDER_FIELDS, from === 0 ? { count:"exact" } : {})
+      .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
+      .order("is_system", { ascending: true })
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (from === 0 && Number.isInteger(count)) total = count;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (!page.length || (total !== null ? rows.length >= total : page.length < pageSize)) break;
+    from += page.length;
+  }
+  return rows.map(normalizeResourceFolderRecord);
 }
 
 export async function createResourceFolderForSpace(teacherSpaceId, folder = {}) {
@@ -2455,9 +2458,109 @@ export async function ensureRecordingsResourceFolderForSpace(teacherSpaceId) {
   }
 }
 
+async function findPersonalResourceFolderByRole(spaceId, role) {
+  const { data, error } = await supabase
+    .from("resource_folders")
+    .select(RESOURCE_FOLDER_FIELDS)
+    .eq("teacher_space_id", spaceId)
+    .eq("is_system", false)
+    .contains("metadata", { system_role: role })
+    .limit(1);
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : null;
+  return row ? normalizeResourceFolderRecord(row) : null;
+}
+
+async function ensureManagedPersonalResourceFolder(spaceId, { name, role, parentId = null, displayOrder = 0, metadata = {} } = {}) {
+  const existing = await findPersonalResourceFolderByRole(spaceId, role);
+  if (existing) return existing;
+  try {
+    return await createResourceFolderForSpace(spaceId, {
+      name,
+      parent_id:parentId,
+      display_order:displayOrder,
+      metadata:{
+        ...metadata,
+        system_role:role,
+        managed_by:TUJER_MANAGED_FOLDER_MARKER,
+        locked:true
+      }
+    });
+  } catch (error) {
+    if (String(error?.code || "") !== "23505") throw error;
+    const concurrent = await findPersonalResourceFolderByRole(spaceId, role);
+    if (concurrent) return concurrent;
+    throw error;
+  }
+}
+
+export async function ensureTujerResourceFoundationForSpace(teacherSpaceId) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const folders = await listResourceFoldersForSpace(spaceId);
+  const personalRoots = folders.filter((folder) => folder?.is_system !== true && !folder?.parent_id);
+  const creationsRoot = await ensureManagedPersonalResourceFolder(spaceId, {
+    name:"Créations Tujer",
+    role:TUJER_CREATIONS_ROOT_ROLE,
+    parentId:null,
+    displayOrder:personalRoots.length
+  });
+  const localFilesRoot = await ensureManagedPersonalResourceFolder(spaceId, {
+    name:"Mes fichiers locaux",
+    role:TUJER_LOCAL_FILES_ROOT_ROLE,
+    parentId:null,
+    displayOrder:personalRoots.length + (creationsRoot ? 1 : 0)
+  });
+  return { creationsRoot, localFilesRoot };
+}
+
+function slugManagedFolderRoleSegment(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "dossier";
+}
+
+export async function ensureTujerManagedFolderPathForSpace(teacherSpaceId, { root = "creations", path = [] } = {}) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const foundation = await ensureTujerResourceFoundationForSpace(spaceId);
+  const useLocalFiles = String(root || "creations") === "local-files";
+  let parent = useLocalFiles ? foundation.localFilesRoot : foundation.creationsRoot;
+  const segments = (Array.isArray(path) ? path : []).map((part) => cleanDisplayName(part)).filter(Boolean);
+  const rolePrefix = useLocalFiles ? "tujer_local_files" : "tujer_creations";
+  const roleParts = [];
+  for (const [index, name] of segments.entries()) {
+    roleParts.push(slugManagedFolderRoleSegment(name));
+    const role = `${rolePrefix}:${roleParts.join("/")}`;
+    parent = await ensureManagedPersonalResourceFolder(spaceId, {
+      name,
+      role,
+      parentId:parent?.id || null,
+      displayOrder:index,
+      metadata:{ tujer_path:segments.slice(0, index + 1), tujer_root:useLocalFiles ? "local-files" : "creations" }
+    });
+  }
+  return parent;
+}
+
 export async function updateResourceFolder(folderId, updates = {}, options = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de ressources invalide.");
+  const isSystem = options?.is_system === true;
+  if (!isSystem && options?.allow_tujer_managed !== true) {
+    const { data: existingFolder, error: existingError } = await supabase
+      .from("resource_folders")
+      .select("metadata")
+      .eq("id", id)
+      .eq("is_system", false)
+      .single();
+    if (existingError) throw existingError;
+    if (String(existingFolder?.metadata?.managed_by || "") === TUJER_MANAGED_FOLDER_MARKER && existingFolder?.metadata?.locked === true) {
+      throw new Error("Ce dossier est géré automatiquement par Tujer.");
+    }
+  }
   const payload = {};
   if ("name" in updates) {
     const name = cleanDisplayName(updates.name);
@@ -2471,7 +2574,6 @@ export async function updateResourceFolder(folderId, updates = {}, options = {})
       ? cloneJsonValue(updates.metadata)
       : {};
   }
-  const isSystem = options?.is_system === true;
   const { data, error } = await supabase
     .from("resource_folders")
     .update(payload)
@@ -2486,6 +2588,19 @@ export async function updateResourceFolder(folderId, updates = {}, options = {})
 export async function deleteResourceFolder(folderId, options = {}) {
   const id = normalizeUuid(folderId);
   if (!id) throw new Error("Dossier de ressources invalide.");
+  const isSystem = options?.is_system === true;
+  if (!isSystem && options?.allow_tujer_managed !== true) {
+    const { data: existingFolder, error: existingError } = await supabase
+      .from("resource_folders")
+      .select("metadata")
+      .eq("id", id)
+      .eq("is_system", false)
+      .single();
+    if (existingError) throw existingError;
+    if (String(existingFolder?.metadata?.managed_by || "") === TUJER_MANAGED_FOLDER_MARKER && existingFolder?.metadata?.locked === true) {
+      throw new Error("Ce dossier est géré automatiquement par Tujer.");
+    }
+  }
   const { error } = await supabase
     .from("resource_folders")
     .delete()
@@ -2496,15 +2611,29 @@ export async function deleteResourceFolder(folderId, options = {}) {
 
 export async function listResourcesForSpace(teacherSpaceId) {
   const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
-  const { data, error } = await supabase
-    .from("resources")
-    .select(RESOURCE_FIELDS)
-    .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
-    .order("is_system", { ascending: true })
-    .order("display_order", { ascending: true })
-    .order("title", { ascending: true });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map(normalizeResourceRecord);
+  // Les ressources personnelles et système partagent la limite de réponse :
+  // paginer la liste complète avant de répartir les ressources par dossier.
+  const pageSize = 1000;
+  const rows = [];
+  let total = null;
+  for (let from = 0; ; ) {
+    const { data, error, count } = await supabase
+      .from("resources")
+      .select(RESOURCE_FIELDS, from === 0 ? { count:"exact" } : {})
+      .or(`teacher_space_id.eq.${spaceId},is_system.eq.true`)
+      .order("is_system", { ascending: true })
+      .order("display_order", { ascending: true })
+      .order("title", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (from === 0 && Number.isInteger(count)) total = count;
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (!page.length || (total !== null ? rows.length >= total : page.length < pageSize)) break;
+    from += page.length;
+  }
+  return rows.map(normalizeResourceRecord);
 }
 
 function sanitizeStorageFileName(value, fallback = "resource") {
@@ -2641,21 +2770,35 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
   const isSeyes = declaredType === "seyes"
     || rawMimeType === "application/vnd.site-outils.seyes+json"
     || fileNameLower.endsWith(".seyes");
+  const isCreation = declaredType === "creation"
+    || rawMimeType === TUJER_CREATION_MIME
+    || fileNameLower.endsWith(".tujer.json");
+  const isDocument = declaredType === "document"
+    || rawMimeType === "application/pdf"
+    || fileNameLower.endsWith(".pdf");
   const mimeType = isSeyes
     ? "application/vnd.site-outils.seyes+json"
-    : rawMimeType;
+    : (isCreation ? TUJER_CREATION_MIME : rawMimeType);
   const resourceType = isSeyes
     ? "seyes"
-    : (mimeType.startsWith("audio/") || declaredType === "audio" ? "audio" : "image");
-  if (!isSeyes && !mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) {
-    throw new Error("Seules les images, les pistes audio et les documents .seyes sont acceptés.");
+    : (isCreation
+      ? "creation"
+      : (isDocument
+        ? "document"
+        : (mimeType.startsWith("audio/") || declaredType === "audio" ? "audio" : "image")));
+  if (!isSeyes && !isCreation && !isDocument && !mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) {
+    throw new Error("Seules les images, les pistes audio, les PDF, les documents .seyes et les créations Tujer sont acceptés.");
   }
 
   const user = await getCurrentUser();
   if (!user?.id) throw new Error("Utilisateur non connecté.");
   const resourceId = globalThis.crypto?.randomUUID?.();
   if (!resourceId) throw new Error("Impossible de générer l’identifiant de la ressource.");
-  const fallbackFileName = resourceType === "audio" ? "audio" : (resourceType === "seyes" ? "document.seyes" : "image");
+  const fallbackFileName = resourceType === "audio"
+    ? "audio"
+    : (resourceType === "seyes"
+      ? "document.seyes"
+      : (resourceType === "creation" ? "creation.tujer.json" : (resourceType === "document" ? "document.pdf" : "image")));
   const fileName = sanitizeStorageFileName(resource.name || file.name, fallbackFileName);
   const storagePath = `${user.id}/${resourceId}/${fileName}`;
 
@@ -2672,7 +2815,9 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
     id: resourceId,
     teacher_space_id: spaceId,
     folder_id: normalizeNullableUuid(resource.folder_id),
-    title: cleanDisplayName(resource.title || file.name) || (resourceType === "audio" ? "Audio" : (resourceType === "seyes" ? "Document Seyès" : "Image")),
+    title: cleanDisplayName(resource.title || file.name) || (resourceType === "audio"
+      ? "Audio"
+      : (resourceType === "seyes" ? "Document Seyès" : (resourceType === "creation" ? "Création Tujer" : (resourceType === "document" ? "Document" : "Image")))),
     resource_type: resourceType,
     storage_bucket: TEACHER_RESOURCE_BUCKET,
     storage_path: storagePath,
@@ -2702,6 +2847,109 @@ export async function uploadResourceForSpace(teacherSpaceId, file, resource = {}
   }
 
   return normalizeResourceRecord(data);
+}
+
+export async function replacePersonalResourceFile(resourceId, file, updates = {}) {
+  const id = normalizeUuid(resourceId);
+  if (!id) throw new Error("Ressource invalide.");
+  if (!(file instanceof Blob)) throw new Error("Fichier invalide.");
+
+  const { data: existing, error: readError } = await supabase
+    .from("resources")
+    .select(RESOURCE_FIELDS)
+    .eq("id", id)
+    .eq("is_system", false)
+    .single();
+  if (readError) throw readError;
+
+  const existingType = String(existing?.resource_type || "");
+  const requestedType = String(updates?.type || existingType).trim().toLowerCase();
+  if (requestedType !== existingType) throw new Error("Le type d’une ressource existante ne peut pas être modifié.");
+
+  const user = await getCurrentUser();
+  if (!user?.id) throw new Error("Utilisateur non connecté.");
+  const bucket = String(existing?.storage_bucket || TEACHER_RESOURCE_BUCKET).trim() || TEACHER_RESOURCE_BUCKET;
+  const mimeType = String(file.type || updates?.mime_type || existing?.mime_type || "application/octet-stream").trim().toLowerCase() || "application/octet-stream";
+  const safeName = sanitizeStorageFileName(updates?.name || file.name || existing?.title || "resource", "resource");
+  const storagePath = `${user.id}/${id}/${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, file, {
+    contentType:mimeType,
+    cacheControl:"3600",
+    upsert:false
+  });
+  if (uploadError) throw uploadError;
+
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+    ? cloneJsonValue(existing.metadata)
+    : {};
+  const replacementMetadata = updates?.metadata && typeof updates.metadata === "object" && !Array.isArray(updates.metadata)
+    ? cloneJsonValue(updates.metadata)
+    : {};
+  const payload = {
+    storage_bucket:bucket,
+    storage_path:storagePath,
+    mime_type:mimeType,
+    size_bytes:Math.max(0, Number(file.size) || 0),
+    metadata:{ ...existingMetadata, ...replacementMetadata, replaced_at:new Date().toISOString() }
+  };
+  if ("title" in updates) {
+    const title = cleanDisplayName(updates.title);
+    if (title) payload.title = title;
+  }
+  if ("folder_id" in updates) payload.folder_id = normalizeNullableUuid(updates.folder_id);
+  if ("width" in updates) payload.width = Math.max(0, Number(updates.width) || 0);
+  if ("height" in updates) payload.height = Math.max(0, Number(updates.height) || 0);
+  if ("duration" in updates) payload.duration_seconds = Math.max(0, Number(updates.duration) || 0);
+  if ("alt" in updates || "alt_text" in updates) payload.alt_text = String(updates.alt_text ?? updates.alt ?? "").trim();
+
+  const { data, error } = await supabase
+    .from("resources")
+    .update(payload)
+    .eq("id", id)
+    .eq("is_system", false)
+    .select(RESOURCE_FIELDS)
+    .single();
+  if (error) {
+    await supabase.storage.from(bucket).remove([storagePath]).catch(() => {});
+    throw error;
+  }
+
+  const oldBucket = String(existing?.storage_bucket || bucket).trim() || bucket;
+  const oldPath = String(existing?.storage_path || "").trim();
+  if (oldPath && (oldBucket !== bucket || oldPath !== storagePath)) {
+    const { error: removeError } = await supabase.storage.from(oldBucket).remove([oldPath]);
+    if (removeError) console.warn("La ressource a été remplacée, mais l’ancien fichier Storage n’a pas pu être supprimé.", removeError);
+  }
+  return normalizeResourceRecord(data);
+}
+
+export async function replaceTujerCreationResourceRefs(teacherSpaceId, creationResourceId, dependencyResourceIds = []) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  const creationId = normalizeUuid(creationResourceId);
+  if (!creationId) throw new Error("Création Tujer invalide.");
+  const dependencies = Array.from(new Set((Array.isArray(dependencyResourceIds) ? dependencyResourceIds : []).map(normalizeUuid).filter(Boolean)))
+    .filter((id) => id !== creationId);
+  const { data, error } = await supabase.rpc("replace_tujer_creation_resource_refs", {
+    p_teacher_space_id:spaceId,
+    p_creation_resource_id:creationId,
+    p_dependency_resource_ids:dependencies
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function listTujerCreationResourceRefs(teacherSpaceId, creationResourceId = null) {
+  const spaceId = normalizePositiveTeacherSpaceId(teacherSpaceId);
+  let query = supabase
+    .from("tujer_creation_resource_refs")
+    .select("creation_resource_id, dependency_resource_id")
+    .eq("teacher_space_id", spaceId);
+  const creationId = normalizeUuid(creationResourceId);
+  if (creationId) query = query.eq("creation_resource_id", creationId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
 }
 
 export async function replaceAudioResourceFile(resourceId, file, updates = {}) {

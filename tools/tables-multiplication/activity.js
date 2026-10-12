@@ -101,6 +101,10 @@ export function createActivity(initialContext = {}) {
       return applyShellAnswerDisplayMode(state, mode);
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getTablesHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -516,6 +520,62 @@ function buildCorrectionSnapshot(question) {
   return {
     value: String(getExpectedAnswer(question) ?? "")
   };
+}
+
+function getTablesHistorySnapshot(state, stage = "question") {
+  const q = state.currentQuestion;
+  if (!q) return {};
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key:"calculation", label:"Calcul" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer", compact:true },
+          { key:"expected", label:"Attendu", compact:true }
+        ],
+        cells: {
+          calculation: { type:"text", value:formatTablesHistoryCalculation(q) }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:String(state.studentAnswerSnapshot?.value ?? state.input?.value ?? "").trim()
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: { type:"text", value:String(getExpectedAnswer(q) ?? "") }
+      }
+    }
+  };
+}
+
+function formatTablesHistoryCalculation(question) {
+  if (!question) return "";
+  const factor1 = formatIntegerForDisplay(question.factor1 ?? "");
+  const factor2 = formatIntegerForDisplay(question.factor2 ?? "");
+  const result = formatIntegerForDisplay(question.result ?? "");
+  if (isFactorAnswerQuestion(question)) {
+    const missingIndex = Number(question.missingIndex) === 0 ? 0 : 1;
+    const left = missingIndex === 0 ? "□" : factor1;
+    const right = missingIndex === 1 ? "□" : factor2;
+    return `${left} × ${right} = ${result}`;
+  }
+  return `${factor1} × ${factor2} =`;
 }
 
 function computeStoredEvaluation(state) {

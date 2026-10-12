@@ -1,49 +1,60 @@
 # Outils, Quiz et Tableau
 
-Dernière mise à jour : 2026-08-07.
+Dernière revue globale : 2026-08-07. Mise à jour ciblée : 2026-10-11 (registre et Catalogue).
 
 ## Outils élèves
 
 Les outils vivent dans `tools/` et sont déclarés dans `tools/registry.js`. La règle reste **tools-first** : chaque outil actif doit correspondre à une action élève claire.
 
-Le registre contient 32 outils :
+Le registre contient 43 outils :
 
-| Outil | Libellé | Secours local |
-|---|---|---|
-| `addition` | Addition | oui |
-| `soustraction` | Soustraction | oui |
-| `multiplication-posee` | Multiplication posée | oui |
-| `addition-trous` | Addition à trous | oui |
-| `soustraction-trous` | Soustraction à trous | oui |
-| `multiplication-trous` | Multiplication à trous | oui |
-| `tables-multiplication` | Tables de multiplication | oui |
-| `boites-jetons` | Boites à jetons | oui |
-| `plus-moins-autant` | Plus, moins, autant | oui |
-| `comparaison` | Comparaison | oui |
-| `somme-difference` | Somme ou différence ? | oui |
-| `collection` | Collection | oui |
-| `calcul-cible` | Calcul ciblé | oui |
-| `compte-est-bon` | Compte est bon | oui |
-| `frise-picbille` | Frise Picbille | oui |
-| `droite-numerique-simple` | Repérage sur droite simple | oui |
-| `droite-numerique-complete` | Repérage sur droite complète | oui |
-| `ordre-alphabetique-lettres` | Ordre alphabétique — Lettres | oui |
-| `ordre-alphabetique-mots` | Ordre alphabétique — Mots | oui |
-| `representation-picbille` | Représentation décimale — Picbille | oui |
-| `representation-dede` | Représentation décimale — Dédé | oui |
-| `representation-carres` | Représentation décimale — Carrés | oui |
-| `representation-tuiles` | Représentation décimale — Tuiles | oui |
-| `monnaie-representation` | Monnaie — Représentation | oui |
-| `encodage` | Encodage | oui |
-| `reperage-graphemes` | Repérage de graphèmes | non |
-| `dictee-muette` | Dictée muette | non |
-| `nuage-lettres` | Nuage de lettres | non |
-| `geste-graphique` | Geste graphique | oui |
-| `nombres-lettres` | Nombres en lettres | non |
-| `conjugaison` | Conjugaison | non |
-| `quiz` | Quiz | non |
+| Outil | Libellé |
+|---|---|
+| `addition` | Addition |
+| `soustraction` | Soustraction |
+| `multiplication-posee` | Multiplication posée |
+| `addition-trous` | Addition à trous |
+| `soustraction-trous` | Soustraction à trous |
+| `multiplication-trous` | Multiplication à trous |
+| `tables-multiplication` | Tables de multiplication |
+| `boites-jetons` | Boites à jetons |
+| `plus-moins-autant` | Plus, moins, autant |
+| `comparaison` | Différence entre collections |
+| `comparaison-signes` | Comparaison (introduction) |
+| `somme-difference` | Somme ou différence ? |
+| `collection` | Collection |
+| `calcul-cible` | Calcul ciblé |
+| `compte-est-bon` | Compte est bon |
+| `frise-picbille` | Frise Picbille |
+| `droite-numerique-simple` | Repérage sur droite simple |
+| `droite-numerique-complete` | Repérage sur droite complète |
+| `ordre-alphabetique-lettres` | Ordre alphabétique — Lettres |
+| `ordre-alphabetique-mots` | Ordre alphabétique — Mots |
+| `representation-picbille` | Représentation décimale — Picbille |
+| `representation-dede` | Représentation décimale — Dédé |
+| `representation-carres` | Représentation décimale — Carrés |
+| `representation-tuiles` | Représentation décimale — Tuiles |
+| `monnaie-representation` | Monnaie — Représentation |
+| `m-millimetre` | M. Millimètre |
+| `points-alignes` | Points alignés |
+| `encodage` | Encodage |
+| `reperage-graphemes` | Repérer les graphèmes |
+| `dictee-muette` | Dictée muette |
+| `presence-son` | Présence du son |
+| `nuage-lettres` | Nuage de lettres |
+| `segmenter-mots` | Segmenter les mots |
+| `recomposer-mots-syllabes` | Recomposer les mots |
+| `mot-cache` | Mot caché |
+| `reperage-occurrences` | Repérage personnalisé |
+| `reperage-mots` | Repérage de mots |
+| `geste-graphique` | Geste graphique |
+| `copie` | Copie |
+| `nombres-lettres` | Nombres en lettres |
+| `identifier-verbe` | Identifier le verbe |
+| `conjugaison` | Conjugaison |
+| `quiz` | Quiz |
 
-`shared/catalogue.js` contient 26 activités de secours. Supabase reste la source principale de l’Exploration.
+L’Exploration dépend exclusivement de Supabase pour les activités (`catalog_activities`) et l’arborescence (`pedagogical_nodes`). Le module `shared/catalogue.js` conserve les fonctions partagées nécessaires au runtime.
 
 ## Atelier Quiz
 

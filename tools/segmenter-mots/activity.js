@@ -100,6 +100,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getSegmenterHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -473,6 +477,73 @@ function getDisplayedCuts(state) {
 function getStudentCuts(state) {
   if (state.studentCutsSnapshot instanceof Set) return state.studentCutsSnapshot;
   return state.cuts;
+}
+
+function getSegmenterHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key:"answer", label:"Découpage de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" }
+        ],
+        cells: {}
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const studentCuts = state.studentCutsSnapshot instanceof Set
+      ? [...state.studentCutsSnapshot]
+      : [...state.cuts];
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:formatHistorySegmentation(question, studentCuts)
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:formatHistorySegmentation(question, question.expectedCutPositions || [])
+        }
+      }
+    }
+  };
+}
+
+function formatHistorySegmentation(question, positions = []) {
+  const letters = Array.isArray(question?.letters) ? question.letters : [];
+  if (!letters.length) return "";
+
+  const cuts = new Set(normalizeCutPositions(question, positions));
+  const chunks = [];
+  let current = "";
+
+  letters.forEach((letter, index) => {
+    current += String(letter || "");
+    const cutPosition = index + 1;
+    if (cuts.has(cutPosition)) {
+      chunks.push(current);
+      current = "";
+    }
+  });
+
+  if (current || !chunks.length) chunks.push(current);
+  return chunks.filter(Boolean).join(" · ");
 }
 
 function submitCurrentAnswer(state) {

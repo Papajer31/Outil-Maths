@@ -1,6 +1,6 @@
 # État actuel du projet — Site d’outils
 
-Dernière mise à jour : 2026-08-14.
+Dernière revue globale : 2026-08-14. Mise à jour ciblée : 2026-10-11 (Catalogue).
 
 ## Intention générale
 
@@ -36,7 +36,7 @@ Tous les enseignants utilisent le même explorateur. Ils peuvent consulter, test
 Côté élève, l’arborescence réelle n’est plus obligatoirement affichée telle quelle. Chaque nœud peut posséder un `student_label` court et un `student_navigation_mode` (`folder` ou `transparent`). Un nœud transparent reste dans le référentiel mais n’est pas une étape de navigation : ses enfants remontent au premier ancêtre visible. Les dossiers `grade_level` sont toujours transparents automatiquement après filtrage du niveau des élèves. Aucun `parent_id` pédagogique n’est modifié par cette projection.
 Le super-admin règle ces deux propriétés directement dans l’éditeur de l’arborescence avec **Nom pour les élèves** et **Afficher cette étape dans Exploration**. Un nom élève vide réutilise automatiquement le nom pédagogique. Les dossiers de niveau n’exposent pas ces réglages puisqu’ils sont toujours transparents côté élève.
 
-`shared/catalogue.js` fournit un secours local de 26 activités lorsque Supabase n’est pas disponible. Le registre réel comprend 32 outils ; six ne possèdent pas d’activité dans ce secours local : `reperage-graphemes`, `dictee-muette`, `nuage-lettres`, `nombres-lettres`, `conjugaison` et `quiz`.
+`shared/catalogue.js` conserve les fonctions partagées de normalisation, de niveaux et de préparation du runtime, sans liste d’activités ni arborescence pédagogique de secours. Les données viennent exclusivement de Supabase (`catalog_activities` et `pedagogical_nodes`). Une erreur de chargement est remontée à l’interface plutôt que masquée par des données locales périmées.
 
 ## Aventure
 

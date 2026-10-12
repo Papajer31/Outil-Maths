@@ -1,6 +1,7 @@
 @import url("../js/teacher-tools/apps/activity/activity.css");
 @import url("../../shared/color-picker.css");
 @import url("../js/teacher-tools/apps/clock/clock.css");
+@import url("../js/teacher-tools/apps/fusee/fusee.css");
 @import url("../js/teacher-tools/apps/image/image.css");
 @import url("../js/teacher-tools/apps/image-labels/image-labels.css");
 @import url("../js/teacher-tools/apps/labels/labels.css");
@@ -161,7 +162,7 @@ button{touch-action:manipulation}
 }
 .ttp-catalog-overlay[hidden]{display:none}
 .ttp-catalog-card{
-  width:min(900px,calc(100vw - 56px));
+  width:min(1080px,calc(100vw - 56px));
   max-height:calc(100vh - 56px);
   overflow:auto;
   border:1px solid rgba(255,255,255,.14);
@@ -192,7 +193,7 @@ button{touch-action:manipulation}
 }
 .ttp-catalog-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px;
 }
 .ttp-catalog-tile{
@@ -215,11 +216,14 @@ button{touch-action:manipulation}
 .ttp-catalog-tile>.ttp-material-icon{font-size:42px}
 .ttp-catalog-tile strong{font-size:18px}
 .ttp-catalog-tile small{font-size:13px;line-height:1.3;color:rgba(255,255,255,.66)}
-@media (max-width:700px){
+@media (max-width:760px){
   .ttp-catalog-overlay{padding:14px}
   .ttp-catalog-card{width:calc(100vw - 28px);max-height:calc(100vh - 28px);padding:14px}
   .ttp-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .ttp-catalog-tile{min-height:128px;padding:14px 10px}
+}
+@media (max-width:480px){
+  .ttp-catalog-grid{grid-template-columns:1fr}
 }
 
 /* TABLEAU V7 — actions de page distinctes et palette Notes compacte */

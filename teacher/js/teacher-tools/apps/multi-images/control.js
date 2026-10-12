@@ -354,6 +354,7 @@ export function createMultiImagesControlPanel({
           </button>
         </div>
 
+
         <div class="tt-multi-images-source-grid">
           <div class="tt-multi-images-url-row">
             <input id="ttMultiImagesUrlInput" type="url" inputmode="url" placeholder="https://…">

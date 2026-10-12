@@ -100,10 +100,67 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getMillimetreHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+function getMillimetreHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+  const phase = String(stage || "question").toLowerCase();
+  const read = question.questionType === QUESTION_TYPES.READ;
+  const value = Number(question.value);
+  const previewSegments = (read ? state.readGeneratedSegments :
+    (state.answerRevealed ? state.submittedBuildSegments : state.buildSegments)) || [];
+  const preview = {
+    type: "millimetre",
+    mode: read ? "read" : "build",
+    width: read ? (state.readSvgWidth || DEFAULT_CANVAS_WIDTH) : (state.canvasWidth || DEFAULT_CANVAS_WIDTH),
+    height: read ? (state.readSvgHeight || DEFAULT_CANVAS_HEIGHT) : (state.canvasHeight || DEFAULT_CANVAS_HEIGHT),
+    segments: previewSegments.slice(0, 120).map((segment) => ({
+      mm: Number(segment.mm),
+      start: { x: Number(segment.start?.x), y: Number(segment.start?.y) },
+      end: { x: Number(segment.end?.x), y: Number(segment.end?.y) }
+    })),
+    expectedSegments: read ? [] : (Array.isArray(question?.decomposition?.segments)
+      ? question.decomposition.segments.map(Number)
+      : [])
+  };
+  if (phase === "question") {
+    return { history: {
+      columns: read
+        ? [
+          { key: "question", label: "Question", compact: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true },
+          { key: "expected", label: "Attendu", compact: true }
+        ]
+        : [
+          { key: "question", label: "Question", compact: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer", fill: true }
+        ],
+      cells: read
+        ? {
+          question: { type: "text", value: "", preview },
+          expected: { type: "text", value: `${value} mm` }
+        }
+        : {
+          question: { type: "text", value: `Construire ${value} mm` }
+        }
+    }};
+  }
+  const correct = Boolean(state.latestEvaluation?.isCorrect);
+  const answer = read ? String(state.submittedReadAnswer || getCurrentReadValue(state) || "").trim() : "";
+  return { history: { cells: {
+    answer: read
+      ? { type: "text", value: answer ? `${answer} mm` : "—" }
+      : { type: "text", value: "", preview }
+  }}};
 }
 
 function createRuntimeState(initialContext = {}) {

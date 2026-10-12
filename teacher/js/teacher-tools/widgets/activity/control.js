@@ -1,4 +1,3 @@
-import { getPedagogicalNodes } from "../../../../../shared/catalogue.js";
 import { escapeAttr, escapeHtml } from "../../../dashboard/text-utils.js";
 import {
   ACTIVITY_PROJECTION_MODE_SLIDESHOW,
@@ -87,10 +86,10 @@ export function createActivityControlPanel({
           : [],
         typeof listPedagogicalNodesForTeacher === "function"
           ? listPedagogicalNodesForTeacher()
-          : getPedagogicalNodes()
+          : Promise.reject(new Error("Chargement de l’arborescence indisponible."))
       ]);
       catalogActivities = normalizeCatalogActivities(activitiesResult);
-      folders = normalizeFolders(foldersResult?.length ? foldersResult : getPedagogicalNodes());
+      folders = normalizeFolders(foldersResult);
       catalogLoaded = true;
       return true;
     } catch (error) {

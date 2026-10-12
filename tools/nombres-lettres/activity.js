@@ -747,48 +747,50 @@ function getCurrentEvaluation(state) {
 
 function getNombresLettresHistorySnapshot(state, stage = "question") {
   const q = state.currentQuestion;
-  const direction = q?.direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER
-    ? QUESTION_DIRECTIONS.WORDS_TO_NUMBER
-    : QUESTION_DIRECTIONS.NUMBER_TO_WORDS;
-  const directionLabel = direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER
-    ? "Lettres → Nombre"
-    : "Nombre → Lettres";
+  if (!q) return {};
 
-  if (!q) {
-    return { schemaVersion:2, kind:"number-words", direction, directionLabel, value:"" };
-  }
+  const safeStage = String(stage || "question").trim().toLowerCase();
 
-  const safeStage = String(stage || "question").toLowerCase();
   if (safeStage === "question") {
     return {
-      schemaVersion:2,
-      kind:"number-words",
-      direction,
-      directionLabel,
-      prompt:String(q.prompt || ""),
-      value:String(q.displayPrimary || q.value || ""),
-      valueLabel:direction === QUESTION_DIRECTIONS.WORDS_TO_NUMBER ? "Écriture proposée" : "Nombre proposé"
+      history: {
+        columns: [
+          { key:"question", label:"Question" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" }
+        ],
+        cells: {
+          question: {
+            type:"text",
+            value:String(q.displayPrimary || q.value || "")
+          }
+        }
+      }
     };
   }
 
   if (safeStage === "answer") {
     return {
-      schemaVersion:2,
-      kind:"number-words",
-      direction,
-      directionLabel,
-      value:String(state.submittedAnswer || getCurrentResponseValue(state) || ""),
-      valueLabel:"Réponse donnée"
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:String(state.submittedAnswer || getCurrentResponseValue(state) || "")
+          }
+        }
+      }
     };
   }
 
   return {
-    schemaVersion:2,
-    kind:"number-words",
-    direction,
-    directionLabel,
-    value:String(q.expectedAnswer || ""),
-    valueLabel:"Réponse attendue"
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:String(q.expectedAnswer || "")
+        }
+      }
+    }
   };
 }
 

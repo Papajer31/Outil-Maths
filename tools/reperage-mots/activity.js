@@ -112,6 +112,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getReperageMotsHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -352,6 +356,92 @@ function getStudentSelection(state) {
 
 function syncValidationState(state) {
   state.latestContext?.services?.notifyValidationStateChanged?.();
+}
+
+function getReperageMotsHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key:"target", label:"Mot cible", compact:true, align:"center" },
+    {
+      key:"selection",
+      label:"Sélection / correction",
+      legend:[
+        { state:"correct", label:"Correct" },
+        { state:"missed", label:"Oublié" },
+        { state:"wrong", label:"Erreur" }
+      ]
+    }
+  ];
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns,
+        cells: {
+          target: {
+            type:"tokens",
+            items:[{ text:String(question.word || "") }]
+          },
+          selection: {
+            type:"sequence",
+            items:buildWordHistorySequence(question, new Set(), { showMissed:false })
+          }
+        }
+      }
+    };
+  }
+
+  const studentSelection = getStudentSelection(state);
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          selection: {
+            type:"sequence",
+            items:buildWordHistorySequence(question, studentSelection, { showMissed:false })
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        selection: {
+          type:"sequence",
+          items:buildWordHistorySequence(question, studentSelection, { showMissed:true })
+        }
+      }
+    }
+  };
+}
+
+function buildWordHistorySequence(question, selectedIds, { showMissed = true } = {}) {
+  const selected = selectedIds instanceof Set
+    ? selectedIds
+    : new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id)));
+
+  return (Array.isArray(question?.items) ? question.items : []).map((item) => {
+    const id = String(item?.id || "");
+    const wasSelected = selected.has(id);
+    const isTarget = item?.isTarget === true;
+    let itemState = "neutral";
+
+    if (isTarget && wasSelected) itemState = "correct";
+    else if (!isTarget && wasSelected) itemState = "wrong";
+    else if (isTarget && showMissed) itemState = "missed";
+
+    return {
+      text:String(item?.text || ""),
+      writing:String(item?.writing || "script").trim().toLowerCase() === "cursive" ? "cursive" : "script",
+      state:itemState
+    };
+  });
 }
 
 async function ensurePhonologyWordCatalog() {

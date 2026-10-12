@@ -12,7 +12,8 @@ import {
   normalizeMagicSum,
   paginateWorksheetItems
 } from "./worksheet-generator-core.js";
-import { downloadPentominoMaterialPdf, downloadWorksheetPdf } from "./worksheet-pdf.js";
+import { downloadPentominoMaterialPdf, downloadWorksheetPdf, downloadPrintablePaperPdf } from "./worksheet-pdf.js";
+import { PAPER_GENERATOR_ID, PAPER_PRESETS, normalizePaperConfig, paperSupportsRedMargin, renderPaperSvg } from "./printable-paper.js";
 import { escapeAttr, escapeHtml } from "./text-utils.js";
 import {
   bindBasicMinMax,
@@ -84,6 +85,7 @@ const WORD_SEARCH_DEFAULT_CONFIG = Object.freeze({
 });
 
 function getDefaultConfig(generatorId){
+  if (generatorId === PAPER_GENERATOR_ID) return normalizePaperConfig({kind:"seyes",redMargin:true});
   if (generatorId === PENTOMINO_GENERATOR_ID) return { ...PENTOMINO_DEFAULT_CONFIG };
   if (generatorId === WORD_SEARCH_GENERATOR_ID) return { ...WORD_SEARCH_DEFAULT_CONFIG };
   return generatorId === NUMBER_MYSTERY_GENERATOR_ID
@@ -1028,6 +1030,140 @@ function renderPentominoSettings(config){
     </section>`;
 }
 
+function renderPaperSlider({field,label,value,min,max,step=1}){
+  return `<div class="dashboard-paper-slider-field" data-paper-slider-for="${escapeAttr(field)}">
+    <div class="dashboard-paper-slider-heading">
+      <label for="paper-${escapeAttr(field)}">${escapeHtml(label)}</label>
+      <output data-paper-output="${escapeAttr(field)}" for="paper-${escapeAttr(field)}">${value} mm</output>
+    </div>
+    <input class="dashboard-paper-range" type="range" id="paper-${escapeAttr(field)}"
+      data-paper-field="${escapeAttr(field)}" min="${min}" max="${max}" step="${step}" value="${value}">
+  </div>`;
+}
+
+function renderPaperChoiceButtons({ field, label, value, options = [] }){
+  return `<div class="dashboard-paper-choice-field" data-paper-choice-field="${escapeAttr(field)}">
+    <div class="dashboard-paper-slider-heading"><span>${escapeHtml(label)}</span></div>
+    <div class="dashboard-paper-choice-buttons" role="group" aria-label="${escapeAttr(label)}">
+      ${options.map((option)=>`<button class="dashboard-paper-choice-button${option.value===value?" is-selected":""}" type="button" data-paper-choice-button="${escapeAttr(field)}" data-paper-choice-value="${escapeAttr(option.value)}" aria-pressed="${option.value===value}">${escapeHtml(option.label)}</button>`).join("")}
+    </div>
+  </div>`;
+}
+
+function renderPaperSettings(config, { modelCollapsed = false } = {}){
+  const cfg=normalizePaperConfig(config);
+  return `
+    <section class="dashboard-worksheet-settings-group dashboard-paper-presets-group${modelCollapsed?" is-collapsed":""}">
+      <button class="dashboard-worksheet-settings-heading" type="button" data-generator-action="toggle-paper-model" aria-expanded="${modelCollapsed?"false":"true"}" aria-label="${modelCollapsed?"Afficher les modèles":"Masquer les modèles"}">
+        <h3>Modèle</h3>
+        <span class="dashboard-material-icon" aria-hidden="true">${modelCollapsed?"expand_more":"expand_less"}</span>
+      </button>
+      <div class="dashboard-paper-presets" role="group" aria-label="Modèle de papier">
+        ${PAPER_PRESETS.map((preset)=>`
+          <button class="dashboard-paper-preset${preset.id===cfg.kind?" is-selected":""}" type="button"
+            data-paper-preset="${escapeAttr(preset.id)}" aria-pressed="${preset.id===cfg.kind}">
+            <span class="dashboard-paper-preset-thumb" aria-hidden="true">${renderPaperSvg(preset.preview,{thumbnail:true})}</span>
+            <span class="dashboard-paper-preset-label">${escapeHtml(preset.label)}</span>
+          </button>
+        `).join("")}
+      </div>
+    </section>
+    <section class="dashboard-worksheet-settings-group dashboard-paper-settings-group">
+      <h3>Paramètres généraux</h3>
+      <div class="dashboard-worksheet-toggle-row dashboard-worksheet-orientation-row" role="group" aria-label="Orientation de la feuille">
+        <span>Orientation</span>
+        <span class="dashboard-worksheet-orientation-choice">
+          <span class="dashboard-worksheet-orientation-option ${cfg.landscape?"":"is-active"}">Portrait</span>
+          <label class="dashboard-toggle">
+            <input data-paper-field="landscape" type="checkbox" ${cfg.landscape?"checked":""} aria-label="Format paysage">
+            <span class="dashboard-toggle-track" aria-hidden="true"></span>
+          </label>
+          <span class="dashboard-worksheet-orientation-option ${cfg.landscape?"is-active":""}">Paysage</span>
+        </span>
+      </div>
+      ${renderStepperField({
+        id:"paper-margin-mm",label:"Marges extérieures (mm)",value:cfg.marginMm,
+        inputMin:0,inputMax:30,step:1,
+        fieldClassName:"tv-stepper-field-inline dashboard-worksheet-stepper-field"
+      })}
+      <label class="dashboard-worksheet-toggle-row" data-paper-red-margin-row>
+        <span>Marge rouge</span>
+        <span class="dashboard-toggle">
+          <input data-paper-field="red-margin" type="checkbox" ${cfg.redMargin?"checked":""}>
+          <span class="dashboard-toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </section>
+    <section class="dashboard-worksheet-settings-group dashboard-paper-specific-settings">
+      <h3>Paramètres spécifiques</h3>
+      <div class="dashboard-worksheet-toggle-row" data-paper-orthogonal-mode-row>
+        <span>Rendu orthogonal</span>
+        <span class="dashboard-worksheet-orientation-choice">
+          <span class="dashboard-worksheet-orientation-option ${cfg.orthogonalMode==="lines"?"is-active":""}">Lignes</span>
+          <label class="dashboard-toggle">
+            <input data-paper-field="orthogonal-points" type="checkbox" ${cfg.orthogonalMode==="points"?"checked":""} aria-label="Rendu en points">
+            <span class="dashboard-toggle-track" aria-hidden="true"></span>
+          </label>
+          <span class="dashboard-worksheet-orientation-option ${cfg.orthogonalMode==="points"?"is-active":""}">Points</span>
+        </span>
+      </div>
+      ${renderPaperSlider({field:"orth-step",label:"Pas du réseau",value:cfg.orthStepMm,min:5,max:20})}
+      <div class="dashboard-worksheet-toggle-row" data-paper-isometric-mode-row>
+        <span>Rendu isométrique</span>
+        <span class="dashboard-worksheet-orientation-choice">
+          <span class="dashboard-worksheet-orientation-option ${cfg.isometricMode==="lines"?"is-active":""}">Lignes</span>
+          <label class="dashboard-toggle">
+            <input data-paper-field="isometric-points" type="checkbox" ${cfg.isometricMode==="points"?"checked":""} aria-label="Rendu en points">
+            <span class="dashboard-toggle-track" aria-hidden="true"></span>
+          </label>
+          <span class="dashboard-worksheet-orientation-option ${cfg.isometricMode==="points"?"is-active":""}">Points</span>
+        </span>
+      </div>
+      ${renderPaperSlider({field:"iso-step",label:"Pas du réseau",value:cfg.isoStepMm,min:5,max:20})}
+      ${renderPaperSlider({field:"hex-step",label:"Côté de l’hexagone",value:cfg.hexStepMm,min:5,max:20})}
+      <div data-paper-graph-color-row>
+        ${renderPaperChoiceButtons({ field:"graph-color", label:"Couleur", value:cfg.graphColor, options:[
+          { value:"blue", label:"Bleu" },
+          { value:"orange", label:"Orange" },
+          { value:"black", label:"Noir" }
+        ]})}
+      </div>
+      ${renderPaperSlider({field:"band-gap",label:"Espace blanc entre les bandes",value:cfg.bandGapMm,min:0,max:50})}
+      <div class="tv-stepper-field tv-stepper-field-inline dashboard-worksheet-stepper-field dashboard-paper-fraction-field" data-paper-band-interline>
+        <div class="tv-stepper-field-label" id="paper-interline-label">Interligne des bandes (mm)</div>
+        <div class="tv-stepper-field-control">
+          <div class="tv-stepper-field-control-row">
+            <div class="tv-stepper tv-stepper-no-inline-label" role="group" aria-labelledby="paper-interline-label">
+              <button class="tv-stepper-btn" type="button" data-paper-interline-direction="-1" aria-label="Diminuer l’interligne"><span class="tv-stepper-icon" aria-hidden="true">remove</span></button>
+              <input class="tv-input tv-input-stepper" data-paper-field="band-interline" type="text" inputmode="decimal" value="${String(cfg.bandInterlineMm).replace(".",",")}" aria-labelledby="paper-interline-label" autocomplete="off" spellcheck="false">
+              <button class="tv-stepper-btn" type="button" data-paper-interline-direction="1" aria-label="Augmenter l’interligne"><span class="tv-stepper-icon" aria-hidden="true">add</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <label class="dashboard-worksheet-toggle-row" data-paper-band-vertical-row>
+        <span>Lignes verticales</span>
+        <span class="dashboard-toggle">
+          <input data-paper-field="band-vertical-lines" type="checkbox" ${cfg.bandVerticalLines?"checked":""}>
+          <span class="dashboard-toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <label class="dashboard-worksheet-toggle-row" data-paper-band-gurvan-row>
+        <span>Coloration Gurvan</span>
+        <span class="dashboard-toggle">
+          <input data-paper-field="band-gurvan" type="checkbox" ${cfg.bandGurvan?"checked":""}>
+          <span class="dashboard-toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </section>
+  `;
+}
+
+function renderPaperPreview(config){
+  const cfg=normalizePaperConfig(config);
+  return `<section class="dashboard-worksheet-page dashboard-paper-page ${cfg.landscape?"is-landscape":""}" aria-label="Aperçu de la feuille A4">${renderPaperSvg(cfg)}</section>`;
+}
+
 export function createWorksheetGeneratorViewController({
   view,
   host,
@@ -1042,6 +1178,7 @@ export function createWorksheetGeneratorViewController({
   let worksheet = buildMagicSquareWorksheet(config);
   let showSolutions = false;
   let commonSettingsCollapsed = true;
+  let paperModelCollapsed = false;
   let previewZoom = null;
   let previewFitZoom = 1;
   let previewResizeObserver = null;
@@ -1134,6 +1271,12 @@ export function createWorksheetGeneratorViewController({
   }
 
   async function regenerate(){
+    if (generatorId === PAPER_GENERATOR_ID) {
+      cancelActiveGeneration();
+      normalizeCurrentConfig();
+      renderPreview();
+      return;
+    }
     normalizeCurrentConfig();
     if (generatorId === WORD_SEARCH_GENERATOR_ID) config.resolvedWords = config.sourceWords;
     const requestedGeneratorId = generatorId;
@@ -1158,6 +1301,10 @@ export function createWorksheetGeneratorViewController({
   }
 
   function normalizeCurrentConfig(){
+    if (generatorId === PAPER_GENERATOR_ID) {
+      config = normalizePaperConfig(config);
+      return;
+    }
     config.perPage = normalizePerPage(config.perPage, generatorId);
     config.pageCount = clampInteger(config.pageCount, 1, 20, 1);
     config.cutLines = config.cutLines === true;
@@ -1273,10 +1420,12 @@ export function createWorksheetGeneratorViewController({
         return;
       }
 
-      config = {
-        ...getDefaultConfig(requestedGeneratorId),
-        ...getPersistableConfig(requestedGeneratorId, saved.settings)
-      };
+      config = requestedGeneratorId === PAPER_GENERATOR_ID
+        ? normalizePaperConfig(saved.settings)
+        : {
+          ...getDefaultConfig(requestedGeneratorId),
+          ...getPersistableConfig(requestedGeneratorId, saved.settings)
+        };
       normalizeCurrentConfig();
       lastPersistedSettingsByGenerator.set(
         requestedGeneratorId,
@@ -1291,6 +1440,7 @@ export function createWorksheetGeneratorViewController({
   }
 
   function renderSettings(){
+    if (generatorId === PAPER_GENERATOR_ID) return `<div class="dashboard-worksheet-sidebar-scroll">${renderPaperSettings(config, { modelCollapsed:paperModelCollapsed })}</div>`;
     const specific = generatorId === PENTOMINO_GENERATOR_ID
       ? renderPentominoSettings(config)
       : generatorId === WORD_SEARCH_GENERATOR_ID
@@ -1307,6 +1457,7 @@ export function createWorksheetGeneratorViewController({
   }
 
   function getGeneratorTitle(){
+    if (generatorId === PAPER_GENERATOR_ID) return "Papiers et lignages";
     if (generatorId === PENTOMINO_GENERATOR_ID) return "Défis pentaminos";
     if (generatorId === WORD_SEARCH_GENERATOR_ID) return "Mots mêlés";
     return generatorId === NUMBER_MYSTERY_GENERATOR_ID ? "Nombre mystérieux" : "Carré magique";
@@ -1319,6 +1470,11 @@ export function createWorksheetGeneratorViewController({
       return;
     }
 
+    if (generatorId === PAPER_GENERATOR_ID) {
+      pages.innerHTML = renderPaperPreview(config);
+      window.requestAnimationFrame(updatePreviewZoom);
+      return;
+    }
     pages.innerHTML = renderWorksheetPages(worksheet.exercises, {
       generatorId,
       perPage:normalizePerPage(config.perPage, generatorId),
@@ -1350,7 +1506,7 @@ export function createWorksheetGeneratorViewController({
           ${renderSettings()}
 
           <div class="dashboard-worksheet-sidebar-actions">
-            <div class="dashboard-worksheet-sidebar-actions-main">
+            ${generatorId === PAPER_GENERATOR_ID ? "" : `<div class="dashboard-worksheet-sidebar-actions-main">
               <button class="btn dashboard-btn-with-icon dashboard-worksheet-regenerate" type="button" data-generator-action="regenerate">
                 <span class="dashboard-material-icon" aria-hidden="true">refresh</span>
                 <span>Régénérer</span>
@@ -1359,7 +1515,7 @@ export function createWorksheetGeneratorViewController({
                 <span class="dashboard-material-icon" aria-hidden="true">${showSolutions ? "visibility_off" : "visibility"}</span>
                 <span>${showSolutions ? "Voir la fiche élève" : "Correction"}</span>
               </button>
-            </div>
+            </div>`}
             <button class="btn primary dashboard-btn-with-icon" type="button" data-generator-action="pdf" ${isGenerating ? "disabled" : ""}>
               <span class="dashboard-material-icon" aria-hidden="true">picture_as_pdf</span>
               <span>Télécharger le PDF</span>
@@ -1372,7 +1528,7 @@ export function createWorksheetGeneratorViewController({
             <div class="dashboard-worksheet-preview-stage-sizer">
               <div class="dashboard-worksheet-preview-stage">
                 <div class="dashboard-worksheet-preview-pages">
-                  ${renderWorksheetPages(worksheet.exercises, {
+                  ${generatorId === PAPER_GENERATOR_ID ? renderPaperPreview(config) : renderWorksheetPages(worksheet.exercises, {
                     generatorId,
                     perPage,
                     showSolutions,
@@ -1457,8 +1613,97 @@ export function createWorksheetGeneratorViewController({
     };
   }
 
+  // Ne jamais reconstruire le panneau lors des interactions papier : préserver focus,
+  // position de défilement, glissement des sliders et événements des contrôles.
+  function syncPaperSettingsUI(){
+    if (generatorId !== PAPER_GENERATOR_ID || !host) return;
+    host.querySelectorAll("[data-paper-preset]").forEach((button)=>{
+      const selected=button.dataset.paperPreset===config.kind;
+      button.classList.toggle("is-selected",selected);
+      button.setAttribute("aria-pressed",String(selected));
+    });
+    const show = (selector, state) => { const el=host.querySelector(selector); if(el) el.hidden=!state; };
+    show('[data-paper-slider-for="orth-step"]', config.kind === "orthogonal");
+    show('[data-paper-slider-for="iso-step"]', config.kind === "isometric");
+    show('[data-paper-slider-for="hex-step"]', config.kind === "hexagonal");
+    show('[data-paper-slider-for="band-gap"]', config.kind === "bands");
+    show('[data-paper-orthogonal-mode-row]', config.kind === "orthogonal");
+    show('[data-paper-isometric-mode-row]', config.kind === "isometric");
+    show('[data-paper-graph-color-row]', config.kind === "graph");
+    show('[data-paper-band-interline]', config.kind === "bands");
+    show('[data-paper-band-vertical-row]', config.kind === "bands");
+    show('[data-paper-band-gurvan-row]', config.kind === "bands");
+    const dimensions=host.querySelector(".dashboard-paper-specific-settings");
+    if(dimensions) dimensions.hidden=config.kind==="seyes";
+    const redMargin=host.querySelector("[data-paper-red-margin-row]");
+    if(redMargin) redMargin.hidden=!paperSupportsRedMargin(config.kind);
+    const orientation=host.querySelector(".dashboard-worksheet-orientation-choice");
+    orientation?.querySelectorAll(".dashboard-worksheet-orientation-option").forEach((option,index)=>{
+      option.classList.toggle("is-active",index===(config.landscape?1:0));
+    });
+    const syncToggleRow = (selector, active) => {
+      const row = host.querySelector(selector);
+      row?.querySelectorAll('.dashboard-worksheet-orientation-option').forEach((option,index)=>{
+        option.classList.toggle('is-active', index === (active ? 1 : 0));
+      });
+    };
+    syncToggleRow('[data-paper-orthogonal-mode-row]', config.orthogonalMode === 'points');
+    syncToggleRow('[data-paper-isometric-mode-row]', config.isometricMode === 'points');
+    const interline=host.querySelector('[data-paper-field="band-interline"]');
+    if(interline && document.activeElement!==interline) interline.value=String(config.bandInterlineMm).replace('.',',');
+    host.querySelectorAll('[data-paper-interline-direction]').forEach((button)=>{
+      button.disabled = Number(button.dataset.paperInterlineDirection)<0 ? config.bandInterlineMm<=2 : config.bandInterlineMm>=4;
+    });
+    const values={"orth-step":config.orthStepMm,"iso-step":config.isoStepMm,"hex-step":config.hexStepMm,"band-gap":config.bandGapMm};
+    for(const [field,value] of Object.entries(values)){
+      const input=host.querySelector(`[data-paper-field="${field}"]`);
+      if(input) input.value=String(value);
+      const output=host.querySelector(`[data-paper-output="${field}"]`);
+      if(output) output.textContent=`${value} mm`;
+    }
+    host.querySelector('[data-paper-field="landscape"]') && (host.querySelector('[data-paper-field="landscape"]').checked = config.landscape);
+    host.querySelector('#paper-margin-mm') && (host.querySelector('#paper-margin-mm').value = String(config.marginMm));
+    host.querySelector('[data-paper-field="red-margin"]') && (host.querySelector('[data-paper-field="red-margin"]').checked = config.redMargin);
+    host.querySelector('[data-paper-field="orthogonal-points"]') && (host.querySelector('[data-paper-field="orthogonal-points"]').checked = config.orthogonalMode === 'points');
+    host.querySelector('[data-paper-field="isometric-points"]') && (host.querySelector('[data-paper-field="isometric-points"]').checked = config.isometricMode === 'points');
+    host.querySelector('[data-paper-field="band-vertical-lines"]') && (host.querySelector('[data-paper-field="band-vertical-lines"]').checked = config.bandVerticalLines);
+    host.querySelector('[data-paper-field="band-gurvan"]') && (host.querySelector('[data-paper-field="band-gurvan"]').checked = config.bandGurvan);
+    host.querySelectorAll('[data-paper-choice-button="graph-color"]').forEach((button)=>{
+      const selected=button.dataset.paperChoiceValue===config.graphColor;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+
   function updateConfigFromControls({ regenerateContent = false } = {}){
     if (!host) return;
+    if (generatorId === PAPER_GENERATOR_ID) {
+      const before=serializePersistableConfig(generatorId,config);
+      const interlineText = String(host.querySelector('[data-paper-field="band-interline"]')?.value || "3").replace(",", ".");
+      config=normalizePaperConfig({
+        ...config,
+        landscape:host.querySelector('[data-paper-field="landscape"]')?.checked === true,
+        marginMm:host.querySelector("#paper-margin-mm")?.value,
+        redMargin:host.querySelector('[data-paper-field="red-margin"]')?.checked === true,
+        orthogonalMode:host.querySelector('[data-paper-field="orthogonal-points"]')?.checked === true ? 'points' : 'lines',
+        isometricMode:host.querySelector('[data-paper-field="isometric-points"]')?.checked === true ? 'points' : 'lines',
+        bandVerticalLines:host.querySelector('[data-paper-field="band-vertical-lines"]')?.checked === true,
+        bandGurvan:host.querySelector('[data-paper-field="band-gurvan"]')?.checked === true,
+        orthStepMm:host.querySelector('[data-paper-field="orth-step"]')?.value,
+        isoStepMm:host.querySelector('[data-paper-field="iso-step"]')?.value,
+        hexStepMm:host.querySelector('[data-paper-field="hex-step"]')?.value,
+        graphColor:host.querySelector('[data-paper-choice-button="graph-color"].is-selected')?.dataset.paperChoiceValue,
+        bandGapMm:host.querySelector('[data-paper-field="band-gap"]')?.value,
+        bandInterlineMm:interlineText
+      });
+      if (serializePersistableConfig(generatorId,config)!==before) {
+        configEditRevision+=1;
+        scheduleSettingsSave();
+      }
+      syncPaperSettingsUI();
+      renderPreview();
+      return;
+    }
     const before = serializePersistableConfig(generatorId, config);
     updateCommonConfigFromControls();
     if (generatorId === PENTOMINO_GENERATOR_ID) {
@@ -1820,6 +2065,10 @@ export function createWorksheetGeneratorViewController({
     try {
       if (button) button.disabled = true;
       if (label) label.textContent = "Génération…";
+      if (generatorId === PAPER_GENERATOR_ID) {
+        await downloadPrintablePaperPdf(config);
+        return;
+      }
       await downloadWorksheetPdf({
         generatorId,
         exercises:worksheet.exercises,
@@ -1841,6 +2090,15 @@ export function createWorksheetGeneratorViewController({
   function bindRenderedEvents(){
     if (!host) return;
     host.querySelector('[data-generator-action="back"]')?.addEventListener("click", () => close());
+    host.querySelector('[data-generator-action="toggle-paper-model"]')?.addEventListener("click", (event) => {
+      paperModelCollapsed = !paperModelCollapsed;
+      const group = event.currentTarget.closest(".dashboard-paper-presets-group");
+      const icon = event.currentTarget.querySelector(".dashboard-material-icon");
+      group?.classList.toggle("is-collapsed", paperModelCollapsed);
+      event.currentTarget.setAttribute("aria-expanded", paperModelCollapsed ? "false" : "true");
+      event.currentTarget.setAttribute("aria-label", paperModelCollapsed ? "Afficher les modèles" : "Masquer les modèles");
+      if (icon) icon.textContent = paperModelCollapsed ? "expand_more" : "expand_less";
+    });
     host.querySelector('[data-generator-action="toggle-common-settings"]')?.addEventListener("click", (event) => {
       commonSettingsCollapsed = !commonSettingsCollapsed;
       const group = event.currentTarget.closest(".dashboard-worksheet-common-settings");
@@ -1857,6 +2115,64 @@ export function createWorksheetGeneratorViewController({
     });
     host.querySelector('[data-generator-action="pdf"]')?.addEventListener("click", () => { void downloadPdfCurrent(); });
     host.querySelector('[data-pentomino-action="material"]')?.addEventListener("click", openPentominoMaterialOverlay);
+
+    if (generatorId === PAPER_GENERATOR_ID) {
+      host.querySelectorAll("[data-paper-preset]").forEach((button)=>{
+        button.addEventListener("click",()=>{
+          const kind=String(button.dataset.paperPreset || "");
+          if(kind===config.kind) return;
+          config=normalizePaperConfig({...config,kind});
+          configEditRevision+=1;
+          scheduleSettingsSave();
+          syncPaperSettingsUI();
+          renderPreview();
+        });
+      });
+      bindStepperField(host,"paper-margin-mm",{
+        inputMin:0,inputMax:30,onChange:()=>updateConfigFromControls()
+      });
+      host.querySelector("#paper-margin-mm")?.addEventListener("change",()=>updateConfigFromControls());
+      ["landscape","red-margin","orthogonal-points","isometric-points","band-vertical-lines","band-gurvan"].forEach((field)=>{
+        host.querySelector(`[data-paper-field="${field}"]`)?.addEventListener("change",()=>updateConfigFromControls());
+      });
+      ["orth-step","iso-step","hex-step","band-gap"].forEach((field)=>{
+        host.querySelector(`[data-paper-field="${field}"]`)?.addEventListener("input",()=>updateConfigFromControls());
+      });
+      host.querySelectorAll('[data-paper-choice-button]').forEach((button)=>{
+        button.addEventListener('click',()=>{
+          const field = button.dataset.paperChoiceButton;
+          const value = button.dataset.paperChoiceValue;
+          host.querySelectorAll(`[data-paper-choice-button="${field}"]`).forEach((item)=>{
+            const selected = item.dataset.paperChoiceValue === value;
+            item.classList.toggle('is-selected', selected);
+            item.setAttribute('aria-pressed', String(selected));
+          });
+          updateConfigFromControls();
+        });
+      });
+      const interline=host.querySelector('[data-paper-field="band-interline"]');
+      function commitInterline(){
+        if(!interline) return;
+        const requested=Number(interline.value.replace(",","."));
+        const next=Number.isFinite(requested) ? Math.min(4,Math.max(2,2+Math.round((requested-2)*2)/2)) : config.bandInterlineMm;
+        interline.value=String(next).replace(".",",");
+        updateConfigFromControls();
+      }
+      interline?.addEventListener("change",commitInterline);
+      interline?.addEventListener("keydown",(event)=>{
+        if(event.key==="Enter") {event.preventDefault();interline.blur();}
+      });
+      host.querySelectorAll("[data-paper-interline-direction]").forEach((button)=>{
+        button.addEventListener("click",()=>{
+          if(!interline) return;
+          const dir=Number(button.dataset.paperInterlineDirection)||0;
+          interline.value=String(Math.min(4,Math.max(2,config.bandInterlineMm+dir*.5))).replace(".",",");
+          commitInterline();
+        });
+      });
+      syncPaperSettingsUI();
+      return;
+    }
 
     host.querySelectorAll("[data-generator-per-page-direction]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1981,7 +2297,7 @@ export function createWorksheetGeneratorViewController({
   return {
     open(id){
       const requested = String(id || "");
-      if (![MAGIC_SQUARE_GENERATOR_ID, NUMBER_MYSTERY_GENERATOR_ID, WORD_SEARCH_GENERATOR_ID, PENTOMINO_GENERATOR_ID].includes(requested)) {
+      if (![MAGIC_SQUARE_GENERATOR_ID, NUMBER_MYSTERY_GENERATOR_ID, WORD_SEARCH_GENERATOR_ID, PENTOMINO_GENERATOR_ID, PAPER_GENERATOR_ID].includes(requested)) {
         showToast?.("Ce générateur n’est pas encore disponible.", { isError:true });
         return;
       }
@@ -1990,6 +2306,7 @@ export function createWorksheetGeneratorViewController({
       config = getDefaultConfig(generatorId);
       showSolutions = false;
       commonSettingsCollapsed = true;
+      paperModelCollapsed = false;
       previewZoom = null;
       configEditRevision = 0;
       const requestedOpenRevision = ++openRevision;

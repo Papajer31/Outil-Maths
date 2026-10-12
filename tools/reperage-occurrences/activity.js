@@ -368,29 +368,88 @@ function teardownState(state, container) {
 
 function getReperageOccurrencesHistorySnapshot(state, stage = "question") {
   const question = state.currentQuestion;
-  if (!question) {
-    return { schemaVersion:2, kind:"occurrence-selection", prompt:"", items:[] };
-  }
+  if (!question) return {};
 
   const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key:"target", label:"À trouver", compact:true },
+    {
+      key:"selection",
+      label:"Sélection / correction",
+      legend:[
+        { state:"correct", label:"Correct" },
+        { state:"missed", label:"Oublié" },
+        { state:"wrong", label:"Erreur" }
+      ]
+    }
+  ];
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns,
+        cells: {
+          target: {
+            type:"text",
+            value:String(question.target || "")
+          },
+          selection: {
+            type:"sequence",
+            items:buildOccurrenceHistorySequence(question, new Set(), { showMissed:false })
+          }
+        }
+      }
+    };
+  }
+
   const studentSelection = getStudentSelection(state);
-  const selectedIds = safeStage === "question" ? [] : [...studentSelection];
-  const expectedIds = Array.isArray(question.expectedIds) ? [...question.expectedIds] : [];
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          selection: {
+            type:"sequence",
+            items:buildOccurrenceHistorySequence(question, studentSelection, { showMissed:false })
+          }
+        }
+      }
+    };
+  }
 
   return {
-    schemaVersion:2,
-    kind:"occurrence-selection",
-    prompt:String(question.prompt || ""),
-    target:String(question.target || ""),
-    writingMode:String(question.writingMode || "script"),
-    items:(Array.isArray(question.items) ? question.items : []).map((item) => ({
-      id:String(item?.id || ""),
-      text:String(item?.text || ""),
-      expected:item?.isTarget === true
-    })),
-    selectedIds,
-    expectedIds:safeStage === "correction" ? expectedIds : []
+    history: {
+      cells: {
+        selection: {
+          type:"sequence",
+          items:buildOccurrenceHistorySequence(question, studentSelection, { showMissed:true })
+        }
+      }
+    }
   };
+}
+
+function buildOccurrenceHistorySequence(question, selectedIds, { showMissed = true } = {}) {
+  const selected = selectedIds instanceof Set
+    ? selectedIds
+    : new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id)));
+
+  return (Array.isArray(question?.items) ? question.items : []).map((item) => {
+    const id = String(item?.id || "");
+    const wasSelected = selected.has(id);
+    const isTarget = item?.isTarget === true;
+    let state = "neutral";
+
+    if (isTarget && wasSelected) state = "correct";
+    else if (!isTarget && wasSelected) state = "wrong";
+    else if (isTarget && showMissed) state = "missed";
+
+    return {
+      text:String(item?.text || ""),
+      writing:String(item?.writing || "script").trim().toLowerCase() === "cursive" ? "cursive" : "script",
+      state
+    };
+  });
 }
 
 function injectActivityStyles() {

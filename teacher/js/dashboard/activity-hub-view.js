@@ -33,7 +33,7 @@ export function createActivityHubViewController({
           ${renderHubCard({
             action: "open-assigned",
             icon: "assignment_ind",
-            title: "Activités attribuées",
+            title: "Missions",
             text: "Voir les activités et séquences actuellement proposées aux élèves, puis en attribuer de nouvelles."
           })}
           ${renderHubCard({

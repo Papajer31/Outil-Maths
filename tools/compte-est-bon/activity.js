@@ -5,6 +5,7 @@ import {
   evaluateTargetedCalculationResponse,
   evaluateTokenBoxesResponse,
   formatSelection,
+  formatTargetedStep,
   getTargetedRequiredStepCount,
   hasDuplicateResponseLines,
   normalizeBoxIds,
@@ -20,6 +21,7 @@ import {
   resolveQuestionInstructionText,
   setToolInstructionText
 } from "../../shared/tool-instruction.js";
+import { renderMaterialIcon } from "../../shared/material-icons-svg.js";
 
 let stylesInjected = false;
 const TARGETED_STEP_EQUALS_DELAY_MS = 500;
@@ -86,6 +88,10 @@ export function createActivity(initialContext = {}) {
       };
     },
 
+    getHistorySnapshot(stage = "question") {
+      return buildCompteEstBonHistorySnapshot(state, stage);
+    },
+
     getShellAnswerDisplayState(container, context = state.latestContext) {
       state.container = container || state.container;
       state.latestContext = context ?? state.latestContext;
@@ -121,6 +127,98 @@ export function createActivity(initialContext = {}) {
       teardownState(state, container || state.container);
     }
   };
+}
+
+function buildCompteEstBonHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question || !isClassicChallengeQuestion(question)) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key: "target", label: "Cible", compact: true, align: "center" },
+    { key: "numbers", label: "Nombres de départ", compact: true },
+    { key: "path", label: "Chemin / correction", fill: true }
+  ];
+
+  if (safeStage === "question") {
+    const numbers = Array.isArray(question.initialNumbers) ? question.initialNumbers : question.numbers;
+    return {
+      history: {
+        columns,
+        cells: {
+          target: { type: "tokens", items: [{ text: String(question.target ?? ""), tone: "accent" }] },
+          numbers: {
+            type: "tokens",
+            items: (Array.isArray(numbers) ? numbers : []).map((value) => ({ text: String(value), tone: "default" }))
+          }
+        }
+      }
+    };
+  }
+
+  const submitted = cloneTargetedSteps(
+    state.answerRevealed && state.submittedTargetedSteps.length
+      ? state.submittedTargetedSteps
+      : state.targetedSteps
+  );
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          path: {
+            type: "calculation_path",
+            student: submitted.map((step) => ({ text: formatTargetedStep(step), state: "neutral" })),
+            correction: [],
+            branchAfter: submitted.length - 1
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "correction") {
+    const evaluation = evaluateTargetedCalculationResponse(question, submitted);
+    if (evaluation.isCorrect) {
+      return {
+        history: {
+          cells: {
+            path: {
+              type: "calculation_path",
+              student: submitted.map((step) => ({ text: formatTargetedStep(step), state: "correct" })),
+              correction: [],
+              branchAfter: submitted.length - 1
+            }
+          }
+        }
+      };
+    }
+
+    const plan = state.classicCorrectionPlan || buildClassicCorrectionPlan(question, submitted);
+    const preservedStepCount = Math.max(0, Math.min(
+      submitted.length,
+      Number.isFinite(Number(plan?.preservedStepCount)) ? Math.trunc(Number(plan.preservedStepCount)) : 0
+    ));
+    const continuation = Array.isArray(plan?.continuationSteps) ? plan.continuationSteps : [];
+
+    return {
+      history: {
+        cells: {
+          path: {
+            type: "calculation_path",
+            student: submitted.map((step, index) => ({
+              text: formatTargetedStep(step),
+              state: index < preservedStepCount ? "correct" : "wrong"
+            })),
+            correction: continuation.map((step) => ({ text: formatTargetedStep(step), state: "missed" })),
+            branchAfter: preservedStepCount - 1
+          }
+        }
+      }
+    };
+  }
+
+  return {};
 }
 
 function createRuntimeState(initialContext = {}) {
@@ -738,7 +836,7 @@ function renderTargetedStudentSteps(state, { readOnly = false } = {}) {
           data-nc-calc-back="${index}"
           ${backEnabled ? "" : "disabled"}
           aria-label="Revenir en arrière"
-        ><span class="nc-material-icon" aria-hidden="true">undo</span></button>
+        >${renderMaterialIcon("undo", { className: "nc-material-icon" })}</button>
       `;
 
     return `
@@ -819,7 +917,7 @@ function renderTargetedBackPlaceholder() {
       disabled
       aria-hidden="true"
       tabindex="-1"
-    ><span class="nc-material-icon" aria-hidden="true">undo</span></button>
+    >${renderMaterialIcon("undo", { className: "nc-material-icon" })}</button>
   `;
 }
 

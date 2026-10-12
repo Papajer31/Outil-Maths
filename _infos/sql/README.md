@@ -1,6 +1,6 @@
 # SQL — mode d’emploi
 
-Dernière mise à jour : 2026-09-13.
+Dernière mise à jour : 2026-10-10.
 
 ## Règle absolue
 
@@ -47,6 +47,9 @@ Les fichiers numérotés sont l’historique séquentiel du projet. **Ne jamais 
 | `47` | suppression définitive des anciennes banques `phonology_words` / `vocabulary_default_words` | **migration à appliquer avec le patch de nettoyage lexical** |
 | `48` à `56` | activités personnelles, attributions, séquences, liens directs, ressources Seyès, Realtime et remise à zéro historique | migrations actives de septembre 2026 |
 | `57` | suppression de l’ancien système Missions, maintien du lore Mission via les attributions, nettoyage suppression Catalogue/Aventure | **à exécuter avec le patch de suppression Missions / onglet Quiz du 23/09/2026** |
+| `58` à `62` | historique détaillé v2, checkpoints Missions, renommage Catalogue, réglages générateurs, sauvegarde du Tableau | migrations actives de septembre/octobre 2026 |
+| `63` | socle « Créations Tujer » : ressources `creation`/`document` et dépendances vers les fichiers locaux persistants | **à exécuter avec le patch Créations Tujer** |
+| `64` | table rase de l’ancien historique + verrouillage du nouveau contrat sémantique ; la progression Exploration existante est figée en baseline | **à exécuter avec le patch H1 de refonte de l’historique** |
 
 ## Script spécial d’arborescence
 

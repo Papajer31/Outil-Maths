@@ -1,4 +1,4 @@
-import { getPedagogicalNodes, normalizeCatalogActivity } from "../../../../../shared/catalogue.js";
+import { normalizeCatalogActivity } from "../../../../../shared/catalogue.js";
 import { escapeAttr, escapeHtml } from "../../../dashboard/text-utils.js";
 import {
   applyProjectedActivityAction,
@@ -120,7 +120,7 @@ export function createActivityControlPanel({
           : [],
         typeof listPedagogicalNodesForTeacher === "function"
           ? listPedagogicalNodesForTeacher()
-          : getPedagogicalNodes(),
+          : Promise.reject(new Error("Chargement de l’arborescence indisponible.")),
         teacherSpaceId && typeof listTeacherActivitiesForSpace === "function"
           ? listTeacherActivitiesForSpace(teacherSpaceId)
           : [],
@@ -129,7 +129,7 @@ export function createActivityControlPanel({
           : []
       ]);
       catalogActivities = normalizeCatalogActivities(catalogResult);
-      catalogFolders = normalizeFolders(catalogFoldersResult?.length ? catalogFoldersResult : getPedagogicalNodes());
+      catalogFolders = normalizeFolders(catalogFoldersResult);
       teacherActivities = (Array.isArray(teacherResult) ? teacherResult : []).slice().sort((a,b) => compareByOrderThenLabel(a,b,getActivityLabel));
       teacherFolders = normalizeFolders(teacherFoldersResult);
       catalogLoaded = true;

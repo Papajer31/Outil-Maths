@@ -166,6 +166,10 @@ function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getDecimalRepresentationHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       stopPhaseMonitor(state);
       teardownState(state, container || state.container);
@@ -2932,6 +2936,190 @@ function countBuildPieces(items) {
     if (item?.kind === "ones") acc.ones += 1;
     return acc;
   }, { hundreds: 0, tens: 0, ones: 0 });
+}
+
+
+function getDecimalRepresentationHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const isRepresentationToNumber = question.direction === REPRESENTATION_DIRECTIONS.REPRESENTATION_TO_NUMBER;
+
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key: "prompt", label: "Consigne", fill: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer" },
+          { key: "expected", label: "Attendu" }
+        ],
+        cells: {
+          prompt: isRepresentationToNumber
+            ? buildRepresentationToNumberPromptCell(question)
+            : buildNumberToRepresentationPromptCell(question)
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const cells = {
+      answer: isRepresentationToNumber
+        ? {
+            type: "text",
+            value: String(state.studentAnswerSnapshot?.value ?? state.inputEl?.value ?? "").trim()
+          }
+        : buildDecompositionCell(countBuildPieces(
+            Array.isArray(state.studentBuildSnapshot) && state.studentBuildSnapshot.length
+              ? state.studentBuildSnapshot
+              : state.buildItems
+          ))
+    };
+
+    if (isRepresentationToNumber) {
+      const promptPreview = buildDecimalHistoryPreview(state, { source: "question" });
+      if (promptPreview) {
+        cells.prompt = buildRepresentationToNumberPromptCell(question, promptPreview);
+      }
+    } else {
+      const answerPreview = buildDecimalHistoryPreview(state, { source: "student" });
+      if (answerPreview) cells.answer.preview = answerPreview;
+    }
+
+    return { history: { cells } };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: isRepresentationToNumber
+          ? { type: "text", value: String(question.value ?? "") }
+          : buildDecompositionCell(question.expectedBuild || question.decomposition || {})
+      }
+    }
+  };
+}
+
+function buildDecimalHistoryPreview(state, { source = "question" } = {}) {
+  const question = state.currentQuestion;
+  if (!question) return null;
+  const settings = normalizeSettings(state.latestContext?.settings);
+  const base = {
+    type: "decimal-representation",
+    themeId: String(question.themeId || ""),
+    value: Number(question.value) || 0,
+    labelMode: String(settings.textBlocksLabelMode || ""),
+    allowLooseTens: settings.allowLooseTens === true,
+    displayBuild: { ...(question.displayBuild || question.decomposition || question.expectedBuild || {}) }
+  };
+
+  const usePieces = source === "student"
+    || (question.direction === REPRESENTATION_DIRECTIONS.REPRESENTATION_TO_NUMBER
+      && settings.displayMode === DISPLAY_MODES.RANDOM);
+
+  if (!usePieces) {
+    return { ...base, mode: "ordered" };
+  }
+
+  const sourceItems = source === "student"
+    ? (Array.isArray(state.studentBuildSnapshot) && state.studentBuildSnapshot.length
+      ? state.studentBuildSnapshot
+      : state.buildItems)
+    : state.buildItems;
+  const items = buildDecimalHistoryPreviewItems(state, sourceItems);
+  if (!items.length) {
+    return source === "question" ? { ...base, mode: "ordered" } : null;
+  }
+
+  const viewport = getElementSize(state.builderWorkspaceEl);
+  return {
+    ...base,
+    mode: "pieces",
+    viewport: {
+      width: Math.max(80, viewport.width || 720),
+      height: Math.max(80, viewport.height || 420)
+    },
+    items
+  };
+}
+
+function buildDecimalHistoryPreviewItems(state, items) {
+  return (Array.isArray(items) ? items : []).map((item) => {
+    if (!item?.kind) return null;
+    const size = getBuildItemSize(state, item);
+    return {
+      kind: item.kind,
+      x: Number(item.x) || 0,
+      y: Number(item.y) || 0,
+      width: Math.max(4, Number(size?.width) || 40),
+      height: Math.max(4, Number(size?.height) || 40),
+      zIndex: Math.max(1, Number(item.zIndex) || 1)
+    };
+  }).filter(Boolean);
+}
+
+function buildRepresentationToNumberPromptCell(question, preview = null) {
+  const display = question?.displayBuild || question?.decomposition || question?.expectedBuild || {};
+  const parts = [
+    { kind: "text", text: "Écris le nombre représenté :" },
+    ...buildDecompositionPhraseParts(display)
+  ];
+  const cell = { type: "phrase", parts };
+  if (preview) cell.preview = preview;
+  return cell;
+}
+
+function buildNumberToRepresentationPromptCell(question) {
+  return {
+    type: "phrase",
+    parts: [
+      { kind: "text", text: "Représente" },
+      { kind: "pill", text: String(question?.value ?? "") }
+    ]
+  };
+}
+
+function buildDecompositionCell(decomposition = {}) {
+  return {
+    type: "tokens",
+    items: buildDecompositionEntries(decomposition).map((entry) => ({
+      text: entry.label,
+      tone: "default"
+    }))
+  };
+}
+
+function buildDecompositionPhraseParts(decomposition = {}) {
+  const entries = buildDecompositionEntries(decomposition);
+  if (!entries.length) return [{ kind: "pill", text: "0" }];
+  const parts = [];
+  entries.forEach((entry, index) => {
+    if (index > 0) parts.push({ kind: "text", text: "·" });
+    parts.push({ kind: "pill", text: entry.label });
+  });
+  return parts;
+}
+
+function buildDecompositionEntries(decomposition = {}) {
+  const orders = [
+    ["thousands", "millier", "milliers"],
+    ["hundreds", "centaine", "centaines"],
+    ["tens", "dizaine", "dizaines"],
+    ["ones", "unité", "unités"]
+  ];
+
+  const entries = [];
+  orders.forEach(([key, singular, plural]) => {
+    const count = Math.max(0, Math.trunc(Number(decomposition?.[key]) || 0));
+    if (!count) return;
+    entries.push({
+      key,
+      count,
+      label: `${count} ${count === 1 ? singular : plural}`
+    });
+  });
+  return entries;
 }
 
 function destroyAnswerControl(state) {

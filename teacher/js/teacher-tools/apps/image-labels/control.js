@@ -138,6 +138,7 @@ export function createImageLabelsControlPanel({
           </button>
         </div>
 
+
         <div class="tt-labels-layout-bar" aria-label="Disposition des images">
           <label class="tt-widget-action-toggle tt-labels-snap-toggle" title="Magnétisme d’alignement entre images">
             <input type="checkbox" data-image-labels-snap ${current.snapEnabled ? "checked" : ""}>

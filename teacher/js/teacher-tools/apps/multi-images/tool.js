@@ -13,6 +13,7 @@ export const multiImagesTeacherTool = defineTeacherTool({
   id: "multi-images",
   label: "Multimages",
   icon: "collections",
+  creationType: "tableau.page.multi-images",
   description: "Afficher plusieurs images en galerie ou en tableau automatique.",
   surface: {
     background: false,

@@ -114,9 +114,22 @@ body.game-mode{-webkit-user-select:none;user-select:none;-webkit-touch-callout:n
 @media(max-width:480px){.resource-modal .resource-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
 
 /* V4 — planètes fixes par ressource. */
+/* Les écrans existants sont hébergés dans les deux fenêtres du Tableau. */
+body.tableau-control{height:100dvh;overflow:auto}
+.tableau-control .setup{max-width:none;padding:16px;min-height:100dvh}
+.tableau-control .setup-header{align-items:flex-start;flex-wrap:wrap;gap:12px}
+.tableau-control .setup-header .brand{display:none}
+.tableau-control .setup-header .toolbar{flex-wrap:wrap}
+.tableau-control .setup-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tableau-control .setup-preview{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.tableau-control .setup-footer{position:sticky;bottom:0;z-index:10;padding:12px;background:#071b28;border-top:1px solid #477182}
+.tableau-runtime .game-header .toolbar [data-action="fullscreen"]{display:none}
+.tableau-runtime.tableau-chrome-hidden .game-header .toolbar{visibility:hidden;pointer-events:none}
+@media(max-width:850px){.tableau-control .setup-grid,.tableau-control .setup-preview{grid-template-columns:1fr}.tableau-control .setup-preview{grid-column:auto}}
 .node.planet{overflow:visible}
 .node.planet .planet-art{position:absolute;inset:50% auto auto 50%;width:128%;height:128%;max-width:none;object-fit:contain;transform:translate(-50%,-50%);border-radius:0;background:none;pointer-events:none;filter:drop-shadow(0 4px 7px #00152199)}
 .node.planet .planet-name{border:0;background:#0c2534e8;padding:2px 10px;bottom:-30px;max-width:180px}
 .node.planet.blocked .planet-art{filter:grayscale(1) brightness(.55) drop-shadow(0 4px 7px #00152199)}
 .planet-notice-art{height:150px;max-width:230px}
+.modal .notice-player{font-size:clamp(40px,4vw,48px);line-height:1.15;margin:0 0 20px;overflow-wrap:anywhere}
 .notice-text>img{margin:0 4px}

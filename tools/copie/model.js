@@ -28,8 +28,28 @@ export function normalizeSettings(settings = {}){
   };
 }
 
+const ELIDED_WORD_PREFIXES = new Set([
+  "l", "d", "j", "m", "t", "s", "n", "c", "qu",
+  "jusqu", "lorsqu", "puisqu", "quoiqu"
+]);
+
 export function countCopyWords(text = ""){
-  return tokenizeCopyText(text).filter((token) => token.kind === "word").length;
+  return tokenizeCopyText(text)
+    .filter((token) => token.kind === "word")
+    .reduce((total, token) => total + Math.max(1, Number(token.wordCount) || 1), 0);
+}
+
+export function getCopyWordCountThroughTokenIndex(text = "", tokenIndex){
+  const safeIndex = Math.trunc(Number(tokenIndex));
+  if (!Number.isInteger(safeIndex) || safeIndex < 0) return null;
+  const token = tokenizeCopyText(text).find((entry) => entry.kind === "word" && entry.index === safeIndex);
+  return token && Number.isInteger(token.wordNumberEnd) ? token.wordNumberEnd : null;
+}
+
+export function getCopyWordTokenByIndex(text = "", tokenIndex){
+  const safeIndex = Math.trunc(Number(tokenIndex));
+  if (!Number.isInteger(safeIndex) || safeIndex < 0) return null;
+  return tokenizeCopyText(text).find((entry) => entry.kind === "word" && entry.index === safeIndex) || null;
 }
 
 export function tokenizeCopyText(text = ""){
@@ -38,14 +58,34 @@ export function tokenizeCopyText(text = ""){
   const wordPattern = /[\p{L}\p{N}](?:[\p{L}\p{M}\p{N}]|[’'\-](?=[\p{L}\p{N}]))*/gu;
   let cursor = 0;
   let wordIndex = 0;
+  let pedagogicalWordCount = 0;
   let match;
+
+  const pushClickableWord = (wordText) => {
+    pedagogicalWordCount += 1;
+    tokens.push({
+      kind:"word",
+      text:wordText,
+      index:wordIndex,
+      wordCount:1,
+      wordNumberStart:pedagogicalWordCount,
+      wordNumberEnd:pedagogicalWordCount
+    });
+    wordIndex += 1;
+  };
 
   while ((match = wordPattern.exec(source))) {
     if (match.index > cursor) {
       tokens.push({ kind:"text", text:source.slice(cursor, match.index) });
     }
-    tokens.push({ kind:"word", text:match[0], index:wordIndex });
-    wordIndex += 1;
+
+    // Les élisions grammaticales doivent être deux mots réellement cliquables :
+    // « l'habitude » => « l' » + « habitude », « qu'il » => « qu' » + « il ».
+    // Les apostrophes lexicalisées (aujourd'hui, quelqu'un…) restent un seul mot.
+    for (const part of splitClickablePedagogicalWords(match[0])) {
+      pushClickableWord(part);
+    }
+
     cursor = match.index + match[0].length;
   }
 
@@ -54,6 +94,19 @@ export function tokenizeCopyText(text = ""){
   }
 
   return tokens;
+}
+
+function splitClickablePedagogicalWords(value){
+  const token = String(value || "");
+  const apostropheIndex = token.search(/[’']/u);
+  if (apostropheIndex <= 0 || apostropheIndex >= token.length - 1) return [token];
+
+  const prefix = token.slice(0, apostropheIndex).toLocaleLowerCase("fr-FR");
+  if (!ELIDED_WORD_PREFIXES.has(prefix)) return [token];
+
+  const elided = token.slice(0, apostropheIndex + 1);
+  const remainder = token.slice(apostropheIndex + 1);
+  return [elided, ...splitClickablePedagogicalWords(remainder)];
 }
 
 function normalizeTimerMode(value, fallback){

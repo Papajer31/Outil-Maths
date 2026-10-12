@@ -3,12 +3,12 @@
 'use strict';
 const KEYS=['carburant','eau','provisions','outils','oxygene'];
 const PLANETS=[
- {id:'p0',key:'eau',resource:'eau',name:'Eau',asset:'Pla1.png'},
- {id:'p1',key:'oxygene',resource:'oxygene',name:'Oxygène',asset:'Pla2.png'},
- {id:'p2',key:'carburant',resource:'carburant',name:'Carburant',asset:'Pla3.png'},
- {id:'p3',key:'provisions',resource:'provisions',name:'Provisions',asset:'Pla4.png'},
- {id:'p4',key:'merchant',merchant:true,name:'Marchand',asset:'Pla5.png'},
- {id:'p5',key:'outils',resource:'outils',name:'Outils',asset:'Pla6.png'}
+ {id:'p0',key:'eau',resource:'eau',name:'Eau',asset:'Pla1.webp'},
+ {id:'p1',key:'oxygene',resource:'oxygene',name:'Oxygène',asset:'Pla2.webp'},
+ {id:'p2',key:'carburant',resource:'carburant',name:'Carburant',asset:'Pla3.webp'},
+ {id:'p3',key:'provisions',resource:'provisions',name:'Provisions',asset:'Pla4.webp'},
+ {id:'p4',key:'merchant',merchant:true,name:'Marchand',asset:'Pla5.webp'},
+ {id:'p5',key:'outils',resource:'outils',name:'Outils',asset:'Pla6.webp'}
 ];
 const TRANSPORT_STORIES=14;
 const DIE_FACES=['rocket',2,3,4,5,'asteroid'];

@@ -1,5 +1,6 @@
 @import url("../js/teacher-tools/apps/activity/activity.css");
 @import url("../js/teacher-tools/apps/clock/clock.css");
+@import url("../js/teacher-tools/apps/fusee/fusee.css");
 @import url("../js/teacher-tools/apps/image/image.css");
 @import url("../js/teacher-tools/apps/image-labels/image-labels.css");
 @import url("../js/teacher-tools/apps/labels/labels.css");
@@ -427,7 +428,9 @@
 }
 
 .tt-widget-picker-modal .tt-widget-picker-card{
-  width:min(620px, calc(100vw - 48px));
+  width:min(1080px, calc(100vw - 48px));
+  max-height:calc(100dvh - 48px);
+  overflow:auto;
   gap:16px;
 }
 
@@ -449,8 +452,15 @@
 
 .tt-widget-picker-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns:repeat(3, minmax(0, 1fr));
   gap:10px;
+}
+
+@media (max-width:760px){
+  .tt-widget-picker-grid{grid-template-columns:repeat(2, minmax(0, 1fr))}
+}
+@media (max-width:480px){
+  .tt-widget-picker-grid{grid-template-columns:1fr}
 }
 
 .tt-widget-picker-option{
@@ -1414,7 +1424,11 @@
 .tt-app-explorer.dashboard-activities-explorer{
   --dashboard-tree-pane-width:32%;
   grid-template-columns:clamp(300px, var(--dashboard-tree-pane-width), 460px) 4px minmax(0, 1fr);
+  grid-template-rows:minmax(0, 1fr);
 }
+
+.tt-app-explorer > .tt-board-pane{margin:0}
+.tt-app-explorer > .tt-app-control-pane{grid-column:3}
 
 .tt-pages-pane-head{
   flex:0 0 auto;
@@ -1525,6 +1539,43 @@
 
 .tt-app-control-header{
   min-height:64px !important;
+  flex-wrap:wrap;
+  padding-block:10px;
+}
+
+.tt-app-control-header .tt-board-header-right{
+  margin-left:auto;
+  max-width:100%;
+}
+
+.tt-app-control-header .tt-board-pane-title{
+  max-width:100%;
+  line-height:1.5;
+}
+.tt-app-control-header .tt-board-action-btn{
+  line-height:1.5;
+}
+.tt-app-control-header [data-active-app-label]{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.tt-page-creation-actions{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+}
+.tt-page-creation-actions[hidden]{display:none}
+.tt-page-creation-actions .tt-board-action-btn{
+  width:36px;
+  min-height:36px;
+  padding:0;
+}
+.tt-page-creation-actions .tt-board-action-btn.is-primary{
+  border-color:rgba(245,158,11,.28);
+  background:rgba(146,64,14,.22);
 }
 
 .tt-app-control-pane .tt-board-actions{

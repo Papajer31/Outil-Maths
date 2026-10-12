@@ -1,5 +1,6 @@
 import {
   ANSWERS,
+  LAYOUTS,
   evaluateAnswer,
   normalizeSettings,
   PROMPT_MODES,
@@ -78,6 +79,10 @@ export function createActivity(initialContext = {}) {
       if (!canSubmitAnswer(state)) return false;
       requestReveal(state);
       return true;
+    },
+
+    getHistorySnapshot(stage = "question") {
+      return getPlusMoinsAutantHistorySnapshot(state, stage);
     },
 
     unmount(container) {
@@ -700,6 +705,86 @@ function getResponseUi(context = {}) {
     ?? "boxed"
   ).trim().toLowerCase();
   return safe === "free" ? "free" : "boxed";
+}
+
+
+function getPlusMoinsAutantHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  if (safeStage === "question") {
+    return {
+      history: {
+        columns: [
+          { key: "situation", label: "Situation", fill: true },
+          { key: "answer", label: "Réponse de l’élève", role: "answer", compact: true },
+          { key: "expected", label: "Attendu", compact: true },
+          { key: "aid", label: "Aide", compact: true }
+        ],
+        cells: {
+          situation: {
+            type: "text",
+            value: getPlusMoinsAutantHistorySituation(question)
+          },
+          aid: buildPlusMoinsAutantHistoryAid(question)
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    const submitted = state.submittedAnswer || state.selectedAnswer || "";
+    return {
+      history: {
+        cells: {
+          answer: {
+            type: "text",
+            value: getPlusMoinsAutantHistoryAnswer(submitted)
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type: "text",
+          value: getPlusMoinsAutantHistoryAnswer(question.correctAnswer)
+        }
+      }
+    }
+  };
+}
+
+function getPlusMoinsAutantHistorySituation(question) {
+  const keyword = question?.promptMode === PROMPT_MODES.LESS ? "moins" : "plus";
+  const redCount = Math.max(0, Number(question?.redCount) || 0);
+  const blueCount = Math.max(0, Number(question?.blueCount) || 0);
+  return `Qui en a le ${keyword} ? → Rouges : ${redCount} · Bleus : ${blueCount}`;
+}
+
+function getPlusMoinsAutantHistoryAnswer(answer) {
+  if (answer === ANSWERS.RED) return "Rouges";
+  if (answer === ANSWERS.BLUE) return "Bleus";
+  if (answer === ANSWERS.EQUAL) return "Autant";
+  return "";
+}
+
+function buildPlusMoinsAutantHistoryAid(question) {
+  const layout = String(question?.layout || "");
+  const text = layout === LAYOUTS.PAIRED
+    ? "Paires visibles"
+    : layout === LAYOUTS.SEPARATED
+      ? "Couleurs séparées"
+      : "";
+  return {
+    type: "tokens",
+    items: text ? [{ text, tone: "default" }] : [],
+    emptyText: ""
+  };
 }
 
 function teardownState(state, container) {

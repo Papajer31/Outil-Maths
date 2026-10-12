@@ -42,7 +42,7 @@ Date : 14 août 2026.
 
 ### 5. Compatibilité avant migration SQL
 
-Ce test est facultatif si la migration a déjà été exécutée. Le code sait retenter la lecture de l’arborescence sans les deux nouvelles colonnes si Supabase signale qu’elles n’existent pas. Cela évite qu’un déploiement des fichiers quelques secondes avant le SQL fasse basculer Exploration sur le petit secours local.
+Ce test est facultatif si la migration a déjà été exécutée. Le code sait retenter la lecture de l’arborescence sans les deux nouvelles colonnes si Supabase signale qu’elles n’existent pas. Les listes de secours locales ont été supprimées. En cas d’échec de lecture, l’interface indique désormais que le Catalogue est indisponible ; cette compatibilité avec les anciennes colonnes ne concerne que la requête SQL.
 
 ## Test manuel avancé du mode transparent
 

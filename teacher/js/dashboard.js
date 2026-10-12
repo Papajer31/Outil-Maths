@@ -64,6 +64,7 @@ import {
   createResourceFolderForSpace,
   createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
+  ensureTujerResourceFoundationForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -92,7 +93,8 @@ import {
 } from "./teacher-api.js";
 import { createHeaderPopupController } from "./dashboard/header-popups.js";
 import { createStudentDashboardController } from "./dashboard/student-controller.js";
-import { createActivityHubViewController } from "./dashboard/activity-hub-view.js";
+import { createTeacherHomeViewController } from "./dashboard/home-view.js";
+import { createActivitySearchEntries } from "./dashboard/activity-search.js";
 import { createMyActivitiesViewController } from "./dashboard/my-activities-view.js";
 import { createActivityAssignmentViewController } from "./dashboard/activity-assignment-view.js";
 import { openDirectLaunchDialog } from "./dashboard/direct-launch-dialog.js";
@@ -139,6 +141,10 @@ const userMenuPopup = document.getElementById("userMenuPopup");
 const btnOpenProfileOverlay = document.getElementById("btnOpenProfileOverlay");
 const profileOverlay = document.getElementById("profileOverlay");
 const btnCloseProfileOverlay = document.getElementById("btnCloseProfileOverlay");
+const btnNavHome = document.getElementById("btnNavHome");
+const btnDashboardTitleHome = document.getElementById("btnDashboardTitleHome");
+const btnNavCatalogue = document.getElementById("btnNavCatalogue");
+const btnNavAssignments = document.getElementById("btnNavAssignments");
 const btnNavClass = document.getElementById("btnNavClass");
 const btnNavActivityHub = document.getElementById("btnNavActivityHub");
 const btnNavAdventure = document.getElementById("btnNavAdventure");
@@ -156,7 +162,7 @@ const studentsList = document.getElementById("studentsList");
 const configsList = document.getElementById("configsList");
 const configHeader = document.getElementById("configHeader");
 const classView = document.getElementById("classView");
-const activityHubView = document.getElementById("activityHubView");
+const homeView = document.getElementById("homeView");
 const myActivitiesView = document.getElementById("myActivitiesView");
 const myActivitiesHeader = document.getElementById("myActivitiesHeader");
 const myActivitiesList = document.getElementById("myActivitiesList");
@@ -231,7 +237,9 @@ let currentUser = null;
 let currentTeacherSpace = null;
 let currentStudents = [];
 let currentStudent = null;
-let currentDashboardSection = "activity-hub"; // "activity-hub" | "my-activities" | "personal-activity-editor" | "activity-assignment" | "adventure" | "activities" | "quiz-editor" | "class" | "resources" | "teacher-tools" | "admin"
+let currentDashboardSection = "home"; // "home" | "class" | "activities" (Catalogue) | "my-activities" | "activity-assignment" | autres vues existantes
+let hasMountedAssignmentView = false;
+let mountedAssignmentTeacherSpaceId = "";
 let showDashboardHelpIcons = getContextualHelpEnabled();
 let studentViewMode = "tiles"; // "list" | "tiles"
 let activityListScrollTop = 0;
@@ -253,7 +261,7 @@ let mountedAdminUserId = "";
 let dashboardToast = null;
 let dashboardToastTimer = null;
 
-let activityHubViewController = null;
+let homeViewController = null;
 let myActivitiesViewController = null;
 let activityAssignmentViewController = null;
 let personalActivityEditorController = null;
@@ -326,14 +334,49 @@ studentController = createStudentDashboardController({
   showToast: showDashboardShareToast
 });
 
-activityHubViewController = createActivityHubViewController({
-  view: activityHubView,
-  onOpenExploration: () => openDashboardSection("activities"),
-  onOpenMyActivities: () => openDashboardSection("my-activities"),
-  onOpenAssignedWork: () => openDashboardSection("activity-assignment"),
-  onOpenRocketGame: () => { window.location.href = "../games/fusee/"; }
+homeViewController = createTeacherHomeViewController({
+  view: homeView,
+  getActivitySearchEntries:async () => {
+    const spaceId = currentTeacherSpace?.id;
+    const [personalActivities, personalFolders] = spaceId
+      ? await Promise.all([
+          listTeacherActivitiesForSpace(spaceId),
+          listTeacherActivityFoldersForSpace(spaceId)
+        ])
+      : [[], []];
+    await ensureActivitiesViewMounted();
+    return [
+      ...(activitiesViewController?.getSearchEntries?.({ grade:"all" }) || []),
+      ...createActivitySearchEntries(personalActivities, personalFolders, { rootLabel:"Mes activités", source:"my-activities" })
+    ].sort((a, b) => a.title.localeCompare(b.title, "fr", { sensitivity:"base" }));
+  },
+  onOpenSearchActivity:async (activity, entry) => {
+    if (entry?.source === "my-activities") {
+      await openPersonalActivity(activity);
+      return;
+    }
+    await openDashboardSection("activities");
+    await activitiesViewController?.revealActivity?.(activity.id);
+  },
+  showToast:showDashboardShareToast,
+  onOpenTableau: () => {
+    // La popup doit s’ouvrir durant le clic, avant tout await.
+    teacherToolsViewController?.openProjection?.();
+    return openDashboardSection("teacher-tools");
+  },
+  onCreateActivity: async () => {
+    await openDashboardSection("my-activities");
+    myActivitiesViewController?.openCreationDialog?.({ folderId:null });
+  },
+  onOpenGenerators: async () => {
+    await openDashboardSection("resources");
+    resourcesViewController?.openGeneratorsFolder?.();
+  },
+  onAssignActivity: async () => {
+    await openDashboardSection("activity-assignment");
+    await activityAssignmentViewController?.openNewAssignment?.();
+  }
 });
-activityHubViewController.render();
 
 myActivitiesViewController = createMyActivitiesViewController({
   view: myActivitiesView,
@@ -353,7 +396,7 @@ myActivitiesViewController = createMyActivitiesViewController({
   deleteTeacherSequence,
   listCatalogActivitiesForTeacherSpace,
   listPedagogicalNodesForTeacher,
-  onBack: () => openDashboardSection("activity-hub"),
+  onBack: () => openDashboardSection("home"),
   onCreateActivity: ({ type, folderId, difficultyMode } = {}) => openPersonalActivityCreator({ type, folderId, difficultyMode }),
   onOpenActivity: (activity) => openPersonalActivity(activity),
   onTestActivity: (activity) => testPersonalActivityFromTile(activity),
@@ -406,7 +449,7 @@ activitiesViewController = createActivitiesViewController({
   saveCatalogActivityAsAdmin,
   deleteCatalogActivityAsAdmin,
   getCatalogActivityUsageAsAdmin,
-  onBackToActivityHub: () => openDashboardSection("activity-hub"),
+  onBackToActivityHub: () => openDashboardSection("home"),
   onAssignCatalogActivity: (activity) => openActivityAssignment({ sourceType:"catalog_activity", sourceId:activity?.id }),
   onDirectLaunchCatalogActivity: (activity) => openDirectLaunchDialog({
     teacherSpaceId:currentTeacherSpace?.id,
@@ -446,7 +489,7 @@ activityAssignmentViewController = createActivityAssignmentViewController({
   setActivityAssignmentActive,
   reassignActivityAssignment,
   deleteActivityAssignment,
-  onBack: () => openDashboardSection("activity-hub"),
+  onBack: () => openDashboardSection("home"),
   showToast: showDashboardShareToast
 });
 
@@ -804,7 +847,7 @@ async function syncPersonalActivityEnvelopeAfterQuizSave(savedQuiz) {
 
 async function returnFromPersonalActivityEditor() {
   if (!personalActivityEditorContext) {
-    await openDashboardSection("activity-hub");
+    await openDashboardSection("my-activities");
     return;
   }
   const returnContext = { ...personalActivityEditorContext };
@@ -1047,6 +1090,7 @@ resourcesViewController = createResourcesViewController({
   createResourceFolderForSpace,
   createSystemResourceFolderAsAdmin,
   ensureRecordingsResourceFolderForSpace,
+  ensureTujerResourceFoundationForSpace,
   updateResourceFolder,
   deleteResourceFolder,
   listResourcesForSpace,
@@ -1056,10 +1100,15 @@ resourcesViewController = createResourcesViewController({
   deleteResource,
   createResourceSignedUrl,
   getLexicalEntriesCount,
+  listLexicalEntries,
   onOpenLexicalBank: () => { void lexicalBankViewController?.open?.(); },
   onOpenGenerator: (generatorId) => { worksheetGeneratorViewController?.open?.(generatorId); },
   onImportSystemImages: ({ folderPath, folderName } = {}) => {
     systemImagesImportDialog?.open?.({ destinationPath:folderPath, destinationLabel:folderName });
+  },
+  onOpenCreation: async (resource) => {
+    await openDashboardSection("teacher-tools");
+    return await teacherToolsViewController?.addCreationResource?.(resource);
   }
 });
 
@@ -1218,7 +1267,11 @@ async function ensureMyActivitiesViewMounted({ forceRefresh = false } = {}){
 }
 
 async function ensureActivityAssignmentViewMounted({ forceRefresh = false, preselect = null } = {}){
-  await activityAssignmentViewController?.render?.({ forceRefresh, preselect });
+  const teacherSpaceId = String(currentTeacherSpace?.id || "");
+  if (!forceRefresh && !preselect && hasMountedAssignmentView && mountedAssignmentTeacherSpaceId === teacherSpaceId) return;
+  await activityAssignmentViewController?.render?.({ forceRefresh:forceRefresh || !hasMountedAssignmentView || mountedAssignmentTeacherSpaceId !== teacherSpaceId, preselect });
+  hasMountedAssignmentView = true;
+  mountedAssignmentTeacherSpaceId = teacherSpaceId;
 }
 
 async function openActivityAssignment({ sourceType = "", sourceId = "" } = {}){
@@ -1274,21 +1327,15 @@ async function openDashboardSection(section){
   currentDashboardSection = next;
   renderDashboardShellState();
 
-  if (next === "activity-hub") {
-    activityHubViewController?.render?.();
-    return;
-  }
+  if (next === "home") return;
   if (next === "my-activities") return ensureMyActivitiesViewMounted();
   if (next === "personal-activity-editor") return;
   if (next === "activity-assignment") {
-    await ensureActivityAssignmentViewMounted({ forceRefresh:true });
+    await ensureActivityAssignmentViewMounted();
     return;
   }
   if (next === "class") return ensureClassViewMounted();
-  if (next === "adventure") {
-    const preserveDraft = adventureViewController?.hasUnsavedChanges?.() === true;
-    return ensureAdventureViewMounted({ forceRefresh: !preserveDraft });
-  }
+  if (next === "adventure") return ensureAdventureViewMounted();
   if (next === "activities") {
     await ensureActivitiesViewMounted();
     restoreActivitiesScrollPosition();
@@ -1330,10 +1377,15 @@ function syncDashboardUrl({ mode = "replace" } = {}){
 function renderDashboardShellState(){
   syncDashboardViewportSizing();
 
+  if (currentDashboardSection !== "activities") activitiesViewController?.closeSearch?.({ restoreFocus:false });
+  if (currentDashboardSection !== "home") homeViewController?.closeSearch?.();
   if (currentDashboardSection !== "quiz-editor") personalActivityEditorContext = null;
 
-  const isActivitiesSection = ["activity-hub", "my-activities", "personal-activity-editor", "activity-assignment", "activities"].includes(currentDashboardSection);
-  btnNavActivityHub?.classList.toggle("is-active", isActivitiesSection);
+  const isPersonalSection = ["my-activities", "personal-activity-editor", "quiz-editor"].includes(currentDashboardSection);
+  btnNavHome?.classList.toggle("is-active", currentDashboardSection === "home");
+  btnNavCatalogue?.classList.toggle("is-active", currentDashboardSection === "activities");
+  btnNavActivityHub?.classList.toggle("is-active", isPersonalSection);
+  btnNavAssignments?.classList.toggle("is-active", currentDashboardSection === "activity-assignment");
   btnNavAdventure?.classList.toggle("is-active", currentDashboardSection === "adventure");
   btnNavClass?.classList.toggle("is-active", currentDashboardSection === "class");
   btnNavResources?.classList.toggle("is-active", currentDashboardSection === "resources");
@@ -1341,7 +1393,7 @@ function renderDashboardShellState(){
   btnNavAdmin?.classList.toggle("is-active", currentDashboardSection === "admin");
   btnNavAdmin?.classList.toggle("hidden", currentUserIsSuperAdmin !== true);
 
-  activityHubView?.classList.toggle("hidden", currentDashboardSection !== "activity-hub");
+  homeView?.classList.toggle("hidden", currentDashboardSection !== "home");
   myActivitiesView?.classList.toggle("hidden", currentDashboardSection !== "my-activities");
   personalActivityEditorView?.classList.toggle("hidden", currentDashboardSection !== "personal-activity-editor");
   activityAssignmentView?.classList.toggle("hidden", currentDashboardSection !== "activity-assignment");
@@ -1389,15 +1441,12 @@ btnEditAccessCode?.addEventListener("click", studentController.openEditAccessCod
 btnAddStudent?.addEventListener("click", studentController.openPrimaryModal);
 btnModalCancel?.addEventListener("click", studentController.closeAccessCodeModal);
 btnModalCreate?.addEventListener("click", studentController.submitPrimaryModal);
-btnNavActivityHub?.addEventListener("click", async () => {
-  await openDashboardSection("activity-hub");
-});
-btnNavAdventure?.addEventListener("click", async () => {
-  currentDashboardSection = "adventure";
-  renderDashboardShellState();
-  const preserveDraft = adventureViewController?.hasUnsavedChanges?.() === true;
-  await ensureAdventureViewMounted({ forceRefresh: !preserveDraft });
-});
+btnNavHome?.addEventListener("click", () => { void openDashboardSection("home"); });
+btnDashboardTitleHome?.addEventListener("click", () => { void openDashboardSection("home"); });
+btnNavCatalogue?.addEventListener("click", () => { void openDashboardSection("activities"); });
+btnNavActivityHub?.addEventListener("click", () => { void openDashboardSection("my-activities"); });
+btnNavAssignments?.addEventListener("click", () => { void openDashboardSection("activity-assignment"); });
+btnNavAdventure?.addEventListener("click", () => { void openDashboardSection("adventure"); });
 btnNavClass?.addEventListener("click", async () => {
   currentDashboardSection = "class";
   renderDashboardShellState();
@@ -1548,7 +1597,6 @@ async function boot(){
     renderDashboardShellState();
     updateClassSectionTitle();
     await ensureClassViewMounted();
-    activityHubViewController?.render?.();
     syncDashboardUrl();
   } catch (err) {
     if (teacherEmail) teacherEmail.textContent = err?.message || "Impossible de charger le compte.";

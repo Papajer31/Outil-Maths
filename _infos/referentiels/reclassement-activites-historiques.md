@@ -1,6 +1,6 @@
 # Reclassement des activités historiques
 
-Le script `seed_pedagogical_tree_cp_cm2.sql` applique les rattachements suivants aux 26 activités du catalogue local de secours.
+Document historique : le script `seed_pedagogical_tree_cp_cm2.sql` avait prévu les rattachements suivants pour 26 activités d’un ancien catalogue local, désormais supprimé du code. Ces correspondances ne constituent pas le Catalogue actuel, qui est entièrement géré dans Supabase.
 
 | Activité | Dossier cible |
 |---|---|

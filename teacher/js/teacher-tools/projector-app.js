@@ -411,6 +411,7 @@ function renderActiveApp(){
     page,
     sendAction,
     chromeVisible: projectionChromeVisible,
+    closeAppControls: () => setAppControlsOpen(false),
     setProjectionChromeVisible: (visible) => setProjectionChromeVisible(visible),
     requestFullscreen: ensureFullscreen
   });

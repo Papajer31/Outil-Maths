@@ -116,6 +116,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getTokenBoxesHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       teardownState(state, container || state.container);
     }
@@ -1441,6 +1445,93 @@ function canToggleStudentAnswerDisplay(state) {
     state.minSolutionsToFind
   );
   return !evaluation.isCorrect;
+}
+
+
+function getTokenBoxesHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question || isCalculationTileQuestion(question)) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const columns = [
+    { key:"target", label:"Cible", compact:true, align:"center" },
+    { key:"boxes", label:"Boîtes proposées", compact:true },
+    {
+      key:"solutions",
+      label:"Solutions",
+      fill:true,
+      legend:[
+        { state:"correct", label:"Trouvée" },
+        { state:"missed", label:"À trouver" },
+        { state:"wrong", label:"Erreur" }
+      ]
+    }
+  ];
+
+  if (safeStage === "question") {
+    return {
+      history:{
+        columns,
+        cells:{
+          target:{
+            type:"tokens",
+            items:[{ text:String(question.target ?? ""), tone:"accent" }]
+          },
+          boxes:{
+            type:"tokens",
+            items:(Array.isArray(question.boxes) ? question.boxes : []).map((box) => ({
+              text:String(box?.value ?? "")
+            }))
+          },
+          solutions:{ type:"tokens", items:[], emptyText:"" }
+        }
+      }
+    };
+  }
+
+  const responseLines = state.answerRevealed
+    ? state.submittedResponseLines
+    : state.responseLines;
+  const evaluation = evaluateTokenBoxesResponse(question, responseLines, state.minSolutionsToFind);
+  const items = buildTokenBoxesHistorySolutionTokens(question, evaluation, {
+    includeMissing:safeStage === "correction"
+  });
+
+  return {
+    history:{
+      cells:{
+        solutions:{ type:"tokens", items, emptyText:"" }
+      }
+    }
+  };
+}
+
+function buildTokenBoxesHistorySolutionTokens(question, evaluation, { includeMissing = false } = {}) {
+  const items = [];
+  const lines = Array.isArray(evaluation?.lineEvaluations) ? evaluation.lineEvaluations : [];
+
+  lines.forEach((line) => {
+    if (!line || line.isEmpty) return;
+    const expression = formatSelection(question, line.boxIds);
+    if (!expression) return;
+    const sum = Number(line.sum);
+    const value = Number.isFinite(sum) ? `${expression} = ${sum}` : expression;
+    items.push({
+      text:value,
+      tone:line.isCorrectDistinct ? "correct" : "incorrect"
+    });
+  });
+
+  if (includeMissing) {
+    const missing = Array.isArray(evaluation?.missingSolutions) ? evaluation.missingSolutions : [];
+    missing.forEach((solution) => {
+      const expression = formatSelection(question, solution?.boxIds, { withResult:true });
+      if (!expression) return;
+      items.push({ text:expression, tone:"missed" });
+    });
+  }
+
+  return items;
 }
 
 /* -------------------------------------------------------------------------- */

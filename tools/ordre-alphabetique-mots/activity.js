@@ -76,6 +76,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getOrdreAlphabetiqueMotsHistorySnapshot(state, stage);
+    },
+
     unmount(container) {
       stopPhaseMonitor(state);
       teardownState(state, container || state.container);
@@ -105,6 +109,7 @@ function createRuntimeState(initialContext = {}) {
     answerOrder: [],
     drag: null,
     currentQuestion: null,
+    currentQuestionSettings: null,
     lastQuestionId: null,
     wordEntries: [],
     visualHintRanges: new Map(),
@@ -253,6 +258,7 @@ async function loadNextQuestion(state, context = {}) {
   }
 
   const settings = normalizeSettings(context?.settings);
+  state.currentQuestionSettings = settings;
   const workspace = state.workspace;
   if (!workspace || !state.promptEl) return;
 
@@ -846,6 +852,59 @@ function requestReveal(state) {
     skipValidationReview: true,
     answerControlsDelayMs: getCorrectionAnimationDurationMs(state, isCorrect)
   });
+}
+
+function getOrdreAlphabetiqueMotsHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const toTokens = (values) => (Array.isArray(values) ? values : [])
+    .filter((value) => value != null && String(value).trim() !== "")
+    .map((value) => ({ text:String(value), tone:"default" }));
+
+  if (safeStage === "question") {
+    const aids = [];
+    if (state.currentQuestionSettings?.showAlphabet === true) {
+      aids.push({ text:"Alphabet", tone:"accent" });
+    }
+    if (state.currentQuestionSettings?.visualHint === true) {
+      aids.push({ text:"Lettre surlignée", tone:"accent" });
+    }
+
+    return {
+      history: {
+        columns: [
+          { key:"words", label:"Mots proposés" },
+          { key:"answer", label:"Réponse de l’élève", role:"answer" },
+          { key:"expected", label:"Attendu" },
+          { key:"aids", label:"Aides" }
+        ],
+        cells: {
+          words: { type:"tokens", items:toTokens(question.items) },
+          aids: { type:"tokens", items:aids, emptyText:"" }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: { type:"tokens", items:toTokens(state.answerOrder) }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: { type:"tokens", items:toTokens(question.answerItems) }
+      }
+    }
+  };
 }
 
 function getCorrectionAnimationDurationMs(state, isCorrect) {

@@ -9,7 +9,8 @@ import {
   evaluateNumberAnswer,
   evaluateGraduationAnswer,
   getNearestTickIndex,
-  getPicbilleBoxX
+  getPicbilleBoxX,
+  getTickValue
 } from "./model.js";
 import {
   ensureToolInstructionStyles,
@@ -75,6 +76,10 @@ export function createActivity(initialContext = {}) {
       if (!canSubmitAnswer(state) || state.answerRevealed) return false;
       requestReveal(state);
       return true;
+    },
+
+    getHistorySnapshot(stage = "question") {
+      return getNumberLineHistorySnapshot(state, stage);
     },
 
     unmount(container) {
@@ -1004,6 +1009,84 @@ function canToggleStudentAnswerDisplay(state) {
   }
 
   return Number.isInteger(state.submittedTickIndex);
+}
+
+function getNumberLineHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+  const cell = buildNumberLineHistoryCorrectionCell(state, question, safeStage);
+
+  if (safeStage === "question") {
+    const prompt = question.questionType === QUESTION_TYPES.NUMBER_TO_GRADUATION
+      ? `Place ${question.targetValue} sur la droite.`
+      : "Écris le nombre indiqué.";
+    return {
+      history: {
+        columns: [
+          { key: "prompt", label: "Consigne", compact: true },
+          { key: "lineCorrection", label: "Droite / correction", fill: true }
+        ],
+        cells: {
+          prompt: { type: "text", value: prompt },
+          lineCorrection: cell
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: { lineCorrection: cell }
+    }
+  };
+}
+
+function buildNumberLineHistoryCorrectionCell(state, question, stage) {
+  const isNumberToGraduation = question.questionType === QUESTION_TYPES.NUMBER_TO_GRADUATION;
+  const markerIndices = Array.isArray(question?.markerIndices)
+    ? question.markerIndices.filter(Number.isInteger).slice(0, 2)
+    : [];
+
+  let studentIndex = null;
+  let studentValue = "";
+  if (stage !== "question") {
+    if (isNumberToGraduation) {
+      studentIndex = Number.isInteger(state.submittedTickIndex)
+        ? state.submittedTickIndex
+        : state.hasDragged && Number.isInteger(state.placedTickIndex)
+          ? state.placedTickIndex
+          : null;
+    } else {
+      studentValue = String(state.submittedAnswer ?? state.inputEl?.value ?? "").trim();
+    }
+  }
+
+  let correct = false;
+  if (stage !== "question") {
+    if (isNumberToGraduation) {
+      correct = Number.isInteger(studentIndex) && studentIndex === question.targetIndex;
+    } else {
+      const numericAnswer = Number(String(studentValue).replace(",", "."));
+      correct = Number.isFinite(numericAnswer) && numericAnswer === Number(question.targetValue);
+    }
+  }
+
+  return {
+    type: "number_line_correction",
+    lineType: String(question?.lineType || "simple"),
+    questionType: String(question?.questionType || ""),
+    targetIndex: Number.isInteger(question?.targetIndex) ? question.targetIndex : null,
+    targetValue: Number(question?.targetValue),
+    referenceA: Number(question?.referenceA),
+    referenceB: Number(question?.referenceB),
+    markerIndices,
+    tickCount: Math.max(2, Math.trunc(Number(question?.tickCount) || 2)),
+    studentIndex,
+    studentValue,
+    correct
+  };
 }
 
 function getShellAnswerDisplayState(state) {

@@ -81,6 +81,10 @@ export function createActivity(initialContext = {}) {
       return true;
     },
 
+    getHistorySnapshot(stage = "question") {
+      return getPresenceSonHistorySnapshot(state, stage);
+    },
+
     getShellAnswerDisplayState(container, context = state.latestContext) {
       state.container = container || state.container;
       syncRuntimeState(state, context ?? state.latestContext);
@@ -397,6 +401,102 @@ function updateChoiceSelection(state) {
     const selected = String(button.dataset.spAnswer || "") === String(state.selectedAnswer || "");
     button.classList.toggle("is-selected", selected && !state.answerRevealed);
   });
+}
+
+function getPresenceSonHistorySnapshot(state, stage = "question") {
+  const question = state.currentQuestion;
+  if (!question) return {};
+
+  const safeStage = String(stage || "question").trim().toLowerCase();
+
+  if (safeStage === "question") {
+    const imageUrl = getPublicImageAssetUrl(question?.imageStoragePath, { bucket: IMAGE_BUCKET });
+    return {
+      history: {
+        columns: [
+          { key:"instruction", label:"Consigne" },
+          { key:"image", label:"Image", align:"center", compact:true },
+          { key:"answer", label:"Réponse de l’élève", role:"answer", align:"center", compact:true },
+          { key:"expected", label:"Attendu", align:"center", compact:true }
+        ],
+        cells: {
+          instruction: {
+            type:"phrase",
+            parts:buildPresenceSonHistoryInstruction(question)
+          },
+          image: {
+            type:"image",
+            src:imageUrl,
+            alt:String(question?.word || question?.slug || "Image"),
+            label:"Afficher l’image"
+          }
+        }
+      }
+    };
+  }
+
+  if (safeStage === "answer") {
+    return {
+      history: {
+        cells: {
+          answer: {
+            type:"text",
+            value:formatPresenceSonHistoryAnswer(question, state.submittedAnswer || state.selectedAnswer)
+          }
+        }
+      }
+    };
+  }
+
+  return {
+    history: {
+      cells: {
+        expected: {
+          type:"text",
+          value:formatPresenceSonHistoryAnswer(question, question?.correctAnswer)
+        }
+      }
+    }
+  };
+}
+
+function buildPresenceSonHistoryInstruction(question) {
+  const sound = String(question?.target?.bubbleText || question?.target?.label || "").trim();
+  const word = String(question?.word || question?.slug || "").trim();
+
+  if (question?.mode === QUESTION_MODES.SYLLABLE_PLACE) {
+    return [
+      { kind:"text", text:"Dans quelle syllabe entends-tu" },
+      { kind:"pill", text:sound },
+      { kind:"text", text:"dans" },
+      { kind:"pill", text:word },
+      { kind:"text", text:"?" }
+    ];
+  }
+
+  return [
+    { kind:"text", text:"J’entends" },
+    { kind:"pill", text:sound },
+    { kind:"text", text:"dans" },
+    { kind:"pill", text:word },
+    { kind:"text", text:"?" }
+  ];
+}
+
+function formatPresenceSonHistoryAnswer(question, rawAnswer) {
+  if (question?.mode !== QUESTION_MODES.SYLLABLE_PLACE) {
+    const value = String(rawAnswer || "").trim();
+    if (value === ANSWERS.YES) return "Oui";
+    if (value === ANSWERS.NO) return "Non";
+    return "";
+  }
+
+  const syllables = Array.isArray(question?.syllables) ? question.syllables : [];
+  const indexes = parseEncodedSyllableSelection(rawAnswer);
+  return indexes
+    .map((index) => String(syllables[index] ?? "").trim())
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function requestReveal(state) {
